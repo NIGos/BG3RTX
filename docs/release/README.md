@@ -18,7 +18,8 @@ This is a beta. Expect bugs. Please report them (see "Reporting a bug").
 - **Baldur's Gate 3 on Steam, Vulkan renderer** (`bin\bg3.exe`, not the DirectX 11 one). Tested with
   game version 4.1.1.7631656 (Patch 8, Hotfix 10). A new game patch can break BG3RTX until it is updated.
   GOG copies should work through **Browse...** in the launcher but are untested.
-- About 150 MB of disk space, plus a shader cache of a few tens of MB in `%LOCALAPPDATA%\BG3RTX`.
+- Disk space for the extracted archive plus a growing shader cache in `%LOCALAPPDATA%\BG3RTX`.
+  Final package size and long-session cache growth are not yet qualified.
 
 ## Install
 
@@ -30,7 +31,7 @@ This is a beta. Expect bugs. Please report them (see "Reporting a bug").
    You can also skip the installer and run `bin\BG3RTX.exe` straight from the unzipped folder.
 3. Start **BG3RTX** (`bin\BG3RTX.exe`). It finds Steam installs by itself; otherwise use **Browse...**
    and pick the folder that contains `bin\bg3.exe`.
-4. Pick a preset (the window suggests one for your GPU) and press **Save and launch**.
+4. Pick a preset (the window suggests one for your GPU) and press **Save**, then **Play**.
 5. In the game's Graphics options set the upscaler to **DLSS** (Quality recommended). Ray
    Reconstruction replaces the game's DLSS; it does not run with FSR, XeSS or TAA.
 
@@ -57,29 +58,40 @@ and clear any Steam launch option; there is no installed Vulkan layer to unregis
 | Low | Lowest | Screen-space GI and contact shadows. No RT scene or Ray Reconstruction. |
 | Medium | Higher | Opaque RT scene, RT GI, fast local-light shadows and glossy reflections. |
 | High | High | Adds alpha-tested geometry, including foliage, to the RT scene. |
-| Ultra (RTX 5090) | Highest | More GI rays, shadowed lights, rougher reflections, RT water, hidden-surface bounce, emission at hidden ray hits and 6 m far-field sun bounce. A 58 fps rendered cap targets 116 displayed fps with 2x frame generation. |
+| Ultra | Highest | Two-ray GI, hidden roofs, Full local/box shadows, Rough reflections, water + Refraction, Far (6 m) bounce/emission, stock hair/scalp shadows and temporal depth of field/bloom. Rendered cap 58 fps. |
 
-Only Ultra on an RTX 5090 has been measured (about 16.7 ms per rendered frame at 2560x1067 rendered to
-3840x1600). The other presets remain unqualified on other GPUs. Every setting, its choices and which
-changes need a game restart are in `docs\USER_SETTINGS.md`. Those timings do not qualify VRAM use.
+Reference measurements come from an RTX 5090, not a GPU support matrix or an FPS guarantee.
+The final release configuration still needs integrated smoke and long-session acceptance.
+Every control, its choices and restart requirements are in `docs\USER_SETTINGS.md`.
+Lighting, Surfaces and Performance contain player controls; Help & support contains compatibility,
+memory and reporting help. Visible hair remains the game's stock hair.
 
 ### VRAM guidance
 
-The launcher suggests a preset from the GPU model, not its free VRAM budget. Start conservatively.
-These are risk estimates for demanding scenes at 4K-class output with DLSS Quality, not measured
-minimum requirements. No card size has passed long-session memory qualification.
+No VRAM capacity or preset has completed memory qualification. GPU model suggestions do not
+measure free driver budget. A recorded port long view used 31.7 GB against a 30.6 GB budget
+on a 32 GB card, so even that capacity is not guaranteed safe. There are no qualified 12/16/24 GB
+preset recommendations, and RTX 30/40 acceptance remains open. Start with Low and raise settings
+cautiously. Lower resolution/preset if stalls, missing geometry or crashes appear, then restart:
+allocations from the higher preset may remain. The game, other applications and FG need headroom.
 
-| Card VRAM | Starting guidance |
+### Included features and measured costs
+
+These scene-specific GPU pass measurements are not additive and do not predict your frame rate.
+Stock hair stays visible; no replacement hair is part of this release.
+
+| Feature | Recorded evidence / cost on the test system |
 |---|---|
-| Below 12 GB | No qualified recommendation. Low is the least demanding option. |
-| 12 GB | Start with Low. Medium is high risk; High and Ultra are not recommended. |
-| 16 GB | Start with Low. Medium remains unmeasured; High is high risk. Avoid Ultra. |
-| 24 GB | Low or Medium has more headroom. High is unqualified. Ultra is not recommended. |
-| 32 GB | More headroom, but Ultra is still at risk. A port long view reached 31.7 GB against a 30.6 GB budget. |
+| RT sun/local shadows, GI, reflections and RR | Existing release paths; no universal per-feature cost receipt |
+| Ultra opacity micromaps and cutout masks | Camp: 1.17 G compared rays, zero violations; RT 8.65-8.75 versus 9.37-10.08 ms; local data/hardware fallback applies |
+| Box light shadows respecting game shadow flags | S6: local lighting +0.13 ms; signed energy delta 0.0 within repeat noise |
+| Off-screen bounce/emission, Far (6 m) | S8/camp: GI trace +3.2/+3.7 ms; energy -2.01%/-2.42% (shading change) |
+| Stock hair/scalp shadows and occlusion | Recorded RT +2.3-6.3 ms and GI +3.2-8.8 ms; capture pool trim reduces used mesh pool 26-50%, with no numeric GPU saving measured |
+| Water reflections, shadows, refraction and camera correction | wf9 08:59 qualified: static ON equals OFF, turning screen hits about 6.7% to 17%; final compose median 0.154 ms absolute, not an incremental cost |
+| Temporal depth of field and bloom | Ultra promotion accepted on user visual verdict; isolated pass 0.152-0.153 ms, about 250 MiB reference memory; paired statistical quality/energy tests did not pass |
 
-Lower output resolution and select a lower preset if you see stalls, missing geometry or crashes.
-Restart the game after lowering a preset: memory from the higher preset may remain allocated.
-The game's own memory use, other applications and frame generation also need headroom.
+Water surface Fresnel is not promoted. Generated rows, hidden-water shading, SHaRC, reduced
+trace resolution and the rejected GPU candidates are excluded from the release feature set.
 
 **Compare with the original image:** press **Ctrl+Shift+F9** in game to switch every ray-traced effect off
 and on again. DLSS and frame generation stay as they are.
@@ -89,11 +101,10 @@ and on again. DLSS and frame generation stay as they are.
 - Tested mostly in Act 1 (camp, Grymforge, Adamantine Forge) and a few Act 3 places (Water Queen's
   House, the Blushing Mermaid). Act 2 and most of Act 3 are not systematically tested.
 - Long sessions (several hours) are not tested yet. The log is capped (two files of at most 64 MB).
-- Frame generation on <-> off, and some Experimental levels, need a game restart (the window marks them).
-- "Experimental" settings are being tested: they can cost a lot of GPU time or look wrong in places.
-- First enabling native hair compiles shaders. Expect a pause or stutter while compilation finishes.
+- Frame generation Off/on, geometry and first capture activation need a restart (see settings guide).
+- First enabling stock hair/scalp capture compiles shaders. Expect a pause or stutter while compilation finishes.
 - VRAM pressure is a particular risk on 12-16 GB cards. Long sessions and level changes can retain memory,
-  even on larger cards. See the table above.
+  even on larger cards. See VRAM guidance above.
 - The water flicker seen at the port is also present in the game's own water. BG3RTX does not fix it.
 - Other Vulkan overlays (Steam, EOS, GOG) can conflict: tick "Disable other Vulkan overlays" in the
   launcher if the game crashes at start or frame generation does nothing. NVIDIA Smooth Motion is
@@ -156,5 +167,5 @@ and an explicitly selected `-SavePath "D:\Chosen\save.lsv"` instead of the dialo
 ## Licences and credits
 
 BG3RTX ships NVIDIA DLSS, DLSS Frame Generation, Reflex and Streamline, and Microsoft's DirectX Shader
-Compiler. Their licences are in `THIRD_PARTY.md` and `LICENSES\`. NVIDIA, GeForce RTX and DLSS are
+Compiler. Their licences are in `THIRD_PARTY.md` and `licences\`; bundled fonts carry their OFL in `bin\ui\fonts\`. NVIDIA, GeForce RTX and DLSS are
 trademarks of NVIDIA Corporation. BG3RTX is not made, endorsed or supported by NVIDIA or Larian Studios.

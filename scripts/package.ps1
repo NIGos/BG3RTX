@@ -20,7 +20,8 @@
 #   .\scripts\package.ps1 -Diagnostics     ship the developer layer of bin\ instead
 #   .\scripts\package.ps1 -Version 0.1.0-beta1 -NoZip
 #   .\scripts\package.ps1 -ListOnly        validate/list notice files only; no build or output writes
-#   .\scripts\package.ps1 -DryRun          validate/list notices and launcher UI assets; no build or output writes
+#   .\scripts\package.ps1 -DryRun          validate/list notices and launcher UI assets; no writes
+#   .\scripts\package.ps1 -DryRun -OutDir <scratch>  full payload audit, files.txt and manifest diff; no build/copies
 param([switch]$ListOnly, [switch]$DryRun, [switch]$NoBuild, [switch]$Diagnostics, [switch]$WithSharc, [switch]$NoZip,
       [string]$Version = "", [string]$OutDir = "")
 $ErrorActionPreference = "Stop"
@@ -85,7 +86,7 @@ foreach ($entry in $launcherFiles) {
   if (-not (Test-Path -LiteralPath $entry.Source -PathType Leaf)) { throw "missing launcher asset: $($entry.Source)" }
   if ((Get-Item -LiteralPath $entry.Source).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "linked launcher asset: $($entry.Source)" }
 }
-if ($DryRun) {
+if ($DryRun -and -not $OutDir) {
   @($noticeFiles) + @($launcherFiles) | ConvertTo-Json
   return
 }
@@ -109,7 +110,7 @@ if ($Version -notmatch '^[A-Za-z0-9._-]+$') { throw "version '$Version': letters
 $name = "BG3RTX-$Version"
 $out = Join-Path $OutDir $name
 
-if (-not $NoBuild) {
+if (-not $NoBuild -and -not $DryRun) {
   # AGENTS.md: never build while the game runs (contention, and a live core would hot-reload).
   if (Get-Process -Name bg3, bg3_dx11 -ErrorAction SilentlyContinue) { throw "bg3.exe is running: package later or use -NoBuild" }
   & (Join-Path $PSScriptRoot "build.ps1") -Test
@@ -120,7 +121,7 @@ $layerBin = $bin
 if (-not $Diagnostics) {
   $nodiag = Join-Path $root "build-nodiag"
   $layerBin = Join-Path $nodiag "bin"
-  if (-not $NoBuild) {
+  if (-not $NoBuild -and -not $DryRun) {
     # build.ps1 entered the MSVC environment; same generator and configuration.
     if (-not (Test-Path (Join-Path $nodiag "build.ninja"))) {
       cmake -S $root -B $nodiag -G Ninja "-DCMAKE_BUILD_TYPE=RelWithDebInfo" "-DBG3RTX_DIAGNOSTICS=OFF" "-DBG3RTX_BIN=$layerBin"
@@ -129,28 +130,32 @@ if (-not $Diagnostics) {
     cmake --build $nodiag --target VkLayer_bg3rtx
     if ($LASTEXITCODE) { throw "build of the lean layer failed" }
   }
-  if (-not (Test-Path (Join-Path $layerBin "VkLayer_bg3rtx.dll"))) { throw "no lean layer in $layerBin (run without -NoBuild)" }
+  if (-not $DryRun -and -not (Test-Path (Join-Path $layerBin "VkLayer_bg3rtx.dll"))) { throw "no lean layer in $layerBin (run without -NoBuild)" }
 }
 
-if (Test-Path $out) {
-  # Only a previous package of ours (it has files.txt), never anything else under dist\.
-  if (-not (Test-Path (Join-Path $out "files.txt"))) { throw "$out exists and is not a package: remove it by hand" }
-  Remove-Item -Recurse -Force $out
+# Never replace/recursively clean a previous package: it could contain a junction.
+$out = [IO.Path]::GetFullPath($out)
+for ($p = $out; $p; $p = Split-Path $p) {
+  if ((Test-Path -LiteralPath $p) -and ((Get-Item -LiteralPath $p -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    throw "linked package output: $p"
+  }
 }
-New-Item -ItemType Directory -Force (Join-Path $out "bin") | Out-Null
+if (Test-Path -LiteralPath $out) { throw "$out already exists: choose a fresh output/version" }
+New-Item -ItemType Directory -Path $out | Out-Null
+$payload = New-Object System.Collections.Generic.List[object]
 function Copy-To([string]$src, [string]$rel) {
-  if (-not (Test-Path $src)) { throw "missing: $src" }
+  $exists = Test-Path -LiteralPath $src -PathType Leaf
+  $payload.Add([pscustomobject]@{ Source = $src; Destination = $rel; Exists = $exists })
+  if ($DryRun) { return }
+  if (-not $exists) { throw "missing: $src" }
   $dst = Join-Path $out $rel
   New-Item -ItemType Directory -Force (Split-Path $dst) | Out-Null
-  Copy-Item $src $dst
+  Copy-Item -LiteralPath $src -Destination $dst
 }
 
 # Binaries.
 Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.dll") "bin\VkLayer_bg3rtx.dll"
 foreach ($f in @("VkLayer_bg3rtx.json", "bg3rtx_core.dll", "BG3RTX.exe")) { Copy-To (Join-Path $bin $f) "bin\$f" }
-foreach ($f in @("README.md", "corner.svg", "dark-stone.svg", "divider.svg", "frame.svg", "glyph-help.svg", "glyph-light.svg", "glyph-memory.svg", "glyph-performance.svg", "glyph-water.svg", "hero-lantern.png", "parchment-panel.svg")) {
-  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\ornaments\$f"); Destination = "bin\ui\branding\ornaments\$f" }
-}
 foreach ($entry in $launcherFiles) { Copy-To $entry.Source $entry.Destination }
 # Only the manifest can add a third-party binary to the payload.
 foreach ($entry in $thirdParty.binaries) {
@@ -162,7 +167,10 @@ foreach ($entry in $thirdParty.binaries) {
 }
 
 # Shaders, and the common\ headers they include (transitively; -I shaders as in layer/shaders.cpp).
-Copy-Item -Recurse (Join-Path $root "shaders") (Join-Path $out "shaders")
+# Source files only; never carry shader caches, debug output or editor files.
+Get-ChildItem (Join-Path $root "shaders") -Recurse -File | Where-Object {
+  $_.Extension -in @('.hlsl', '.hlsli', '.h') -or $_.Name -eq 'variants.txt'
+} | ForEach-Object { Copy-To $_.FullName ("shaders\" + $_.FullName.Substring((Join-Path $root "shaders").Length + 1)) }
 $seen = @{}
 $queue = New-Object System.Collections.Generic.Queue[string]
 Get-ChildItem (Join-Path $root "shaders") -Recurse -File -Include *.hlsl, *.hlsli, *.h | ForEach-Object { $queue.Enqueue($_.FullName) }
@@ -189,7 +197,8 @@ Copy-To $db "data\assetdb\bg3rtx_assetdb.bin"
 
 # Release profile: later lines win in the ini parser.
 $ini = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @(Get-Content (Join-Path $root "data\release.ini"))
-$ini | Set-Content -Encoding UTF8 (Join-Path $out "bg3rtx.ini")
+$payload.Add([pscustomobject]@{ Source = '<generated release defaults>'; Destination = 'bg3rtx.ini'; Exists = $true })
+if (-not $DryRun) { $ini | Set-Content -Encoding UTF8 (Join-Path $out "bg3rtx.ini") }
 
 # Every checked-in notice, including any additional files/subdirectories.
 foreach ($notice in $noticeFiles) { Copy-To $notice.Source $notice.Destination }
@@ -210,12 +219,33 @@ foreach ($f in @("install.ps1", "uninstall.ps1", "Install.cmd", "Uninstall.cmd",
   Copy-To (Join-Path $PSScriptRoot "release\$f") $f
 }
 $sha = (git -C $root rev-parse HEAD).Trim()
-@("BG3RTX $Version", "commit $sha", "layer $(if ($Diagnostics) { 'diagnostics' } else { 'lean' })",
-  "built $(Get-Date -Format 'yyyy-MM-dd HH:mm')") | Set-Content -Encoding UTF8 (Join-Path $out "VERSION.txt")
+$payload.Add([pscustomobject]@{ Source = '<generated version>'; Destination = 'VERSION.txt'; Exists = $true })
+if (-not $DryRun) {
+  @("BG3RTX $Version", "commit $sha", "layer $(if ($Diagnostics) { 'diagnostics' } else { 'lean' })",
+    "built $(Get-Date -Format 'yyyy-MM-dd HH:mm')") | Set-Content -Encoding UTF8 (Join-Path $out "VERSION.txt")
+}
+$planned = @($payload | ForEach-Object { $_.Destination.Replace('/', '\') } | Sort-Object)
+if (@($planned | Group-Object | Where-Object Count -gt 1).Count) { throw 'duplicate payload destination' }
+$expected = @($planned) + @('files.txt') | Sort-Object
+if ($DryRun) {
+  $expected | Set-Content -Encoding UTF8 (Join-Path $out 'files.txt')
+  $payload | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $out 'payload-list.json')
+  $manifest = @(Get-Content -LiteralPath (Join-Path $out 'files.txt'))
+  $diff = @(Compare-Object $expected $manifest)
+  ConvertTo-Json -InputObject @($diff) | Set-Content -Encoding UTF8 (Join-Path $out 'files.diff.json')
+  $missingInputs = @($payload | Where-Object { -not $_.Exists })
+  [pscustomobject]@{ Files = $expected.Count; Missing = @($missingInputs); ManifestDifferences = $diff.Count;
+    Mode = 'plan only: no payload copied; not a distributable package' } |
+    ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $out 'audit.json')
+  Write-Host "Dry-run payload: $($expected.Count) files; $($missingInputs.Count) missing inputs; $($diff.Count) manifest differences. $out"
+  return
+}
 
 # files.txt: every shipped file (install.ps1 copies exactly these; uninstall.ps1 removes them).
 $files = Get-ChildItem $out -Recurse -File | ForEach-Object { $_.FullName.Substring($out.Length + 1) } | Sort-Object
 @($files) + @("files.txt") | Set-Content -Encoding UTF8 (Join-Path $out "files.txt")
+$manifest = @(Get-Content -LiteralPath (Join-Path $out 'files.txt'))
+if (@(Compare-Object $expected ($manifest | Sort-Object)).Count) { throw 'files.txt differs from planned payload' }
 $mb = (Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ("Packaged {0}: {1} files, {2:N1} MB, {3} common headers, layer {4}" -f $out, ($files.Count + 1), $mb,
             @($headers).Count, $(if ($Diagnostics) { 'diagnostics' } else { 'lean' }))
