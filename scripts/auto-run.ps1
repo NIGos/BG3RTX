@@ -151,6 +151,25 @@ function Tagged([string]$dir, [string]$name, [string]$ext) {
 }
 $ini = Tagged $caps "auto" ".ini"
 $failFastFailures = @(); $guardNextPhase=0
+function Wait-AftermathDump([string]$StartupSet, $Failure, [string]$LogPath, [double]$TimeoutSeconds=60) {
+  # Startup-latched opt-in only. Preserve the global failure and normal cleanup.
+  $enabled=$false
+  foreach($entry in ($StartupSet -split ',')) {
+    if($entry -match '^\s*aftermath\s*=\s*(\d+)\s*$') { $enabled=($Matches[1] -eq '1') }
+  }
+  if(-not $enabled -or -not $Failure.device_lost -or $Failure.slice -ne -1) { return }
+  Write-Host "[aftermath-wait] waiting up to $TimeoutSeconds s for GPU crash dump before close"
+  $timer=[Diagnostics.Stopwatch]::StartNew()
+  do {
+    # Each poll closes the log; never keep a reader open while Aftermath writes.
+    $dump=@(Get-Content -LiteralPath $LogPath -ErrorAction SilentlyContinue | Where-Object {$_ -match '\[aftermath\] GPU crash dump written:'} | Select-Object -Last 1)
+    if($dump.Count) { Write-Host "[aftermath-wait] dump completed: $($dump[0])"; return }
+    $remaining=$TimeoutSeconds-$timer.Elapsed.TotalSeconds
+    if($remaining -le 0) { break }
+    Start-Sleep -Milliseconds ([int][Math]::Min(250, [Math]::Ceiling($remaining*1000)))
+  } while($true)
+  Write-Host "[aftermath-wait] timed out after $TimeoutSeconds s; closing without dump completion"
+}
 $guardRunner = Tagged $caps 'live-guard' '.runner.txt'
 $guardPollAt=[datetime]::MinValue; $guardFinalAt=$null
 $guardPython = if(Get-Command py -ErrorAction SilentlyContinue){'py'}else{'python'}
@@ -1095,6 +1114,11 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
   if (-not $KeepRunning) {
     # Ask nicely first so the game can save its pipeline cache; a killed game
     # recompiles ~30k pipelines on the next start.
+    if ($game -and -not $game.HasExited) {
+      $deviceFailure=$failFastFailures | Where-Object {$_.device_lost -and $_.slice -eq -1} | Select-Object -First 1
+      Wait-AftermathDump $guardContext.job.set $deviceFailure $log
+      $game.Refresh()
+    }
     if ($game -and -not $game.HasExited) {
       $scriptCloseRequested = $true
       Write-Host "[exit] script requests CloseMainWindow: result=$result phase=$panIndex/$($panPlan.Count)"

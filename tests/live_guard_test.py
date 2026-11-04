@@ -212,6 +212,11 @@ class LiveGuardTest(unittest.TestCase):
         self.assertIsNone(self.run_guard(stamp(2, "[diagnostics] VK_ERROR_DEVICE_LOST count 0")))
         r = self.run_guard(stamp(2, "[aftermath] device lost: waiting for crash dump"))
         self.assertEqual((r["slice"], r["next_phase"]), (-1, -1))
+        self.assertTrue(r['device_lost'])
+        r = self.run_guard(stamp(2, '[fault] VK_ERROR_DEVICE_LOST from vkQueueSubmit'))
+        self.assertTrue(r['device_lost'])
+        r = self.run_guard(stamp(2, '[crash] exception 0xc0000005'))
+        self.assertFalse(r['device_lost'])
 
     def test_zero_tolerance_and_when_present(self):
         self.job["expect_every"] = [dict(select="overflow", match=r"(?!)", event=True, min=0, windows=["diag"])]

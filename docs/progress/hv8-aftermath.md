@@ -1,3 +1,3 @@
-## Probe Aftermath (branch hv8-aftermath, OFFLINE_PREPARED, 2026-11-04)
-- Dialogue1 Ultra: hv7 warm-all, order 1 mask 8 only, restore; aftermath=1 at startup; 118.7 s phases, 5.9-minute cap; no game launched.
-- Captures: captures/aftermath/*.nv-gpudmp, logged as [aftermath] GPU crash dump written:. BLOCKED: existing queue always rejects device loss and may abort its dump wait; no supported expected-crash VALID or single-event conditional dump gate.
+## Probe Aftermath (hv8-aftermath, READY_FOR_LIVE, 2026-11-04)
+- Global device loss with startup aftermath=1 now polls for dump completion for up to 60 s before normal close; logs completion/path or timeout; remains a failure. Hv8 patterns retain the dump path.
+- Offline: live_guard 21/21, runner synthetic completion/delayed-write/timeout/opt-out checks PASS; hv8 lint 0 failures (81 VALID logs; historical replay/readiness still unproven). No game launched; no commit.

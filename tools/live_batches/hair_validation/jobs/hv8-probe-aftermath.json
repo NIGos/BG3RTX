@@ -72,6 +72,7 @@
     "captures/live_batches/hair_validation/plans/hv8-probe-aftermath.json"
   ],
   "patterns": [
+    "\\[aftermath\\] GPU crash dump written:",
     "\\[hot\\]",
     "\\[ngx\\] RR create",
     "\\[sl\\] DLSS-G frame",

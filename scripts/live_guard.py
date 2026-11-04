@@ -56,8 +56,11 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
                     next_phase=max(end, phase) if end < len(plan) and offset >= 0 else -1)
 
     # Device loss and crashes poison the entire launch, including during load.
-    if re.search(r"\[fault\] VK_ERROR_DEVICE_LOST from\b|\[aftermath\] device lost: waiting\b|\[crash\] exception 0x[0-9a-f]+", game, re.I):
-        return failure("global game failure: crash or device lost", global_failure=True)
+    device_lost = bool(re.search(r"\[fault\] VK_ERROR_DEVICE_LOST from\b|\[aftermath\] device lost: waiting\b", game, re.I))
+    if device_lost or re.search(r"\[crash\] exception 0x[0-9a-f]+", game, re.I):
+        result = failure("global game failure: crash or device lost", global_failure=True)
+        result["device_lost"] = device_lost
+        return result
     if current and current.get("fail_fast", True) is False:
         return None
     start = next((w["start"] for w in wins if current and w["index"] >= current["offset"]), None)

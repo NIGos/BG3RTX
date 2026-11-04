@@ -339,7 +339,7 @@ def probe_aftermath_job(name, save, plan):
     # Read only in aftermath_pre_device(), before vkCreateDevice; never a window key.
     j['set'] += ',rt_hair_primary_passes=15,aftermath=1'
     j['live_flow']['startup_only'] = list(dict.fromkeys(j['live_flow'].get('startup_only', []) + ['aftermath']))
-    j['patterns'] += [r'\[aftermath\]', AFTERMATH_FAULT]
+    j['patterns'] += [r'\[aftermath\]', AFTERMATH_FAULT, r'\[aftermath\] GPU crash dump written:']
     j['expect'] = [rx for rx in j['expect'] if 'exposure held' not in rx]
     j['expect'] += [r'\[aftermath\] GPU crash dumps ENABLED',
                     AFTERMATH_FAULT + r'|\[hair primary\] hair primary breadcrumbs:',
