@@ -6,7 +6,7 @@
 #   bin\VkLayer_bg3rtx.json   its manifest, found through VK_ADD_LAYER_PATH (tools/launcher/launch.cpp)
 #   bin\bg3rtx_core.dll, bin\BG3RTX.exe (settings window + launcher), bin\dxcompiler.dll (runtime HLSL)
 #   bin\sl\                   Streamline + DLSS / DLSS-G / Reflex production DLLs (signed by NVIDIA)
-#   shaders\                  HLSL, compiled in game by DXC
+#   shaders\                  HLSL and runtime alpha / camera-fade classification tables
 #   common\*.h                only the headers the shaders include (found by following #include)
 #   data\assetdb\bg3rtx_assetdb.bin   offline game data (lights, materials, roofs)
 #   bg3rtx.ini                repository bg3rtx.ini + data\release.ini (developer keys off)
@@ -176,6 +176,11 @@ foreach ($entry in $thirdParty.binaries) {
 Get-ChildItem (Join-Path $root "shaders") -Recurse -File | Where-Object {
   $_.Extension -in @('.hlsl', '.hlsli', '.h') -or $_.Name -eq 'variants.txt'
 } | ForEach-Object { Copy-To $_.FullName ("shaders\" + $_.FullName.Substring((Join-Path $root "shaders").Length + 1)) }
+# Runtime classification data are opened by layer/alphatest.cpp, not by DXC.
+# Keep this explicit: captures, caches and optional offline VT masks are not payload.
+foreach ($f in @('shaders\rt\alpha_fs.txt', 'shaders\rt\camera_fade_fs.txt')) {
+  Copy-To (Join-Path $root $f) $f
+}
 $seen = @{}
 $queue = New-Object System.Collections.Generic.Queue[string]
 Get-ChildItem (Join-Path $root "shaders") -Recurse -File -Include *.hlsl, *.hlsli, *.h | ForEach-Object { $queue.Enqueue($_.FullName) }

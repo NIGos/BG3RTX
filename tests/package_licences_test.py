@@ -119,6 +119,9 @@ class PackageLicencesTest(unittest.TestCase):
                 path = self.root / 'build-nodiag' / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b'fixture, never executed')
+        (self.root / 'shaders/rt').mkdir()
+        for name in ('alpha_fs.txt', 'camera_fade_fs.txt'):
+            shutil.copyfile(ROOT / 'shaders/rt' / name, self.root / 'shaders/rt' / name)
         (self.root / 'shaders/main.hlsl').write_text('#include "../common/fixture.h"')
         (self.root / 'common/fixture.h').write_text('// fixture')
         (self.root / 'shaders/dev.py').write_text('must not ship')
