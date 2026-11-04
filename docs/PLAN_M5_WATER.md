@@ -648,6 +648,9 @@ All costs below are unmeasured incremental RTX 5090 estimates at 2560 x 1067, no
    partition validity; all eight static shots require finite post-water float colour/exposure.
    Model brightness may change. CPU/encoding/participation gates do not grant image quality
    approval; inspect the shallow rim and foam against this partition. No game launch authorized.
+   wsf1-result follow-up: paired post-core preview floats bound S8 rim/open-water ROI evidence;
+   the default-off candidate also timestamps patched forward draws, summed per frame, separately
+   from compose. Native OFF stays untimed, so absolute ON FS cost is not an incremental FS delta.
 3. Refracted path ramp: `rt_water_surface_path=0`, pool-only FS + compose, +0.01-0.04 ms.
    Reuse existing refraction hit distance, no extra ray; replace only column ramp d by physical L_t.
    Requires runtime ramp CB mapping and separated column/source terms; preserve shoreline/foam masks.
