@@ -426,7 +426,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
+  CHECK(user_exp == 13);   // native coverage, pool trim and temporal post graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
   CHECK(dev == (std::vector<std::string>{"exp_hair_fibre_gi", "exp_hair_groom_shadow_t", "exp_hair_primary_passes", "exp_hair_primary_order", "exp_hair_groom_tips", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
@@ -822,6 +822,25 @@ static void test_ultra_water() {
   for (int i = 0; i < kKnobCount; ++i)
     if (kKnobs[i].experimental) first_exp = (std::min)(first_exp, i);
   CHECK(iw < first_exp);
+  const Knob& temporal = *find_knob("rr_post_temporal");
+  CHECK(!temporal.experimental && !temporal.advanced && !temporal.dev_only);
+  CHECK_EQ(temporal.category, "Lighting");   // Alongside Ray Reconstruction.
+  CHECK(temporal.apply == Apply::Live);
+  CHECK(!temporal.choices[1].experimental && !temporal.choices[1].awaiting_qualification);
+  CHECK(temporal.choices[1].caps == kCapDlss);
+  CHECK(!choice_supported(temporal, 1, 0));
+  CHECK(choice_supported(temporal, 1, kCapDlss));
+  CHECK_EQ(temporal.choices[1].need[0].knob, "rr");
+  CHECK(temporal.choices[1].need[0].min_choice == 1);
+  CHECK_EQ(temporal.required_on[0].key, "rr_post");
+  CHECK_EQ(temporal.required_on[0].value, "1");
+  for (int preset = 0; preset < kPresetCount; ++preset) {
+    CHECK(temporal.preset[preset] == (preset == kUltra ? 1 : 0));
+    Map expanded;
+    for (const auto& kv : expand_preset(preset)) expanded[kv.first] = kv.second;
+    CHECK_EQ(get(expanded, "rr_post_temporal"), preset == kUltra ? "1" : "0");
+    CHECK_EQ(get(expanded, "rr_post"), "1");
+  }
   const Knob& hair_resolve = *find_knob("rr_hair_resolve");
   CHECK(hair_resolve.experimental && !hair_resolve.dev_only);
   CHECK(hair_resolve.apply == Apply::Live);
