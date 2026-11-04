@@ -10,6 +10,7 @@
 #include "host.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
@@ -106,6 +107,7 @@ struct StagedHeader {
   bool submitted = false;
   uint32_t n = 0, pixels = 0;
   uint8_t bytes[hair_primary::kHeaderBytes] = {};
+  float cam[4] = {};   // the build camera (kCameraOffset; valid with kFlagCamera)
   uint64_t keys[hair_primary::kMaxGrooms] = {};
   uint8_t lods[hair_primary::kMaxGrooms] = {};
 };
@@ -113,7 +115,7 @@ constexpr int kStaged = 3;
 StagedHeader g_staged[kStaged];
 int g_staged_next = 0;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
-uint32_t g_probe_no_pick = 0, g_probe_stale = 0, g_probe_quiet = 0;
+uint32_t g_probe_no_pick = 0, g_probe_stale = 0, g_probe_quiet = 0, g_probe_no_camera = 0;   // no_camera: publishes
 bool g_order = false;                       // the last publish was staged (the key on)
 uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
 std::unordered_set<uint64_t> g_live_keys;   // the keys of the header the G-buffer reads (order mode: swaps need them)
@@ -324,14 +326,14 @@ bool header_ready() {
                   : !info || !(info->features & BG3_DEV_INT64) ? "shaderInt64 not enabled (sharc_device=1 enables it)"
                   : !g_frag_stores ? "fragmentStoresAndAtomics not enabled by the game"
                   : !g_precise ? "occlusionQueryPrecise not enabled: no coverage proof, no swaps" : nullptr;
-  if (!why && !make(g_header, hair_primary::kHeaderAlloc, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  if (!why && !make(g_header, hair_primary::kHeaderTotal, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     "hair primary header"))
     why = "header buffer allocation failed";
   if (why) {
     log("[hair primary] UNAVAILABLE (%s): matched hair keeps its cards", why);
     return false;
   }
-  if (!make(g_probe_header, hair_primary::kHeaderBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  if (!make(g_probe_header, hair_primary::kHeaderTotal, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             "hair primary probe header")) return false;
   log("[hair primary] header at 0x%llx: static hair pipelines get strand variants", (unsigned long long)g_header.addr);
   if (auto* p = static_cast<hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist))))
@@ -362,6 +364,7 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st) {
   dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr,
                             0, nullptr);
   dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, st.n, st.bytes);
+  dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
   dd->vk.CmdPipelineBarrier(cmd,
@@ -450,15 +453,17 @@ void coverage_before_prepass(VkCommandBuffer cmd) {
   const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
   if (i < 0) { ++g_probe_no_pick; return; }
   const auto& st = g_staged[i];
-  // Only this frame's publish: the groom TLAS is camera-relative (an older one misses the strands: hv6 2026-11-04, 0
-  // strand samples next to 95670 card samples) and can reference a BLAS range already freed by a LOD change.
-  if (st.pick.tag != now + 1) { ++g_probe_stale; return; }
+  // This frame's or the previous frame's publish (the scene build is recorded after the G-buffer pass: the prepass and
+  // the G-buffer only ever see the previous one, hv6 2026-11-04). The strand shaders rebase its camera-relative TLAS to
+  // this camera (hp_rebase); an older one may reference ranges freed by a LOD change (bvhsplit kGroomFreeLag: 2 frames).
+  if (st.pick.tag + 1 < now + 1) { ++g_probe_stale; return; }
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
   g_dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                              0, 1, &mb, 0, nullptr, 0, nullptr);
   g_dd->vk.CmdUpdateBuffer(cmd, g_probe_header.b, 0, st.n, st.bytes);
+  g_dd->vk.CmdUpdateBuffer(cmd, g_probe_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
   g_dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
@@ -489,9 +494,11 @@ void coverage_log(uint64_t now) {
         unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped);
   }
   log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: strand/card samples = ratio, swapped frames):%s; ratio min %.3f, bound %.3f, draws below bound %u; "
-      "probe frames refused: no publish of the frame %u, older publish %u, load quiet %u",
-      probed, swapped, per, minimum, hair_primary::kCoverMin, below, g_probe_no_pick, g_probe_stale, g_probe_quiet);
-  g_probe_no_pick = g_probe_stale = g_probe_quiet = 0;
+      "probe frames refused: no publish of the frame %u, older publish %u, load quiet %u; publishes without a build "
+      "camera %u",
+      probed, swapped, per, minimum, hair_primary::kCoverMin, below, g_probe_no_pick, g_probe_stale, g_probe_quiet,
+      g_probe_no_camera);
+  g_probe_no_pick = g_probe_stale = g_probe_quiet = g_probe_no_camera = 0;
   g_coverage_period.clear();
 }
 
@@ -821,9 +828,9 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
     picks[i] = st.submitted || same_recording ? st.pick : hair_primary::Staged{};
   }
   int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
-  // Only this frame's publish: an older groom TLAS is camera-relative to another camera and may reference freed
-  // ranges (bvhsplit kGroomFreeLag covers 2 frames of age, not more).
-  if (i >= 0 && g_staged[i].pick.tag != frame) i = -1;
+  // This frame's or the previous frame's publish (the strand shaders rebase it to this camera, hp_rebase); an older one
+  // may reference ranges freed by a LOD change (bvhsplit kGroomFreeLag covers 2 frames of age, not more).
+  if (i >= 0 && g_staged[i].pick.tag + 1 < frame) i = -1;
   if (i < 0) {
     g_live_keys.clear();   // no swap this frame; the prepass of the next one keeps its cards too
     if (g_order_none++ % 300 == 0)
@@ -969,6 +976,12 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   h.pixels = g_pixels.addr;
   std::memcpy(h.viewport, viewport, sizeof h.viewport);
   StagedHeader st;
+  // The build camera: the origin of this publish's camera-relative groom points (the strand passes of the next frame
+  // rebase their rays to their own camera). Without it the strand shaders keep no strand (fail closed).
+  if (rt_build_camera(now, st.cam) && std::isfinite(st.cam[0]) && std::isfinite(st.cam[1]) && std::isfinite(st.cam[2]))
+    h.flags |= hair_primary::kFlagCamera;
+  else
+    ++g_probe_no_camera;
   st.pick = {h.tag, rec, uint64_t(cmd)};
   st.recording = cmd_recording(cmd);
   st.n = hair_primary::pack(h, rows, count, st.bytes);

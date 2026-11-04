@@ -248,6 +248,17 @@ int main() {
     const Staged empty[2] = {};
     CHECK(hair_primary::pick_publish(empty, 2, 0, upto101) == -1);
   }
+  {   // rebase (hp_rebase): the strand passes of frame N trace frame N-1's camera-relative groom from frame N's camera
+    CHECK(hair_primary::kFlagCamera != hair_primary::kFlagTips && hair_primary::kCameraOffset + 16 == hair_primary::kHeaderTotal);
+    CHECK(hair_primary::kCameraOffset >= hair_primary::kColourOffset + hair_primary::kMaxGrooms * hair_primary::kColourBytes);
+    const double world[3] = {-640.25, 3.5, -190.75}, build[3] = {-642.4, 1.8, -195.3}, now[3] = {-642.1, 1.8, -194.9};
+    double org[3], dir[3], len = 0;
+    for (int c = 0; c < 3; ++c) { org[c] = now[c] - build[c]; dir[c] = world[c] - now[c]; len += dir[c] * dir[c]; }
+    len = std::sqrt(len);
+    bool same = true;
+    for (int c = 0; c < 3; ++c) same = same && std::fabs(org[c] + dir[c] / len * len - (world[c] - build[c])) < 1e-9;
+    CHECK(same);   // origin + t * direction (this camera's ray) lands on the point in the build camera's frame
+  }
   {   // level reload (hv1 2026-11-03 18:40, device lost after F8): LoadGuard + SwapGate as hair_primary_publish uses them
     hair_primary::LoadGuard load;
     hair_primary::SwapGate g;

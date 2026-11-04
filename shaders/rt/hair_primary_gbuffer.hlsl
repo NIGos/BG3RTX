@@ -2,8 +2,8 @@
 // Primary strand hair, G-buffer variant (docs/RTX_HAIR_PRIMARY.md, key rt_hair_groom_primary): replaces the
 // fragment shader of a matched static CHAR_Hair G-buffer draw (native FS 42a95e17ec3adc51,
 // captures/alpha_cache/42a95e17ec3adc51.glsl) inside a clone of the game's pipeline (layer/hair_primary.cpp).
-// The card fragment is only the candidate region: one camera ray through the pixel into this frame's groom TLAS
-// (built after the prepass); no strand: discard. A strand hit writes its own depth (the clone tests
+// The card fragment is only the candidate region: one camera ray through the pixel into the last published groom TLAS
+// (the previous frame's: rebased to this camera, hp_rebase); no strand: discard. A strand hit writes its own depth (the clone tests
 // GREATER_OR_EQUAL with depth writes: the prepass clone left no card depth), the fibre normal, the game's material
 // evaluated at the strand's own UV (card UV at its embedding point), the strand tangent and class 5.
 // The first fragment of a pixel traces and stores the hit (common/hair_primary.h pixel entry); later fragments of
@@ -12,7 +12,7 @@
 // groom or another card layer is written by that card's fragment.
 // Same descriptor bindings as the native FS (a subset of the game's pipeline layout); the record address comes
 // from specialization constants 1100/1101.
-#include "hair_primary.hlsli"
+#include "hair_primary_rebase.hlsli"
 
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
@@ -22,6 +22,8 @@ struct Camera {               // set 0 binding 2 (FRAME_MAP "Frame generation")
   row_major float4x4 proj;    // jittered reversed-Z projection
   row_major float4x4 vp;      // camera-relative jittered view-projection
   float near_z, far_z;
+  float2 m5;
+  float3 position;            // m6: camera world position (the origin of this frame's camera-relative space)
 };
 struct Draw {                 // set 1 binding 0
   row_major float4x4 world;
@@ -87,6 +89,8 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float cos_card = abs(dot(dir, cn)) / max(length(cn), 1e-30);
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
   if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
+  float3 org;   // this camera in the published groom's camera-relative frame (hp_rebase)
+  if (!hp_rebase(rec, gCam.position, org)) discard;
   const uint64_t pool = addr2(ld2(rec + 24u)), pixels = addr2(ld2(rec + 32u));
   const uint pool_bytes = ld(rec + 56u);
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
@@ -94,7 +98,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   uint4 e = vk::RawBufferLoad<uint4>(at, 16);
   if (e.w != hp_seal(e.xyz, tag)) {
     RayDesc r;
-    r.Origin = 0.0.xxx;
+    r.Origin = org;
     r.TMin = 0.0;
     r.Direction = dir;
     r.TMax = 1.0e5;
@@ -109,8 +113,8 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
         uint i0;
         if (hp_segment(pool, pool_bytes, row, seg, i0)) {
         const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
-        const float3 hit = dir * q.CommittedRayT();
-        const float v = hp_segment_param(hit, p0, p1);
+        const float3 hit = dir * q.CommittedRayT();   // this frame's camera-relative point
+        const float v = hp_segment_param(hit + org, p0, p1);
         const float4 c = mul(float4(hit, 1.0), gCam.vp);
         e = uint4((k << 24) | seg, asuint(v), asuint(c.z / c.w), 0u);
         }
@@ -134,7 +138,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float2 uv1 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0 + 1u, 8u), 4));
   const float2 uv = lerp(uv0, uv1, v);
   const float3 t_world = normalize(p1 - p0);
-  const float3 to_cam = -normalize(lerp(p0, p1, v));
+  const float3 to_cam = normalize(org - lerp(p0, p1, v));
   const float3 t_view = normalize(mul(float4(t_world, 0.0), gCam.view).xyz);
   const float3 n_view = normalize(mul(float4(hp_fibre_normal(t_world, to_cam), 0.0), gCam.view).xyz);
 
