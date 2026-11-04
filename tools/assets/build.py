@@ -43,6 +43,28 @@ def _guard_output(out: str, data_dir: str) -> None:
         raise SystemExit("refusing to write inside the game folder")
 
 
+def _validate_presets(worlds, triggers, probes, preset_index, log=print):
+    required = set()
+    for world in worlds:
+        required.update(r for r in (world.lighting, world.atmosphere) if r)
+    for trigger in triggers:
+        if trigger.kind in ("lighting", "atmosphere"):
+            required.update(r for r in trigger.resources if r)
+    for probe in probes:
+        required.update(c.lighting for c in probe.captures if c.lighting)
+        if probe.trigger_lighting:
+            required.add(probe.trigger_lighting)
+    missing = sorted(required - preset_index.keys())
+    trigger_keys = {(t.level, t.map_key) for t in triggers}
+    unresolved_links = [(t.level, key) for t in triggers if t.kind not in ("lighting", "atmosphere") for key in t.links if (t.level, key) not in trigger_keys]
+    if unresolved_links:
+        log(f"unresolved trigger links ({len(unresolved_links)}): {unresolved_links}")
+        raise ValueError(f"unresolved trigger links: {unresolved_links}")
+    if missing:
+        log(f"unresolved required lighting/atmosphere presets ({len(missing)}): {', '.join(missing)}")
+        raise ValueError("missing required presets: " + ", ".join(missing))
+
+
 def build(game: str, out: str, jobs: int = 0, want_json: bool = False, include_honour: bool = False,
           skip_effects: bool = False, names: bool = True, log=print) -> dict:
     t0 = time.time()
@@ -50,8 +72,9 @@ def build(game: str, out: str, jobs: int = 0, want_json: bool = False, include_h
     _guard_output(out, data_dir)
     os.makedirs(out, exist_ok=True)
     ps = PackageSet(data_dir)
-    fingerprint = ps.fingerprint()
-    digest = hashlib.md5(json.dumps(fingerprint, sort_keys=True).encode()).digest()
+    fingerprint = ps.fingerprint(log=log)
+    identity = [{k: p[k] for k in ("name", "priority", "sha256")} for p in fingerprint]
+    digest = hashlib.md5(json.dumps(identity, sort_keys=True).encode()).digest()
     log(f"reading {len(ps.packages)} packages, {len(ps.index)} files ({time.time() - t0:.1f}s)")
 
     li = LevelIndex(ps, include_honour=include_honour)
@@ -75,6 +98,8 @@ def build(game: str, out: str, jobs: int = 0, want_json: bool = False, include_h
     S = w.strings.add if names else (lambda s: 0)
     A = w.strings.add  # always kept (identifiers the runtime looks up)
     preset_index = {p.id: i for i, p in enumerate(presets)}
+
+    _validate_presets(worlds, trigs, probes, preset_index, log)
 
     # ---- levels, instances, aliases ----
     by_level = {}

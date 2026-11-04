@@ -33,7 +33,87 @@ static std::vector<uint8_t> asset(float radius = 0.0001f, uint32_t tri = 1, uint
   return b;
 }
 
+static void test_upload_submission() {
+  using namespace hair_primary;
+  CHECK(readback_state(100, 101, true) == ReadbackState::Wait);
+  CHECK(readback_state(100, 102, false) == ReadbackState::Drop);
+  CHECK(readback_state(102, 103, true) == ReadbackState::Wait); // redone upload
+  CHECK(readback_state(102, 104, true) == ReadbackState::Ready);
+}
+static void test_compaction_submission() {
+  using namespace hair_primary;
+  // A stale, nonzero size is no authority to compact an unsubmitted build.
+  const uint64_t stale_size = 64;
+  CHECK(stale_size && readback_state(10, 50, false) == ReadbackState::Drop);
+  CHECK(readback_state(50, 51, true) == ReadbackState::Wait);
+  CHECK(readback_state(50, 52, true) == ReadbackState::Ready);
+}
+static void test_uv_submission() {
+  using namespace hair_primary;
+  CHECK(readback_state(20, 20, false) == ReadbackState::Wait);
+  CHECK(readback_state(20, 22, false) == ReadbackState::Drop); // never match old style samples
+  CHECK(readback_state(20, 22, true) == ReadbackState::Ready);
+}
+static void test_count_submission() {
+  using namespace hair_primary;
+  CHECK(readback_state(0, 1, true) == ReadbackState::Wait);
+  CHECK(readback_state(0, 2, false) == ReadbackState::Drop); // neither success nor failure evidence
+  CHECK(readback_state(0, 2, true) == ReadbackState::Ready);
+}
+static void test_gbuffer_depth_latch() {
+  hair_primary::DepthLatch latch;
+  CHECK(!latch.dropped(7, 100)); // refused prepass: cards plus probe
+  latch.prepass(8, 100);
+  CHECK(!latch.dropped(7, 100)); // another draw key cannot authorize a swap
+  for (uint64_t f = 100; f <= 102; ++f) CHECK(latch.dropped(8, f));
+  CHECK(!latch.dropped(8, 99));
+  CHECK(!latch.dropped(8, 103));
+}
+static void test_prepass_drop_decision() {
+  using namespace hair_primary;
+  constexpr uint64_t now = 100, key = 7;
+  for (uint64_t applied : {now, now + 1}) { // prepass before/after G-buffer recording
+    DepthLatch latch;
+    CHECK(prepass_drop_allowed(applied, now, true, true, latch.allow_prepass(key, now)));
+    latch.prepass(key, now);
+    CHECK(latch.dropped(key, now + 1));
+    latch.observe_pipeline(key, now, false, false);
+    CHECK(!prepass_drop_allowed(applied, now, true, true, latch.allow_prepass(key, now)));
+  }
+  CHECK(!prepass_drop_allowed(now - 1, now, true, true, true));
+  CHECK(!prepass_drop_allowed(now + 2, now, true, true, true));
+  CHECK(!prepass_drop_allowed(0, now, true, true, true));
+  CHECK(!prepass_drop_allowed(now, now, false, true, true));
+  CHECK(!prepass_drop_allowed(now, now, true, false, true));
+  CHECK(!prepass_drop_allowed(now, now, true, true, false));
+  // hv7: equality with now rejected all 187 draws when apply was now + 1.
+  unsigned drops = 0;
+  for (unsigned i = 0; i < 187; ++i)
+    drops += prepass_drop_allowed(now + 1, now, true, true, true);
+  CHECK(drops == 187);
+}
+static void test_card_accepted_totals() {
+  uint32_t cards[256] = {}, accepted[256] = {}, ct[4], at[4];
+  cards[0] = 10; cards[1] = 5; accepted[0] = 3;
+  cards[64] = 8; accepted[64] = 7; accepted[255] = 2;
+  hair_primary::count_marker_totals(cards, accepted, ct, at);
+  CHECK(ct[0] == 15 && at[0] == 3);
+  CHECK(ct[1] == 8 && at[1] == 7);
+  CHECK(ct[2] == 0 && at[2] == 0 && ct[3] == 0 && at[3] == 2);
+}
+static void test_period_failures() {
+  hair_primary::PeriodFailures failures;
+  ++failures.refused; ++failures.feedback; ++failures.feedback;
+  CHECK(failures.refused == 1 && failures.feedback == 2);
+  failures.reset();
+  CHECK(failures.refused == 0 && failures.feedback == 0);
+  ++failures.feedback;
+  CHECK(failures.refused == 0 && failures.feedback == 1);
+}
+
 int main() {
+  test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
+  test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
@@ -378,85 +458,70 @@ int main() {
     gate.observe(key, 100, 1000, 1000); // arrives at publish 103
     CHECK(gate.allow(key, 103));
     for (uint64_t n = 104; n < 108; ++n) {
-      CHECK(latch.begin() == 0);
       const bool prepass = gate.allow(key, n);
-      if (prepass) latch.prepass(key);
-      // G-buffer 104 refuses its header after a qualified prepass. The failed
-      // count from G-buffer 101 arrives only at publish 104, after this draw.
-      latch.gbuffer();
+      if (prepass) latch.prepass(key, n);
       const bool strands = gate.allow(key, n) && n != 104;
       CHECK(!strands);
-      const bool fallback = latch.needs_card_depth(key, strands);
-      CHECK(fallback == prepass);
-      if (fallback) {
-        CHECK(latch.needs_card_depth(key, false)); // all sibling draws need depth
-        latch.resolved(key);
-      }
-      if (n == 104) gate.observe(key, 101, 1000, 1944); // three publishes later, after G-buffer
+      const bool fallback = latch.needs_card_depth(key, n, strands);
+      CHECK(!latch.orphan(key, n, strands, fallback));
+      if (n == 104) gate.observe(key, 101, 1000, 1944);
       CHECK(!gate.allow(key, n));
     }
-    gate.observe(key, 100, 1000, 1000); // old success cannot override failure
+    gate.observe(key, 100, 1000, 1000);
     CHECK(!gate.allow(key, 108));
-    CHECK(latch.begin() == 0); // no orphan
   }
-  { // Prepass before present (F -> F+1), or both passes at F: the same depth epoch.
+  { // Frame latch: both recording orders, interleaving, hitch and sibling pipelines.
     using namespace hair_primary;
     constexpr uint64_t key = 0xABCD, F = 100;
     for (uint64_t present : {0ULL, 1ULL}) {
       DepthLatch latch;
-      CoverageGate gate;
-      gate.observe(key, F, 1000, 1000);
-      CHECK(latch.begin() == 0);
-      CHECK(gate.allow(key, F));
-      latch.prepass(key);
-      CHECK(latch.begin() == 0); // another prepass before G-buffer must retain obligations
-      CHECK(latch.keys.count(key) == 1);
-      latch.gbuffer();
-      gate.invalidate(key, F + present); // G-buffer refuses the prepass-swapped key
-      const bool strands = gate.allow(key, F + present);
-      CHECK(!strands);
-      CHECK(latch.needs_card_depth(key, strands)); // native-depth fallback
-      CHECK(latch.needs_card_depth(key, false)); // sibling draws still need fallback
-      latch.resolved(key);
-      CHECK(latch.begin() == 0); // no orphan, regardless of present's position
-      latch.prepass(key);
-      CHECK(latch.begin() == 0); // repeated prepasses cannot count an orphan
-      latch.gbuffer();
-      CHECK(latch.begin() == 0); // allow late G-buffer draws one more epoch
-      CHECK(latch.needs_card_depth(key, false));
-      latch.gbuffer();
-      CHECK(latch.begin() == 1); // a genuinely unresolved epoch is counted once
-      CHECK(latch.begin() == 0);
-      CHECK(!latch.needs_card_depth(key, false));
+      // G-buffer F can precede prepass F, consuming prepass F-1 instead.
+      latch.prepass(key, F - 1);
+      CHECK(latch.needs_card_depth(key, F, false));
+      CHECK(!latch.orphan(key, F, false, true));
+      latch.prepass(key, F);
+      CHECK(latch.needs_card_depth(key, F + present, false));
+      CHECK(!latch.orphan(key, F + present, false, true));
+      CHECK(latch.needs_card_depth(key, F + present, false)); // sibling obligation retained
+      CHECK(!latch.orphan(key, F + present, true, false));
+      latch.prepass(key, F + 1); // next prepass before late G-buffer draws
+      CHECK(latch.needs_card_depth(key, F + 1, false));
+      CHECK(latch.needs_card_depth(key, F + 3, false));
+      CHECK(!latch.needs_card_depth(key, F + 4, false));
+      latch.prune(F + 900); // hitch: no synthetic orphan from missing draws
+      CHECK(latch.keys.empty());
+      CHECK(!latch.orphan(key, F + 900, false, false));
     }
-  }
-  { // G-buffer draws may be recorded after the next prepass begins.
-    using namespace hair_primary;
-    constexpr uint64_t key = 0xABCD000000000001ULL, F = 100;
     DepthLatch latch;
-    CHECK(latch.begin() == 0);
-    latch.prepass(key, F);
-    latch.gbuffer(); // pass begin(F), before its draws
-    CHECK(latch.begin() == 0); // prepass(F+1)
-    CHECK(latch.previous.at(key) == F);
-    CHECK(latch.needs_card_depth(key, false)); // late refusal still needs fallback
-    latch.prepass(key, F + 1);
-    CHECK(!latch.needs_card_depth(key, true)); // G-buffer draw(F) swaps
-    latch.resolved(key);
-    CHECK(latch.keys.empty() && latch.previous.empty());
-    latch.gbuffer(); // G-buffer(F+1) also swaps
-    latch.resolved(key);
-    CHECK(latch.begin() == 0);
-    // No G-buffer swap or fallback: retain the original prepass frame until drop.
-    latch.prepass(key, F + 2);
-    latch.gbuffer();
-    CHECK(latch.begin() == 0);
-    CHECK(latch.previous.at(key) == F + 2);
-    latch.gbuffer();
-    CHECK(latch.begin() == 1);
-    CHECK(!latch.needs_card_depth(key, false));
-    latch.gbuffer();
-    CHECK(latch.begin() == 0); // count it only once
+    latch.observe_pipeline(key, F, false, false); // uncovered sibling
+    latch.observe_pipeline(key, F, true, true); // covered sibling cannot erase it
+    CHECK(!latch.allow_prepass(key, F));
+    CHECK(!latch.allow_prepass(key, F + 300));
+    CHECK(latch.allow_prepass(key, F + 301));
+    CHECK(latch.allow_prepass(key + 1, F));
+    if (latch.allow_prepass(key, F)) latch.prepass(key, F);
+    CHECK(!latch.orphan(key, F, false, false));
+    latch.prepass(key + 1, F); // true native draw without fallback: exactly one
+    unsigned orphans = latch.orphan(key + 1, F + 2, false, false);
+    orphans += latch.orphan(key + 1, F + 2, false, true);
+    orphans += latch.orphan(key + 1, F + 2, true, false);
+    CHECK(orphans == 1);
+    std::puts("depth latch: recording orders, interleaving, hitch, uncovered sibling, true orphan passed");
+  }
+  { // hv9 aggregate fixture: 3 keys x 60 frames at 30 fps; no draw-time orphan.
+    using namespace hair_primary;
+    DepthLatch latch;
+    unsigned prepass = 0, gbuffer = 0, velocity = 0, orphans = 0;
+    for (uint64_t f = 2600; f < 2660; ++f) {
+      latch.prune(f);
+      for (uint64_t key : {0xe338ULL, 0x833dULL, 0xdfc7ULL}) {
+        CHECK(latch.allow_prepass(key, f));
+        latch.prepass(key, f); ++prepass;
+        orphans += latch.orphan(key, f + 1, true, false); ++gbuffer; ++velocity;
+      }
+    }
+    CHECK(prepass == 180 && gbuffer == 180 && velocity == 180 && orphans == 0);
+    std::puts("hv9 aggregate fixture: 180/180/180 draws, 0 orphans (not a per-draw log replay)");
   }
   { // Compact draw keys: duplicates share, live slots survive reorder/removal, overflow keeps cards.
     using namespace hair_primary;
@@ -499,7 +564,7 @@ int main() {
     auto count = [&](uint32_t tag) {
       for (const auto& m : pixel) for (uint32_t j = 0; j < 4; ++j) {
         const uint32_t t = tag - j, slot = m.card & 255u;
-        if (t && slot < kDrawSlots && (m.card >> 8) == (t & 0xFFFFFFu)) {
+        if ((t & 0xFFFFFFu) && slot < kDrawSlots && (m.card >> 8) == (t & 0xFFFFFFu)) {
           ++card[j][slot];
           accepted[j][slot] += m.accepted == m.card;
         }
@@ -516,10 +581,11 @@ int main() {
     fragment(0, 0, 0x1000065, false);
     CHECK(pixel[0].accepted != pixel[0].card); // stale acceptance
     for (auto& m : pixel) m = {};
-    fragment(15, 0, 0x1000000, true); // low 24 tag bits may legitimately wrap to zero
+    fragment(15, 0, 0x1000000, true); // wrapped tags are excluded, including untouched zero markers
     fragment(16, 1, 0x1000000, true); // invalid slot ignored
     count(0x1000000);
-    CHECK(card[0][15] == 1 && accepted[0][15] == 1);
+    CHECK(card[0][15] == 0 && accepted[0][15] == 0);
+    CHECK(card[0][0] == 1); // unchanged by the untouched zero markers
   }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;

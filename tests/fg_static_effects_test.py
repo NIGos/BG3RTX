@@ -4,6 +4,9 @@ import tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from scripts.qa.fg_static_effects import analyze,compare_debug,same_pose
 
 

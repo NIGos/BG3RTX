@@ -34,7 +34,7 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     const uint slot = mark.x & 255u;
     for (uint j = 0u; j < 4u; ++j) {
       const uint tag = pc.tag - j;
-      if (tag != 0u && slot < 16u && (mark.x >> 8u) == (tag & 0xFFFFFFu)) {
+      if ((tag & 0xFFFFFFu) != 0u && slot < 16u && (mark.x >> 8u) == (tag & 0xFFFFFFu)) {
         InterlockedAdd(gsCardCount[j * 64u + slot], 1u);
         if (mark.y == mark.x) InterlockedAdd(gsTagCount[j * 64u + slot], 1u);
       }

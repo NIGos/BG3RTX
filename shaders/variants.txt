@@ -167,3 +167,7 @@ rt/water_reflect.hlsl?WATER_HIT_SHADE_LAYOUT=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATI
 rt/water_reflect.hlsl?WATER_RR_HIT=1;WATER_HIT_SHADE_LAYOUT=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1
 rt/water_reflect.hlsl?WATER_RR_HIT=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1
 rt/water_reflect.hlsl?WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1
+
+rt/hair_primary_count.hlsl
+rt/hair_primary_gbuffer.hlsl
+rt/hair_primary_velocity.hlsl

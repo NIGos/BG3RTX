@@ -349,13 +349,16 @@ def parse_template(path: str, data: bytes):
 
 # ---- worker processes: hashing is pure Python, so it is spread over cores ----
 _WORKER_PS = None
+_WORKER_PS_KEY = None
 
 
 def _hash_worker(args):
     data_dir, paks, names = args
-    global _WORKER_PS
-    if _WORKER_PS is None:
+    global _WORKER_PS, _WORKER_PS_KEY
+    key = (os.path.normcase(os.path.realpath(data_dir)), tuple(sorted(p.lower() for p in paks)))
+    if _WORKER_PS is None or _WORKER_PS_KEY != key:
         _WORKER_PS = PackageSet(data_dir, only=paks)
+        _WORKER_PS_KEY = key
     out = []
     for n in names:
         try:
@@ -370,13 +373,13 @@ def hash_bshd(data_dir: str, paks: list, names: list, jobs: int):
     if not names:
         return []
     if jobs <= 1:
-        return _hash_worker((data_dir, paks, names))
+        return sorted(_hash_worker((data_dir, paks, names)))
     chunks = [names[i::jobs * 4] for i in range(jobs * 4)]
     res = []
     with ProcessPoolExecutor(jobs) as ex:
         for r in ex.map(_hash_worker, [(data_dir, paks, c) for c in chunks]):
             res.extend(r)
-    return res
+    return sorted(res)
 
 
 def extract(ps: PackageSet, data_dir: str, jobs: int = 0, log=print) -> MaterialDB:
@@ -411,7 +414,7 @@ def extract(ps: PackageSet, data_dir: str, jobs: int = 0, log=print) -> Material
         f"{len(mat_bshd)} material bshd, {len(engine_bshd)} engine bshd")
 
     owners = sorted({ps.owner(n) for n in list(mat_bshd) + engine_bshd})
-    hashed = hash_bshd(data_dir, owners, sorted(mat_bshd) + sorted(engine_bshd), jobs)
+    hashed = sorted(hash_bshd(data_dir, owners, sorted(mat_bshd) + sorted(engine_bshd), jobs))
     errors = [h for h in hashed if h[1].startswith("error:")]
 
     variants, vindex = [], {}

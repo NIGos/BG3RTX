@@ -5,7 +5,7 @@ with plain pointer casts after a size check (`layer/assetdb.cpp` mirrors these l
 `tests/test_format.py` pins the record sizes).
 
   header (64 B)  "BG3RTXDB", u32 version, u32 header size, u32 section count, u32 flags,
-                 u64 TOC offset, u64 file size, u64 build time (unix), 16 B source digest
+                 u64 TOC offset, u64 file size, u64 content stamp (legacy build-time field), 16 B source digest
   TOC (32 B per section)  char tag[4], u32 section version, u64 offset, u64 size,
                           u32 record count, u32 record size
 String references are u32 byte offsets into STRS (0 is the empty string). Indices that
@@ -13,8 +13,8 @@ point nowhere are 0xFFFFFFFF.
 """
 from __future__ import annotations
 
+import hashlib
 import struct
-import time
 
 MAGIC = b"BG3RTXDB"
 VERSION = 1
@@ -107,8 +107,10 @@ class Writer:
         toc_off = len(out)
         for tag, ver, off, size, count, rsize in placed:
             out += TOC.pack(tag.encode("ascii"), ver, off, size, count, rsize)
+        # The legacy timestamp slot is a stable content stamp; its width/layout is unchanged.
+        stamp = int.from_bytes(hashlib.blake2b(out[HEADER.size:], digest_size=8).digest(), "little")
         HEADER.pack_into(out, 0, MAGIC, VERSION, HEADER.size, len(placed), 0, toc_off, len(out),
-                         int(build_time if build_time is not None else time.time()), digest[:16].ljust(16, b"\0"))
+                         int(build_time if build_time is not None else stamp), digest[:16].ljust(16, b"\0"))
         with open(path, "wb") as f:
             f.write(out)
         return {tag: {"bytes": size, "count": count} for tag, _v, _o, size, count, _r in placed}
@@ -118,14 +120,32 @@ class Reader:
     """Reads the container back (tests, `info`, and the offline join tools)."""
 
     def __init__(self, data: bytes):
+        if len(data) < HEADER.size:
+            raise ValueError("truncated asset database header")
         magic, ver, hsize, nsec, _flags, toc, fsize, self.build_time, self.digest = HEADER.unpack_from(data, 0)
-        if magic != MAGIC or ver != VERSION or fsize != len(data):
+        if magic != MAGIC or ver != VERSION or hsize != HEADER.size or fsize != len(data):
             raise ValueError("not a version 1 asset database (or truncated)")
+        if toc < hsize or toc % 16 or toc + nsec * TOC.size != len(data):
+            raise ValueError("invalid asset database TOC span")
         self.data = data
         self.toc = {}
+        spans = []
         for i in range(nsec):
             tag, sv, off, size, count, rsize = TOC.unpack_from(data, toc + i * TOC.size)
-            self.toc[tag.decode()] = (off, size, count, rsize)
+            tag = tag.decode("ascii")
+            if tag in self.toc or sv != VERSION or off < hsize or off % 16 or off + size > toc:
+                raise ValueError(f"invalid section {tag} span/version")
+            if any(off < end and start < off + size for start, end in spans):
+                raise ValueError(f"overlapping section {tag}")
+            spans.append((off, off + size))
+            if tag == "STRS":
+                if rsize != 1 or not size or data[off] != 0 or data[off + size - 1] != 0 or data[off:off+size].count(b"\0") != count:
+                    raise ValueError("invalid STRS section")
+            elif tag not in RECORDS or rsize != RECORDS[tag].size or size != count * rsize:
+                raise ValueError(f"invalid section {tag} records")
+            self.toc[tag] = (off, size, count, rsize)
+        if "STRS" not in self.toc:
+            raise ValueError("missing STRS section")
 
     def rows(self, tag: str) -> list[tuple]:
         if tag not in self.toc:
@@ -135,6 +155,11 @@ class Reader:
         return [rec.unpack_from(self.data, off + i * rsize) for i in range(count)]
 
     def string(self, ref: int) -> str:
-        off = self.toc["STRS"][0] + ref
-        end = self.data.index(b"\0", off)
+        base, size, _, _ = self.toc["STRS"]
+        if not 0 <= ref < size or (ref and self.data[base + ref - 1] != 0):
+            raise ValueError("string reference outside STRS or not at a string boundary")
+        off = base + ref
+        end = self.data.find(b"\0", off, base + size)
+        if end < 0:
+            raise ValueError("unterminated STRS string")
         return self.data[off:end].decode("utf-8")
