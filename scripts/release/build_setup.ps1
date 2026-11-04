@@ -34,10 +34,9 @@ $hashFile = Join-Path $OutDir 'payload.sha256.json'
 [pscustomobject]@{ schema = 1; files = $entries } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $hashFile -Encoding UTF8
 $license = Join-Path $OutDir 'setup-license.txt'
 ((Get-Content -LiteralPath (Join-Path $PayloadDir 'LICENSE') -Raw) + "`r`n`r`n" + (Get-Content -LiteralPath (Join-Path $PayloadDir 'LICENSE-EXCEPTION.md') -Raw)) | Set-Content -LiteralPath $license -Encoding UTF8
-# ISCC has no Windows VERSIONINFO: pin the compiler's own banner, not file properties.
-$banner = & $Compiler '/?' 2>&1
-if ($LASTEXITCODE -ne 0) { throw 'Cannot query Inno compiler' }
-if (($banner -join "`n") -notmatch '(?<![\d.])6\.7\.3(?![\d.])') { throw 'Inno Setup 6.7.3 is required' }
+# ISCC prints no version and has no VERSIONINFO: pin Inno Setup 6.7.3 by the compiler's file hash.
+$isccSha = '0a8757031b33777e4c9cbffee40f11a5062b36d25cbe144c1db73b6102b80ad7'
+if ((Get-FileHash -LiteralPath $Compiler -Algorithm SHA256).Hash.ToLowerInvariant() -ne $isccSha) { throw 'Inno Setup 6.7.3 (ISCC.exe SHA256 pin) is required' }
 Write-Host "Compiling Setup: Inno 6.7.3; $($entries.Count) payload hashes; version $version"
 & $Compiler "/DPayloadDir=$PayloadDir" "/DProductVersion=$version" "/DHashManifest=$hashFile" "/DLicensePath=$license" "/O$OutDir" (Join-Path $PSScriptRoot 'BG3RTX.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed: $LASTEXITCODE" }
