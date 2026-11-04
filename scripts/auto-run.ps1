@@ -765,13 +765,19 @@ while ((Get-Date) -lt $deadline) {
         $phaseReadyOffset=if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
         $iniLines += "pan_capture=$(if ($step.wait_log) { 0 } else { $step.serial })"
+        $phaseBurstSerial=$step.serial
         if ($step.set) {
           foreach ($assignment in ($step.set -split ',')) {
             $parts = $assignment -split '=', 2
             if ($parts.Count -ne 2) { throw 'MovePlan set requires key=value' }
             $settingPattern = '^' + [regex]::Escape($parts[0]) + '='
             $iniLines = @($iniLines | Where-Object { $_ -notmatch $settingPattern })
-            $iniLines += $assignment
+            if ($step.wait_log -and $parts[0] -eq 'pan_capture') {
+              # Explicit set values override serial too. Preparation/mode keys
+              # still apply now so their resources can warm before readiness.
+              $phaseBurstSerial=$parts[1]
+              $iniLines += 'pan_capture=0'
+            } else { $iniLines += $assignment }
           }
         }
         if ($NoActivate) { $iniLines=Set-UnfocusedIniLines $iniLines -PreserveFG:$UnfocusedFG }
@@ -857,7 +863,7 @@ while ((Get-Date) -lt $deadline) {
       # motion-ready so measured events retain the same readiness boundary.
       if ($step.wait_log -and $phaseReady -and -not $phaseBurstArmed) {
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
-        $iniLines += "pan_capture=$($step.serial)"
+        $iniLines += "pan_capture=$phaseBurstSerial"
         $iniLines | Set-Content -LiteralPath $ini
         $phaseBurstArmed=$true
       }
