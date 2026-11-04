@@ -79,6 +79,25 @@ class PipelineReadinessTests(unittest.TestCase):
 
 
 class FlowTests(unittest.TestCase):
+    def test_wsf1_064436_readiness_is_outside_periodic_window(self):
+        data = f.read(f.ROOT / 'tests/fixtures/window_ready_wsf1_064436.json')
+        job, step = data['job'], data['phase']
+        with patch.dict(fw.MODEL, {}, clear=True), patch.dict(f.TRACE_STALL, {}, clear=True):
+            errors, budgets = f.window_problems(job, [step])
+            self.assertEqual(errors, [])
+            self.assertTrue(budgets)
+            self.assertTrue(all(b['complete'] >= b['required'] for b in budgets))
+            self.assertEqual(fw.gates.check(job['expect_every'], data['game'],
+                                           data['runner'], [step]), [])
+            # Same 15.4 s plan: charging apply time again was the false finding.
+            without_wait = dict(step)
+            without_wait.pop('wait_log')
+            self.assertTrue(f.window_problems(job, [without_wait])[0])
+            # A ready marker does not waive the straddling line or trace stalls.
+            self.assertTrue(f.window_problems(job, [dict(step, seconds=9)])[0])
+            closed = re.sub(r'06:47:28\.735', '06:47:17.098', data['runner'])
+            self.assertTrue(fw.gates.check(job['expect_every'], data['game'], closed, [step]))
+
     def test_wsf1_window4_replays_stretched_complete_period(self):
         data = f.read(f.ROOT / 'tests/fixtures/window_stall_wsf1.json')
         job, plan, _ = f.load_job(f.ROOT / 'tools/live_batches/water_surface_fresnel/jobs/wsf1-s8-interface-column.json')
@@ -195,10 +214,10 @@ class FlowTests(unittest.TestCase):
         p[2]["seconds"] = 60
         budget = f.duration_budget(j, p)
         cost = next(w for w in budget["windows"] if w["window"] == "cost-off")
-        self.assertEqual(cost["minimum_seconds"], 11.1)  # 1s apply + 2 x 5s cadence
+        self.assertEqual(cost["minimum_seconds"], 10.1)  # 2 x 5s after motion-ready
         self.assertTrue(budget["findings"])
         f.tighten(j, p)
-        self.assertEqual(p[2]["seconds"], 11.1)
+        self.assertEqual(p[2]["seconds"], 10.1)
         self.assertFalse(f.window_problems(j, p)[0])
 
     def test_duration_trace_uses_segment_stall_and_exclusive_endpoint(self):
@@ -376,6 +395,7 @@ class FlowTests(unittest.TestCase):
 
     def test_300_frame_window_needs_two_lines_and_latency(self):
         j, p = fixture()
+        p[2].pop('wait_log')  # no readiness boundary: apply delay is inside seconds
         j["expect_every"] = [dict(select="rt passes: GPU cost", match="ok", windows=["cost-off"], min=1)]
         errors, budgets = f.window_problems(j, p)
         self.assertEqual(budgets[0]["minimum_seconds_exclusive"], 21)
@@ -387,6 +407,7 @@ class FlowTests(unittest.TestCase):
 
     def test_multiple_lines_trace_stall_and_custom_cadence(self):
         j, p = fixture()
+        p[2].pop('wait_log')
         j["live_flow"] = dict(trace_stall_s=3)
         j["expect_every"] = [dict(select="custom", match="ok", windows=["cost-off"], min=2, period_frames=60)]
         p[2].update(seconds=11, trace_at=[1, 2])

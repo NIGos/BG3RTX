@@ -22,6 +22,23 @@ and the runner's skipped first line after settings apply. The window endpoint is
 exclusive. Every required line must fit; `when_present` does not excuse an
 insufficient window when its pass runs. Known periodic events also have their
 cadence checked. One-off trace/burst events retain event semantics.
+For periodic gates in phases with `wait_log`, scheduled seconds start at
+`[motion-ready]` (auto-run resets the phase clock). Settings latency belongs to
+the separate readiness allowance and is not subtracted again. The first stats
+line is still skipped, and capture stalls and exclusive endpoints still apply.
+`tests/fixtures/window_ready_wsf1_064436.json` retains the exact VALID wsf1 phase 4
+producer lines and readiness/next-window timestamps: its unchanged 15.4 s fits
+at the fresh S8 26.3158 FPS; charging settings latency twice falsely required
+more than 15.5571 s. Readiness alone cannot make a short window valid.
+The initial 89-log refresh found real shortages without a readiness wait in go2-s8
+(first shot 12.7 -> 12.9 s; cost 23.4 -> 24.0 s), go2-s8-medium (cost
+23.4 -> 24.0 s), and smoke_ultra (static 12.8 -> 12.9 s), inherited by
+combined S8 part 1. Its other shot findings, hv3, wf9, wo1, wsf1 and combined
+S8 part 2 were settings-delay false positives. A VALID run remains evidence
+for its actual alignment, not a blanket exemption from future sizing checks.
+Three historical logs disappeared from the shared corpus before final checks;
+the final 86-log corpus gives 26.1552 FPS and a > 23.94 s cost bound. The frozen
+snapshot was refreshed against that readable corpus, without queue writes.
 Trace-write events must have enough scheduled `trace_at` requests and time for
 serialized completion (two presents plus the declared write stall per request).
 A missing request or a completion beyond the exclusive endpoint fails offline.

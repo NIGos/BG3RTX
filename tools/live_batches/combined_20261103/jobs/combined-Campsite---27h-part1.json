@@ -57,7 +57,7 @@
   "window_mode": "visible_unfocused_fg",
   "name": "combined-Campsite---27h-part1",
   "live_batch": "combined",
-  "timeout": 3623.0,
+  "timeout": 3633.0,
   "args": [
     "-RealPresent",
     "-Move",
@@ -380,21 +380,7 @@
               0
             ],
             "fps": 12.106537530270467,
-            "windows": 110,
-            "logs": [
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
-            ]
+            "windows": 110
           },
           {
             "state": [
@@ -405,19 +391,7 @@
               0
             ],
             "fps": 7.562389715155868,
-            "windows": 17,
-            "logs": [
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
-            ]
+            "windows": 17
           },
           {
             "state": [
@@ -428,18 +402,22 @@
               0
             ],
             "fps": 6.949270326617158,
-            "windows": 2,
-            "logs": [
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
-            ]
+            "windows": 2
           }
         ],
         "trace_export": {
-          "seconds": 0.3169999999954598,
+          "seconds": 0.30200000000331784,
           "quantile": 0.95,
-          "samples": 431,
+          "samples": 440,
           "maximum": 0.43699999999807915
+        },
+        "trace_capture_stall": {
+          "seconds": 2.71857,
+          "source": "wf7a-s8-fg2.1.164300.log",
+          "quantile": 0.95,
+          "samples": 428,
+          "maximum": 2.9799,
+          "logs": 73
         }
       }
     },
@@ -780,15 +758,23 @@
           }
         ],
         "trace_export": {
-          "seconds": 0.31900000000041473,
+          "seconds": 0.30399999999644933,
           "quantile": 0.95,
-          "samples": 411,
+          "samples": 437,
           "maximum": 0.43699999999807915
+        },
+        "trace_capture_stall": {
+          "seconds": 2.71857,
+          "source": "wf7a-s8-fg2.1.164300.log",
+          "quantile": 0.95,
+          "samples": 428,
+          "maximum": 2.9799,
+          "logs": 73
         }
       }
     }
   ],
-  "estimated_phase_seconds": 694.6,
+  "estimated_phase_seconds": 686.6,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -864,8 +850,16 @@
     "trace_export": {
       "seconds": 0.30399999999644933,
       "quantile": 0.95,
-      "samples": 437,
+      "samples": 428,
       "maximum": 0.43699999999807915
+    },
+    "trace_capture_stall": {
+      "seconds": 2.71857,
+      "source": "wf7a-s8-fg2.1.164300.log",
+      "quantile": 0.95,
+      "samples": 428,
+      "maximum": 2.9799,
+      "logs": 73
     },
     "segments": [
       {
@@ -889,21 +883,7 @@
                 0
               ],
               "fps": 12.106537530270467,
-              "windows": 110,
-              "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
-              ]
+              "windows": 110
             },
             {
               "state": [
@@ -914,19 +894,7 @@
                 0
               ],
               "fps": 7.562389715155868,
-              "windows": 17,
-              "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
-              ]
+              "windows": 17
             },
             {
               "state": [
@@ -937,26 +905,22 @@
                 0
               ],
               "fps": 6.949270326617158,
-              "windows": 2,
-              "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
-              ]
+              "windows": 2
             }
           ],
           "trace_export": {
-            "seconds": 0.3169999999954598,
+            "seconds": 0.30200000000331784,
             "quantile": 0.95,
-            "samples": 431,
+            "samples": 440,
             "maximum": 0.43699999999807915
           },
           "trace_capture_stall": {
             "seconds": 2.71857,
             "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 437,
+            "samples": 428,
             "maximum": 2.9799,
-            "logs": 75
+            "logs": 73
           }
         }
       },
@@ -1037,30 +1001,22 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.31900000000041473,
+            "seconds": 0.30399999999644933,
             "quantile": 0.95,
-            "samples": 411,
+            "samples": 437,
             "maximum": 0.43699999999807915
           },
           "trace_capture_stall": {
             "seconds": 2.71857,
             "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 437,
+            "samples": 428,
             "maximum": 2.9799,
-            "logs": 75
+            "logs": 73
           }
         }
       }
-    ],
-    "trace_capture_stall": {
-      "seconds": 2.71857,
-      "source": "wf7a-s8-fg2.1.164300.log",
-      "quantile": 0.95,
-      "samples": 437,
-      "maximum": 2.9799,
-      "logs": 75
-    }
+    ]
   },
   "post": "py -3 tools/live_batches/combine.py --extract \"tools/live_batches/combined_20261103/combined-Campsite---27h-part1.manifest.json\" --log \"{log}\" --runner \"{runner}\" --status \"{status}\" --out \"{log}.batches\" --run-post"
 }

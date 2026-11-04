@@ -1,0 +1,169 @@
+{
+  "source": "wsf1-s8-interface-column.1.064436.log",
+  "valid": true,
+  "job": {
+    "name": "wsf1-s8-interface-column",
+    "save": "Water Queens House",
+    "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,dump_images=1,dump_raw=0,dump_png_width=1280,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,qa_exposure_hold=1,sharc_device=1,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_surface_fresnel=1,fg_snap=0,dump_preview_f32=1",
+    "window_mode": "visible_unfocused_fg",
+    "live_flow": {
+      "expected_fps": 26.3157894737,
+      "settings_latency_s": 1,
+      "trace_stall_s": 1,
+      "trace_capture_stall": {
+        "seconds": 2.71857,
+        "source": "wf7a-s8-fg2.1.164300.log",
+        "quantile": 0.95,
+        "samples": 437,
+        "maximum": 2.9799,
+        "logs": 75
+      }
+    },
+    "expect_every": [
+      {
+        "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "select": "\\[rt\\] scene wait: \\d+ frames",
+        "match": "got this frame's scene, 0 timeouts",
+        "min": 1,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+        "select": "\\[geo\\] RT capture, last \\d+ frames:",
+        "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+        "min": 1,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+        "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+        "match": ", buffer full 0\\.0, added ",
+        "min": 1,
+        "when_present": true,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "continuity",
+        "select": "\\[core\\] \\[water\\] compose stability",
+        "match": "uncomposed 0 \\(on/off flips 0\\)",
+        "min": 1,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "reflection stats",
+        "select": "\\[core\\] \\[water\\] reflections \\(",
+        "match": "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
+        "min": 1,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "compose tiers",
+        "select": "\\[core\\] \\[water\\] compose \\(",
+        "match": "screen hit \\(composed\\) [0-9.]+%, hidden [0-9.]+%.*aborted \\d+, invalid 0\\b",
+        "min": 1,
+        "windows": [
+          "partition-static-1"
+        ],
+        "share": {
+          "pattern": "compose \\((?=.*?aborted (\\d+), invalid 0\\b)(\\d+) frames,.*?rays (\\d+)/frame",
+          "offsets": [
+            0,
+            -0.5
+          ],
+          "max": 1.7863675248347788e-05
+        }
+      },
+      {
+        "name": "compose GPU ms",
+        "select": "\\[core\\] \\[water\\] compose GPU",
+        "match": "compose GPU [0-9.]+ ms median.*compose dispatches [0-9.]+ ms median",
+        "min": 1,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "post-water float shots at the pool rim",
+        "select": "\\[trace\\] frame \\d+ written:",
+        "match": "\\[trace\\] frame \\d+ written:",
+        "event": true,
+        "min": 2,
+        "settle_s": 1,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "surface pipeline selected in every ON window",
+        "select": "\\[water\\] surface Fresnel \\(\\d+ frames\\):",
+        "match": "enabled 1, draws [1-9]\\d*, missing 0\\b",
+        "min": 1,
+        "period_frames": 120,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "coverage-weighted clean contribution participates, invalid 0 and energy partition holds in every ON window",
+        "select": "\\[water\\] surface partition:",
+        "match": "coverage-weighted owned [1-9]\\d*, invalid 0; coverage zero \\d+, partial \\d+, full \\d+.*energy partition checked \\(8 float eps\\)",
+        "min": 1,
+        "period_frames": 120,
+        "windows": [
+          "partition-static-1"
+        ]
+      },
+      {
+        "name": "surface FS GPU ms",
+        "select": "\\[water\\] surface FS GPU",
+        "match": "surface FS GPU [0-9.]+ ms median, p90 [0-9.]+ \\([1-9]\\d* timed frames, [1-9]\\d* passes, [1-9]\\d* draws, dropped 0;",
+        "min": 1,
+        "period_frames": 120,
+        "windows": [
+          "partition-static-1"
+        ]
+      }
+    ]
+  },
+  "phase": {
+    "label": "partition-static-1",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 15.4,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 15.4,
+    "motion_end": 15.4,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_water_surface_fresnel=1,qa_exposure_hold=1,dump_preview_f32=1",
+    "trace_at": [
+      6,
+      9
+    ],
+    "wait_log": [
+      "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
+    ],
+    "wait_log_timeout": 6.464000000007218
+  },
+  "game": "06:47:11.697  [cfg] settings read: bg3rtx.ini (291 keys) + auto.ini (49 keys, preset=ultra) -> 302 keys\n06:47:12.095  [cascade] casters: cascade 2, 120 frames; per frame: draws seen 273.0, skipped as duplicates 33.0, alpha-tested skipped 67.0, not sizeable 0.0, other matrix 0.0, buffer full 0.0, added 173.0; triangles 1126016 (max 1126016), 283.50 MB (max 283.50 of 880 MB, demand max 283.50 MB); camera pass keys 467; captures not converted 0; next-frame builds 120: with the instance 120 (1126016 triangles), no soup 0, unsubmitted 0, no camera 0, legacy 0, BLAS failed 0; captured pass GPU median 0.644 ms (its draws + XFB + conversion); legacy dynamic/unclassified added 173.0, excluded 0.0 per frame; set changes 120 per window; duplicates by mesh (offset differs) 16.0 per frame; cascade casters with key 0 234.0 per frame\n06:47:12.122  [rt] scene wait: 120 frames, 120 waited (120 got this frame's scene, 0 timeouts, 0 skipped), wait mean 3.182 ms, max 4.324 ms\n06:47:12.662  [water] surface Fresnel (120 frames): enabled 1, draws 29, missing 0\n06:47:12.662  [water] surface FS GPU 0.104 ms median, p90 0.107 (28 timed frames, 28 passes, 28 draws, dropped 0; patched forward draws only, includes vertex/fixed-function work; native OFF untimed)\n06:47:12.822  [geo] RT capture, last 120 frames: alpha region 563 MB (peak demand 151.7 MB), opaque peak 175.7 MB of a 1408 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.00, indirect draws dropped 0.00, non-list draws dropped 0.00 (0 triangles), strips/fans captured 0.00 (0 triangles)\n06:47:12.962  [core] [water] reflections (120 frames, 120 traced): water px 100.00% of 2731520 px/frame (in front 9.66%, empty G-buffer 0.00%, at bed 0.81%), behind bed 293452415 (89.5266% of water hits); rays 263952/frame: screen hit 14.9%, hidden 5.9% (skin 0), off screen 1.6%, miss 77.6%, aborted 0, invalid 0; normal fallback 0.40%; mean E 0.1394, mean screen L 0.0836, mean E*L 0.00683; shift on; skipped frames: no scene 0, stale 0, torn 0, no TLAS 0, variant 0, layout 0, size 0; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0\n06:47:12.995  [core] [water] compose (120 frames, 119 composed, 1.01 passes/frame): records 276986/frame, owned 99.33% (not owned 0.67%), invalid 0, kept: rough 14.95%, below the surface 0.02%; rays 233959/frame: screen hit (composed) 15.0%, hidden 6.5% (skin 0), off screen 2.2%, miss 76.3%, aborted 0, invalid 0; unresolved (probe kept) 87.21% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 1, on the previous lighting 119, refused: no recent lighting 0, no scene 0; newer scene taken 3; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.97/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.000000/0.000000 m (119 last-pass samples)\n06:47:12.995  [core] [water] compose stability (120 frames): frames with a water pass 120, composed 120, uncomposed 0 (on/off flips 0); refused passes: no recent lighting (cleared 0, older than 3 frames 0, ahead 0), no scene 0; earlier lighting: current slot stale 0, newer build before this frame 116, newer pair unavailable 0, lighting's pair kept 116; non-finite terms 0 (the game's colour kept: water_compose.h kCsNonFinite)\n06:47:12.995  [core] [water] surface partition: coverage-weighted owned 1787196, invalid 0; coverage zero 0, partial 1788412, full 0, native/missing FS marker 6671961, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 1788412, foam texture source 1788412, edge/flow mask source 1788412; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change\n06:47:12.995  [core] [water] compose GPU 0.434 ms median, p90 0.459 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.411 ms median, p90 0.436\n06:47:13.131  [cfg] settings read: bg3rtx.ini (291 keys) + auto.ini (49 keys, preset=ultra) -> 302 keys\n06:47:16.101  [cascade] casters: cascade 2, 120 frames; per frame: draws seen 273.0, skipped as duplicates 33.0, alpha-tested skipped 67.0, not sizeable 0.0, other matrix 0.0, buffer full 0.0, added 173.0; triangles 1126016 (max 1126016), 283.50 MB (max 283.50 of 880 MB, demand max 283.50 MB); camera pass keys 467; captures not converted 0; next-frame builds 120: with the instance 120 (1126016 triangles), no soup 0, unsubmitted 0, no camera 0, legacy 0, BLAS failed 0; captured pass GPU median 0.646 ms (its draws + XFB + conversion); legacy dynamic/unclassified added 173.0, excluded 0.0 per frame; set changes 120 per window; duplicates by mesh (offset differs) 16.0 per frame; cascade casters with key 0 234.0 per frame\n06:47:16.128  [rt] scene wait: 120 frames, 120 waited (120 got this frame's scene, 0 timeouts, 0 skipped), wait mean 3.468 ms, max 4.829 ms\n06:47:16.662  [water] surface Fresnel (120 frames): enabled 1, draws 120, missing 0\n06:47:16.662  [water] surface FS GPU 0.104 ms median, p90 0.108 (120 timed frames, 120 passes, 120 draws, dropped 0; patched forward draws only, includes vertex/fixed-function work; native OFF untimed)\n06:47:16.823  [geo] RT capture, last 120 frames: alpha region 563 MB (peak demand 151.7 MB), opaque peak 174.6 MB of a 1408 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.00, indirect draws dropped 0.00, non-list draws dropped 0.00 (0 triangles), strips/fans captured 0.00 (0 triangles)\n06:47:16.961  [core] [water] reflections (120 frames, 120 traced): water px 100.00% of 2731520 px/frame (in front 9.66%, empty G-buffer 0.00%, at bed 0.81%), behind bed 293448715 (89.5255% of water hits); rays 263984/frame: screen hit 14.9%, hidden 5.9% (skin 0), off screen 1.6%, miss 77.6%, aborted 0, invalid 0; normal fallback 0.40%; mean E 0.1394, mean screen L 0.0835, mean E*L 0.00682; shift on; skipped frames: no scene 0, stale 0, torn 0, no TLAS 0, variant 0, layout 0, size 0; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0\n06:47:16.995  [core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 274716/frame, owned 99.32% (not owned 0.68%), invalid 0, kept: rough 14.86%, below the surface 0.02%; rays 232277/frame: screen hit (composed) 15.0%, hidden 6.5% (skin 0), off screen 2.1%, miss 76.4%, aborted 0, invalid 0; unresolved (probe kept) 87.21% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 0; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 1.00/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.000000/0.000000 m (120 last-pass samples)\n06:47:16.995  [core] [water] compose stability (120 frames): frames with a water pass 120, composed 120, uncomposed 0 (on/off flips 0); refused passes: no recent lighting (cleared 0, older than 3 frames 0, ahead 0), no scene 0; earlier lighting: current slot stale 0, newer build before this frame 120, newer pair unavailable 0, lighting's pair kept 120; non-finite terms 0 (the game's colour kept: water_compose.h kCsNonFinite)\n06:47:16.995  [core] [water] surface partition: coverage-weighted owned 6913497, invalid 0; coverage zero 0, partial 6917516, full 0, native/missing FS marker 25825538, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 6917516, foam texture source 6917516, edge/flow mask source 6917516; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change\n06:47:16.995  [core] [water] compose GPU 0.459 ms median, p90 0.462 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.023; compose dispatches 0.436 ms median, p90 0.438\n06:47:19.319  [trace] frame 3406 written: 4 submits, 652 images -> C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-064719\n06:47:22.473  [trace] frame 3424 written: 4 submits, 637 images -> C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-064722\n06:47:25.308  [cascade] casters: cascade 2, 120 frames; per frame: draws seen 273.0, skipped as duplicates 33.0, alpha-tested skipped 67.0, not sizeable 0.0, other matrix 0.0, buffer full 0.0, added 173.0; triangles 1126027 (max 1127289), 283.50 MB (max 283.82 of 880 MB, demand max 283.82 MB); camera pass keys 465; captures not converted 0; next-frame builds 120: with the instance 120 (1126027 triangles), no soup 0, unsubmitted 0, no camera 0, legacy 0, BLAS failed 0; captured pass GPU median 0.648 ms (its draws + XFB + conversion); legacy dynamic/unclassified added 173.0, excluded 0.0 per frame; set changes 120 per window; duplicates by mesh (offset differs) 16.0 per frame; cascade casters with key 0 234.0 per frame\n06:47:25.336  [rt] scene wait: 120 frames, 118 waited (118 got this frame's scene, 0 timeouts, 0 skipped), wait mean 3.483 ms, max 11.661 ms\n06:47:25.875  [water] surface Fresnel (120 frames): enabled 1, draws 120, missing 0\n06:47:25.875  [water] surface FS GPU 0.104 ms median, p90 0.108 (120 timed frames, 120 passes, 120 draws, dropped 0; patched forward draws only, includes vertex/fixed-function work; native OFF untimed)\n06:47:26.035  [geo] RT capture, last 120 frames: alpha region 563 MB (peak demand 151.7 MB), opaque peak 201.7 MB of a 1408 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.00, indirect draws dropped 0.00, non-list draws dropped 0.00 (0 triangles), strips/fans captured 0.00 (0 triangles)\n06:47:26.173  [core] [water] reflections (120 frames, 120 traced): water px 100.00% of 2731520 px/frame (in front 9.66%, empty G-buffer 0.00%, at bed 0.81%), behind bed 293449295 (89.5256% of water hits); rays 263990/frame: screen hit 14.8%, hidden 5.9% (skin 0), off screen 1.6%, miss 77.6%, aborted 0, invalid 0; normal fallback 0.40%; mean E 0.1394, mean screen L 0.0835, mean E*L 0.00683; shift on; skipped frames: no scene 0, stale 0, torn 0, no TLAS 0, variant 0, layout 0, size 0; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0\n06:47:26.206  [core] [water] compose (120 frames, 118 composed, 1.02 passes/frame): records 279365/frame, owned 99.32% (not owned 0.68%), invalid 0, kept: rough 14.86%, below the surface 0.02%; rays 236185/frame: screen hit (composed) 15.0%, hidden 6.5% (skin 0), off screen 2.1%, miss 76.4%, aborted 0, invalid 0; unresolved (probe kept) 87.21% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 4, on the previous lighting 116, refused: no recent lighting 0, no scene 0; newer scene taken 0; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.97/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.000000/0.000000 m (118 last-pass samples)\n06:47:26.206  [core] [water] compose stability (120 frames): frames with a water pass 120, composed 120, uncomposed 0 (on/off flips 0); refused passes: no recent lighting (cleared 0, older than 3 frames 0, ahead 0), no scene 0; earlier lighting: current slot stale 0, newer build before this frame 116, newer pair unavailable 0, lighting's pair kept 116; non-finite terms 0 (the game's colour kept: water_compose.h kCsNonFinite)\n06:47:26.206  [core] [water] surface partition: coverage-weighted owned 6913541, invalid 0; coverage zero 0, partial 6917845, full 0, native/missing FS marker 25823557, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 6917845, foam texture source 6917845, edge/flow mask source 6917845; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change\n06:47:26.206  [core] [water] compose GPU 0.459 ms median, p90 0.466 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.030; compose dispatches 0.436 ms median, p90 0.439",
+  "runner": "06:47:11.671 [pan-plan] window 0 serial 0 repeat_ms 0 kind=static speed_px_s=0 direction=0 hover=, set=rt_water_surface_fresnel=1,qa_exposure_hold=1,dump_preview_f32=1 foreground=False real_present=True visible_unfocused=True\n06:47:13.098 [motion-ready] phase=0 label=partition-static-1\n06:47:28.735 [pan-plan] window 1 serial 0 repeat_ms 0 kind=static speed_px_s=0 direction=0 hover=, set=rt_water_surface_fresnel=0,qa_exposure_hold=1,dump_preview_f32=1 foreground=False real_present=True visible_unfocused=True",
+  "note": "Exact VALID 064436 phase 4 lines and boundaries, indices rebased to 0/1. No synthesized producer timestamps."
+}
