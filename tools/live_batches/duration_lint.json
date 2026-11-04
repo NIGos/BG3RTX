@@ -59579,7 +59579,7 @@
       "forbid: retired bounds-invalid primitives [1-9]\\d*": 0,
       "expect: \\[auto\\] scene ready": 22,
       "expect: \\[cfg\\] settings read": 466,
-      "expect: \\[hair primary\\] level load \\(new G-buffer images\\): strand swaps paused for \\d+ frames": 2
+      "expect: \\[hair primary\\] level load \\(first or new G-buffer images\\): strand swaps paused for \\d+ frames": 0
     },
     "windows": [
       {
@@ -60061,142 +60061,15 @@
           ]
         },
         "minimum_seconds_exclusive": 62.719999999986605
-      },
-      {
-        "window": "order-prepass-1",
-        "gate": "strands drawn in the header-order A/B",
-        "complete": 1,
-        "required": 1,
-        "period_s": 30.859999999993303,
-        "fps": 9.721322099807683,
-        "fps_evidence": {
-          "fps": 9.721322099807683,
-          "source": "VALID p10",
-          "windows": 94,
-          "logs": [
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
-          ]
-        },
-        "minimum_seconds_exclusive": 62.719999999986605
-      },
-      {
-        "window": "order-prepass-2",
-        "gate": "strands drawn in the header-order A/B",
-        "complete": 1,
-        "required": 1,
-        "period_s": 30.859999999993303,
-        "fps": 9.721322099807683,
-        "fps_evidence": {
-          "fps": 9.721322099807683,
-          "source": "VALID p10",
-          "windows": 94,
-          "logs": [
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
-          ]
-        },
-        "minimum_seconds_exclusive": 62.719999999986605
-      },
-      {
-        "window": "order-gbuffer-1",
-        "gate": "strands drawn in the header-order A/B",
-        "complete": 1,
-        "required": 1,
-        "period_s": 30.859999999993303,
-        "fps": 9.721322099807683,
-        "fps_evidence": {
-          "fps": 9.721322099807683,
-          "source": "VALID p10",
-          "windows": 94,
-          "logs": [
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
-          ]
-        },
-        "minimum_seconds_exclusive": 62.719999999986605
-      },
-      {
-        "window": "order-gbuffer-2",
-        "gate": "strands drawn in the header-order A/B",
-        "complete": 1,
-        "required": 1,
-        "period_s": 30.859999999993303,
-        "fps": 9.721322099807683,
-        "fps_evidence": {
-          "fps": 9.721322099807683,
-          "source": "VALID p10",
-          "windows": 94,
-          "logs": [
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
-          ]
-        },
-        "minimum_seconds_exclusive": 62.719999999986605
-      },
-      {
-        "window": "order-gbuffer-2",
-        "gate": "G-buffer header order: no counted frame with adjacent-tag pixels",
-        "complete": 1,
-        "required": 1,
-        "period_s": 30.859999999993303,
-        "fps": 9.721322099807683,
-        "fps_evidence": {
-          "fps": 9.721322099807683,
-          "source": "VALID p10",
-          "windows": 94,
-          "logs": [
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
-            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
-          ]
-        },
-        "minimum_seconds_exclusive": 62.719999999986605
       }
     ],
     "duration": {
-      "seconds": 749.4999999999999,
-      "minimum_seconds": 749.5,
+      "seconds": 488.30000000000007,
+      "minimum_seconds": 488.3,
       "unresolved": [
         {
           "window": "warmup",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "warm-order",
-          "reasons": [
-            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
@@ -60327,22 +60200,10 @@
           "reasons": [
             "failure-latency observation bound retained"
           ]
-        },
-        {
-          "window": "order-gbuffer-1",
-          "reasons": [
-            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-          ]
-        },
-        {
-          "window": "restore",
-          "reasons": [
-            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-          ]
         }
       ],
       "expected_readiness_seconds": 11.69,
-      "readiness_timeout_seconds": 1440.0,
+      "readiness_timeout_seconds": 900.0,
       "windows": [
         {
           "window": "warmup",
@@ -60356,21 +60217,6 @@
           "expected_readiness_seconds": 0.0,
           "readiness_samples": 8,
           "readiness_source": "VALID same-save/key median",
-          "minimum_readiness_wait_seconds": 0
-        },
-        {
-          "window": "warm-order",
-          "seconds": 10.0,
-          "minimum_seconds": 10.0,
-          "savings_seconds": 0,
-          "unresolved": [
-            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
-          "readiness_samples": 0,
-          "readiness_source": "unproven; no VALID same-save/key observation",
           "minimum_readiness_wait_seconds": 0
         },
         {
@@ -60670,67 +60516,15 @@
           "minimum_readiness_wait_seconds": 0
         },
         {
-          "window": "order-prepass-1",
-          "seconds": 62.8,
-          "minimum_seconds": 62.8,
-          "savings_seconds": 0,
-          "unresolved": [],
-          "readiness_timeout_seconds": 0.0,
-          "expected_readiness_seconds": 0,
-          "readiness_samples": 0,
-          "readiness_source": "no wait",
-          "minimum_readiness_wait_seconds": 0
-        },
-        {
-          "window": "order-prepass-2",
-          "seconds": 62.8,
-          "minimum_seconds": 62.8,
-          "savings_seconds": 0,
-          "unresolved": [],
-          "readiness_timeout_seconds": 0.0,
-          "expected_readiness_seconds": 0,
-          "readiness_samples": 0,
-          "readiness_source": "no wait",
-          "minimum_readiness_wait_seconds": 0
-        },
-        {
-          "window": "order-gbuffer-1",
-          "seconds": 62.8,
-          "minimum_seconds": 62.8,
-          "savings_seconds": 0,
-          "unresolved": [
-            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-          ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
-          "readiness_samples": 0,
-          "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
-        },
-        {
-          "window": "order-gbuffer-2",
-          "seconds": 62.8,
-          "minimum_seconds": 62.8,
-          "savings_seconds": 0,
-          "unresolved": [],
-          "readiness_timeout_seconds": 0.0,
-          "expected_readiness_seconds": 0,
-          "readiness_samples": 0,
-          "readiness_source": "no wait",
-          "minimum_readiness_wait_seconds": 0
-        },
-        {
           "window": "restore",
           "seconds": 1.1,
           "minimum_seconds": 1.1,
           "savings_seconds": 0,
-          "unresolved": [
-            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-          ],
-          "readiness_timeout_seconds": 180.0,
+          "unresolved": [],
+          "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
           "readiness_samples": 0,
-          "readiness_source": "unproven; no VALID same-save/key observation",
+          "readiness_source": "no wait",
           "minimum_readiness_wait_seconds": 0
         }
       ],
@@ -60740,15 +60534,11 @@
       "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log",
       "status": "UNPROVEN",
       "problems": [
+        "expect missing: \\[hair primary\\] level load \\(first or new G-buffer images\\): strand swaps paused for \\d+ frames",
         "every-window strands drawn after every strand-stage reload: window 'survive-c-strands-2' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused",
         "every-window strands drawn after every strand-stage reload: window 'survive-c-strands-3' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused",
         "every-window strands drawn after every strand-stage reload: window 'survive-d-fibre-2' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused",
-        "every-window strands drawn after every strand-stage reload: window 'survive-d-fibre-3' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused",
-        "every-window strands drawn in the header-order A/B: window 'order-prepass-1' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused",
-        "every-window strands drawn in the header-order A/B: window 'order-prepass-2' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused",
-        "every-window strands drawn in the header-order A/B: window 'order-gbuffer-1' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused",
-        "every-window strands drawn in the header-order A/B: window 'order-gbuffer-2' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused",
-        "every-window G-buffer header order: no counted frame with adjacent-tag pixels: window 'order-gbuffer-2' (phase 0) has 0 complete line(s), need 1"
+        "every-window strands drawn after every strand-stage reload: window 'survive-d-fibre-3' (phase 0): 1 of 1 line(s) fail /\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused/; first: 20:48:09.987  [hair primary] frame 11100: 5 grooms published; last 300 frames: 300 publishes, 0 prepass, 0 G-buffer and 0 velocity strand draws, 0 pipelines refused"
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
@@ -150300,5 +150090,920 @@
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
     "active": false
+  },
+  "tools\\live_batches\\hair_validation\\jobs\\hv6-strand-diagnostic.json": {
+    "problems": [
+      "readiness: warm-order: changed rt_hair_groom_tips requires pipeline wait_log (unknown pipeline mapping; declare key-specific wait_log)",
+      "readiness: warm-cards: changed rt_hair_groom_tips requires pipeline wait_log (unknown pipeline mapping; declare key-specific wait_log)",
+      "readiness: tips-on: changed rt_hair_groom_tips requires pipeline wait_log (unknown pipeline mapping; declare key-specific wait_log)",
+      "readiness: cards-c: changed rt_hair_groom_tips requires pipeline wait_log (unknown pipeline mapping; declare key-specific wait_log)"
+    ],
+    "regex_coverage": {
+      "forbid: \\[crash\\] exception 0x": 0,
+      "forbid: VK_ERROR_DEVICE_LOST": 0,
+      "forbid: \\[hot\\] core (rejected|faulted)": 0,
+      "forbid: FAILED, keeping previous": 0,
+      "forbid: compile call failed": 0,
+      "forbid: RR creation failed": 0,
+      "forbid: RR evaluate failed": 0,
+      "forbid: skipped: no variant for": 0,
+      "forbid: pipeline creation failed": 0,
+      "forbid: shader module creation failed": 0,
+      "forbid: \\[hair primary\\] UNAVAILABLE": 0,
+      "forbid: \\[hair primary\\] .*could not be allocated": 0,
+      "forbid: \\[hair primary\\] strand fragment shader unavailable": 0,
+      "forbid: \\[hair groom\\] device WITHOUT": 0,
+      "forbid: \\[hair groom\\] .*malformed": 0,
+      "forbid: \\[geo\\] rt_native_hair rejected": 0,
+      "forbid: \\[cascade\\] could not allocate": 0,
+      "forbid: set 1 [1-9]\\d* out-of-range reads skipped": 0,
+      "forbid: \\[hair primary\\].*\\b[1-9]\\d* pipelines refused": 0,
+      "forbid: (?i)device (?:was )?lost": 0,
+      "forbid: \\[fault\\]\\s+(read|write|execute) invalid": 0,
+      "forbid: invalid/missing native state [1-9]\\d*": 0,
+      "forbid: retired bounds-invalid primitives [1-9]\\d*": 0,
+      "forbid: (?s)\\[hair primary\\] frame \\d+:[^\\n]*[1-9]\\d* G-buffer[^\\n]*\\n.*?\\[hair primary\\] level load \\(first or new G-buffer images\\)": 0,
+      "forbid: (?s)\\[hair primary\\] level load \\(first or new G-buffer images\\)(?:(?!\\[hair primary\\] frame).)*\\[hair primary\\] frame \\d+:[^\\n]*\\b[1-9]\\d* G-buffer": 0,
+      "expect: \\[auto\\] scene ready": 22,
+      "expect: \\[cfg\\] settings read": 466,
+      "expect: \\[hair primary\\] level load \\(first or new G-buffer images\\)": 0,
+      "expect: \\[hair primary\\] header at 0x[0-9a-f]+": 3,
+      "expect: \\[rrpost\\] exposure held": 224
+    },
+    "windows": [
+      {
+        "window": "order-prepass-1",
+        "gate": "coverage: no below-bound draw swapped",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 63.719999999986605
+      },
+      {
+        "window": "order-gbuffer-1",
+        "gate": "coverage: no below-bound draw swapped",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 63.719999999986605
+      },
+      {
+        "window": "order-prepass-2",
+        "gate": "coverage: no below-bound draw swapped",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "order-gbuffer-2",
+        "gate": "coverage: no below-bound draw swapped",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "tips-on",
+        "gate": "coverage: no below-bound draw swapped",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "order-prepass-1",
+        "gate": "strand GPU cost only when coverage reports swapped frames",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 63.719999999986605
+      },
+      {
+        "window": "order-gbuffer-1",
+        "gate": "strand GPU cost only when coverage reports swapped frames",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 63.719999999986605
+      },
+      {
+        "window": "order-prepass-2",
+        "gate": "strand GPU cost only when coverage reports swapped frames",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "order-gbuffer-2",
+        "gate": "strand GPU cost only when coverage reports swapped frames",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "tips-on",
+        "gate": "strand GPU cost only when coverage reports swapped frames",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "order-gbuffer-1",
+        "gate": "order 1 has no adjacent-tag frames",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 63.719999999986605
+      },
+      {
+        "window": "order-gbuffer-2",
+        "gate": "order 1 has no adjacent-tag frames",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "tips-on",
+        "gate": "order 1 has no adjacent-tag frames",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "order-prepass-1",
+        "gate": "strand participation after quiet window when swaps happened",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 63.719999999986605
+      },
+      {
+        "window": "order-gbuffer-1",
+        "gate": "strand participation after quiet window when swaps happened",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 63.719999999986605
+      },
+      {
+        "window": "order-prepass-2",
+        "gate": "strand participation after quiet window when swaps happened",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "order-gbuffer-2",
+        "gate": "strand participation after quiet window when swaps happened",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "tips-on",
+        "gate": "strand participation after quiet window when swaps happened",
+        "complete": 1,
+        "required": 1,
+        "period_s": 30.859999999993303,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 62.719999999986605
+      },
+      {
+        "window": "cards-a",
+        "gate": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "complete": 1,
+        "required": 1,
+        "period_s": 6.171999999998661,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 14.343999999997322
+      },
+      {
+        "window": "cards-b",
+        "gate": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "complete": 1,
+        "required": 1,
+        "period_s": 6.171999999998661,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 13.343999999997322
+      },
+      {
+        "window": "cards-c",
+        "gate": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "complete": 1,
+        "required": 1,
+        "period_s": 6.171999999998661,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 13.343999999997322
+      },
+      {
+        "window": "order-prepass-1",
+        "gate": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "complete": 9,
+        "required": 1,
+        "period_s": 6.171999999998661,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 14.343999999997322
+      },
+      {
+        "window": "order-gbuffer-1",
+        "gate": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "complete": 9,
+        "required": 1,
+        "period_s": 6.171999999998661,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 14.343999999997322
+      },
+      {
+        "window": "order-prepass-2",
+        "gate": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "complete": 9,
+        "required": 1,
+        "period_s": 6.171999999998661,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 13.343999999997322
+      },
+      {
+        "window": "order-gbuffer-2",
+        "gate": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "complete": 9,
+        "required": 1,
+        "period_s": 6.171999999998661,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 13.343999999997322
+      },
+      {
+        "window": "tips-on",
+        "gate": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+        "complete": 9,
+        "required": 1,
+        "period_s": 6.171999999998661,
+        "fps": 9.721322099807683,
+        "fps_evidence": {
+          "fps": 9.721322099807683,
+          "source": "VALID p10",
+          "windows": 94,
+          "logs": [
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+            "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+          ]
+        },
+        "minimum_seconds_exclusive": 13.343999999997322
+      }
+    ],
+    "duration": {
+      "seconds": 433.3,
+      "minimum_seconds": 433.3,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-order",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-cards",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "order-gbuffer-1",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "cards-b",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "order-gbuffer-2",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "tips-on",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "cards-c",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        }
+      ],
+      "expected_readiness_seconds": 14.764,
+      "readiness_timeout_seconds": 1800.0,
+      "windows": [
+        {
+          "window": "warmup",
+          "seconds": 25.0,
+          "minimum_seconds": 25.0,
+          "savings_seconds": 0,
+          "unresolved": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 0.0,
+          "readiness_samples": 8,
+          "readiness_source": "VALID same-save/key median",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "warm-order",
+          "seconds": 25.0,
+          "minimum_seconds": 25.0,
+          "savings_seconds": 0,
+          "unresolved": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "unproven; no VALID same-save/key observation",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "warm-cards",
+          "seconds": 25.0,
+          "minimum_seconds": 25.0,
+          "savings_seconds": 0,
+          "unresolved": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "unproven; no VALID same-save/key observation",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "cards-a",
+          "seconds": 14.4,
+          "minimum_seconds": 14.4,
+          "savings_seconds": 0,
+          "unresolved": [],
+          "readiness_timeout_seconds": 0.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "no wait",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "order-prepass-1",
+          "seconds": 63.8,
+          "minimum_seconds": 63.8,
+          "savings_seconds": 0,
+          "unresolved": [],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 7.382,
+          "readiness_samples": 2,
+          "readiness_source": "VALID same-save/key median",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "order-gbuffer-1",
+          "seconds": 63.8,
+          "minimum_seconds": 63.8,
+          "savings_seconds": 0,
+          "unresolved": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "unproven; no VALID same-save/key observation",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "cards-b",
+          "seconds": 13.4,
+          "minimum_seconds": 13.4,
+          "savings_seconds": 0,
+          "unresolved": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "unproven; no VALID same-save/key observation",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "order-prepass-2",
+          "seconds": 62.8,
+          "minimum_seconds": 62.8,
+          "savings_seconds": 0,
+          "unresolved": [],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 7.382,
+          "readiness_samples": 2,
+          "readiness_source": "VALID same-save/key median",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "order-gbuffer-2",
+          "seconds": 62.8,
+          "minimum_seconds": 62.8,
+          "savings_seconds": 0,
+          "unresolved": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "unproven; no VALID same-save/key observation",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "tips-on",
+          "seconds": 62.8,
+          "minimum_seconds": 62.8,
+          "savings_seconds": 0,
+          "unresolved": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "unproven; no VALID same-save/key observation",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "cards-c",
+          "seconds": 13.4,
+          "minimum_seconds": 13.4,
+          "savings_seconds": 0,
+          "unresolved": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ],
+          "readiness_timeout_seconds": 180.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "unproven; no VALID same-save/key observation",
+          "minimum_readiness_wait_seconds": 0
+        },
+        {
+          "window": "restore",
+          "seconds": 1.1,
+          "minimum_seconds": 1.1,
+          "savings_seconds": 0,
+          "unresolved": [],
+          "readiness_timeout_seconds": 0.0,
+          "expected_readiness_seconds": 0,
+          "readiness_samples": 0,
+          "readiness_source": "no wait",
+          "minimum_readiness_wait_seconds": 0
+        }
+      ],
+      "findings": []
+    },
+    "replay": {
+      "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log",
+      "status": "UNPROVEN",
+      "problems": [
+        "expect missing: \\[hair primary\\] level load \\(first or new G-buffer images\\)",
+        "every-window first load quiet period: 1 of 8 line(s) fail /\\b0 G-buffer and 0 velocity strand draws/; first: 20:39:42.597  [hair primary] frame 1800: 5 grooms published; last 300 frames: 290 publishes, 292 prepass, 299 G-buffer and 292 velocity strand draws, 0 pipelines refused",
+        "every-window coverage: no below-bound draw swapped: window 'order-prepass-1' (phase 0) has 0 complete line(s), need 1",
+        "every-window coverage: no below-bound draw swapped: window 'order-gbuffer-1' (phase 0) has 0 complete line(s), need 1",
+        "every-window coverage: no below-bound draw swapped: window 'order-prepass-2' (phase 0) has 0 complete line(s), need 1",
+        "every-window coverage: no below-bound draw swapped: window 'order-gbuffer-2' (phase 0) has 0 complete line(s), need 1",
+        "every-window coverage: no below-bound draw swapped: window 'tips-on' (phase 0) has 0 complete line(s), need 1",
+        "every-window order 1 has no adjacent-tag frames: window 'order-gbuffer-1' (phase 0) has 0 complete line(s), need 1",
+        "every-window order 1 has no adjacent-tag frames: window 'order-gbuffer-2' (phase 0) has 0 complete line(s), need 1",
+        "every-window order 1 has no adjacent-tag frames: window 'tips-on' (phase 0) has 0 complete line(s), need 1",
+        "every-window consecutive rendered hair frames cards-a: window 'cards-a' (phase 0) has 0 event line(s), need 1",
+        "every-window consecutive rendered hair frames cards-b: window 'cards-b' (phase 0) has 0 event line(s), need 1",
+        "every-window consecutive rendered hair frames cards-c: window 'cards-c' (phase 0) has 0 event line(s), need 1",
+        "every-window consecutive rendered hair frames order-prepass-1: window 'order-prepass-1' (phase 0) has 0 event line(s), need 1",
+        "every-window consecutive rendered hair frames order-gbuffer-1: window 'order-gbuffer-1' (phase 0) has 0 event line(s), need 1",
+        "every-window consecutive rendered hair frames order-prepass-2: window 'order-prepass-2' (phase 0) has 0 event line(s), need 1",
+        "every-window consecutive rendered hair frames order-gbuffer-2: window 'order-gbuffer-2' (phase 0) has 0 event line(s), need 1",
+        "every-window consecutive rendered hair frames tips-on: window 'tips-on' (phase 0) has 0 event line(s), need 1"
+      ],
+      "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
+    },
+    "active": true
   }
 }

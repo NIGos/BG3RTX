@@ -41,9 +41,7 @@ STAGES = [("a-native", dict(rt_native_hair="1", rt_native_scalp="1", rt_hair_phy
           ("c-strands", dict(rt_hair_groom="1")),
           ("d-fibre", dict(rt_hair_fibre="1"))]
 STRAND_STAGES = ("c-strands", "d-fibre")   # strands on screen: their survival windows need strand draws
-# After the stages, the header-order A/B (docs/RTX_HAIR_PRIMARY.md 5b, predicted.json strike_rule_20261103): the strand
-# header written in the prepass's command buffer (order 0) then in the G-buffer's (order 1), two windows each (each
-# holds a whole 300-frame line at the unfocused 30 fps).
+# Header-order A/B is now isolated in hv6, alternating 0/1/0/1.
 ORDER = [("order-prepass", "0"), ("order-gbuffer", "1")]
 SURVIVE = [1, 2, 3]   # 3 adjacent same-key 20 s windows: uninterrupted 60 s > 25 s failure.
 
@@ -61,7 +59,6 @@ def make_bisect():
         every.update(more)
     # Warm every value the stages use before the first judged window (pipelines, groom uploads), then stage A.
     plan = [stage_phase("warmup", PRIMARY_LOG_FRAMES / UNFOCUSED_FPS, every),
-            stage_phase("warm-order", 10, dict(every, rt_hair_groom_primary_order="1")),   # both A/B values warmed
             stage_phase("warm-settle", 10, dict(STAGES[0][1]))]
     for name, more in STAGES:
         keys.update(more)
@@ -69,11 +66,11 @@ def make_bisect():
         plan.append(dict(stage_phase(f"reload-{name}", 5, keys), reload_selected=True))
         # The strand stages' windows hold a whole 300-frame strand line at the unfocused 30 fps (> 21 s, live_flow).
         plan += [stage_phase(f"survive-{name}-{i}", 25 if name in STRAND_STAGES else 20, keys) for i in SURVIVE]
-    for name, value in ORDER:
-        keys["rt_hair_groom_primary_order"] = value
-        plan += [stage_phase(f"{name}-{i}", 25, keys) for i in (1, 2)]
     keys["rt_hair_groom_primary_order"] = "0"
     plan.append(stage_phase("restore", 5, keys))
+    for p in plan:
+        if p['label'].startswith('warm'):
+            p.update(wait_log=[r"\[shaders\] cache: prefetched ", r"gi: gi/[^ ]+ generation ", r"\[auto\] scene ready"], wait_log_timeout=180)
     return plan
 
 
@@ -158,12 +155,13 @@ def job(name, save, plan, validation=False):
 
 def bisect_job(name, save, plan):
     j = job(name, save, plan, validation=False)
+    j["timeout"] = 850
     labels = [p["label"] for p in plan]
     survive = [l for l in labels if l.startswith("survive-")]
     # Frames after every reload: the per-60-frame scene-wait line in every survival window (none: the device or the
     # game is gone in that stage). The level-load line of hair_primary once a strand stage reloads.
     j["expect"] = [r"\[auto\] scene ready", r"\[cfg\] settings read",
-                   r"\[hair primary\] level load \(new G-buffer images\): strand swaps paused for \d+ frames"]
+                   r"\[hair primary\] level load \(first or new G-buffer images\): strand swaps paused for \d+ frames"]
     j["expect_every"] = [dict(name="frames rendered in every survival window after a reload", select=r"\[rt\] scene wait: 60 frames",
                               match=r"\[rt\] scene wait: 60 frames", event=True, min=1, windows=survive)]
     j["expect_every"].append(dict(name="hair guards zero after every reload", select=r"\[alpha hair\] native coverage records",
@@ -175,16 +173,6 @@ def bisect_job(name, save, plan):
                                   match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES,
                                   windows=[l for l in survive if any(l.startswith("survive-" + s) for s in STRAND_STAGES)
                                            and not l.endswith("-1")]))
-    # The header-order A/B: strand draws in all four windows; with the G-buffer order (its second window, after the
-    # switch settles) no counted frame carries an adjacent frame's tag. The prepass windows decide the hypothesis
-    # (predicted.json: adjacent-tag frames > 0 there if it holds), they are not gated.
-    order_windows = [f"{n}-{i}" for n, _ in ORDER for i in (1, 2)]
-    j["expect_every"].append(dict(name="strands drawn in the header-order A/B", select=r"\[hair primary\] frame \d+:",
-                                  match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES, windows=order_windows))
-    j["expect_every"].append(dict(name="G-buffer header order: no counted frame with adjacent-tag pixels",
-                                  select=r"\[hair primary\] counted frame \d+:",
-                                  match=r"counted frames with adjacent-tag pixels 0 \(session \d+\), header order G-buffer",
-                                  min=1, period_frames=PRIMARY_LOG_FRAMES, windows=["order-gbuffer-2"]))
     j["expect_runner"] = [r"window-mode.*visible_unfocused", rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done",
                           r"\[hair-reload\] selected save reload complete"]
     j["purpose"] = ("Reload bisect (hv1 device lost after F8): four F8 reloads in one launch with rt_hair_groom_primary "
@@ -194,24 +182,95 @@ def bisect_job(name, save, plan):
     return j
 
 
+COVERAGE = r"\[hair primary\] coverage \(last 300 frames\):"
+COVERAGE_ITEM = r"[0-9a-fA-F]{4}:[0-9]+/[0-9]+=(?P<value>[0-9.]+),(?P<active>[0-9]+)"
+SWAPPED = r"[0-9a-fA-F]{4}:\d+/\d+=[0-9.]+,[1-9]\d*\b"
+DIAGNOSTIC_WINDOWS = ["order-prepass-1", "order-gbuffer-1", "order-prepass-2", "order-gbuffer-2", "tips-on"]
+CAPTURE_WINDOWS = ["cards-a", "cards-b", "cards-c"] + DIAGNOSTIC_WINDOWS
+
+
+def make_diagnostic():
+    # Same stationary saved Dialogue1 close-up as hair_groom.
+    def step(label, order="0", groom="1", tips="0", capture=False):
+        keys = dict(hp.ON, rt_hair_groom=groom, rt_hair_groom_primary_order=order, rt_hair_groom_tips=tips)
+        p = stage_phase(label, 25, keys, trace=capture and label in ("cards-a", "order-prepass-1", "order-gbuffer-1"))
+        if capture:
+            serial = 98600 + CAPTURE_WINDOWS.index(label)
+            p.update(serial=serial, capture_at=3)
+            p["set"] += f",pan_prepare=1,pan_edge=1,pan_capture={serial},pan_delay_ms=0"
+        return p
+    plan = [step("warmup"), step("warm-order", "1", tips="1"), step("warm-cards", groom="0"),
+            step("cards-a", groom="0", capture=True),
+            step("order-prepass-1", capture=True), step("order-gbuffer-1", "1", capture=True),
+            step("cards-b", groom="0", capture=True),
+            step("order-prepass-2", capture=True), step("order-gbuffer-2", "1", capture=True),
+            step("tips-on", "1", tips="1", capture=True), step("cards-c", groom="0", capture=True),
+            stage_phase("restore", 5, dict(hp.OFF, rt_hair_groom_primary_order="0", rt_hair_groom_tips="0"))]
+
+    for p in plan:
+        if p['label'].startswith('warm'):
+            p['set'] += ',qa_exposure_hold=0,pan_delay_ms=0'
+            p.update(wait_log=[r"\[shaders\] cache: prefetched ", r"gi: gi/[^ ]+ generation ", r"\[auto\] scene ready"], wait_log_timeout=180)
+    return plan
+
+
+def diagnostic_job(name, save, plan):
+    from scripts.queue_gates import SCENE_WAIT_GATE
+    j = job(name, save, plan)
+    j["timeout"] = 800
+    spec = importlib.util.spec_from_file_location("hair_crowd_jobs", HERE.parent / "hair_crowd/make_job.py")
+    crowd = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(crowd)
+    j["live_flow"] = dict(crowd.job("hc1-dialogue1-fg2", save)["live_flow"])
+    j["set"] += ",rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=0,rt_hair_groom_tips=0"
+    j["expect"] = [r"\[auto\] scene ready", r"\[cfg\] settings read",
+                   r"\[hair primary\] level load \(first or new G-buffer images\)",
+                   r"\[hair primary\] header at 0x[0-9a-f]+", r"\[rrpost\] exposure held"]
+    j["fail_fast"] = True
+    j["expect_every"] = [dict(name="first load quiet period", select=r"\[hair primary\] frame \d+:",
+                              match=r"\b0 G-buffer and 0 velocity strand draws", first_only=True, min=1)]
+    j["forbid"] += [r"(?s)\[hair primary\] frame \d+:[^\n]*[1-9]\d* G-buffer[^\n]*\n.*?\[hair primary\] level load \(first or new G-buffer images\)"]
+    j["forbid"] += [r"(?s)\[hair primary\] level load \(first or new G-buffer images\)(?:(?!\[hair primary\] frame).)*\[hair primary\] frame \d+:[^\n]*\b[1-9]\d* G-buffer"]
+    j["expect_every"] += [dict(name="coverage: no below-bound draw swapped", select=COVERAGE, match=COVERAGE,
+                               items=dict(pattern=COVERAGE_ITEM, bound=r", bound ([0-9.]+),", empty=r"\b0 draws probed, 0 swapped;"),
+                               min=1, period_frames=300, windows=DIAGNOSTIC_WINDOWS),
+                            dict(name="strand GPU cost only when coverage reports swapped frames",
+                                 select=r"\[hair primary\] strand G-buffer draws GPU",
+                                 match=r"GPU [0-9.]+ ms/frame \(average of [1-9]\d* frames",
+                                 required_if=dict(select=COVERAGE, match=SWAPPED),
+                                 min=1, period_frames=300, windows=DIAGNOSTIC_WINDOWS),
+                            dict(name="order 1 has no adjacent-tag frames", select=r"\[hair primary\] counted frame \d+:",
+                                 match=r"counted frames with adjacent-tag pixels 0 \(session \d+\), header order G-buffer",
+                                 min=1, period_frames=300, windows=["order-gbuffer-1", "order-gbuffer-2", "tips-on"])]
+    for label in CAPTURE_WINDOWS:
+        serial = 98600 + CAPTURE_WINDOWS.index(label)
+        j["expect_every"].append(dict(name="consecutive rendered hair frames " + label,
+                                      select=rf"\[pan\] burst {serial} complete",
+                                      match=rf"\[pan\] burst {serial} complete: 8 frames, 20 samples, transport ok",
+                                      event=True, min=1, windows=[label]))
+    j["expect_every"].append(dict(name="strand participation after quiet window when swaps happened",
+        select=r"\[hair primary\] frame \d+:", match=hp.STRANDS,
+        required_if=dict(select=COVERAGE, match=SWAPPED), min=1, period_frames=300, windows=DIAGNOSTIC_WINDOWS))
+    j["expect_every"].append(dict(SCENE_WAIT_GATE, windows=CAPTURE_WINDOWS))
+    j["expect_runner"] = [r"window-mode.*visible_unfocused", rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done"]
+    j["expect_runner"] += [rf"\[motion-trace\] phase={i} label={p['label']} repeat=0" for i,p in enumerate(plan) if p.get("trace_at")]
+    j["purpose"] = "First-load safety, order 0/1/0/1, per-draw card fallback, tips 0/1 and same-run player-head flicker. No reload."
+    return j
+
+
 def main():
     assert (HERE / "predicted.json").exists()
     for folder in ("jobs", "plans"):
         (HERE/folder).mkdir(exist_ok=True)
-    for name, save, validation in [("hv1-dialogue1", "Test Dialogue1", False),
-                                    ("hv2-camp", "Campsite - 27h", False),
-                                    ("hv3-s8", "Water Queens House", False),
-                                    ("hv4-gpuav", "Test Dialogue1", True)]:
-        plan = make(validation)
-        for folder, value in (("plans", plan), ("jobs", job(name, save, plan, validation))):
+    for name, builder, factory in [("hv5-reload-bisect", make_bisect, bisect_job),
+                                   ("hv6-strand-diagnostic", make_diagnostic, diagnostic_job)]:
+        plan = builder()
+        for folder, value in (("plans", plan), ("jobs", factory(name, "Test Dialogue1", plan))):
             (HERE/folder/f"{name}.json").write_text(json.dumps(value, indent=2)+"\n", encoding="utf-8")
-    plan = make_bisect()
-    for folder, value in (("plans", plan), ("jobs", bisect_job("hv5-reload-bisect", "Test Dialogue1", plan))):
-        (HERE/folder/"hv5-reload-bisect.json").write_text(json.dumps(value, indent=2)+"\n", encoding="utf-8")
-    print("5 jobs generated, 3 save launches + isolated short GPU-AV + the reload bisect; no queue staging")
+    print("hv5 and hv6 generated; historical hv1-hv4 retained; no queue staging")
 
 
 if __name__ == "__main__":
     main()
     from tools.live_batches.live_flow import tighten_files
-    tighten_files(Path(__file__).resolve().parent)
+    tighten_files(HERE, cache=ROOT / ".offline/hair-diag-flow-corpus.json", job_names=["hv5-reload-bisect", "hv6-strand-diagnostic"])

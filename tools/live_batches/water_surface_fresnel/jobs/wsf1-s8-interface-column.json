@@ -212,7 +212,7 @@
     }
   },
   "name": "wsf1-s8-interface-column",
-  "timeout": 2238,
+  "timeout": 2238.0,
   "live_batch": "water-surface-fresnel",
   "stop_on_dump": false,
   "energy_fs": "water-compose",

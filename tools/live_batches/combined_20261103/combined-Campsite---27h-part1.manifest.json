@@ -5,7 +5,7 @@
       "prefix": "b1-cp4-compact-camp-join--",
       "offset": 0,
       "count": 7,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a1f09aa8ed1b0702d\\tools\\live_batches\\cov_paks_compact\\jobs\\cp4-compact-camp-join.json",
+      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\cov_paks_compact\\jobs\\cp4-compact-camp-join.json",
       "job": {
         "save": "Campsite - 27h",
         "session": false,
@@ -326,7 +326,7 @@
       "prefix": "b2-go1-camp--",
       "offset": 8,
       "count": 21,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a1f09aa8ed1b0702d\\tools\\live_batches\\gpu_opt1\\jobs\\go1-camp.json",
+      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\gpu_opt1\\jobs\\go1-camp.json",
       "job": {
         "name": "go1-camp",
         "save": "Campsite - 27h",

@@ -1,0 +1,328 @@
+{
+  "name": "hv6-strand-diagnostic",
+  "save": "Test Dialogue1",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 2354,
+  "repeat": 1,
+  "live_batch": "hair-validation",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=0,rt_hair_groom_tips=0",
+  "live_flow": {
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "startup_only": [
+      "rt_hair_groom_primary"
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 9.721322099807683,
+        "windows": 94,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "fps": 9.590792838861653,
+        "windows": 81,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3169999999954598,
+      "quantile": 0.95,
+      "samples": 439,
+      "maximum": 0.43699999999807915
+    }
+  },
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/hair_validation/plans/hv6-strand-diagnostic.json"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "failed",
+    "\\[cascade\\] casters",
+    "\\[geo\\]",
+    "\\[alpha hair\\]",
+    "\\[alpha scalp\\]",
+    "\\[hair groom\\]",
+    "\\[hair primary\\]",
+    "\\[hair fibre\\]",
+    "gi: background builds",
+    "building in the background",
+    "skipped: no variant for",
+    "\\[bvh\\]",
+    "\\[rrpost\\] exposure (held|hold|probe)",
+    "\\[core\\] guard:",
+    "\\[fault\\]",
+    "\\[mem\\]",
+    "pool full",
+    "DEVICE_LOST",
+    "\\[pan\\]",
+    "\\[sl\\] present capture",
+    "\\[sl\\] DLSS-G frame"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[cfg\\] settings read",
+    "\\[hair primary\\] level load \\(first or new G-buffer images\\)",
+    "\\[hair primary\\] header at 0x[0-9a-f]+",
+    "\\[rrpost\\] exposure held"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "skipped: no variant for",
+    "pipeline creation failed",
+    "shader module creation failed",
+    "\\[hair primary\\] UNAVAILABLE",
+    "\\[hair primary\\] .*could not be allocated",
+    "\\[hair primary\\] strand fragment shader unavailable",
+    "\\[hair groom\\] device WITHOUT",
+    "\\[hair groom\\] .*malformed",
+    "\\[geo\\] rt_native_hair rejected",
+    "\\[cascade\\] could not allocate",
+    "set 1 [1-9]\\d* out-of-range reads skipped",
+    "\\[hair primary\\].*\\b[1-9]\\d* pipelines refused",
+    "(?i)device (?:was )?lost",
+    "\\[fault\\]\\s+(read|write|execute) invalid",
+    "invalid/missing native state [1-9]\\d*",
+    "retired bounds-invalid primitives [1-9]\\d*",
+    "(?s)\\[hair primary\\] frame \\d+:[^\\n]*[1-9]\\d* G-buffer[^\\n]*\\n.*?\\[hair primary\\] level load \\(first or new G-buffer images\\)",
+    "(?s)\\[hair primary\\] level load \\(first or new G-buffer images\\)(?:(?!\\[hair primary\\] frame).)*\\[hair primary\\] frame \\d+:[^\\n]*\\b[1-9]\\d* G-buffer"
+  ],
+  "expect_runner": [
+    "window-mode.*visible_unfocused",
+    "\\[motion-plan\\] complete phases=12\\b",
+    "^Run ended: done",
+    "\\[motion-trace\\] phase=3 label=cards-a repeat=0",
+    "\\[motion-trace\\] phase=4 label=order-prepass-1 repeat=0",
+    "\\[motion-trace\\] phase=5 label=order-gbuffer-1 repeat=0"
+  ],
+  "stop_on_dump": true,
+  "purpose": "First-load safety, order 0/1/0/1, per-draw card fallback, tips 0/1 and same-run player-head flicker. No reload.",
+  "estimated_phase_seconds": 433.3,
+  "expect_every": [
+    {
+      "name": "first load quiet period",
+      "select": "\\[hair primary\\] frame \\d+:",
+      "match": "\\b0 G-buffer and 0 velocity strand draws",
+      "first_only": true,
+      "min": 1
+    },
+    {
+      "name": "coverage: no below-bound draw swapped",
+      "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+      "match": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+      "items": {
+        "pattern": "[0-9a-fA-F]{4}:[0-9]+/[0-9]+=(?P<value>[0-9.]+),(?P<active>[0-9]+)",
+        "bound": ", bound ([0-9.]+),",
+        "empty": "\\b0 draws probed, 0 swapped;"
+      },
+      "min": 1,
+      "period_frames": 300,
+      "windows": [
+        "order-prepass-1",
+        "order-gbuffer-1",
+        "order-prepass-2",
+        "order-gbuffer-2",
+        "tips-on"
+      ]
+    },
+    {
+      "name": "strand GPU cost only when coverage reports swapped frames",
+      "select": "\\[hair primary\\] strand G-buffer draws GPU",
+      "match": "GPU [0-9.]+ ms/frame \\(average of [1-9]\\d* frames",
+      "required_if": {
+        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+      },
+      "min": 1,
+      "period_frames": 300,
+      "windows": [
+        "order-prepass-1",
+        "order-gbuffer-1",
+        "order-prepass-2",
+        "order-gbuffer-2",
+        "tips-on"
+      ]
+    },
+    {
+      "name": "order 1 has no adjacent-tag frames",
+      "select": "\\[hair primary\\] counted frame \\d+:",
+      "match": "counted frames with adjacent-tag pixels 0 \\(session \\d+\\), header order G-buffer",
+      "min": 1,
+      "period_frames": 300,
+      "windows": [
+        "order-gbuffer-1",
+        "order-gbuffer-2",
+        "tips-on"
+      ]
+    },
+    {
+      "name": "consecutive rendered hair frames cards-a",
+      "select": "\\[pan\\] burst 98600 complete",
+      "match": "\\[pan\\] burst 98600 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "cards-a"
+      ]
+    },
+    {
+      "name": "consecutive rendered hair frames cards-b",
+      "select": "\\[pan\\] burst 98601 complete",
+      "match": "\\[pan\\] burst 98601 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "cards-b"
+      ]
+    },
+    {
+      "name": "consecutive rendered hair frames cards-c",
+      "select": "\\[pan\\] burst 98602 complete",
+      "match": "\\[pan\\] burst 98602 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "cards-c"
+      ]
+    },
+    {
+      "name": "consecutive rendered hair frames order-prepass-1",
+      "select": "\\[pan\\] burst 98603 complete",
+      "match": "\\[pan\\] burst 98603 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "order-prepass-1"
+      ]
+    },
+    {
+      "name": "consecutive rendered hair frames order-gbuffer-1",
+      "select": "\\[pan\\] burst 98604 complete",
+      "match": "\\[pan\\] burst 98604 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "order-gbuffer-1"
+      ]
+    },
+    {
+      "name": "consecutive rendered hair frames order-prepass-2",
+      "select": "\\[pan\\] burst 98605 complete",
+      "match": "\\[pan\\] burst 98605 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "order-prepass-2"
+      ]
+    },
+    {
+      "name": "consecutive rendered hair frames order-gbuffer-2",
+      "select": "\\[pan\\] burst 98606 complete",
+      "match": "\\[pan\\] burst 98606 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "order-gbuffer-2"
+      ]
+    },
+    {
+      "name": "consecutive rendered hair frames tips-on",
+      "select": "\\[pan\\] burst 98607 complete",
+      "match": "\\[pan\\] burst 98607 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "tips-on"
+      ]
+    },
+    {
+      "name": "strand participation after quiet window when swaps happened",
+      "select": "\\[hair primary\\] frame \\d+:",
+      "match": "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
+      "required_if": {
+        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+      },
+      "min": 1,
+      "period_frames": 300,
+      "windows": [
+        "order-prepass-1",
+        "order-gbuffer-1",
+        "order-prepass-2",
+        "order-gbuffer-2",
+        "tips-on"
+      ]
+    },
+    {
+      "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "cards-a",
+        "cards-b",
+        "cards-c",
+        "order-prepass-1",
+        "order-gbuffer-1",
+        "order-prepass-2",
+        "order-gbuffer-2",
+        "tips-on"
+      ]
+    }
+  ],
+  "window_mode": "visible_unfocused_fg",
+  "fail_fast": true
+}

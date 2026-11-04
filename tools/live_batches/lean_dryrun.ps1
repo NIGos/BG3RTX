@@ -12,7 +12,7 @@
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
 param([Parameter(Mandatory)][string]$Batch, [string]$Receipt = '',
       [string]$Out = '', [double]$MaxMinutes = 20, [double]$MaxMB = 2048,
-      [switch]$Independent, [switch]$Unfocused, [int]$MaxBursts = 0, [double]$BurstMB = 2300, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force)
+      [switch]$Independent, [switch]$Unfocused, [int]$MaxBursts = 0, [double]$BurstMB = 2300, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force, [string[]]$JobNames = @(), [switch]$ScratchOnly)
 # Reuse: a passed check whose inputs (this script, the batch folder, scripts\*.ps1 / *.py, the parameters
 # but -Out) are byte-identical to a previous pass prints that pass's lines and exits 0 without the fake
 # queue runs (captures\.cache\lean_dryrun-<batch>.json). -Force always reruns.
@@ -38,7 +38,8 @@ $flowPython = 'py'
 $flowArgs = @(); if ($flowPython -eq 'py') { $flowArgs += '-3' }
 $flowReport = Join-Path $Out 'live-flow.json'
 New-Item -ItemType Directory -Force $Out | Out-Null
-& $flowPython @flowArgs (Join-Path $PSScriptRoot 'live_flow.py') $here --preflight --report $flowReport
+$flowSelection = @(); if ($JobNames.Count) { $flowSelection = @('--job-names', ($JobNames -join ',')) }
+& $flowPython @flowArgs (Join-Path $PSScriptRoot 'live_flow.py') $here --preflight --report $flowReport --cache (Join-Path $Out 'flow-corpus.json') @flowSelection
 if ($LASTEXITCODE -ne 0) { throw 'live-flow design lint failed; fix before fake queue dryrun' }
 $flow = Get-Content -LiteralPath $flowReport -Raw | ConvertFrom-Json
 $flowDurations = @{}
@@ -50,9 +51,10 @@ foreach ($entry in $flow.jobs.PSObject.Properties) {
 . (Join-Path $scripts 'queue-permission.ps1')
 . (Join-Path $scripts 'queue-window-mode.ps1')
 . (Join-Path $scripts 'longrun.ps1')
+if ($ScratchOnly) { function Get-LongrunCacheDir { Join-Path $Out 'cache' } }
 $inputs = @($PSCommandPath) + @(Get-ChildItem $here -Recurse -File | ForEach-Object FullName) +
   @(Get-ChildItem $scripts -File -Include '*.ps1', '*.py' -Recurse | ForEach-Object FullName)
-$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB")
+$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB|$($JobNames -join ',')")
 $reuse = if ($Force) { $null } else { Get-LongrunReuse "lean_dryrun-$Batch" $inputHash }
 if ($reuse) {
   foreach ($l in @($reuse.lines)) { Write-Host $l }
@@ -71,6 +73,7 @@ function Apply-Set($state, [string]$set) {
 function Test-Diag($s) { foreach ($k in 'rt_stats', 'rt_primary_check', 'rt_primary_identity', 'ls_stats', 'ls_check', 'rt_debug', 'rf_stats', 'rf_debug', 'rt_occ_stats') { if ($s[$k] -and $s[$k] -ne '0') { return $true } }; $false }
 
 $jobFiles = @(Get-ChildItem (Join-Path $here 'jobs') -Filter '*.json' | Sort-Object Name)
+if ($JobNames.Count) { $jobFiles = @($jobFiles | Where-Object { $_.BaseName -in $JobNames }) }
 $jobs = @($jobFiles | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json })
 $first = $jobs[0].name
 if (-not $Receipt) { $Receipt = "$($jobs[0].live_batch).json" }

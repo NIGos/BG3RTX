@@ -682,14 +682,16 @@ def retime(job, plan):
     return changes
 
 
-def tighten_files(directory):
+def tighten_files(directory, cache=None, job_names=None):
     """Refresh checked-in artifacts with the same model used by lint/preflight."""
-    index = corpus(default_results(), ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
+    index = corpus(default_results(), cache or ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
     fps_windows.configure(index["entries"])
     configure_trace_exports(index["entries"])
     readiness_budget.configure(index["entries"])
     reports = []
     for path in job_files(directory):
+        if job_names and path.stem not in job_names:
+            continue
         job, plan, plan_path = load_job(path)
         first_warm = next((p for p in plan if p.get("label", "").startswith(("warm", "prefetch"))), None)
         if first_warm is not None:
@@ -814,6 +816,7 @@ def main(argv=None):
     ap.add_argument("--batches", help="comma-separated batch folders to regenerate with --retime")
     ap.add_argument("--replay-only", action="store_true", help="report historical gate coverage without regex-forbid audit")
     ap.add_argument("--report")
+    ap.add_argument("--job-names", help="comma-separated job stems to check")
     ap.add_argument("--tree", help="actual runner tree for preflight plan resolution")
     ap.add_argument("--preflight", action="store_true", help="refuse invalid or overlong launches before starting the runner")
     ap.add_argument("--active", action="store_true", help="check only active jobs in duration_lint.json")
@@ -830,7 +833,7 @@ def main(argv=None):
     memo = index.get("matches", {})
     active = active_job_files() if a.active else None
     for path in job_files(a.target):
-        if active is not None and path not in active:
+        if (active is not None and path not in active) or (a.job_names and path.stem not in a.job_names.split(",")):
             continue
         try:
             if a.preflight and a.tree:

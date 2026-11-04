@@ -3460,7 +3460,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           // Previous points: valid from the second update of this points range (the first copies stale bytes).
           hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
                                   w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};
-          hp_keys[groom_count] = w.g->uv_off ? w.hp_key : 0;   // no UVs yet: its draw keeps the card
+          // No UVs yet, or a points range in its first update (new LOD or upload: its BLAS and points exist on the
+          // GPU only from this build on): its draw keeps the card.
+          hp_keys[groom_count] = w.g->uv_off && w.g->prev_frames > 1 ? w.hp_key : 0;
           hp_lods[groom_count] = uint8_t(w.g->lod < 0 ? 0 : w.g->lod);
         }
         ++groom_count;

@@ -21,31 +21,6 @@
     "wait_log_timeout": 180.0
   },
   {
-    "label": "warm-order",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 10.0,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 10.0,
-    "motion_end": 10.0,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=1,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
-    "wait_log": [
-      "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation ",
-      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0,
-    "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ]
-  },
-  {
     "label": "warm-settle",
     "kind": "static",
     "speed": "static",
@@ -62,6 +37,7 @@
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",
+      "\\[auto\\] scene ready",
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
       "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
@@ -406,74 +382,6 @@
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
   },
   {
-    "label": "order-prepass-1",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 62.8,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 62.8,
-    "motion_end": 62.8,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
-  },
-  {
-    "label": "order-prepass-2",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 62.8,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 62.8,
-    "motion_end": 62.8,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
-  },
-  {
-    "label": "order-gbuffer-1",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 62.8,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 62.8,
-    "motion_end": 62.8,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=1,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
-    "wait_log": [
-      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
-  },
-  {
-    "label": "order-gbuffer-2",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 62.8,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 62.8,
-    "motion_end": 62.8,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=1,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
-  },
-  {
     "label": "restore",
     "kind": "static",
     "speed": "static",
@@ -486,14 +394,6 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
-    "wait_log": [
-      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
   }
 ]
