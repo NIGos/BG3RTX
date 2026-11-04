@@ -36,7 +36,7 @@ The BBCode uses placeholders like `[img]IMAGE_URL:banner.png[/img]`.
 | `h_features.png` ... `h_licence.png` | 1000 x 64 | description section headers |
 | `h_read_first.png`, `h_help.png`, `h_bugs.png`, `h_known_issues.png` | 1000 x 64 | sticky post section headers |
 
-Also good as the mod's main image (thumbnail): `banner.png`, or `assets/branding/bg3rtx-512.png`.
+Mod primary image (thumbnail on cards and search): `img/thumbnail.png`, 1920 x 1080; it stays legible at 320 x 180 and keeps 6% edges clear for card crops.
 
 Graphics use only project artwork: the gem emblem, the charcoal surface, the ornament SVGs and
 the lantern painting in `assets/branding/`, the palette of `docs/release/VISUAL_STYLE.md`,
