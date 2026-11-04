@@ -175,14 +175,9 @@ bool make_pipe(VkPipeline& pipe, uint64_t& gen, const char* entry);
 bool ensure(VkDescriptorSetLayout em_layout) {
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
-  if (g_layout && g_em_layout != em_layout) {   // the host's layout never changes in practice
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_pipe);
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_flush);
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_layout);
-    g_pipe = g_flush = VK_NULL_HANDLE;
-    g_layout = VK_NULL_HANDLE;
-  }
-  if (!g_push) {
+  if (!g_layout || g_em_layout != em_layout) {
+    VkDescriptorSetLayout push = VK_NULL_HANDLE, empty = VK_NULL_HANDLE;
+    VkPipelineLayout layout = VK_NULL_HANDLE;
     VkDescriptorSetLayoutBinding b[8] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -196,19 +191,33 @@ bool ensure(VkDescriptorSetLayout em_layout) {
     ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
     ci.bindingCount = 8;
     ci.pBindings = b;
-    if (vk.CreateDescriptorSetLayout(dev, &ci, nullptr, &g_push) != VK_SUCCESS) return false;
+    if (vk.CreateDescriptorSetLayout(dev, &ci, nullptr, &push) != VK_SUCCESS) return false;
     VkDescriptorSetLayoutCreateInfo ei{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    if (vk.CreateDescriptorSetLayout(dev, &ei, nullptr, &g_empty) != VK_SUCCESS) return false;
-  }
-  if (!g_layout) {
-    VkDescriptorSetLayout sets[4] = {g_push, g_empty, g_empty, em_layout};
+    if (vk.CreateDescriptorSetLayout(dev, &ei, nullptr, &empty) != VK_SUCCESS) {
+      vk.DestroyDescriptorSetLayout(dev, push, nullptr);
+      return false;
+    }
+    VkDescriptorSetLayout sets[4] = {push, empty, empty, em_layout};
     VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
     VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     li.setLayoutCount = 4;
     li.pSetLayouts = sets;
     li.pushConstantRangeCount = 1;
     li.pPushConstantRanges = &pc;
-    if (vk.CreatePipelineLayout(dev, &li, nullptr, &g_layout) != VK_SUCCESS) return false;
+    if (vk.CreatePipelineLayout(dev, &li, nullptr, &layout) != VK_SUCCESS) {
+      vk.DestroyDescriptorSetLayout(dev, push, nullptr);
+      vk.DestroyDescriptorSetLayout(dev, empty, nullptr);
+      return false;
+    }
+    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_pipe);
+    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_flush);
+    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_layout);
+    host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_push);
+    host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_empty);
+    g_pipe = g_flush = VK_NULL_HANDLE;
+    g_push = push;
+    g_empty = empty;
+    g_layout = layout;
     g_em_layout = em_layout;
     g_gen = g_flush_gen = 0;
   }

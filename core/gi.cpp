@@ -427,8 +427,8 @@ bool g_x_logged = false;
 uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0, g_shift = 1;
 
 // RR mode (docs/QUALITY.md fix 3): with Ray Reconstruction denoising the frame,
-// the GI traces 1 ray per full-res pixel and keeps no history of its own, the
-// input RR is designed for. gi_rr: -1 follows rr, 0 off, 1 on.
+// the GI uses the preset's ray count and keeps no history of its own, the
+// input RR is designed for. Ultra uses two rays. gi_rr: -1 follows rr, 0 off, 1 on.
 bool trace_half() {
   return host->cfg_float("rt_trace_scale", 1.0f) == 0.5f;
 }
@@ -736,15 +736,23 @@ bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLa
   sci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
   sci.bindingCount = n;
   sci.pBindings = b;
-  if (host->vk->CreateDescriptorSetLayout(host->device, &sci, nullptr, set_layout) != VK_SUCCESS) return false;
+  VkDescriptorSetLayout next_set = VK_NULL_HANDLE;
+  if (host->vk->CreateDescriptorSetLayout(host->device, &sci, nullptr, &next_set) != VK_SUCCESS) return false;
   VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
-  VkDescriptorSetLayout sets[3] = {*set_layout, set1, set2};
+  VkDescriptorSetLayout sets[3] = {next_set, set1, set2};
   VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   lci.setLayoutCount = set2 ? 3 : set1 ? 2 : 1;
   lci.pSetLayouts = sets;
   lci.pushConstantRangeCount = 1;
   lci.pPushConstantRanges = &pc;
-  return host->vk->CreatePipelineLayout(host->device, &lci, nullptr, layout) == VK_SUCCESS;
+  VkPipelineLayout next_layout = VK_NULL_HANDLE;
+  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &next_layout) != VK_SUCCESS) {
+    host->vk->DestroyDescriptorSetLayout(host->device, next_set, nullptr);
+    return false;
+  }
+  *set_layout = next_set;
+  *layout = next_layout;
+  return true;
 }
 
 bool ensure_layout() {
@@ -781,26 +789,27 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
   VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
   VkDescriptorSet unused;
   if (!game || !host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
+  VkDescriptorSetLayout next_set = VK_NULL_HANDLE;
+  VkPipelineLayout next_layout = VK_NULL_HANDLE;
+  if (!make_layout(kRfBindings, &next_set, &next_layout, host_layout, game)) return false;
   if (g_rf_layout) {
     for(const auto& [slot,v]:g_rf_resolve.variants) host->defer_destroy(BG3_DEFER_PIPELINE,uint64_t(v.pipeline));
     g_rf_resolve=Pipe{};
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf.pipeline);
+    for (const auto& [slot, v] : g_rf.variants) host->defer_destroy(BG3_DEFER_PIPELINE, uint64_t(v.pipeline));
     defer_layout_destroy(uint64_t(g_rf_layout));
     host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rf_set_layout);
     g_rf = Pipe{};
     g_rf_layout = VK_NULL_HANDLE;
     g_rf_set_layout = VK_NULL_HANDLE;
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf_sharc.pipeline);
+    for (const auto& [slot, v] : g_rf_sharc.variants) host->defer_destroy(BG3_DEFER_PIPELINE, uint64_t(v.pipeline));
     defer_layout_destroy(uint64_t(g_rf_sharc_layout));
     g_rf_sharc = Pipe{};
     g_rf_sharc_layout = VK_NULL_HANDLE;
     rf_gi_drop();
     host->log("rf: the lighting's set 1 layout changed (%p -> %p); rebuilding", (void*)g_rf_game_layout, (void*)game);
   }
-  if (!make_layout(kRfBindings, &g_rf_set_layout, &g_rf_layout, host_layout, game)) {
-    g_rf_layout = VK_NULL_HANDLE;
-    return false;
-  }
+  g_rf_set_layout = next_set;
+  g_rf_layout = next_layout;
   g_rf_game_layout = game;
   return true;
 }
@@ -857,7 +866,10 @@ bool ensure_ls_layout() {
     VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     sci.bindingCount = kSunBindings;
     sci.pBindings = b;
-    if (host->vk->CreateDescriptorSetLayout(host->device, &sci, nullptr, &g_sun_dsl) != VK_SUCCESS) return false;
+    VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    VkDescriptorSet sets[kSunRing] = {};
+    if (host->vk->CreateDescriptorSetLayout(host->device, &sci, nullptr, &dsl) != VK_SUCCESS) return false;
     VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kSunRing},
                                   {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 5 * kSunRing},
                                   {VK_DESCRIPTOR_TYPE_SAMPLER, kSunRing},
@@ -866,14 +878,24 @@ bool ensure_ls_layout() {
     pci.maxSets = kSunRing;
     pci.poolSizeCount = 4;
     pci.pPoolSizes = ps;
-    if (host->vk->CreateDescriptorPool(host->device, &pci, nullptr, &g_sun_pool) != VK_SUCCESS) return false;
+    if (host->vk->CreateDescriptorPool(host->device, &pci, nullptr, &pool) != VK_SUCCESS) {
+      host->vk->DestroyDescriptorSetLayout(host->device, dsl, nullptr);
+      return false;
+    }
     VkDescriptorSetLayout ls[kSunRing];
-    for (auto& l : ls) l = g_sun_dsl;
+    for (auto& l : ls) l = dsl;
     VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-    ai.descriptorPool = g_sun_pool;
+    ai.descriptorPool = pool;
     ai.descriptorSetCount = kSunRing;
     ai.pSetLayouts = ls;
-    if (host->vk->AllocateDescriptorSets(host->device, &ai, g_sun_sets) != VK_SUCCESS) return false;
+    if (host->vk->AllocateDescriptorSets(host->device, &ai, sets) != VK_SUCCESS) {
+      host->vk->DestroyDescriptorPool(host->device, pool, nullptr);
+      host->vk->DestroyDescriptorSetLayout(host->device, dsl, nullptr);
+      return false;
+    }
+    g_sun_dsl = dsl;
+    g_sun_pool = pool;
+    std::copy_n(sets, kSunRing, g_sun_sets);
   }
   VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
   VkDescriptorSet unused;
@@ -3573,12 +3595,12 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   const bool em_view = pc.rt_debug >= 16 && pc.rt_debug <= 20;
   if (em_view || em_check_due())
     em_debug(cmd, s.cam, s.vp, s.dep, s.dif, s.spe, s.l_cam2, g_w, g_h, em_view ? pc.rt_debug - 10 : 0);
-  // M5.2 water reflections (core/water.cpp, rt_water_reflections): measured, not composed.
+  // Water reflections and forward composition (core/water.cpp, rt_water_reflections).
   if (s.tlas && s.alpha && water_rf_wanted()) {
     Push wpc = pc;
     wpc.rt_stats = 0;
     WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
-    if (s.ls_ok && s.boxes_bound && host->rt_hit_material_use &&
+    if (host->cfg_int("rt_water_hit_shade", 0) && s.ls_ok && s.boxes_bound && host->rt_hit_material_use &&
         bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t))))) {
       const VkDescriptorSet hs = sun_set ? sun_set : (ensure_ls_layout() ? write_sun_set(s) : VK_NULL_HANDLE);
       if (hs && ((g_sunt_ok && g_sunt.view) || g_ls_nodata.view)) {

@@ -22,7 +22,11 @@ inline bool parse_index_line(const std::string& line, IndexEntry* out) {
   if (line.empty() || line[0] == '#') return false;
   unsigned t = 0, a = 0, b = 0, c = 0, d = 0;
   char name[260] = {};
+#ifdef _MSC_VER
+  if (sscanf_s(line.c_str(), "%u %x %x %x %x %259s", &t, &a, &b, &c, &d, name, unsigned(sizeof name)) != 6) return false;
+#else
   if (std::sscanf(line.c_str(), "%u %x %x %x %x %259s", &t, &a, &b, &c, &d, name) != 6) return false;
+#endif
   out->tileset = t;
   out->p0[0] = a; out->p0[1] = b; out->p0[2] = c; out->p0[3] = d;
   out->file = name;

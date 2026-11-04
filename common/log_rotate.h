@@ -8,6 +8,9 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#ifdef _MSC_VER
+#include <share.h>
+#endif
 
 namespace bg3 {
 namespace logrot {
@@ -40,7 +43,14 @@ inline bool shift(const std::string& path) {
 struct Writer {
   std::string path;
   uint64_t cap = kLogCapBytes;
-  FILE* (*open)(const char*) = [](const char* p) { return std::fopen(p, "w"); };
+  FILE* (*open)(const char*) = [](const char* p) {
+#ifdef _MSC_VER
+    // Preserve fopen's sharing: the queue and diagnostics read the live log.
+    return _fsopen(p, "w", _SH_DENYNO);
+#else
+    return std::fopen(p, "w");
+#endif
+  };
   FILE* f = nullptr;
   uint64_t written = 0;
   unsigned rotations = 0;
