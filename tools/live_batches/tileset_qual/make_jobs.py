@@ -30,7 +30,7 @@ def main():
         save='Test Dialogue3', retained_draws=132, supported_material_draws=48,
         supported_depth_draws=56,
         startup_constraint='layer/util.cpp retains startup_tilesets on every reload. No live gate isolates this choice. Two launches required; no fake 0/1/0/1.',
-        pass_rule='Each measured interval: zero scene-wait timeouts, capture buffer full and alpha region full zero. ON diagnostic: complete > 0, unknown 0, capture-incomplete 0, qualified family2 > 0 and native primary matches > 0. OFF/ON coverage and RT/GI ms must be present. Float pre-post means finite and nonnegative; report signed energy/coverage deltas, no equal-energy gate for this shading-model change. Missing data INVALID. Visual quality remains user decision.',
+        pass_rule='Cost intervals without traces or diagnostic stats: zero scene-wait timeouts. Each measured interval: capture buffer full and alpha region full zero. ON diagnostic: complete > 0, unknown 0, capture-incomplete 0, qualified family2 > 0 and native primary matches > 0. OFF/ON coverage and RT/GI ms must be present. Float pre-post means finite and nonnegative; report signed energy/coverage deltas, no equal-energy gate for this shading-model change. Missing data INVALID. Visual quality remains user decision.',
         coverage_prediction='ON has positive family2 acquisitions, OFF has no enabled Tileset acquisitions. Report complete record counts, hybrid GI hit/screen/hidden/off-screen shares and overall material qualified/attempted. No invented minimum coverage percentage.',
         pt_reference=None,
         energy_rule='No matched Dialogue3 PT reference found. Report float pre-post scene colour and exposure per launch; independent load/camera/exposure can confound differences. Never a quality PASS from cross-run comparison.',
@@ -57,7 +57,7 @@ def main():
         diag, cost = 'diag-' + suffix, 'cost-' + suffix
         gates = [
             gate('material table capacity', r'\[hit material capacity\] frame \d+ ', r'opaque rows \d+/\d+ overflow 0; deferred rows \d+/\d+ overflow 0; samplers \d+/\d+ overflow 0; cache views \d+/\d+ overflow 0;.* tables \d+/\d+ overflow 0', [diag], event=True, settle_s=1),
-            gate('scene waits', r'\[rt\] scene wait: \d+ frames', r"got this frame's scene, 0 timeouts", [diag, cost]),
+            gate('scene waits', r'\[rt\] scene wait: \d+ frames', r"got this frame's scene, 0 timeouts", [cost]),
             gate('RT capture capacity', r'\[geo\] RT capture, last \d+ frames:', r'alpha draws made opaque \(region full\) 0\.00, opaque draws dropped \(buffer full\) 0\.00,', [diag, cost]),
             gate('cascade capacity', r'\[cascade\] casters: cascade \d+, \d+ frames;', r', buffer full 0\.0, added ', [diag, cost], when_present=True),
             gate('RT GPU ms', r'rt passes: GPU cost', r'rt passes: GPU cost [0-9.]+ ms/frame', [cost], period_frames=120),

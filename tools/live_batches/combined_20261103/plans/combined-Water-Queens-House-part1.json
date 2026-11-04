@@ -275,8 +275,7 @@
     "stats_reset": true,
     "wait_log_timeout": 30,
     "wait_stats": [
-      "omm check \\(\\d+ frames\\):",
-      "\\[rt\\] scene wait: \\d+ frames"
+      "omm check \\(\\d+ frames\\):"
     ]
   },
   {

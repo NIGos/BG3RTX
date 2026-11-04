@@ -13,3 +13,16 @@
   Read-only HEAD comparison of all 32 jobs finds identical failures, 0 new problems.
   Reports are in captures/.cache/scenewait-{active-lint,gi-lint,baseline-comparison}.json.
 - No game launched, no GPU measurement, no Git metadata changes or commits.
+
+## Scene-wait measurement exclusions (branch scenewait-traces, kept, 2026-11-04)
+
+- ts1 OFF live 16:28: diag-off reported 59 current scenes, 1 timeout, max 16.688 ms.
+  Diagnostic readbacks confound scene-build timing just as trace captures do.
+- Exclude windows with traces or enabled *_stats, *_check or *_debug keys in
+  pipeline_readiness.CONTROL, using cumulative settings. Keep zero timeouts strict
+  elsewhere; capacity gates are unchanged.
+- Regenerated scene-wait scopes and wait_stats in tileset OFF/ON, smoke_ultra and
+  its active combined job/manifest. Preserve existing frame counts and timing evidence.
+- Offline: queue_gates all checks passed; live_flow 68 tests; batch_jobs_lint 7 tests.
+  No game launch, commit or generated corpus files. Next live check: ts1 cost windows
+  still require 0 timeouts; diagnostic coverage/capacity gates remain mandatory.

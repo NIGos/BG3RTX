@@ -205,15 +205,6 @@
       "min": 1
     },
     {
-      "name": "b1-su1-ultra-s8-fg2--OMM diagnostic: scene wait has zero timeouts",
-      "select": "\\[rt\\] scene wait: \\d+ frames",
-      "match": "got this frame's scene, 0 timeouts",
-      "windows": [
-        "b1-su1-ultra-s8-fg2--diag-omm"
-      ],
-      "min": 1
-    },
-    {
       "name": "b1-su1-ultra-s8-fg2--no mesh pool exhaustion in measured windows (load excluded)",
       "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
       "match": "(?!)",

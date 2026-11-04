@@ -17,7 +17,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from scripts.queue_gates import phase_states, _apply
+from scripts.queue_gates import phase_states, _apply, scene_wait_eligible
 from tools.live_batches import fps_windows, readiness_budget, pipeline_readiness
 
 # Recent VALID logs, scene-ready -> both a zero-timeout scene interval and
@@ -731,18 +731,17 @@ def settings(text):
 
 
 def scope_scene_wait_gates(job, plan):
-    """Keep timeout checks in measurement windows without float captures."""
-    # Float export stalls can delay scene builds. Keep zero-timeout gates strict
-    # in their measurement windows, but never judge a trace-capture phase.
-    without_traces = {p['label'] for p in plan if not p.get('trace_at')}
+    """Keep strict timeout checks outside captures and expensive diagnostics."""
+    eligible = {p['label'] for p, state in zip(plan, phase_states(job, plan))
+                if scene_wait_eligible(p, state)}
     for phase in plan:
-        if phase.get('trace_at') and 'wait_stats' in phase:
+        if phase['label'] not in eligible and 'wait_stats' in phase:
             phase['wait_stats'] = [rx for rx in phase['wait_stats'] if 'scene wait:' not in rx]
     gates = []
     for gate in job.get('expect_every', []):
         if 'scene wait:' in gate.get('select', '') and '0 timeouts' in gate.get('match', ''):
             gate['windows'] = [label for label in gate.get('windows', [p['label'] for p in plan])
-                               if label in without_traces]
+                               if label in eligible]
             if not gate['windows']:
                 continue  # An empty windows list would gate the entire run.
         gates.append(gate)

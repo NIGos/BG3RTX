@@ -526,6 +526,25 @@ class FlowTests(unittest.TestCase):
         self.assertNotIn(scene['select'], p[2].get('wait_stats', []))
         self.assertIn(scene['select'], p[3]['wait_stats'])
 
+    def test_scene_wait_excludes_inherited_diagnostics_until_disabled(self):
+        from scripts.queue_gates import SCENE_WAIT_GATE, SCENE_WAIT_BAD, line_matches
+        from tools.live_batches.pipeline_readiness import CONTROL
+        for key in sorted(k for k in CONTROL if k.endswith(('_stats', '_check', '_debug'))):
+            with self.subTest(key=key):
+                j, p = fixture()
+                j['set'] += ',' + key + '=1'
+                p[3]['set'] += ',' + key + '=0'
+                scene = dict(SCENE_WAIT_GATE, windows=['cost-off', 'cost-on'])
+                p[2]['wait_stats'] = [scene['select']]
+                capacity = dict(select='capture buffer', match='0 dropped', windows=['cost-off', 'cost-on'])
+                j['expect_every'] = [scene, capacity]
+                f.frame_windows(j, p)
+                self.assertEqual(scene['windows'], ['cost-on'])
+                self.assertFalse(line_matches(scene, SCENE_WAIT_BAD))
+                self.assertNotIn(scene['select'], p[2].get('wait_stats', []))
+                self.assertIn(scene['select'], p[3]['wait_stats'])
+                self.assertEqual(capacity['windows'], ['cost-off', 'cost-on'])
+
     def test_cadence_unknown_missing_label_foreground_and_min_zero(self):
         j, p = fixture()
         j["expect_every"] = [dict(select="new statistic", match="ok", windows=["cost-off"])]

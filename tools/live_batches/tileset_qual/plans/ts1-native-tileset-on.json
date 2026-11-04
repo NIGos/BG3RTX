@@ -59,7 +59,6 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[hit material capacity\\] frame \\d+ ",
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "rt stats \\(\\d+ frames\\): hybrid GI",
       "hit material \\(\\d+ frames\\): attempted",

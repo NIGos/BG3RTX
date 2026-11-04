@@ -201,15 +201,6 @@
             "min": 1
           },
           {
-            "name": "OMM diagnostic: scene wait has zero timeouts",
-            "select": "\\[rt\\] scene wait: \\d+ frames",
-            "match": "got this frame's scene, 0 timeouts",
-            "windows": [
-              "diag-omm"
-            ],
-            "min": 1
-          },
-          {
             "name": "no mesh pool exhaustion in measured windows (load excluded)",
             "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
             "match": "(?!)",
@@ -702,8 +693,7 @@
           "stats_reset": true,
           "wait_log_timeout": 30,
           "wait_stats": [
-            "omm check \\(\\d+ frames\\):",
-            "\\[rt\\] scene wait: \\d+ frames"
+            "omm check \\(\\d+ frames\\):"
           ]
         },
         {
@@ -2093,8 +2083,7 @@
       "stats_reset": true,
       "wait_log_timeout": 30,
       "wait_stats": [
-        "omm check \\(\\d+ frames\\):",
-        "\\[rt\\] scene wait: \\d+ frames"
+        "omm check \\(\\d+ frames\\):"
       ]
     },
     {

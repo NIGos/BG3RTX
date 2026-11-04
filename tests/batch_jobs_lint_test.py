@@ -13,18 +13,20 @@ from tools.live_batches import live_flow as flow
 
 
 class BatchJobsLintTests(unittest.TestCase):
-    def test_scene_wait_timeout_gates_exclude_float_captures(self):
+    def test_scene_wait_timeout_gates_exclude_captures_and_diagnostics(self):
         from tools.live_batches.regenerate_active import active_paths
-        from scripts.queue_gates import line_matches, SCENE_WAIT_BAD
-        paths = list(active_paths()) + [ROOT / 'tools/live_batches/gi_1ray_qual/jobs/gi1-ultra-1ray.json']
+        from scripts.queue_gates import line_matches, SCENE_WAIT_BAD, phase_states, scene_wait_eligible
+        paths = list(active_paths()) + sorted((ROOT / 'tools/live_batches/tileset_qual/jobs').glob('*.json'))
+        paths += [ROOT / 'tools/live_batches/gi_1ray_qual/jobs/gi1-ultra-1ray.json']
         for path in paths:
             job, plan, _ = flow.load_job(path)
-            captures = {p['label'] for p in plan if p.get('trace_at')}
+            excluded = {p['label'] for p, state in zip(plan, phase_states(job, plan))
+                        if not scene_wait_eligible(p, state)}
             for gate in job.get('expect_every', []):
                 if 'scene wait:' in gate.get('select', '') and '0 timeouts' in gate.get('match', ''):
                     with self.subTest(job=path.name, gate=gate['name']):
                         self.assertTrue(gate.get('windows'))
-                        self.assertFalse(captures.intersection(gate['windows']))
+                        self.assertFalse(excluded.intersection(gate['windows']))
                         self.assertFalse(line_matches(gate, SCENE_WAIT_BAD))
         gi = flow.read(paths[-1])
         gates = [g for g in gi['expect_every'] if 'scene wait:' in g.get('select', '')]

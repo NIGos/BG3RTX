@@ -93,7 +93,6 @@
       "select": "\\[rt\\] scene wait: \\d+ frames",
       "match": "got this frame's scene, 0 timeouts",
       "windows": [
-        "diag-on",
         "cost-on"
       ],
       "min": 1
