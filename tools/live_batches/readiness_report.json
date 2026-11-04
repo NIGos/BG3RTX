@@ -1,44 +1,52 @@
 {
   "jobs": {
     "su1-ultra-s8-fg2": {
-      "before_seconds": 175.0,
-      "before_readiness_seconds": null,
+      "before_seconds": 151.5,
+      "before_readiness_seconds": 4.354,
       "before_basis": "original job",
       "after_seconds": 151.5,
-      "readiness_seconds": 4.354,
-      "preflight_seconds": 155.854,
-      "problems": []
+      "readiness_seconds": 5.214,
+      "preflight_seconds": 156.714,
+      "problems": [
+        "windows: static-a: one trace written in each static window: trace schedule guarantees 0 complete events, need 1; minimum > 11.107133333333088 s including serialized trace stalls",
+        "windows: static-b: one trace written in each static window: trace schedule guarantees 0 complete events, need 1; minimum > 11.107133333333081 s including serialized trace stalls"
+      ]
     },
     "wsf1-s8-interface-column": {
-      "before_seconds": 141.8,
-      "before_readiness_seconds": null,
+      "before_seconds": 120.6,
+      "before_readiness_seconds": 47.894,
       "before_basis": "original job",
       "after_seconds": 120.6,
-      "readiness_seconds": 47.894,
-      "preflight_seconds": 168.494,
-      "problems": []
+      "readiness_seconds": 57.354,
+      "preflight_seconds": 177.954,
+      "problems": [
+        "windows: partition-static-0: post-water float shots at the pool rim: trace schedule guarantees 1 complete events, need 2; minimum > 10.107133333333088 s including serialized trace stalls",
+        "windows: partition-static-1: post-water float shots at the pool rim: trace schedule guarantees 1 complete events, need 2; minimum > 10.107133333333088 s including serialized trace stalls",
+        "windows: partition-static-2: post-water float shots at the pool rim: trace schedule guarantees 1 complete events, need 2; minimum > 10.107133333333088 s including serialized trace stalls",
+        "windows: partition-static-3: post-water float shots at the pool rim: trace schedule guarantees 1 complete events, need 2; minimum > 10.107133333333095 s including serialized trace stalls"
+      ]
     },
     "cp4-compact-camp-join": {
-      "before_seconds": 100.9,
-      "before_readiness_seconds": null,
+      "before_seconds": 53.3,
+      "before_readiness_seconds": 16.871,
       "before_basis": "original job",
       "after_seconds": 53.3,
-      "readiness_seconds": 16.871,
-      "preflight_seconds": 70.171,
+      "readiness_seconds": 16.897,
+      "preflight_seconds": 70.197,
       "problems": []
     },
     "cp5-compact-s6-publication": {
-      "before_seconds": 203.3,
-      "before_readiness_seconds": null,
+      "before_seconds": 97.2,
+      "before_readiness_seconds": 0,
       "before_basis": "original job",
-      "after_seconds": 97.2,
+      "after_seconds": 96.1,
       "readiness_seconds": 0,
-      "preflight_seconds": 97.2,
+      "preflight_seconds": 96.1,
       "problems": []
     },
     "pt-dialogue3": {
-      "before_seconds": 393.3,
-      "before_readiness_seconds": null,
+      "before_seconds": 388.3,
+      "before_readiness_seconds": 0.126,
       "before_basis": "original job",
       "after_seconds": 388.3,
       "readiness_seconds": 0.126,
@@ -46,17 +54,22 @@
       "problems": []
     },
     "pt-s8": {
-      "before_seconds": 139.5,
-      "before_readiness_seconds": null,
+      "before_seconds": 99.1,
+      "before_readiness_seconds": 0.0,
       "before_basis": "original job",
       "after_seconds": 99.1,
       "readiness_seconds": 0.0,
       "preflight_seconds": 99.1,
-      "problems": []
+      "problems": [
+        "windows: energy-off-a: float energy off-a: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330884 s including serialized trace stalls",
+        "windows: energy-on-a: float energy on-a: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330955 s including serialized trace stalls",
+        "windows: energy-off-b: float energy off-b: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330955 s including serialized trace stalls",
+        "windows: energy-on-b: float energy on-b: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330955 s including serialized trace stalls"
+      ]
     },
     "hv1-dialogue1": {
-      "before_seconds": 340.7,
-      "before_readiness_seconds": null,
+      "before_seconds": 215.638,
+      "before_readiness_seconds": 0.29,
       "before_basis": "original job",
       "after_seconds": 215.638,
       "readiness_seconds": 0.29,
@@ -64,17 +77,17 @@
       "problems": []
     },
     "hv2-camp": {
-      "before_seconds": 322.3,
-      "before_readiness_seconds": null,
+      "before_seconds": 223.4,
+      "before_readiness_seconds": 0.0,
       "before_basis": "original job",
       "after_seconds": 223.4,
-      "readiness_seconds": 0.0,
+      "readiness_seconds": 0,
       "preflight_seconds": 223.4,
       "problems": []
     },
     "hv3-s8": {
-      "before_seconds": 270.2,
-      "before_readiness_seconds": null,
+      "before_seconds": 200.9,
+      "before_readiness_seconds": 0.0,
       "before_basis": "original job",
       "after_seconds": 200.9,
       "readiness_seconds": 0.0,
@@ -82,8 +95,8 @@
       "problems": []
     },
     "hv4-gpuav": {
-      "before_seconds": 398.8,
-      "before_readiness_seconds": null,
+      "before_seconds": 69.276,
+      "before_readiness_seconds": 0.029,
       "before_basis": "original job",
       "after_seconds": 69.276,
       "readiness_seconds": 0.029,
@@ -91,134 +104,167 @@
       "problems": []
     },
     "hv5-reload-bisect": {
-      "before_seconds": 488.3,
-      "before_readiness_seconds": null,
+      "before_seconds": 139.556,
+      "before_readiness_seconds": 0.061,
       "before_basis": "original job",
       "after_seconds": 139.556,
-      "readiness_seconds": 0.061,
-      "preflight_seconds": 139.617,
+      "readiness_seconds": 0.058,
+      "preflight_seconds": 139.614,
       "problems": []
     },
     "hv6-strand-diagnostic": {
-      "before_seconds": 431.4,
-      "before_readiness_seconds": null,
+      "before_seconds": 133.7,
+      "before_readiness_seconds": 0.062,
       "before_basis": "original job",
       "after_seconds": 133.7,
-      "readiness_seconds": 0.062,
-      "preflight_seconds": 133.762,
+      "readiness_seconds": 0.057,
+      "preflight_seconds": 133.757,
       "problems": []
     },
     "hv7-pass-bisect": {
-      "before_seconds": 303.9,
-      "before_readiness_seconds": null,
+      "before_seconds": 44.4,
+      "before_readiness_seconds": 0.049,
       "before_basis": "original job",
       "after_seconds": 44.4,
-      "readiness_seconds": 0.049,
-      "preflight_seconds": 44.449,
+      "readiness_seconds": 0.05,
+      "preflight_seconds": 44.45,
       "problems": []
     },
     "hv8-probe-aftermath": {
-      "before_seconds": 118.7,
-      "before_readiness_seconds": null,
+      "before_seconds": 32.2,
+      "before_readiness_seconds": 0,
       "before_basis": "original job",
       "after_seconds": 32.2,
-      "readiness_seconds": 0,
+      "readiness_seconds": 0.0,
       "preflight_seconds": 32.2,
       "problems": []
     },
-    "hc1-dialogue1-fg2": {
-      "before_seconds": 401.5,
+    "hv9-visual": {
+      "before_seconds": null,
       "before_readiness_seconds": null,
       "before_basis": "original job",
+      "after_seconds": 63.8,
+      "readiness_seconds": 0.027,
+      "preflight_seconds": 63.827,
+      "problems": []
+    },
+    "hc1-dialogue1-fg2": {
+      "before_seconds": 151.1,
+      "before_readiness_seconds": 16.149,
+      "before_basis": "original job",
       "after_seconds": 151.1,
-      "readiness_seconds": 16.149,
-      "preflight_seconds": 167.249,
+      "readiness_seconds": 16.025,
+      "preflight_seconds": 167.125,
       "problems": []
     },
     "hc2-campsite-fg2": {
-      "before_seconds": 340.5,
-      "before_readiness_seconds": null,
+      "before_seconds": 144.1,
+      "before_readiness_seconds": 13.68,
       "before_basis": "original job",
       "after_seconds": 144.1,
-      "readiness_seconds": 13.68,
-      "preflight_seconds": 157.78,
+      "readiness_seconds": 14.076,
+      "preflight_seconds": 158.176,
       "problems": []
     },
     "go1-camp": {
-      "before_seconds": 573.4,
-      "before_readiness_seconds": null,
+      "before_seconds": 158.0,
+      "before_readiness_seconds": 6.84,
       "before_basis": "original job",
       "after_seconds": 158.0,
-      "readiness_seconds": 6.84,
-      "preflight_seconds": 164.84,
+      "readiness_seconds": 7.038,
+      "preflight_seconds": 165.038,
       "problems": []
     },
     "go2-s8": {
-      "before_seconds": 408.8,
-      "before_readiness_seconds": null,
+      "before_seconds": 125.7,
+      "before_readiness_seconds": 4.354,
       "before_basis": "original job",
       "after_seconds": 125.7,
-      "readiness_seconds": 4.354,
-      "preflight_seconds": 130.054,
+      "readiness_seconds": 5.214,
+      "preflight_seconds": 130.914,
       "problems": []
     },
     "go2-camp-high": {
-      "before_seconds": 241.0,
-      "before_readiness_seconds": null,
+      "before_seconds": 107.2,
+      "before_readiness_seconds": 6.84,
       "before_basis": "original job",
       "after_seconds": 107.2,
-      "readiness_seconds": 6.84,
-      "preflight_seconds": 114.04,
+      "readiness_seconds": 7.038,
+      "preflight_seconds": 114.238,
       "problems": []
     },
     "go2-s8-medium": {
-      "before_seconds": 189.7,
-      "before_readiness_seconds": null,
+      "before_seconds": 95.5,
+      "before_readiness_seconds": 4.354,
       "before_basis": "original job",
       "after_seconds": 95.5,
-      "readiness_seconds": 4.354,
-      "preflight_seconds": 99.854,
-      "problems": []
+      "readiness_seconds": 5.214,
+      "preflight_seconds": 100.714,
+      "problems": [
+        "windows: shot-off-a: \\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333088 s including serialized trace stalls",
+        "windows: shot-on: \\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333095 s including serialized trace stalls",
+        "windows: shot-off-b: \\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333095 s including serialized trace stalls"
+      ]
     },
     "wo1-s8-bit2": {
-      "before_seconds": 188.0,
-      "before_readiness_seconds": null,
+      "before_seconds": 89.2,
+      "before_readiness_seconds": 4.354,
       "before_basis": "original job",
       "after_seconds": 89.2,
-      "readiness_seconds": 4.354,
-      "preflight_seconds": 93.554,
-      "problems": []
+      "readiness_seconds": 5.214,
+      "preflight_seconds": 94.414,
+      "problems": [
+        "windows: shot-cone-off-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-cone-on-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-cone-off-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-cone-on-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls"
+      ]
     },
     "wo1-s8-bit4": {
-      "before_seconds": 188.0,
-      "before_readiness_seconds": null,
+      "before_seconds": 89.2,
+      "before_readiness_seconds": 4.354,
       "before_basis": "original job",
       "after_seconds": 89.2,
-      "readiness_seconds": 4.354,
-      "preflight_seconds": 93.554,
-      "problems": []
+      "readiness_seconds": 5.214,
+      "preflight_seconds": 94.414,
+      "problems": [
+        "windows: shot-order-off-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-order-on-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-order-off-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-order-on-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls"
+      ]
     },
     "wo1-s8-hit-shade": {
-      "before_seconds": 188.0,
-      "before_readiness_seconds": null,
+      "before_seconds": 89.2,
+      "before_readiness_seconds": 4.354,
       "before_basis": "original job",
       "after_seconds": 89.2,
-      "readiness_seconds": 4.354,
-      "preflight_seconds": 93.554,
-      "problems": []
+      "readiness_seconds": 5.214,
+      "preflight_seconds": 94.414,
+      "problems": [
+        "windows: shot-sparse-off-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-sparse-on-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-sparse-off-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: shot-sparse-on-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls"
+      ]
     },
     "wf9-s8-compose-shift": {
-      "before_seconds": 306.9,
-      "before_readiness_seconds": null,
+      "before_seconds": 272.7,
+      "before_readiness_seconds": 4.515,
       "before_basis": "original job",
       "after_seconds": 272.7,
-      "readiness_seconds": 4.515,
-      "preflight_seconds": 277.215,
-      "problems": []
+      "readiness_seconds": 5.375,
+      "preflight_seconds": 278.075,
+      "problems": [
+        "windows: energy-static-0: static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333088 s including serialized trace stalls",
+        "windows: energy-static-1: static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333088 s including serialized trace stalls",
+        "windows: energy-static-2: static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333088 s including serialized trace stalls",
+        "windows: energy-static-3: static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333088 s including serialized trace stalls"
+      ]
     },
     "ef1-dialogue3-attribution": {
-      "before_seconds": 161.2,
-      "before_readiness_seconds": null,
+      "before_seconds": 162.0,
+      "before_readiness_seconds": 0.198,
       "before_basis": "original job",
       "after_seconds": 162.0,
       "readiness_seconds": 0.198,
@@ -226,26 +272,26 @@
       "problems": []
     },
     "combined-Campsite---27h-part1": {
-      "before_seconds": 675.4,
-      "before_readiness_seconds": null,
+      "before_seconds": 212.4,
+      "before_readiness_seconds": 23.711,
       "before_basis": "original job",
       "after_seconds": 212.4,
-      "readiness_seconds": 23.711,
-      "preflight_seconds": 236.111,
+      "readiness_seconds": 23.935,
+      "preflight_seconds": 236.335,
       "problems": []
     },
     "combined-Campsite---27h-part2": {
-      "before_seconds": 241.0,
-      "before_readiness_seconds": null,
+      "before_seconds": 107.2,
+      "before_readiness_seconds": 6.84,
       "before_basis": "original job",
       "after_seconds": 107.2,
-      "readiness_seconds": 6.84,
-      "preflight_seconds": 114.04,
+      "readiness_seconds": 7.038,
+      "preflight_seconds": 114.238,
       "problems": []
     },
     "combined-Test-Dialogue3": {
-      "before_seconds": 584.4,
-      "before_readiness_seconds": null,
+      "before_seconds": 580.2,
+      "before_readiness_seconds": 0.324,
       "before_basis": "original job",
       "after_seconds": 580.2,
       "readiness_seconds": 0.324,
@@ -253,31 +299,59 @@
       "problems": []
     },
     "combined-Water-Queens-House-part1": {
-      "before_seconds": 584.9,
-      "before_readiness_seconds": null,
+      "before_seconds": 278.3,
+      "before_readiness_seconds": 8.708,
       "before_basis": "original job",
       "after_seconds": 278.3,
-      "readiness_seconds": 8.708,
-      "preflight_seconds": 287.008,
-      "problems": []
+      "readiness_seconds": 10.428,
+      "preflight_seconds": 288.728,
+      "problems": [
+        "windows: b1-su1-ultra-s8-fg2--static-a: b1-su1-ultra-s8-fg2--one trace written in each static window: trace schedule guarantees 0 complete events, need 1; minimum > 11.107133333333088 s including serialized trace stalls",
+        "windows: b1-su1-ultra-s8-fg2--static-b: b1-su1-ultra-s8-fg2--one trace written in each static window: trace schedule guarantees 0 complete events, need 1; minimum > 11.107133333333081 s including serialized trace stalls"
+      ]
     },
     "combined-Water-Queens-House-part2": {
-      "before_seconds": 567.9,
-      "before_readiness_seconds": null,
+      "before_seconds": 276.1,
+      "before_readiness_seconds": 13.076,
       "before_basis": "original job",
       "after_seconds": 276.1,
-      "readiness_seconds": 13.076,
-      "preflight_seconds": 289.176,
-      "problems": []
+      "readiness_seconds": 15.656,
+      "preflight_seconds": 291.756,
+      "problems": [
+        "windows: b1-go2-s8-medium--shot-off-a: b1-go2-s8-medium--\\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333088 s including serialized trace stalls",
+        "windows: b1-go2-s8-medium--shot-on: b1-go2-s8-medium--\\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333095 s including serialized trace stalls",
+        "windows: b1-go2-s8-medium--shot-off-b: b1-go2-s8-medium--\\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333095 s including serialized trace stalls",
+        "windows: b2-wo1-s8-hit-shade--shot-sparse-off-a: b2-wo1-s8-hit-shade--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls",
+        "windows: b2-wo1-s8-hit-shade--shot-sparse-on-a: b2-wo1-s8-hit-shade--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
+        "windows: b2-wo1-s8-hit-shade--shot-sparse-off-b: b2-wo1-s8-hit-shade--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
+        "windows: b2-wo1-s8-hit-shade--shot-sparse-on-b: b2-wo1-s8-hit-shade--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
+        "windows: b3-wo1-s8-bit2--shot-cone-off-a: b3-wo1-s8-bit2--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
+        "windows: b3-wo1-s8-bit2--shot-cone-on-a: b3-wo1-s8-bit2--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
+        "windows: b3-wo1-s8-bit2--shot-cone-off-b: b3-wo1-s8-bit2--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
+        "windows: b3-wo1-s8-bit2--shot-cone-on-b: b3-wo1-s8-bit2--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls"
+      ]
     },
     "combined-Water-Queens-House-part3": {
-      "before_seconds": 636.6,
-      "before_readiness_seconds": null,
+      "before_seconds": 463.2,
+      "before_readiness_seconds": 8.869,
       "before_basis": "original job",
       "after_seconds": 463.2,
-      "readiness_seconds": 8.869,
-      "preflight_seconds": 472.069,
-      "problems": []
+      "readiness_seconds": 10.589,
+      "preflight_seconds": 473.789,
+      "problems": [
+        "windows: b1-wo1-s8-bit4--shot-order-off-a: b1-wo1-s8-bit4--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: b1-wo1-s8-bit4--shot-order-on-a: b1-wo1-s8-bit4--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: b1-wo1-s8-bit4--shot-order-off-b: b1-wo1-s8-bit4--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
+        "windows: b1-wo1-s8-bit4--shot-order-on-b: b1-wo1-s8-bit4--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls",
+        "windows: b2-wf9-s8-compose-shift--energy-static-0: b2-wf9-s8-compose-shift--static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.1071333333330955 s including serialized trace stalls",
+        "windows: b2-wf9-s8-compose-shift--energy-static-1: b2-wf9-s8-compose-shift--static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333081 s including serialized trace stalls",
+        "windows: b2-wf9-s8-compose-shift--energy-static-2: b2-wf9-s8-compose-shift--static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333081 s including serialized trace stalls",
+        "windows: b2-wf9-s8-compose-shift--energy-static-3: b2-wf9-s8-compose-shift--static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333081 s including serialized trace stalls",
+        "windows: b3-pt-s8--energy-off-a: b3-pt-s8--float energy off-a: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330813 s including serialized trace stalls",
+        "windows: b3-pt-s8--energy-on-a: b3-pt-s8--float energy on-a: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330813 s including serialized trace stalls",
+        "windows: b3-pt-s8--energy-off-b: b3-pt-s8--float energy off-b: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330813 s including serialized trace stalls",
+        "windows: b3-pt-s8--energy-on-b: b3-pt-s8--float energy on-b: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330813 s including serialized trace stalls"
+      ]
     }
   },
   "conservative_keys": [
@@ -294,7 +368,10 @@
     "rt_water_geometry"
   ],
   "no_game_launched": true,
-  "superseded": {},
-  "historical_jobs": 91,
+  "superseded": {
+    "combined-Campsite---27h": 498.30000000000035,
+    "combined-Water-Queens-House": 1538.599999999998
+  },
+  "historical_jobs": 94,
   "max_preflight_seconds": 580.524
 }
