@@ -227,7 +227,9 @@ struct SwapGate {
 
 // Coverage evidence is independent of publication and pixel-record strikes. Query pairs are read
 // after 4 frames; two more frames permit CPU/GPU scheduling jitter, never an indefinite lease.
-constexpr uint64_t kCoverageLatency = 4, kFreshFrames = kCoverageLatency + 2;
+// Evidence age: the card readback latency, plus the strand count's (up to kCountTags - 1 tags behind, read back
+// kCountSlots = 3 publishes later), plus 2 frames of scheduling jitter.
+constexpr uint64_t kCoverageLatency = 4, kStrandLatency = 3 + 3, kFreshFrames = kCoverageLatency + kStrandLatency + 2;
 // Batch-4, 877 passing styles / 2631 views, regenerated from unchanged cached geometry:
 // minimum S/C = 8556.228538087944 / 9396.798707214493 = 0.9105471772550376
 // (HAIR_HUM_F_Minthara_Mesh_LOD1, side). One-frame sample-count noise, first-order
@@ -241,6 +243,32 @@ constexpr double kCoverMin = 0.8913102349775665;
 // occlusion samples): the maximum offline ratio 1.0752640637962045 (2631 views) plus the same modelled noise. The live
 // ratio is unique strand pixels of the pixel record over the prepass card samples.
 constexpr double kCoverMax = 1.0752640637962045 + 0.01923694227747121;
+// Pairs the card samples of a prepass slot (frame C = the slot's frame) with the strand pixels of the G-buffer pass
+// recorded after that prepass (counted later, with another latency). Each side keeps its last kPairHistory frames per
+// key: the newest-only maps never met (hv7 2026-11-04: every draw 0/0, the card side ahead by the time the strand
+// count arrived). add() returns true and fills the pair when the other side has the same frame.
+constexpr uint32_t kPairHistory = 16;
+struct CoveragePairing {
+  struct Entry { uint64_t frame = 0, value = 0; };
+  std::unordered_map<uint64_t, std::vector<Entry>> card, strand;
+  bool add(bool is_card, uint64_t key, uint64_t frame, uint64_t value, uint64_t* card_out, uint64_t* strand_out) {
+    if (!key || !frame) return false;
+    auto& mine = (is_card ? card : strand)[key];
+    mine.push_back({frame, value});
+    if (mine.size() > kPairHistory) mine.erase(mine.begin());
+    const auto it = (is_card ? strand : card).find(key);
+    if (it == (is_card ? strand : card).end()) return false;
+    for (const Entry& e : it->second)
+      if (e.frame == frame) {
+        *card_out = is_card ? value : e.value;
+        *strand_out = is_card ? e.value : value;
+        return true;
+      }
+    return false;
+  }
+  void clear() { card.clear(); strand.clear(); }
+};
+
 struct CoverageGate {
   struct Evidence {
     uint64_t frame = 0, card = 0, strand = 0;

@@ -294,7 +294,7 @@ int main() {
     using namespace hair_primary;
     CoverageGate g;
     const uint64_t a = 0xA, b = 0xB;
-    CHECK(kFreshFrames == kCoverageLatency + 2);
+    CHECK(kFreshFrames == kCoverageLatency + kStrandLatency + 2);
     CHECK(!g.allow(a, 10));
     g.observe(a, 10, 1000, 900);
     CHECK(g.allow(a, 10, 0.9));
@@ -362,6 +362,21 @@ int main() {
     const uint32_t none[kCountTags] = {0, 0, 0, 0};
     CHECK(newest_counted_tag(none) == -1);
     CHECK(kTagCountOffset == 1872 && kCountBytes == kTagCountOffset + kCountTags * kMaxGrooms * 4);
+  }
+  {   // Pairing on the real ordering: prepass card slot C, then the G-buffer pass recorded after it; card samples of
+      // C..C+3 read back first, the strand count of the G-buffer after prepass C arrives later (two tags behind plus
+      // the count readback). The newest-only maps never met (hv7 2026-11-04: every draw 0/0).
+    using namespace hair_primary;
+    CoveragePairing p;
+    uint64_t c = 0, st = 0;
+    const uint64_t key = 0xABCDu, C = 1000;
+    for (uint64_t f = C; f < C + 4; ++f) CHECK(!p.add(true, key, f, 107431, &c, &st));
+    CHECK(p.add(false, key, C, 100004, &c, &st) && c == 107431 && st == 100004);
+    CHECK(!p.add(false, key, C + 20, 5, &c, &st));            // no card samples of that frame (yet)
+    CHECK(p.add(true, key, C + 20, 6, &c, &st) && c == 6 && st == 5);   // the card side arriving second also pairs
+    for (uint64_t f = 0; f < kPairHistory + 2; ++f) p.add(true, key, C + 100 + f, 1, &c, &st);
+    CHECK(!p.add(false, key, C + 100, 1, &c, &st));          // history bounded: too old to pair
+    CHECK(!p.add(false, 0, C, 1, &c, &st));
   }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;

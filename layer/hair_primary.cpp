@@ -73,8 +73,9 @@ struct ProbeSlot {
 };
 ProbeSlot g_probe_slots[kCoverageSlots];
 // Per key, the newest read-back sums of one frame; observed into g_coverage when card and strand share the frame.
-struct Samples { uint64_t frame = 0, value = 0; };
-std::unordered_map<uint64_t, Samples> g_card_samples, g_strand_samples;
+hair_primary::CoveragePairing g_pairing;   // card samples x strand pixels per key and prepass frame
+uint64_t g_last_prepass_frame = 0;          // the frame of the newest prepass card slot (the G-buffer after it pairs with it)
+uint32_t g_pair_lookups = 0, g_pair_found = 0, g_pair_keys = 0;   // diagnostics of the last strand evidence
 std::unordered_map<VkPipeline, VkPipeline> g_probe;
 struct CoveragePeriod { bool probed = false; uint32_t swapped = 0; uint64_t last_swap = UINT64_MAX; };
 std::unordered_map<uint64_t, CoveragePeriod> g_coverage_period;
@@ -106,6 +107,7 @@ uint8_t g_last_lods[hair_primary::kMaxGrooms] = {};
 struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; uint8_t lods[hair_primary::kMaxGrooms] = {};
                    uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {};
                    uint32_t traced = 0, hit = 0, tag = 0, evidence_tag = 0, tag_totals[hair_primary::kCountTags] = {};
+                   uint64_t evidence_frame = 0, card_frame = 0;
                    float ray[16] = {}; };
 CountSeen g_seen;
 // C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
@@ -142,7 +144,7 @@ uint64_t g_applied_cmd = 0, g_applied_recording = 0;   // the recording and tag 
 uint32_t g_applied_tag = 0;
 // Per G-buffer frame (frame_index + 1 of its before_pass, order mode): the tag and keys of the header it applied. The
 // count of that frame's pixel record seals with that tag and attributes groom k to that header's key k.
-struct GbFrame { uint64_t frame = 0; uint32_t tag = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; };
+struct GbFrame { uint64_t frame = 0, card_frame = 0; uint32_t tag = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; };
 GbFrame g_gb_frames[8];
 void pair_samples(uint64_t key, uint64_t frame, uint64_t value, bool card);
 // GPU cost of the strand G-buffer draws: a timestamp pair around each (BOTTOM_OF_PIPE: the draw's own completion
@@ -293,7 +295,14 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
         std::unordered_map<uint64_t, uint64_t> strand;
         for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k)
           if (gf->keys[k]) strand[gf->keys[k]] += tc[uint32_t(j) * hair_primary::kMaxGrooms + k];
-        for (const auto& [key, v] : strand) pair_samples(key, gf->frame, v, false);
+        g_pair_lookups = g_pair_found = 0;
+        g_pair_keys = uint32_t(strand.size());
+        for (const auto& [key, v] : strand) {
+          ++g_pair_lookups;
+          pair_samples(key, gf->card_frame, v, false);   // the prepass slot recorded before that G-buffer pass
+        }
+        g_seen.evidence_frame = gf->frame;
+        g_seen.card_frame = gf->card_frame;
       }
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
@@ -455,8 +464,7 @@ void observe_depth(uint64_t image, uint64_t now) {
   g_coverage.clear();
   for (auto& slot : g_probe_slots) { slot.ready = false; slot.n = 0; slot.header_keys.clear(); }
   for (auto& gf : g_gb_frames) gf = GbFrame{};
-  g_card_samples.clear();
-  g_strand_samples.clear();
+  g_pairing.clear();
   for (auto& st : g_staged) st.pick = {};
   g_live_keys.clear();
   g_last_tag = 0;
@@ -488,12 +496,10 @@ bool slot_free(const ProbeSlot& slot) {
 // available (unavailable queries never manufacture evidence); then observe the keys whose card and strand sums are of
 // the same frame.
 void pair_samples(uint64_t key, uint64_t frame, uint64_t value, bool card) {
-  auto& mine = card ? g_card_samples : g_strand_samples;
-  const auto& other = card ? g_strand_samples : g_card_samples;
-  mine[key] = {frame, value};
-  const auto it = other.find(key);
-  if (it == other.end() || it->second.frame != frame) return;
-  g_coverage.observe(key, frame, card ? value : it->second.value, card ? it->second.value : value);
+  uint64_t c = 0, st = 0;
+  if (!g_pairing.add(card, key, frame, value, &c, &st)) return;
+  if (!card) ++g_pair_found;
+  g_coverage.observe(key, frame, c, st);
 }
 
 void read_samples(const ProbeSlot& slot, uint32_t first, bool card) {
@@ -528,6 +534,7 @@ void coverage_before_prepass(VkCommandBuffer cmd) {
   if (slot.frame && slot.submitted_frame && slot.n) read_samples(slot, uint32_t(now % kCoverageSlots) * kProbeDraws * 2, true);
   slot = ProbeSlot{};
   slot.frame = now + 1;
+  g_last_prepass_frame = slot.frame;
   slot.cmd = uint64_t(cmd);
   slot.recording = cmd_recording(cmd);
   g_dd->vk.CmdResetQueryPool(cmd, g_coverage_qp, uint32_t(now % kCoverageSlots) * kProbeDraws * 2, kProbeDraws);
@@ -651,8 +658,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   if (g_coverage_qp) dd->vk.DestroyQueryPool(dd->device, g_coverage_qp, nullptr);
   g_coverage_qp = VK_NULL_HANDLE;
   for (auto& slot : g_probe_slots) slot = ProbeSlot{};
-  g_card_samples.clear();
-  g_strand_samples.clear();
+  g_pairing.clear();
   g_coverage.clear();
   g_coverage_period.clear();
   for (auto& st : g_staged) st = StagedHeader{};
@@ -958,6 +964,7 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
   apply_header(cmd, g_staged[i]);
   GbFrame& gf = g_gb_frames[frame % 8];
   gf.frame = frame;
+  gf.card_frame = g_last_prepass_frame;
   gf.tag = g_staged[i].pick.tag;
   std::memcpy(gf.keys, g_staged[i].keys, sizeof gf.keys);
 }
@@ -1174,11 +1181,13 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       log("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
           "origin (%.4f %.4f %.4f), card distance %.3f, direction (%.4f %.4f %.4f), committed %.0f, hit distance %.3f, "
           "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f); counted with tag %u, header tag now %u; strand pixels "
-          "with tag %u/%u/%u/%u: %u/%u/%u/%u, evidence from tag %u",
+          "with tag %u/%u/%u/%u: %u/%u/%u/%u, evidence from tag %u (G-buffer frame %llu, card frame %llu: %u keys, "
+          "%u paired with card samples)",
           (unsigned long long)g_seen.frame, g_seen.traced,
           g_seen.hit, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14],
           g_seen.tag, g_last_tag, g_seen.tag, g_seen.tag - 1, g_seen.tag - 2, g_seen.tag - 3, g_seen.tag_totals[0],
-          g_seen.tag_totals[1], g_seen.tag_totals[2], g_seen.tag_totals[3], g_seen.evidence_tag);
+          g_seen.tag_totals[1], g_seen.tag_totals[2], g_seen.tag_totals[3], g_seen.evidence_tag,
+          (unsigned long long)g_seen.evidence_frame, (unsigned long long)g_seen.card_frame, g_pair_keys, g_pair_found);
     }
     log("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
         "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",
