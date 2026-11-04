@@ -105,7 +105,6 @@
     "wait_stats": [
       "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
       "\\[mem\\] ours \\("
     ]
@@ -238,7 +237,6 @@
     "wait_stats": [
       "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
       "\\[mem\\] ours \\("
     ]

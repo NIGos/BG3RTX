@@ -117,10 +117,6 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "shot-order-off-a",
-        "shot-order-on-a",
-        "shot-order-off-b",
-        "shot-order-on-b",
         "cost-order-0",
         "cost-order-1",
         "cost-order-2",

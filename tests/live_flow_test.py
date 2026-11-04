@@ -509,6 +509,23 @@ class FlowTests(unittest.TestCase):
         p[2]["seconds"] = 12
         self.assertTrue(f.window_problems(j, p)[0])
 
+    def test_frame_windows_excludes_traces_from_scene_wait_only(self):
+        from scripts.queue_gates import SCENE_WAIT_GATE, line_matches, SCENE_WAIT_BAD
+        j, p = fixture()
+        p[2]['trace_at'] = [1]
+        scene = dict(SCENE_WAIT_GATE, windows=['cost-off', 'cost-on'])
+        p[2]['wait_stats'] = [scene['select']]
+        capacity = dict(select='capture buffer', match='0 dropped', windows=['cost-off', 'cost-on'])
+        capture_only = dict(SCENE_WAIT_GATE, event=True, min=0, windows=['cost-off'])
+        j['expect_every'] = [scene, capacity, capture_only]
+        f.frame_windows(j, p)
+        self.assertEqual(scene['windows'], ['cost-on'])
+        self.assertFalse(line_matches(scene, SCENE_WAIT_BAD))
+        self.assertEqual(capacity['windows'], ['cost-off', 'cost-on'])
+        self.assertNotIn(capture_only, j['expect_every'])
+        self.assertNotIn(scene['select'], p[2].get('wait_stats', []))
+        self.assertIn(scene['select'], p[3]['wait_stats'])
+
     def test_cadence_unknown_missing_label_foreground_and_min_zero(self):
         j, p = fixture()
         j["expect_every"] = [dict(select="new statistic", match="ok", windows=["cost-off"])]

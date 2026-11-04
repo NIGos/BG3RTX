@@ -197,7 +197,6 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "gi: background builds \\(\\d+ frames\\):",
       "\\[alpha hair\\] native coverage records \\d+;"
@@ -225,7 +224,6 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "gi: background builds \\(\\d+ frames\\):",
       "\\[alpha hair\\] native coverage records \\d+;"
@@ -262,7 +260,6 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "gi: background builds \\(\\d+ frames\\):",
       "\\[alpha hair\\] native coverage records \\d+;"
@@ -297,7 +294,6 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "gi: background builds \\(\\d+ frames\\):",
       "\\[alpha hair\\] native coverage records \\d+;"

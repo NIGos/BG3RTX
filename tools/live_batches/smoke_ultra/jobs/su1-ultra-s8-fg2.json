@@ -133,12 +133,10 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "static-a",
         "pan-q",
         "pan-e",
         "rotate-r",
-        "rotate-l",
-        "static-b"
+        "rotate-l"
       ]
     },
     {

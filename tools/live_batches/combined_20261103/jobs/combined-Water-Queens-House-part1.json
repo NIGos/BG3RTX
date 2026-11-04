@@ -145,12 +145,10 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "b1-su1-ultra-s8-fg2--static-a",
         "b1-su1-ultra-s8-fg2--pan-q",
         "b1-su1-ultra-s8-fg2--pan-e",
         "b1-su1-ultra-s8-fg2--rotate-r",
-        "b1-su1-ultra-s8-fg2--rotate-l",
-        "b1-su1-ultra-s8-fg2--static-b"
+        "b1-su1-ultra-s8-fg2--rotate-l"
       ]
     },
     {

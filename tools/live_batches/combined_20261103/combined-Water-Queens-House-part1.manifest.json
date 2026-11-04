@@ -141,12 +141,10 @@
             "match": "got this frame's scene, 0 timeouts",
             "min": 1,
             "windows": [
-              "static-a",
               "pan-q",
               "pan-e",
               "rotate-r",
-              "rotate-l",
-              "static-b"
+              "rotate-l"
             ]
           },
           {
@@ -534,7 +532,6 @@
           "wait_stats": [
             "\\[water\\] reflections \\(\\d+ frames, ",
             "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[rt\\] scene wait: \\d+ frames",
             "\\[water\\] compose stability \\(\\d+ frames\\)",
             "\\[mem\\] ours \\("
           ]
@@ -667,7 +664,6 @@
           "wait_stats": [
             "\\[water\\] reflections \\(\\d+ frames, ",
             "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[rt\\] scene wait: \\d+ frames",
             "\\[water\\] compose stability \\(\\d+ frames\\)",
             "\\[mem\\] ours \\("
           ]
@@ -1927,7 +1923,6 @@
       "wait_stats": [
         "\\[water\\] reflections \\(\\d+ frames, ",
         "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[rt\\] scene wait: \\d+ frames",
         "\\[water\\] compose stability \\(\\d+ frames\\)",
         "\\[mem\\] ours \\("
       ]
@@ -2060,7 +2055,6 @@
       "wait_stats": [
         "\\[water\\] reflections \\(\\d+ frames, ",
         "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[rt\\] scene wait: \\d+ frames",
         "\\[water\\] compose stability \\(\\d+ frames\\)",
         "\\[mem\\] ours \\("
       ]

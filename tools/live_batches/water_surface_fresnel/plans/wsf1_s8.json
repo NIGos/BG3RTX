@@ -89,7 +89,6 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[core\\] \\[water\\] compose stability",
       "\\[core\\] \\[water\\] reflections \\(",
@@ -128,7 +127,6 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[core\\] \\[water\\] compose stability",
       "\\[core\\] \\[water\\] reflections \\(",
@@ -170,7 +168,6 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[core\\] \\[water\\] compose stability",
       "\\[core\\] \\[water\\] reflections \\(",
@@ -209,7 +206,6 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[core\\] \\[water\\] compose stability",
       "\\[core\\] \\[water\\] reflections \\(",

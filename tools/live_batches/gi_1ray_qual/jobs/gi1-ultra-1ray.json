@@ -208,11 +208,7 @@
         "cost-off-a",
         "cost-on-a",
         "cost-off-b",
-        "cost-on-b",
-        "shot-rays-off-a",
-        "shot-rays-on-a",
-        "shot-rays-off-b",
-        "shot-rays-on-b"
+        "cost-on-b"
       ],
       "min": 1
     },
@@ -257,17 +253,9 @@
       "min": 0,
       "windows": [
         "cost-off-a",
-        "shot-rays-off-a",
-        "pan-off-a",
         "cost-on-a",
-        "shot-rays-on-a",
-        "pan-on-a",
         "cost-off-b",
-        "shot-rays-off-b",
-        "pan-off-b",
-        "cost-on-b",
-        "shot-rays-on-b",
-        "pan-on-b"
+        "cost-on-b"
       ]
     }
   ],

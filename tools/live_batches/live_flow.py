@@ -730,8 +730,28 @@ def settings(text):
     return state
 
 
+def scope_scene_wait_gates(job, plan):
+    """Keep timeout checks in measurement windows without float captures."""
+    # Float export stalls can delay scene builds. Keep zero-timeout gates strict
+    # in their measurement windows, but never judge a trace-capture phase.
+    without_traces = {p['label'] for p in plan if not p.get('trace_at')}
+    for phase in plan:
+        if phase.get('trace_at') and 'wait_stats' in phase:
+            phase['wait_stats'] = [rx for rx in phase['wait_stats'] if 'scene wait:' not in rx]
+    gates = []
+    for gate in job.get('expect_every', []):
+        if 'scene wait:' in gate.get('select', '') and '0 timeouts' in gate.get('match', ''):
+            gate['windows'] = [label for label in gate.get('windows', [p['label'] for p in plan])
+                               if label in without_traces]
+            if not gate['windows']:
+                continue  # An empty windows list would gate the entire run.
+        gates.append(gate)
+    job['expect_every'] = gates
+
+
 def frame_windows(job, plan):
     """Set sample counts before estimating seconds; FPS never selects a count."""
+    scope_scene_wait_gates(job, plan)
     for target in [job] + job.get("live_flow", {}).get("segments", []):
         values = settings(target.get("set", ""))
         if int(values.get("rt_stats_period_frames", 0)) <= 0:

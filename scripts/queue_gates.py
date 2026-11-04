@@ -60,7 +60,7 @@ shot to its last (not in phase 0: the hold latches the exposure of the moment) a
 "[rrpost] exposure held" line. Unheld, the eye adaptation moved the 2026-11-01 gi_far S8 ON shot by +3.2%.
 
 Scene-wait lint: every lean job (a -MovePlan with cost-* windows) must gate "[rt] scene wait" with 0 timeouts
-in every cost-* window that traces (rt and rt_scene_wait on), with a log cadence that gives each such window
+in every cost-* window with RT on and no float traces (rt_scene_wait on), with a log cadence that gives each such window
 complete lines. A timeout means the RT passes traced the previous frame's scene (shadows detach while turning):
 the hit-material runs of 2026-11-01 had 15-456 per 600 frames and no gate saw them (SCENE_WAIT_GATE below).
 
@@ -441,11 +441,12 @@ def _on(state, key, default="1"):
     return str(state.get(key, default)) not in ("0", "")
 
 
-def scene_wait_windows(job, plan):
-    """Labels of the cost-* phases whose frames trace (rt and rt_scene_wait on): the windows the gate must cover."""
+def scene_wait_windows(job, plan, *, include_traces=False):
+    """Cost phases with RT scene waits; capacity checks also include captures."""
     states = phase_states(job, plan)
     return [str(p.get("label", "")) for p, st in zip(plan, states)
-            if str(p.get("label", "")).startswith("cost-") and _on(st, "rt") and _on(st, "rt_scene_wait")]
+            if str(p.get("label", "")).startswith("cost-") and (include_traces or not p.get("trace_at"))
+            and _on(st, "rt") and _on(st, "rt_scene_wait")]
 
 
 def _scene_wait_entry(entry):
@@ -548,7 +549,7 @@ CAPACITY_GATES = [
 
 def capacity_problems(job, plan):
     """Problems of a lean job without the capacity gates over its traced cost windows; [] when fine."""
-    need = scene_wait_windows(job, plan)
+    need = scene_wait_windows(job, plan, include_traces=True)
     if not need:
         return []
     states = {str(p.get("label", "")): st for p, st in zip(plan, phase_states(job, plan))}

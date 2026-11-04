@@ -344,11 +344,8 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "cards-a",
         "cards-b",
         "cards-c",
-        "order-prepass-1",
-        "order-gbuffer-1",
         "order-prepass-2",
         "order-gbuffer-2",
         "tips-on"

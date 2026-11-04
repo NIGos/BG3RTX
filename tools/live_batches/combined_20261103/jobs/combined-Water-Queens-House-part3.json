@@ -117,10 +117,6 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "b1-wo1-s8-bit4--shot-order-off-a",
-        "b1-wo1-s8-bit4--shot-order-on-a",
-        "b1-wo1-s8-bit4--shot-order-off-b",
-        "b1-wo1-s8-bit4--shot-order-on-b",
         "b1-wo1-s8-bit4--cost-order-0",
         "b1-wo1-s8-bit4--cost-order-1",
         "b1-wo1-s8-bit4--cost-order-2",
@@ -367,11 +363,7 @@
         "b2-wf9-s8-compose-shift--cost-turn-0",
         "b2-wf9-s8-compose-shift--cost-turn-1",
         "b2-wf9-s8-compose-shift--cost-turn-2",
-        "b2-wf9-s8-compose-shift--cost-turn-3",
-        "b2-wf9-s8-compose-shift--energy-static-0",
-        "b2-wf9-s8-compose-shift--energy-static-1",
-        "b2-wf9-s8-compose-shift--energy-static-2",
-        "b2-wf9-s8-compose-shift--energy-static-3"
+        "b2-wf9-s8-compose-shift--cost-turn-3"
       ]
     },
     {

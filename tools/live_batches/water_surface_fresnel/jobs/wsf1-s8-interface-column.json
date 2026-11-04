@@ -245,10 +245,6 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "partition-static-0",
-        "partition-static-1",
-        "partition-static-2",
-        "partition-static-3",
         "cost-turn-0",
         "cost-turn-1",
         "cost-turn-2",

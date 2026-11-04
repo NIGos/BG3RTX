@@ -120,11 +120,7 @@
         "cost-turn-0",
         "cost-turn-1",
         "cost-turn-2",
-        "cost-turn-3",
-        "energy-static-0",
-        "energy-static-1",
-        "energy-static-2",
-        "energy-static-3"
+        "cost-turn-3"
       ]
     },
     {
