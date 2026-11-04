@@ -73,6 +73,9 @@ float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD0,
          [[vk::location(2)]] float4 aux : TEXCOORD2) {
   Out o = (Out)0;
+  // Every discard returns at once: DXC lowers discard to OpDemoteToHelperInvocation, and a demoted lane keeps
+  // executing, so a load after a failed bound check still ran with its garbage index (hv8 2026-11-04 Aftermath: page
+  // fault on the points load after hp_segment failed, 0x2564a00000, far past the mesh pool).
   const uint64_t rec = record();
   const uint tag = ld(rec);
   const uint width = ld(rec + 4u), height = ld(rec + 8u), grooms = ld(rec + 12u);
@@ -91,9 +94,10 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float3 cn = cross(ddx(pc), ddy(pc));
   const float cos_card = abs(dot(dir, cn)) / max(length(cn), 1e-30);
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
-  if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
+  const float2 dx = ddx(card_uv), dy = ddy(card_uv);   // before the first return (quad neighbours)
+  if (tag == 0u || grooms == 0u || width == 0u || height == 0u) { discard; return o; }
   float3 org;   // this camera in the published groom's camera-relative frame (hp_rebase)
-  if (!hp_rebase(rec, gCam.position, org)) discard;
+  if (!hp_rebase(rec, gCam.position, org)) { discard; return o; }
   const uint64_t pool = addr2(ld2(rec + 24u)), pixels = addr2(ld2(rec + 32u));
   const uint pool_bytes = ld(rec + 56u);
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
@@ -105,7 +109,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     hp_crumb_note(crumbs, 1u, pool);
     hp_crumb_note(crumbs, 2u, pixels);
   }
-  if (!hp_crumb_ok(crumbs, 1u, at, 16u, pixels, pixel_end)) discard;
+  if (!hp_crumb_ok(crumbs, 1u, at, 16u, pixels, pixel_end)) { discard; return o; }
   uint4 e = vk::RawBufferLoad<uint4>(at, 16);
   if (e.w != hp_seal(e.xyz, tag)) {
     RayDesc r;
@@ -144,19 +148,19 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
       vk::RawBufferStore<float4>(d + 48u, float4(gCam.position, 1.0), 16);
     }
   }
-  if (e.x == hair_primary_no_strand) discard;
+  if (e.x == hair_primary_no_strand) { discard; return o; }
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
-  if (k >= grooms) discard;   // the cached entry is validated like a fresh hit (stores of a pixel are not atomic)
+  if (k >= grooms) { discard; return o; }   // the cached entry is validated like a fresh hit (stores of a pixel are not atomic)
   const float v = asfloat(e.y);
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
   uint i0;
-  if (!hp_segment(pool, pool_bytes, row, seg, i0)) discard;
-  if (!hp_crumb_ok(crumbs, 4u, hp_at(pool, row.x, i0, 12u), 24u, pool, pool_end)) discard;
+  if (!hp_segment(pool, pool_bytes, row, seg, i0)) { discard; return o; }
+  if (!hp_crumb_ok(crumbs, 4u, hp_at(pool, row.x, i0, 12u), 24u, pool, pool_end)) { discard; return o; }
   const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
   const float4 hh = mul(float4(ndc, asfloat(e.z), 1.0), inv);
-  if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, length(p1 - p0))) discard;
-  if (row.y == 0u) discard;   // no point UVs (the layer publishes a row without them only for a card-kept draw)
-  if (!hp_crumb_ok(crumbs, 5u, hp_at(pool, row.y, i0, 8u), 16u, pool, pool_end)) discard;
+  if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, length(p1 - p0))) { discard; return o; }
+  if (row.y == 0u) { discard; return o; }   // no point UVs (the layer publishes a row without them only for a card-kept draw)
+  if (!hp_crumb_ok(crumbs, 5u, hp_at(pool, row.y, i0, 8u), 16u, pool, pool_end)) { discard; return o; }
   const float2 uv0 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0, 8u), 4));
   const float2 uv1 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0 + 1u, 8u), 4));
   const float2 uv = lerp(uv0, uv1, v);
@@ -166,14 +170,13 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float3 n_view = normalize(mul(float4(hp_fibre_normal(t_world, to_cam), 0.0), gCam.view).xyz);
 
   // ---- the native material (42a95e17ec3adc51:118-195) at the strand's UV ----
-  const float2 dx = ddx(card_uv), dy = ddy(card_uv);
   const float m5 = F(5u), m7 = F(7u);
   const float4 noise = tex(gNoise, uv * m5, dx * m5, dy * m5);
   const float nz = noise.x * 2.0 - 1.0;
   const float4 ma = tex(gMask, uv + nz * m7, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
   const float4 mb = tex(gMask, uv, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
   const float4 M = max(sign(ma), sign(mb)) * max(abs(ma), abs(mb)) + float4(0.5, 0.0, 0.0, 0.0);
-  if ((ld(rec + 60u) & hair_primary_flag_tips) != 0u && !hp_tips_keep(M.w, pos.xy, tag, aux.x)) discard;
+  if ((ld(rec + 60u) & hair_primary_flag_tips) != 0u && !hp_tips_keep(M.w, pos.xy, tag, aux.x)) { discard; return o; }
   const float m18 = F(18u);
   const float3 c279 = lerp(V(4u), V(6u), m18);
   const float f281 = frac(uv.y);

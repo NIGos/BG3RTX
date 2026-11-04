@@ -51,6 +51,10 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
          [[vk::location(6)]] float4 aux : TEXCOORD6) {
   const float2 dx = ddx(card_uv), dy = ddy(card_uv);
   const uint64_t rec = record();
+  const Out none = (Out)0;
+  // Every discard returns at once: DXC lowers discard to OpDemoteToHelperInvocation, and a demoted lane keeps
+  // executing, so a load after a failed bound check still ran with its garbage index (hv8 2026-11-04 Aftermath: page
+  // fault on the points load after hp_segment failed, 0x2564a00000, far past the mesh pool).
   const uint tag = ld(rec), width = ld(rec + 4u), height = ld(rec + 8u), grooms = ld(rec + 12u);
   // The card fragment's camera-relative point, as in the G-buffer variant (derivatives before any discard).
   const float4 view = asfloat(vk::RawBufferLoad<uint4>(rec + 40u, 8));
@@ -65,26 +69,26 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float3 cn = cross(ddx(pc), ddy(pc));
   const float cos_card = abs(dot(pc / max(t_card, 1e-30), cn)) / max(length(cn), 1e-30);
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
-  if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
+  if (tag == 0u || grooms == 0u || width == 0u || height == 0u) { discard; return none; }
   float3 org;   // this camera in the published groom's camera-relative frame (hp_rebase)
-  if (!hp_rebase(rec, gCam.position, org)) discard;
+  if (!hp_rebase(rec, gCam.position, org)) { discard; return none; }
   const uint64_t pool = addr2(vk::RawBufferLoad<uint2>(rec + 24u, 4)), pixels = addr2(vk::RawBufferLoad<uint2>(rec + 32u, 4));
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
   const uint4 e = vk::RawBufferLoad<uint4>(pixels + uint64_t(px.y * width + px.x) * hair_primary_pixel_bytes, 16);
-  if (e.w != hp_seal(e.xyz, tag) || e.x == hair_primary_no_strand) discard;
+  if (e.w != hp_seal(e.xyz, tag) || e.x == hair_primary_no_strand) { discard; return none; }
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
-  if (k >= grooms) discard;
+  if (k >= grooms) { discard; return none; }
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
   uint i0;
-  if (!hp_segment(pool, ld(rec + 56u), row, seg, i0)) discard;
+  if (!hp_segment(pool, ld(rec + 56u), row, seg, i0)) { discard; return none; }
   const float v = asfloat(e.y);
   {   // the G-buffer variant's ownership test: only the card fragment that wrote this strand (hp_on_card)
     const float4 hh = mul(float4(ndc, asfloat(e.z), 1.0), inv);
     const float seg_len = length(ldf3(hp_at(pool, row.x, i0 + 1u, 12u)) - ldf3(hp_at(pool, row.x, i0, 12u)));
-    if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, seg_len)) discard;
+    if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, seg_len)) { discard; return none; }
   }
   if ((ld(rec + 60u) & hair_primary_flag_tips) != 0u) {
-    if (row.y == 0u) discard;
+    if (row.y == 0u) { discard; return none; }
     const float2 uv0 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0, 8u), 4));
     const float2 uv1 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0 + 1u, 8u), 4));
     const float2 uv = lerp(uv0, uv1, v);
@@ -93,7 +97,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     const float4 ma = gMask.SampleGrad(gWrap, uv + nz * m3, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
     const float4 mb = gMask.SampleGrad(gWrap, uv, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
     const float4 M = max(sign(ma), sign(mb)) * max(abs(ma), abs(mb)) + float4(0.5, 0.0, 0.0, 0.0);
-    if (!hp_tips_keep(M.w, pos.xy, tag, aux.x)) discard;
+    if (!hp_tips_keep(M.w, pos.xy, tag, aux.x)) { discard; return none; }
   }
   // The strand drawn is the published pose (the build camera's frame; build camera = this camera - org). Last frame
   // showed the previous publish's pose: the rows' previous points, relative to that publish's build camera. In the
