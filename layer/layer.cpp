@@ -363,7 +363,6 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   if (!dd) return;
   sl_device_destroy(dd);
   if (dd == g_main) {
-    ngx_join_prewarm();
     rrpost_join_prewarm();
     core_shutdown();
     replay_device_destroyed(dd);

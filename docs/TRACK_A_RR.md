@@ -379,7 +379,9 @@ separate hair radiance/background. No unsupported coverage guide is submitted.
 The cached native deferred shader `captures/alpha_cache/42a95e17ec3adc51.glsl`
 overwrites RT1 alpha with 1; RT2 alpha contains material-class bits.
 
-`rr_hair_resolve=0` is an experimental GUI choice, off in every preset. When on,
+`rr_hair_resolve` retired 2026-11-04: user verdict "ruins the hair" (2026-11-03); GUI, INI and runtime path removed.
+
+Historical implementation (standalone shader retained only as an offline compile fixture): when on,
 an independent G-buffer dispatch snapshots class-5 occupancy before aliasing.
 A separate pre-RR dispatch averages sharp RGB over mixed, aligned 4x4 cells.
 This preserves each cell's sharp-input mean before store quantization, not the
@@ -401,23 +403,10 @@ No game was launched. No quality pass or default promotion is claimed.
 
 ### ef2 observations and ef3 decision (rr-hair2, 2026-11-03)
 
-`rr_hair_resolve` remains a **CANDIDATE, off in all presets**. The user watched
-live A/B and found it good at normal viewing. Analysis saw aligned 4x4 blocks
-only in 6x crops, hair edge gradient -24%, high-frequency detail -48%, RR
-output mean -0.6%, and no flicker gain above the static baseline. Both views
-must be retained: magnified artifacts alone do not establish normal-view harm.
-Dialogue camera drift of 10-18 px confounded ef2, including the late-RR ranking.
-There is no quality pass, definitive rejection, removal, or default promotion.
-
-Prepared ef3 (`tools/live_batches/rr_post_decision`) uses static S8 gameplay,
-close companion hair plus a rigid wall/armour control, no dialogue or Q/E.
-Actual framing remains unverified offline; confirm the proposed boxes before a
-future authorized run. Repeated post 1/0/1/0 is followed by resolve 0/1/0/1 at
-post 1, with separate K8, native-size P16, float traces and clean timing.
-Integer per-frame alignment tolerates slow drift, clips invalid borders and
-checks rigid structure, rather than rejecting displacement alone. The report
-saves fixed-ordinal, unscaled presented hair crops side by side; 6x differences
-are secondary. Capture ordinals cannot establish matching animation/FG parity.
+Historical ef2 analysis saw hair edge gradient -24%, high-frequency detail -48%,
+RR output mean -0.6%, and no flicker gain above the static baseline. Dialogue
+camera drift of 10-18 px confounded ef2. The later user rejection supersedes
+the earlier candidate verdict and unexecuted ef3 resolve plan; do not queue it.
 
 **What late RR gives up.** `rr_post=0` keeps the game's DoF, bloom and grading,
 but places all of them before RR at render resolution. It gives up denoising

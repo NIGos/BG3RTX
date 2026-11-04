@@ -1,5 +1,7 @@
 # ef2: pre-post RR hair resolve
 
+Retired 2026-11-04: rr_hair_resolve removed after user rejection. Do not run the preserved jobs; the generator stops before writing files.
+
 Prepared only. No queue staging or launch script. This job uses Test Dialogue3,
 one launch, the Ultra preset with native hair off, and no camera/dialogue input.
 An authorized future run must show the ef1 white-haired character against the

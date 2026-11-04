@@ -10,7 +10,7 @@ Short form of the /goal text. AGENTS.md is binding. Work in this order; each sta
    corrected wf9 qualification (static delta and smooth Q/E windows), not yet a quality pass.
 4. Qualification partly done: OMM and box lights (honour shadow flag) qualified in Ultra, integrated smoke valid.
    Converted RTX Hair grooms work in game at about 40% less cost than native cards; native card path stays off
-   (+2.3-6.3 ms RT). CPU perf keys and rr_hair_resolve rejected by the user. GI reprojection guards and generated
+   (+2.3-6.3 ms RT). CPU perf controls and rr_hair_resolve retired 2026-11-04 after rejection. GI reprojection guards and generated
    rows still await valid gates (genrows-gate). Hair/DoF cause found: replayed DoF/bloom weights flip per frame;
    rr_post_temporal on post-temporal is READY_FOR_LIVE, off pending energy/quality/cost checks.
 5. Effects IN PROGRESS: water hidden/off-screen hit shading is on main, experimental/off; water-hit-cost adds
@@ -19,8 +19,7 @@ Short form of the /goal text. AGENTS.md is binding. Work in this order; each sta
    M6 SHaRC stays off until it beats the PT reference without losing energy. gpu-opt1 has compact hit state,
    alpha metadata cache and empty water-tile skip, all off pending qualification. rt-continuity and gpu-opt2
    are open lanes at main, with no implementation/result recorded yet.
-7. Backlog to close (in dead time, smallest first): null water MV/glint keys removed; audit remaining rejected keys (CPU perf,
-   rr_hair_resolve, IP grass if still useless, generated rows if superseded), delete the dropped Codex refs (user approved), clean merged
+7. Backlog to close (in dead time, smallest first): null water MV/glint keys removed; rejected CPU perf/hair resolve/static-cascade controls retired 2026-11-04; audit remaining keys (IP grass if still useless, generated rows if superseded), delete the dropped Codex refs (user approved), clean merged
    worktrees and dead captures (test-main captures ~39 GB), fold merged progress fragments (59 folded on 11-03), S8 ambient ratio 1.44
    question, inn material records, lava, rf_hit_gi AO gap (needs a pack with instanced rows), dynamic/cascade BLAS
    relocation, ls_box=2 (qualified in Ultra), M5.5 steps 2-4, every READY_FOR_LIVE branch run.

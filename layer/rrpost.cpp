@@ -143,8 +143,8 @@ struct Pipe {
   VkPipeline pipe = VK_NULL_HANDLE;
   uint64_t gen = 0;
 };
-Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"hair_resolve"}, {"temporal"}, {"temporal_final"}};
-enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_HAIR, P_TEMPORAL, P_TEMPORAL_FINAL };
+Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"temporal"}, {"temporal_final"}};
+enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_TEMPORAL, P_TEMPORAL_FINAL };
 std::string g_last_logged_why;
 uint64_t g_completed = 0, g_broken_frames = 0;
 
@@ -323,7 +323,6 @@ bool ensure_layout(DeviceData* dd) {
 // The shader file that defines an entry. The build and the per-frame generation check must agree:
 // asking rr_post.hlsl for a temporal entry fails to compile ("missing entry point definition").
 const char* entry_source(const char* entry) {
-  if (strcmp(entry, "hair_resolve") == 0) return "rr_hair.hlsl";
   if (strcmp(entry, "temporal") == 0 || strcmp(entry, "temporal_final") == 0) return "rr_post_temporal.hlsl";
   return "rr_post.hlsl";
 }
@@ -782,16 +781,6 @@ void on_resolve(DeviceData* dd, VkCommandBuffer cmd) {
   to_general(dd, cmd, {&g_xr});
   uint32_t ext[2] = {pc.bmax[0] - pc.bmin[0] + 1, pc.bmax[1] - pc.bmin[1] + 1};
   if (!run(dd, cmd, P_RESOLVE, b, pc, (ext[0] + 15) / 16, (ext[1] + 15) / 16)) return breaks("resolve pipeline");
-  if (cfg_int("rr_hair_resolve", 0)) {
-    VkImageView hair = VK_NULL_HANDLE;
-    if (ngx_hair_mask(g_ch.w, g_ch.h, &hair)) {
-      b.in[2] = hair; b.in_l[2] = VK_IMAGE_LAYOUT_GENERAL;
-      if (!run(dd, cmd, P_HAIR, b, pc, (ext[0] + 7) / 8, (ext[1] + 7) / 8))
-        return breaks("hair resolve pipeline");
-      if (frame_index() % 120 == 0)
-        log("[rrpost] hair resolve: current class-5 occupancy, %ux%u, mixed 4x4 cells", g_ch.w, g_ch.h);
-    } else return breaks("current-frame hair occupancy unavailable");
-  }
   g_ch.stage = 3;
 }
 
@@ -1086,7 +1075,7 @@ void rrpost_prewarm(DeviceData* dd) {
     count += g_builds.prewarm(p.entry, uint64_t(g_pl), [dd, entry=p.entry] {
       return compile_background(dd, entry);
     }) ? 1u : 0u;
-  log("[rrpost] Experimental prewarm: %u startup pipelines (RR order and hair resolve, below normal priority)", count);
+  log("[rrpost] Experimental prewarm: %u startup pipelines (RR order, below normal priority)", count);
 }
 void rrpost_join_prewarm() { g_builds.join(); g_prewarmed = false; }
 
