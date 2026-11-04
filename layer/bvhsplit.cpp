@@ -4025,11 +4025,16 @@ void bvh_log_state(const char* prefix) {
       std::unordered_map<VkDeviceAddress, const char*> live;
       for (const auto& [k, m] : g_meshes)
         if (m.as.addr) live[m.as.addr] = "mesh";
-      for (const auto& [k, s] : g_dyn)
+      for (const auto& [k, s] : g_dyn) {
         if (s.as.addr) live[s.as.addr] = "per-draw";
+        if (s.groom && s.groom->as.addr) live[s.groom->as.addr] = "groom";
+      }
       for (const JobBatch& b : g_batches)
         for (const Swap& s : b.swaps)
           if (s.c.addr) live[s.c.addr] = "pending compaction";
+      // The cascade casters' BLAS (the last instance with rt_cascade_casters): live, not a released range (hv6
+      // 2026-11-04 listed the current one as 'RELEASED range' because it was missing here).
+      if (g_casc_as.addr) live[g_casc_as.addr] = "cascade";
       std::unordered_map<VkDeviceAddress, uint64_t> pending;
       for (const PendingFree& p : g_pending_free)
         if (p.chunk >= 0 && size_t(p.chunk) < g_chunks.size()) pending[g_chunks[p.chunk].buf.addr + p.off] = p.frame;

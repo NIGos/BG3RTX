@@ -468,7 +468,12 @@ def window_problems(job, plan):
             # Endpoint is exclusive. Worst alignment puts the first line one full
             # period after apply; one further line is consumed by the straddle rule.
             skip = 0 if g.get("event") else 1
-            overhead = latency + float(g.get("settle_s", 0)) + len(p.get("trace_at", [])) * trace_stall
+            # auto-run restarts the phase clock at motion-ready after wait_log.
+            # Settings/readiness time is outside this scheduled duration, not
+            # another delay to subtract from the measured window. Still skip
+            # the first stats line: readiness does not reset producer counters.
+            apply_delay = 0 if p.get("wait_log") else latency
+            overhead = apply_delay + float(g.get("settle_s", 0)) + len(p.get("trace_at", [])) * trace_stall
             available = float(p.get("seconds", 0)) - overhead
             complete = max(0, math.ceil(available / dt - 1e-9) - 1 - skip)
             minimum = overhead + (need + skip) * dt

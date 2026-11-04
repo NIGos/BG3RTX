@@ -426,8 +426,8 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_fibre_gi", "exp_hair_groom_shadow_t", "exp_hair_primary_order", "exp_hair_groom_tips", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 13);   // native coverage, pool trim and temporal post graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
+  CHECK(dev == (std::vector<std::string>{"exp_hair_fibre_gi", "exp_hair_groom_shadow_t", "exp_hair_primary_passes", "exp_hair_primary_order", "exp_hair_groom_tips", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
@@ -822,6 +822,25 @@ static void test_ultra_water() {
   for (int i = 0; i < kKnobCount; ++i)
     if (kKnobs[i].experimental) first_exp = (std::min)(first_exp, i);
   CHECK(iw < first_exp);
+  const Knob& temporal = *find_knob("rr_post_temporal");
+  CHECK(!temporal.experimental && !temporal.advanced && !temporal.dev_only);
+  CHECK_EQ(temporal.category, "Lighting");   // Alongside Ray Reconstruction.
+  CHECK(temporal.apply == Apply::Live);
+  CHECK(!temporal.choices[1].experimental && !temporal.choices[1].awaiting_qualification);
+  CHECK(temporal.choices[1].caps == kCapDlss);
+  CHECK(!choice_supported(temporal, 1, 0));
+  CHECK(choice_supported(temporal, 1, kCapDlss));
+  CHECK_EQ(temporal.choices[1].need[0].knob, "rr");
+  CHECK(temporal.choices[1].need[0].min_choice == 1);
+  CHECK_EQ(temporal.required_on[0].key, "rr_post");
+  CHECK_EQ(temporal.required_on[0].value, "1");
+  for (int preset = 0; preset < kPresetCount; ++preset) {
+    CHECK(temporal.preset[preset] == (preset == kUltra ? 1 : 0));
+    Map expanded;
+    for (const auto& kv : expand_preset(preset)) expanded[kv.first] = kv.second;
+    CHECK_EQ(get(expanded, "rr_post_temporal"), preset == kUltra ? "1" : "0");
+    CHECK_EQ(get(expanded, "rr_post"), "1");
+  }
   const Knob& hair_resolve = *find_knob("rr_hair_resolve");
   CHECK(hair_resolve.experimental && !hair_resolve.dev_only);
   CHECK(hair_resolve.apply == Apply::Live);
@@ -1058,6 +1077,31 @@ static void test_apply_modes() {
   CHECK(knob_apply(*find_knob("exp_water"),3)==Apply::Restart);
 }
 
+static void test_master_ab_coverage() {
+  // Live master overrides must cover the independent forward-water and primary-hair
+  // routes too: their device capabilities can stay enabled after rt becomes zero.
+  const auto util = read_file(BG3RTX_SOURCE_DIR "/layer/util.cpp");
+  const auto begin = util.find("kAbOffKeys[] = {");
+  CHECK(begin != std::string::npos);
+  if (begin == std::string::npos) return;
+  const auto keys = util.substr(begin, util.find("};", begin) - begin);
+  for (const char* key : {"rt", "gi", "rt_reflections", "rt_shadows", "rt_local_shadows",
+                          "rt_emissive", "sharc", "rt_water_geometry", "rt_water_reflections", "rt_hair_groom"})
+    CHECK(keys.find(std::string("\"") + key + "\"") != std::string::npos);
+  // These parent gates are why the child effect keys need no duplicate override.
+  const auto water = read_file(BG3RTX_SOURCE_DIR "/core/water.cpp");
+  for (const char* child : {"compose", "shadows", "ls", "refr"}) {
+    const auto at = water.find(std::string("bool ") + child + "_wanted()");
+    CHECK(at != std::string::npos);
+    if (at == std::string::npos) continue;
+    CHECK(water.substr(at, water.find('\n', at) - at).find("&& water_rf_wanted()") != std::string::npos);
+  }
+  const auto host_water = read_file(BG3RTX_SOURCE_DIR "/layer/water.cpp");
+  CHECK(host_water.find("bool water_wanted() { return g_dd && rt_enabled() && cfg_hot(CfgHot::rt_water_geometry) != 0;") != std::string::npos);
+  const auto hair = read_file(BG3RTX_SOURCE_DIR "/layer/hair_primary.cpp");
+  CHECK(hair.find("return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0") != std::string::npos);
+}
+
 static void test_retired_hair_ini() {
   const char* keys[] = {"rt_hair_gi_cull", "rt_hair_visibility", "rt_hair_cheap", "rt_hair_gi_mean"};
   const Map defaults = code_defaults();
@@ -1096,6 +1140,7 @@ int main(int argc, char** argv) {
     return 0;
   }
   test_retired_hair_ini();
+  test_master_ab_coverage();
   test_gui_review_safety();
   test_apply_modes();
   test_product_policy();

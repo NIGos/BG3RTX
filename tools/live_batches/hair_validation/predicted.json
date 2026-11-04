@@ -64,5 +64,10 @@
    "predicted": "order 1: draws probed 4-5, strand/card 0.9-1.1 on the Dialogue1 close-up (the 102163-sample draw: about 90k-110k strand samples), swapped frames > 0 once fresh; order 0: draws probed 0 (no strand query without order mode), swapped 0",
    "invalid_if": "order 1 windows with draws probed 0 while 'no publish of the frame' and 'older publish' stay ~0"
   }
+ },
+ "pass_bisect_hv7": {
+  "cause": "hv6 07:30: VK_ERROR_DEVICE_LOST 2.5 s after order-1 readiness; invalid read 0x25be68a000.",
+  "prediction": "Cards throughout warmup (order 0, then order 1 with mask 0); first swap in passes-1-gbuffer. Masks 1, 3, 7 each require two complete 300-frame coverage periods and swapped frames; participation respects enabled passes. First device-loss window names the failing pass set.",
+  "status": "OFFLINE_PREPARED; dry-run budget fails at 7.3 min including 120 s load; no live authorization"
  }
 }

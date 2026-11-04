@@ -684,6 +684,8 @@ while ((Get-Date) -lt $deadline) {
     if($LASTEXITCODE -ne 0){$result='fail-fast guard failed';break}
     $failure=$guardOutput | ConvertFrom-Json
     if($failure){
+      $failureLabel = if ($failure.phase -ge 0 -and $failure.phase -lt $panPlan.Count) { $panPlan[$failure.phase].label } else { 'before-plan' }
+      $failure.check += " (window $failureLabel)"
       $failFastFailures+=@($failure)
       Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [fail-fast] phase=$($failure.phase) slice=$($failure.slice) check=$($failure.check)"
       if($failure.next_phase -lt 0){$result='fail-fast: '+$failure.check;break}
@@ -1119,6 +1121,7 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
   }
   @{ result=$result; game_pid=$(if($game){$game.Id}else{0}); observed_exit_code=$observedExitCode;
      plan_completed=$planCompleted; last_phase=$panIndex; expected_phases=$panPlan.Count;
+     last_phase_label=$(if($panIndex -ge 0 -and $panIndex -lt $panPlan.Count){$panPlan[$panIndex].label}else{'before-plan'});
      completed=($result -eq 'done' -and -not $failFastFailures.Count);
      failed_check=$(if($failFastFailures.Count){$failFastFailures[0].check}else{''});
      failed_phase=$(if($failFastFailures.Count){$failFastFailures[0].phase}else{-1}); slice_failures=@($failFastFailures);
