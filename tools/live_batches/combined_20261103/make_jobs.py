@@ -12,10 +12,17 @@ from tools.live_batches.combine import main
 # Keep generated jobs/manifests because the frozen lint snapshot and tests read them.
 PARTITIONS = {}
 
+# Retained fixture: rebuild from current sources so the cross-job reset gets
+# the shared compositor's complete initial state and pipeline readiness waits.
+FIXTURES = {"combined-Water-Queens-House-part3": [
+    "water_flicker_wf9/jobs/wf9-s8-compose-shift.json",
+    "post_temporal/jobs/pt-s8.json",
+]}
+
 
 if __name__ == "__main__":
     base = ROOT / "tools/live_batches"
     failures = 0
-    for name, sources in PARTITIONS.items():
+    for name, sources in (PARTITIONS | FIXTURES).items():
         failures |= main([str(base / p) for p in sources] + ["--out", str(Path(__file__).resolve().parent), "--name", name])
     sys.exit(failures)

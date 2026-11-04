@@ -12,6 +12,14 @@ from tools.live_batches import live_flow as flow
 
 
 class BatchJobsLintTests(unittest.TestCase):
+    def test_retained_combined_fixture_has_cross_job_pipeline_readiness(self):
+        from tools.live_batches.combined_20261103.make_jobs import FIXTURES
+        for name in FIXTURES:
+            job, plan, _ = flow.load_job(
+                ROOT / 'tools/live_batches/combined_20261103/jobs' / (name + '.json'))
+            self.assertTrue(any(p['label'].endswith('settings-reset') for p in plan))
+            self.assertEqual(flow.pipeline_readiness.problems(job, plan), [])
+
     def test_rejected_scheduling_retired_without_deleting_fixtures(self):
         from tools.live_batches.regenerate_active import BATCHES
         from tools.live_batches.combined_20261103.make_jobs import PARTITIONS

@@ -3,6 +3,7 @@
 The classifier reads Git only. Renames include both paths so moving native code
 under docs cannot hide a native deletion. Empty/unknown input always means full.
 """
+import os
 import argparse
 import ast
 import json
@@ -127,6 +128,16 @@ def tooling_checks(root, paths):
                 args = data.get('args', [])
                 if '-MovePlan' in args and Path(args[args.index('-MovePlan') + 1]).name == plan.name:
                     jobs.add(job)
+    # Historical jobs (inactive in the lint inventory) are evidence, never launched again:
+    # editing them, e.g. when a rejected key is removed, must not re-lint them under newer rules.
+    inventory = root / 'tools/live_batches/duration_lint.json'
+    if jobs and inventory.is_file():
+        entries = json.loads(inventory.read_text(encoding='utf-8-sig'))
+        key = lambda p: os.path.normcase(os.path.normpath(str(p)))
+        inactive = {key(root / Path(k.replace('\\', '/'))) for k, v in entries.items() if not v.get('active')}
+        for job in sorted(j for j in jobs if key(j) in inactive):
+            print(f'historical job, not linted: {job.relative_to(root)}', flush=True)
+        jobs = {j for j in jobs if key(j) not in inactive}
     if jobs:
         sys.path.insert(0, str(root))
         from tools.live_batches import live_flow as flow, lint_snapshot

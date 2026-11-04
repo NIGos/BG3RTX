@@ -4,15 +4,15 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 2449,
+  "timeout": 2449.0,
   "repeat": 1,
   "live_batch": "combined",
-  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=1,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_native_tileset=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=0,rt_water_ls_shadows=0,rt_water_refraction=0,rt_water_game_shadow=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_log_presents=0,pan_water=1,pan_water_frames=8,pan_delay_ms=2000,rt_water_compose_shift=0,rt_stats_period_frames=60",
+  "set": "crash_dump=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_state_every=1,fps_cap=0,gi_debug=0,gi_hit_direct=1,gi_hit_sun=1,headless=0,ls_box=2,ls_check=0,ls_debug=0,ls_k=0,ls_stats=0,pan_capture=0,pan_delay_ms=2000,pan_edge=0,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=1,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=1,rr_show=0,rt=1,rt_alpha=1,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=427,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_omm=0,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_stability_log=0,rt_stats=0,rt_stats_period_frames=60,rt_timing_frames=120,rt_water_compose=1,rt_water_compose_shift=0,rt_water_game_shadow=0,rt_water_geometry=1,rt_water_ls_shadows=0,rt_water_reflections=1,rt_water_refraction=0,rt_water_shadows=0,rt_xfb_mb=1024,sharc=0,sharc_device=1",
   "args": [
     "-RealPresent",
     "-Move",
     "-MovePlan",
-    "captures/live_batches/combined_20261103/plans/combined-Water-Queens-House-part3.json"
+    "tools/live_batches/combined_20261103/plans/combined-Water-Queens-House-part3.json"
   ],
   "patterns": [
     "\\[hot\\]",
@@ -1056,9 +1056,9 @@
           "seconds": 2.6511199999999997,
           "source": "hmm1-mask-s8-fg2.1.083713.log",
           "quantile": 0.95,
-          "samples": 359,
-          "maximum": 2.90531,
-          "logs": 58
+          "samples": 361,
+          "maximum": 3.36211,
+          "logs": 60
         }
       }
     },
@@ -1452,14 +1452,14 @@
           "seconds": 2.6511199999999997,
           "source": "hmm1-mask-s8-fg2.1.083713.log",
           "quantile": 0.95,
-          "samples": 359,
-          "maximum": 2.90531,
-          "logs": 58
+          "samples": 361,
+          "maximum": 3.36211,
+          "logs": 60
         }
       }
     }
   ],
-  "estimated_phase_seconds": 408.30000000000007,
+  "estimated_phase_seconds": 397.0,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -1476,8 +1476,8 @@
           0,
           0
         ],
-        "fps": 18.66832607347135,
-        "windows": 487,
+        "fps": 25.48853016135551,
+        "windows": 504,
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
@@ -1489,6 +1489,8 @@
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel1-smoke-ultra-s8.1.134708.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel1-smoke-ultra-s8.1.175306.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel1-smoke-ultra-s8.1.205853.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel2-smoke-high-s8.1.121305.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
@@ -1571,18 +1573,18 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.2930000000014843,
+      "seconds": 0.2959999999948195,
       "quantile": 0.95,
-      "samples": 359,
-      "maximum": 0.49399999999877764
+      "samples": 361,
+      "maximum": 0.5
     },
     "trace_capture_stall": {
       "seconds": 2.6511199999999997,
       "source": "hmm1-mask-s8-fg2.1.083713.log",
       "quantile": 0.95,
-      "samples": 359,
-      "maximum": 2.90531,
-      "logs": 58
+      "samples": 361,
+      "maximum": 3.36211,
+      "logs": 60
     },
     "segments": [
       {
@@ -1709,9 +1711,9 @@
             "seconds": 2.6511199999999997,
             "source": "hmm1-mask-s8-fg2.1.083713.log",
             "quantile": 0.95,
-            "samples": 359,
-            "maximum": 2.90531,
-            "logs": 58
+            "samples": 361,
+            "maximum": 3.36211,
+            "logs": 60
           }
         }
       },
@@ -1839,13 +1841,13 @@
             "seconds": 2.6511199999999997,
             "source": "hmm1-mask-s8-fg2.1.083713.log",
             "quantile": 0.95,
-            "samples": 359,
-            "maximum": 2.90531,
-            "logs": 58
+            "samples": 361,
+            "maximum": 3.36211,
+            "logs": 60
           }
         }
       }
     ]
   },
-  "post": "py -3 tools/live_batches/combine.py --extract tools/live_batches/combined_20261103/combined-Water-Queens-House-part3.manifest.json --log \"{log}\" --runner \"{runner}\" --out captures/live_batches/combined_20261103/combined-Water-Queens-House-part3 --run-post"
+  "post": "py -3 tools/live_batches/combine.py --extract \"tools/live_batches/combined_20261103/combined-Water-Queens-House-part3.manifest.json\" --log \"{log}\" --runner \"{runner}\" --status \"{status}\" --out \"{log}.batches\" --run-post"
 }
