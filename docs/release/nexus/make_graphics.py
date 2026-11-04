@@ -586,6 +586,71 @@ def make_beware():
     save(img.convert("RGB"), "beware_dragons.png")
 
 
+def make_thumbnail():
+    """Nexus primary image, 1920 x 1080. Must read at about 320 x 180, so: few, big
+    elements, strong contrast, nothing important within 6% of the edges (cards crop)."""
+    W, H = 1920, 1080
+    # a light blur on the painting keeps the PNG under 1.5 MB; invisible at card size
+    img = hero_crop(W, H, focus_y=0.42, zoom=1.0).filter(ImageFilter.GaussianBlur(1.3))
+    img = left_shade(img, reach=0.74, max_alpha=0.95)
+    img = vignette(img, 0.4)
+    img = edge_rule(img, inset=14, alpha=170)
+    img = corner_frame(img, 14, 0, 1.6)
+    d = ImageDraw.Draw(img)
+    x0 = 170
+    em = 210
+    word = lato(226, semibold=True)
+    asc = word.getmetrics()[0]
+    base = 560
+    img.alpha_composite(emblem(em), (x0, base - 188))
+    # soft dark halo behind the wordmark for contrast at small sizes
+    halo = Image.new("L", (W, H), 0)
+    hd = ImageDraw.Draw(halo)
+    text_spaced(hd, (x0 + em + 36, base), "BG3RTX", word, 255, tracking=6)
+    halo = halo.filter(ImageFilter.GaussianBlur(26)).point(lambda v: int(v * 0.7))
+    img = Image.composite(Image.new("RGBA", (W, H), (6, 7, 9, 255)), img, halo)
+    d = ImageDraw.Draw(img)
+    text_spaced(d, (x0 + em + 36, base), "BG3RTX", word, TEXT, tracking=6)
+    div = render_svg(os.path.join(ORN, "divider.svg"), 2.15)
+    img.alpha_composite(div, (x0 - 6, base + 44))
+    d.text((x0 + 4, base + 205), "Ray-traced lighting for", font=display(92), fill=TEXT, anchor="ls")
+    d.text((x0 + 4, base + 315), "Baldur's Gate 3", font=display(92), fill=GOLD_HI, anchor="ls")
+    save(img.convert("RGB"), "thumbnail.png")
+
+
+def make_only():
+    """Compact requirements strip: NVIDIA RTX and Vulkan only (text only, no logos)."""
+    W, H = 1000, 128
+    img = charcoal(W, H)
+    img = vignette(img, 0.3)
+    img = edge_rule(img, inset=5, alpha=150)
+    img = corner_frame(img, 5, 0, 0.42)
+    pills = ["NVIDIA RTX ONLY", "VULKAN RENDERER ONLY"]
+    f = lato(22, semibold=True)
+    tr, pad, gem_w, gap, ph = 2.6, 26, 26, 28, 46
+    widths = [spaced_width(t, f, tr) + 2 * pad + gem_w for t in pills]
+    x = (W - (sum(widths) + gap)) / 2
+    y = 22
+    big = Image.new("RGBA", (W * SS, H * SS), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    spots = []
+    for t, w in zip(pills, widths):
+        d.rounded_rectangle((x * SS, y * SS, (x + w) * SS, (y + ph) * SS), radius=8 * SS,
+                            fill=PANEL + (255,), outline=GOLD + (255,), width=int(1.5 * SS))
+        gem(d, (x + pad + 6) * SS, (y + ph / 2) * SS, 9 * SS, SS)
+        spots.append((x + pad + gem_w, t))
+        x += w + gap
+    img.alpha_composite(big.resize((W, H), Image.LANCZOS))
+    dd = ImageDraw.Draw(img)
+    for tx, t in spots:
+        text_spaced(dd, (tx, y + 31), t, f, TEXT, tracking=tr)
+    m = lato(16)
+    line = "No AMD   ·   No Intel   ·   No DirectX 11"
+    lw = spaced_width(line, m, 1.2)
+    text_spaced(dd, ((W - lw) / 2, 104), line, m, TEXT_2, tracking=1.2)
+    save(img.convert("RGB"), "nvidia_vulkan_only.png")
+
+
 HEADERS = [
     ("features", "What it does"),
     ("screenshots", "Screenshots"),
@@ -657,6 +722,8 @@ def main():
     make_divider()
     make_badges()
     make_beware()
+    make_thumbnail()
+    make_only()
     for name, title in HEADERS:
         make_header(name, title)
     total = sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT))
