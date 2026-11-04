@@ -24,8 +24,9 @@ SAVES = [("hp1-dialogue1-fg2", "Test Dialogue1")]   # Shadowheart's matched LOD1
 # so it is on from startup in every phase; the live cards/strands A/B is rt_hair_groom (off: no groom anywhere, the
 # native cards; on: strands in RT and on screen). There is no live "strands in RT only" mode any more.
 PRIMARY_START = "rt_hair_groom_primary=1"
-ON = dict(hg.GROOM, rt_hair_groom_primary="1", rt_hair_fibre="0")
-OFF = dict(hg.GROOM, rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0")
+# Header order G-buffer: the coverage gate (claude/hair-coverage-gate) keeps the cards in header order prepass.
+ON = dict(hg.GROOM, rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_primary_order="1")
+OFF = dict(hg.GROOM, rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_primary_order="1")
 FIBRE = dict(ON, rt_hair_fibre="1")   # rt_hair_fibre: the strands lit by the fibre BSDF (3b-2b)
 
 

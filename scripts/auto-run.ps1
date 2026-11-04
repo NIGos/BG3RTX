@@ -158,6 +158,18 @@ $guardMargin=1.0
 if($env:BG3RTX_QUEUE_CONTEXT_FILE){
   $guardContext=Get-Content -LiteralPath $env:BG3RTX_QUEUE_CONTEXT_FILE -Raw | ConvertFrom-Json
   if($null -ne $guardContext.job.live_flow.settling_margin_s){$guardMargin=[double]$guardContext.job.live_flow.settling_margin_s}
+  if ($MovePlan) {
+    # Read the corpus cached by queue preflight once, before launch. Never
+    # relearn or scan historical logs inside a live phase/cost window.
+    Push-Location $root
+    try {
+      $limits=@(& $guardPython -m tools.live_batches.readiness_budget --context $env:BG3RTX_QUEUE_CONTEXT_FILE --plan $MovePlan --cache (Join-Path $root 'captures/.cache/live_flow_corpus.json') | ConvertFrom-Json | ForEach-Object {$_})
+      if ($LASTEXITCODE -ne 0 -or $limits.Count -ne $panPlan.Count) { throw 'readiness budget failed' }
+      for ($i=0;$i -lt $panPlan.Count;$i++) {
+        if ($panPlan[$i].wait_log) { $panPlan[$i].wait_log_timeout=[double]$limits[$i] }
+      }
+    } finally { Pop-Location }
+  }
 }
 [IO.File]::WriteAllText($guardRunner,'')
 $guardIniBytes=if(Test-Path -LiteralPath $ini){[IO.File]::ReadAllBytes($ini)}else{$null}
@@ -825,7 +837,7 @@ while ((Get-Date) -lt $deadline) {
         $phaseReady=Test-CameraPlanReady $step $readyText $freshText
         if (-not $phaseReady) {
           if ($planClock.Elapsed.TotalSeconds-$phaseWaitAt -ge $step.wait_log_timeout) {
-            $result="pipeline readiness timed out: $($step.label)"
+            $result="pipeline readiness timed out: $($step.label); missing: $(@(Get-CameraPlanMissing $step $readyText $freshText) -join '; ')"
             if($step.label -match '(?:^|--)producer-sanity-'){
               $silent=@($step.wait_log | Where-Object {$readyText -notmatch $_})
               $result='producer silent: '+($silent -join '; ')
