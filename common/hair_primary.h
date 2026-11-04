@@ -226,6 +226,10 @@ constexpr uint64_t kCoverageLatency = 4, kFreshFrames = kCoverageLatency + 2;
 // noise. kCoverMin = min ratio - sigma; no fitted tolerance. See docs/RTX_HAIR_PRIMARY.md
 // 5b and docs/progress/claude-hair-coverage-bound.json (input state SHA-256, full provenance).
 constexpr double kCoverMin = 0.8913102349775665;
+// Upper side (2026-11-04: the strands may not cover more than the cards either: hv7 measured 2.55 with overdrawn
+// occlusion samples): the maximum offline ratio 1.0752640637962045 (2631 views) plus the same modelled noise. The live
+// ratio is unique strand pixels of the pixel record over the prepass card samples.
+constexpr double kCoverMax = 1.0752640637962045 + 0.01923694227747121;
 struct CoverageGate {
   struct Evidence {
     uint64_t frame = 0, card = 0, strand = 0;
@@ -241,13 +245,13 @@ struct CoverageGate {
     auto& e = latest[key];
     if (frame >= e.frame) e = {frame, card, strand};
   }
-  bool allow(uint64_t key, uint64_t now, double bound = kCoverMin) const {
+  bool allow(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
     const auto it = latest.find(key);
     if (it == latest.end()) return false;
     const auto& e = it->second;
     const auto bad = incomplete.find(key);
     if (bad != incomplete.end() && e.frame <= bad->second) return false;
-    return e.frame && now >= e.frame && now - e.frame <= kFreshFrames && e.card && e.ratio() >= bound;
+    return e.frame && now >= e.frame && now - e.frame <= kFreshFrames && e.card && e.ratio() >= bound && e.ratio() <= upper;
   }
   void clear() { latest.clear(); incomplete.clear(); }
 };

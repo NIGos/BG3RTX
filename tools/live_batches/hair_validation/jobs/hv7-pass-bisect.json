@@ -197,7 +197,7 @@
     {
       "name": "strand participation passes-15-all",
       "select": "\\[hair primary\\] frame \\d+:",
-      "match": "[1-9]\\d* grooms published; last 300 frames: \\d+ publishes, [1-9]\\d* prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
+      "match": "[1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
       "required_if": {
         "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
         "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"

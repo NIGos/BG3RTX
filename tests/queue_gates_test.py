@@ -327,6 +327,15 @@ class NumericItemsTests(unittest.TestCase):
                                ('coverage bound 0.8', False)]:
             self.assertEqual(queue_gates.line_matches(gate,line), expected)
 
+    def test_items_upper_bound(self):
+        gate = dict(match='coverage', items=dict(pattern=r'x:(?P<value>[0-9.]+),(?P<active>\d+)', bound=r'bound ([0-9.]+),',
+                                                 upper=r'upper ([0-9.]+),'))
+        for line, expected in [('coverage x:1.0,3 bound 0.9, upper 1.1,', True),
+                               ('coverage x:2.55,150 bound 0.9, upper 1.1,', False),
+                               ('coverage x:2.55,0 bound 0.9, upper 1.1,', True),
+                               ('coverage x:1.0,3 bound 0.9,', False)]:
+            self.assertEqual(queue_gates.line_matches(gate, line), expected, line)
+
     def test_required_if_uses_complete_trigger_not_straddle(self):
         plan=[dict(label='on')]
         runner='10:00:00.000 [pan-plan] window 0\n10:00:30.000 [motion-plan] complete'

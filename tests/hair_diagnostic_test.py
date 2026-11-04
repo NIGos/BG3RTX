@@ -33,9 +33,10 @@ class DiagnosticTests(unittest.TestCase):
         plan=[dict(label='order-gbuffer-1')]
         gate=jobs.diagnostic_job('test','Test Dialogue1',jobs.make_diagnostic())['expect_every'][1]
         gate=dict(gate,windows=['order-gbuffer-1'])
-        prefix='[hair primary] coverage (last 300 frames): 2 draws probed, 1 swapped; per draw (key prefix: newest strand/card samples = ratio, swapped frames of the period): '
-        good=prefix+'abcd:10/100=0.100,0 ef01:90/100=0.900,30; ratio min 0.100, bound 0.800, draws below bound 1'
+        prefix='[hair primary] coverage (last 300 frames): 2 draws probed, 1 swapped; per draw (key prefix: newest strand pixels/card samples = ratio, swapped frames of the period): '
+        good=prefix+'abcd:10/100=0.100,0 ef01:90/100=0.900,30; ratio min 0.100, bound 0.800, upper 1.094, draws outside bounds 1'
         bad=good.replace('0.100,0','0.100,1')
+        self.assertFalse(queue_gates.line_matches(gate,good.replace('90/100=0.900,30','255/100=2.550,30')))   # above the upper bound
         self.assertTrue(queue_gates.line_matches(gate,good))
         self.assertFalse(queue_gates.line_matches(gate,bad))
         runner='10:00:00.000 [pan-plan] window 0'
