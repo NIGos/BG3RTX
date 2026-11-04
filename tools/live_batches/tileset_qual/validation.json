@@ -1,0 +1,39 @@
+{
+  "status": "PASS_OFFLINE_ONLY",
+  "dryrun_exit_code": 0,
+  "synthetic_tests": 3,
+  "scene_wait_lint": "PASS",
+  "capacity_lint": "PASS",
+  "expected_seconds_per_launch_including_load": 219.6,
+  "launch_cap_seconds": 294,
+  "estimated_disk_mb": 140,
+  "fake_queue": {
+    "a-real": [
+      {
+        "job": "ts1-native-tileset-off",
+        "valid": false,
+        "outcome": "INVALID (missing: successful terminal state | \\[window-mode\\].*visible_unfocused | \\[motion-plan\\] complete phases=6\\b | \\[motion-trace\\] phase=4 label=shot-off repeat=0 | post-analysis gate passed | \\[trace\\] frame \\d+ written | \\[cfg\\] keys:.*rt_native_tileset=0\\b | every-window material table capacity: window 'diag-off' not found in the runner log | every-window scene waits: window 'diag-off' not found in the runner log | every-window scene waits: window 'cost-off' not found in the runner log | every-window RT capture capacity: window 'diag-off' not found in the runner log | every-window RT capture capacity: window 'cost-off' not found in the runner log | every-window cascade capacity: window 'diag-off' not found in the runner log); Run ended: done after 3s (fake)"
+      },
+      {
+        "job": "ts1-native-tileset-on",
+        "valid": false,
+        "outcome": "INVALID (missing: successful terminal state | \\[window-mode\\].*visible_unfocused | \\[motion-plan\\] complete phases=6\\b | \\[motion-trace\\] phase=4 label=shot-on repeat=0 | post-analysis gate passed | \\[trace\\] frame \\d+ written | \\[cfg\\] keys:.*rt_native_tileset=1\\b | every-window material table capacity: window 'diag-on' not found in the runner log | every-window scene waits: window 'diag-on' not found in the runner log | every-window scene waits: window 'cost-on' not found in the runner log | every-window RT capture capacity: window 'diag-on' not found in the runner log | every-window RT capture capacity: window 'cost-on' not found in the runner log | every-window cascade capacity: window 'diag-on' not found in the runner log); Run ended: done after 3s (fake)"
+      }
+    ],
+    "b-structural": [
+      {
+        "job": "ts1-native-tileset-off",
+        "valid": true,
+        "outcome": "Run ended: done after 3s (fake)"
+      },
+      {
+        "job": "ts1-native-tileset-on",
+        "valid": true,
+        "outcome": "Run ended: done after 3s (fake)"
+      }
+    ]
+  },
+  "game_launched": false,
+  "real_queue_written": false,
+  "source": "C:\\Users\\quali\\AppData\\Local\\Temp\\ts1-final-dryrun"
+}

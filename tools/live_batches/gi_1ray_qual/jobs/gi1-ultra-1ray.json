@@ -1,0 +1,402 @@
+{
+  "name": "gi1-ultra-1ray",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 719,
+  "repeat": 1,
+  "live_batch": "gi-1ray-qual",
+  "set": "preset=ultra,fg=2,rr=1,headless=0,fps_cap=0,rt_stats=0,rt_primary_check=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,crash_dump=0,rt_timing_frames=120,rt_scene_wait=1,rt_scene_wait_log_frames=120,gi_rr_rays=2,qa_exposure_hold=0,dump_images=1,dump_raw=0,dump_shaders=0,dump_png_width=1280,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/gi_1ray_qual/plans/gi1.json"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[geo\\] RT capture",
+    "\\[cascade\\] casters",
+    "gi: GPU cost",
+    "gi: trace pass",
+    "GI far",
+    "GI hit direct",
+    "GI hit sun",
+    "hit material",
+    "rt stats",
+    "\\[rrpost\\] exposure (held|hold|probe)",
+    "sharc",
+    "\\[pan\\]",
+    "\\[rt\\] scene wait"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[cfg\\] settings read",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\)"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "\\[cascade\\] could not allocate",
+    "gi: gi_far needs gi_hit_sun",
+    "\\[pan\\].*(REFUSED|INVALID|failed|dropped)",
+    "\\[rrpost\\] exposure hold REFUSED"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=20\\b",
+    "\\[motion-trace\\] phase=4 label=shot-rays-off-a repeat=0",
+    "\\[motion-trace\\] phase=4 label=shot-rays-off-a repeat=1",
+    "\\[motion-trace\\] phase=4 label=shot-rays-off-a repeat=2",
+    "\\[motion-trace\\] phase=8 label=shot-rays-on-a repeat=0",
+    "\\[motion-trace\\] phase=8 label=shot-rays-on-a repeat=1",
+    "\\[motion-trace\\] phase=8 label=shot-rays-on-a repeat=2",
+    "\\[motion-trace\\] phase=12 label=shot-rays-off-b repeat=0",
+    "\\[motion-trace\\] phase=12 label=shot-rays-off-b repeat=1",
+    "\\[motion-trace\\] phase=12 label=shot-rays-off-b repeat=2",
+    "\\[motion-trace\\] phase=16 label=shot-rays-on-b repeat=0",
+    "\\[motion-trace\\] phase=16 label=shot-rays-on-b repeat=1",
+    "\\[motion-trace\\] phase=16 label=shot-rays-on-b repeat=2"
+  ],
+  "stop_on_dump": false,
+  "purpose": "One-ray GI release qualification. Ultra 2/1/2/1, static and held Q/E. Prepared only; no preset changes.",
+  "estimated_phase_seconds": 228.3,
+  "expect_every": [
+    {
+      "name": "K8 off-a",
+      "select": "\\[pan\\] burst 99100 complete",
+      "match": "\\[pan\\] burst 99100 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "pan-off-a"
+      ]
+    },
+    {
+      "name": "GI rays off-a",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass \\(ray-traced, gi_rt=1, 2 rays/sample, full res, RR denoises\\) GPU median [0-9.]+ ms",
+      "period_frames": 300,
+      "min": 1,
+      "windows": [
+        "cost-off-a"
+      ]
+    },
+    {
+      "name": "float traces off-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 3,
+      "windows": [
+        "shot-rays-off-a"
+      ]
+    },
+    {
+      "name": "K8 on-a",
+      "select": "\\[pan\\] burst 99101 complete",
+      "match": "\\[pan\\] burst 99101 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "pan-on-a"
+      ]
+    },
+    {
+      "name": "GI rays on-a",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass \\(ray-traced, gi_rt=1, 1 rays/sample, full res, RR denoises\\) GPU median [0-9.]+ ms",
+      "period_frames": 300,
+      "min": 1,
+      "windows": [
+        "cost-on-a"
+      ]
+    },
+    {
+      "name": "float traces on-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 3,
+      "windows": [
+        "shot-rays-on-a"
+      ]
+    },
+    {
+      "name": "K8 off-b",
+      "select": "\\[pan\\] burst 99102 complete",
+      "match": "\\[pan\\] burst 99102 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "pan-off-b"
+      ]
+    },
+    {
+      "name": "GI rays off-b",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass \\(ray-traced, gi_rt=1, 2 rays/sample, full res, RR denoises\\) GPU median [0-9.]+ ms",
+      "period_frames": 300,
+      "min": 1,
+      "windows": [
+        "cost-off-b"
+      ]
+    },
+    {
+      "name": "float traces off-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 3,
+      "windows": [
+        "shot-rays-off-b"
+      ]
+    },
+    {
+      "name": "K8 on-b",
+      "select": "\\[pan\\] burst 99103 complete",
+      "match": "\\[pan\\] burst 99103 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "pan-on-b"
+      ]
+    },
+    {
+      "name": "GI rays on-b",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass \\(ray-traced, gi_rt=1, 1 rays/sample, full res, RR denoises\\) GPU median [0-9.]+ ms",
+      "period_frames": 300,
+      "min": 1,
+      "windows": [
+        "cost-on-b"
+      ]
+    },
+    {
+      "name": "float traces on-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 3,
+      "windows": [
+        "shot-rays-on-b"
+      ]
+    },
+    {
+      "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "windows": [
+        "cost-off-a",
+        "cost-on-a",
+        "cost-off-b",
+        "cost-on-b",
+        "shot-rays-off-a",
+        "shot-rays-on-a",
+        "shot-rays-off-b",
+        "shot-rays-on-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "cost-off-a",
+        "cost-on-a",
+        "cost-off-b",
+        "cost-on-b",
+        "shot-rays-off-a",
+        "shot-rays-on-a",
+        "shot-rays-off-b",
+        "shot-rays-on-b"
+      ]
+    },
+    {
+      "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "cost-off-a",
+        "cost-on-a",
+        "cost-off-b",
+        "cost-on-b",
+        "shot-rays-off-a",
+        "shot-rays-on-a",
+        "shot-rays-off-b",
+        "shot-rays-on-b"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "zero scene-wait timeouts throughout measurement",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame\\x27s scene, 0 timeouts",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "cost-off-a",
+        "shot-rays-off-a",
+        "pan-off-a",
+        "cost-on-a",
+        "shot-rays-on-a",
+        "pan-on-a",
+        "cost-off-b",
+        "shot-rays-off-b",
+        "pan-off-b",
+        "cost-on-b",
+        "shot-rays-on-b",
+        "pan-on-b"
+      ]
+    }
+  ],
+  "max_minutes": 5.9,
+  "window_mode": "visible_unfocused_fg",
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 3,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 25.48853016135551,
+        "windows": 501,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel1-smoke-ultra-s8.1.134708.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel2-smoke-high-s8.1.121305.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041744.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.085931.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wsf1-s8-interface-column.1.043141.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wsf1-s8-interface-column.1.064436.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          0,
+          1,
+          0,
+          0
+        ],
+        "fps": 15.59251559252314,
+        "windows": 6,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel2-smoke-high-s8.1.121305.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041744.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 22.93577981649794,
+        "windows": 14,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041744.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "fps": 20.949720670434065,
+        "windows": 5,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.2930000000014843,
+      "quantile": 0.95,
+      "samples": 370,
+      "maximum": 0.49399999999877764
+    },
+    "trace_capture_stall": {
+      "seconds": 2.61315,
+      "source": "wf7a-s8-fg2.1.164300.log",
+      "quantile": 0.95,
+      "samples": 370,
+      "maximum": 2.90531,
+      "logs": 59
+    }
+  },
+  "post": "py -3 -m tools.live_batches.gi_1ray_qual.analyze \"{log}\"",
+  "post_gate": true
+}
