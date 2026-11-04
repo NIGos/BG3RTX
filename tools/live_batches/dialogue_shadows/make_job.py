@@ -260,6 +260,7 @@ WARM = "ds0-warm-dialogue1-fg2"
 
 
 def main():
+    raise SystemExit("Retired 2026-11-04: rt_cascade_static_only removed; identity fix supersedes this attribution batch. Historical jobs must not be regenerated.")
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-hair", action="store_true", help="stride-64 fallback (no native-hair startup)")
     ap.add_argument("--out", default=str(HERE))

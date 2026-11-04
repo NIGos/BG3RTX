@@ -12,12 +12,7 @@ Native dumped cascade VS 1cf36b97d3067b6c fails the affine-instance test (skinne
 646a930e41f002bb passes (static), and wind VS 50fbfceb06192473 fails.
 These fixtures verify the filter's classification, not which draw hit the face.
 
-Candidate `rt_cascade_static_only=0`, off in presets: exclude dynamic/unclassified
-legacy copies; preserve camera geometry and raw Current Sun. No shader change.
-Design/limits: [TRACK_D_SUN.md](TRACK_D_SUN.md#dialogue-legacy-cascade-filter-2026-11-03-ready_for_live).
-Status READY_FOR_LIVE, not a visible-quality pass. Planned port/camp A/B, counters,
-roof protection and cost checks: [progress/fix-cascade-dialogue.md](progress/fix-cascade-dialogue.md).
-No game launch; the attribution branch and its prepared jobs were not edited.
+`rt_cascade_static_only` retired 2026-11-04: ON removes every caster; the default identity fix supersedes it. GUI, INI and runtime filter removed. Earlier plans below are historical, not queue instructions.
 
 ## Allocation mismatch follow-up (fix-cascade-dialogue2, 2026-11-03)
 
@@ -32,7 +27,7 @@ the first two; an unlisted VS yields key 0. No captured compute-skinning source
 lineage proves that different output regions belong to the same character.
 Index range alone cannot distinguish two placed instances of the same mesh.
 
-Use the existing off-by-default `rt_cascade_static_only=1` fallback for skinned /
+The historical off-by-default `rt_cascade_static_only=1` fallback was tried for skinned /
 dynamic / unclassified legacy copies. Its affine, known non-storage position
 filter already excludes the audited skinned VS and storage-backed positions.
 Opposite-policy F-1/F-2 soups are rejected after toggles. Camera-pass geometry
@@ -363,6 +358,6 @@ a static dialogue shot; a `camera moving` line flags that shot (excluded from co
 
 Moving shadow not seen by default with fix 2.
 At the port, duplicates by mesh with differing offsets: 16-18 per frame.
-`rt_cascade_static_only=1` removes every cascade caster, equivalent to `rt_cascade_casters=0`; keep it off.
+`rt_cascade_static_only=1` removed every cascade caster, equivalent to `rt_cascade_casters=0`; retired 2026-11-04.
 The static-only toggle hitches about 4 s: the ON shot now holds 12 s and traces at 8 s.
 Short diagnostic views are excluded from 60-frame judged gates; motion triplets are spaced 6 s apart to show a slow band.

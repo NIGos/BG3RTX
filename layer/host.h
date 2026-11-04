@@ -476,15 +476,12 @@ void ngx_init();                       // hooks _nvngx.dll now or when it loads
 // G-buffer discovery; with rr=1 also records the RR guide dispatch into `cmd`.
 void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts, VkImageLayout depth_layout);
 void ngx_on_destroy_image(VkImage img);
-void ngx_join_prewarm();
 void rrpost_prewarm(DeviceData* dd);
 void rrpost_join_prewarm();
 void ngx_on_present();
 // ABI 7: Ray Reconstruction evaluated in the last few frames (not the rr key):
 // false with FSR/TAA, SR fallback, or a failed RR creation.
 bool ngx_rr_active();
-// Current-frame class-5 surviving raster occupancy (R11G11B10, GENERAL).
-bool ngx_hair_mask(uint32_t w, uint32_t h, VkImageView* view);
 // RR's diffuse albedo guide (RGBA8, GENERAL) when it has this size.
 bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view);
 
@@ -930,6 +927,8 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
                                  const VkPipeline* out);
 void hair_primary_forget_pipeline(VkPipeline p);
 bool hair_primary_wanted();
+// After a device loss (layer/devfault.cpp): the strand breadcrumbs (common/hair_primary.h kCrumbAddrOffset).
+void hair_primary_fault_log();
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);

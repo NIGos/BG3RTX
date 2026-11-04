@@ -38,12 +38,10 @@ int main(int argc, char** argv) {
     std::printf("native fixture %s: affine %d\n",argv[i],int(affine));
   }
   // Static roof class A versus skin/cloth/wind, compute-skinned vertices and
-  // unknown bindings. Key OFF preserves all legacy outcomes.
+  // unknown bindings; classification remains diagnostic after filter retirement.
   for(bool affine : {false,true}) for(bool known : {false,true}) for(bool storage : {false,true}) {
     const bool candidate=static_candidate(affine,known,storage);
     if(candidate!=(affine && known && !storage)) return fail(70,"static classification");
-    if(!keep_static_only(false,candidate)) return fail(71,"key off preserves legacy");
-    if(keep_static_only(true,candidate)!=candidate) return fail(72,"key on rejects unknown/deformed");
   }
   SetChanges changes;
   if(changes.observe(10,false,{1,2})) return fail(73,"first set seeds");
@@ -94,9 +92,6 @@ int main(int argc, char** argv) {
   const auto old_character=legacy_caster(false,2,false,true,mesh_key(a)==mesh_key(b),
     dialogue_camera.contains(100,draw_key(b)));
   if(old_character!=LegacyCaster::keep) return fail(81,"regression must reproduce undeduped character");
-  if(keep_static_only(true,static_candidate(false,true,false))) return fail(82,"lagged skin copy excluded");
-  if(!keep_static_only(false,static_candidate(false,true,false))) return fail(83,"off retains old skin behavior");
-  if(!keep_static_only(true,static_candidate(true,true,false))) return fail(84,"offscreen class A roof retained");
   // Default-path regression: two pass-local UBO allocations refer to the same
   // model and pulled vertex instance. No static-only filter needed.
   uint32_t model[16]={};model[0]=model[5]=model[10]=model[15]=0x3f800000u;
@@ -155,12 +150,6 @@ int main(int argc, char** argv) {
     return fail(113,"unlisted camera layout has key zero");
   InstanceSets unknown_camera;unknown_camera.insert(100,camera_draw);
   if(unknown_camera.contains(100,cascade_draw)) return fail(114,"unknown camera cannot dedupe skin");
-  for(bool affine : {false,true}) {
-    // Skin VS is non-affine; compute-skinned affine input is storage-backed.
-    const bool skin=static_candidate(affine,true,true);
-    if(keep_static_only(true,skin)) return fail(115,"fallback removes both skin paths");
-    if(!keep_static_only(false,skin)) return fail(116,"fallback off retains comparison path");
-  }
   DrawId prop=cascade_draw;prop.position[0]+=10;
   InstanceSets props;props.insert(100,cascade_draw);
   if(props.contains(100,prop)) return fail(117,"identical prop geometry at another place remains distinct");

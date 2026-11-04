@@ -166,7 +166,6 @@ enum class LegacyCaster { keep, alpha_skip, duplicate };
 inline bool static_candidate(bool affine_instance, bool position_known, bool storage_position) {
   return affine_instance && position_known && !storage_position;
 }
-inline bool keep_static_only(bool enabled, bool candidate) { return !enabled || candidate; }
 
 // Compare membership, not draw order or the cascade matrix. Seed again after a
 // gap, a cascade switch or a policy toggle; those are not consecutive samples.

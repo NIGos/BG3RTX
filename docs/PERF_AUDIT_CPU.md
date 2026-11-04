@@ -129,3 +129,5 @@ The job names above are proposed jobs, not existing validated queue artifacts. B
 6. For cold/warm tests, name cache state and correlate cache waits with toggle gaps and pacing tails. For the long-view memory case, correlate `[mem]` budget/headroom and scene-build GPU p99 with actual warning timestamps and FG state. Keep intentional loading/compilation windows separate from steady-state results. `[pace]` plus displayed/rendered ratio does not measure end-to-end latency; that remains unmeasured here.
 
 Status: audit complete; candidate savings unvalidated. Only `docs/PERF_AUDIT_CPU.md` added. No implementation changes, shader-request delta 0, no commit. No live approval is requested by this audit.
+
+The three CPU controls retired 2026-11-04 from all GUI modes: `perf_hook_state` adds 6.6 ms submit CPU; `perf_hitmat_lists` has no gain; `perf_submit_batch` is within noise. Shared implementations remain hidden developer INI only, default 0; the proposals above are historical.

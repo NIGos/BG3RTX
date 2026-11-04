@@ -629,9 +629,11 @@ open. Details and exact limits: [OPAQUE_TWO_SURFACE_REFERENCE.md](OPAQUE_TWO_SUR
 | 10 | D-RFR, transparents/particles | low | high | forward-pass capture and shader patching |
 | — | D-PT | reference only | medium | not a product |
 
-## CPU descriptor batching candidate (2026-11-02)
+## CPU descriptor batching (historical implementation, 2026-11-02)
 
-`perf_submit_batch=1` (developer GUI, live, off in every preset) coalesces hit-set
+`perf_submit_batch` retired 2026-11-04: no saving beyond noise (OFF 20.2/20.7 ms, ON 20.3/20.3 ms); hidden developer INI only, default 0; shared descriptor/submit paths retained.
+
+`perf_submit_batch=1` (hidden developer INI only, live, default 0) coalesces hit-set
 clone copies and texture-table overlays by excluding overwritten copy intervals.
 Vulkan still applies writes before copies; final descriptors equal copy then overlay.
 Sun clones keep their copy boundary and combine subsequent independent writes,
@@ -639,8 +641,8 @@ with image/sampler arrays owned until the call returns. Scene slots, pools and
 retirement are unchanged. Game updates still reach the driver in original order;
 tracker write bookkeeping takes one lock per call, then preserves the existing
 OMM callback and sequential copy boundary. No ABI or shader request changes.
-Offline checks and pending A/B: [codex-perf-submit2](progress/codex-perf-submit2.md).
-No measured CPU or GPU saving yet; this is not a quality pass.
+Historical offline checks and A/B: [codex-perf-submit2](progress/codex-perf-submit2.md).
+No saving was demonstrated; no further qualification queue.
 
 ## Immutable alpha header cache candidate (2026-11-03)
 

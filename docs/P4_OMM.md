@@ -266,7 +266,8 @@ Specification source: Vulkan SDK 1.4.357.0 `vulkan_core.h`, `vk.xml`,
   timeline values are never changed. Failed application submits release pins;
   failed private signals, stale generations or foreign-queue submissions keep
   resources until device idle.
-- `perf_submit_batch=1` (off by default): for valid pinned tickets on the graphics
+- `perf_submit_batch` retired 2026-11-04: no measured saving; hidden developer INI only, default 0.
+  Historical `perf_submit_batch=1` behavior: for valid pinned tickets on the graphics
   queue, ordinary extension-free submits append that empty signal entry to the
   same driver call (Submit2 also requires flags 0). Game entries stay separate;
   their waits, signals and extension chains are unchanged. A serial lock covers

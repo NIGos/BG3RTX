@@ -472,6 +472,17 @@ class FlowTests(unittest.TestCase):
         p.insert(3, phase("warm-too-late", values="rr=1"))
         self.assertTrue(f.warmup_problems(j, p))
 
+    def test_hair_cpu_routing_needs_readiness_but_not_pre_warming(self):
+        j, p = fixture()
+        p[2]["set"] += ",rt_hair_groom_primary_order=1,rt_hair_primary_passes=8"
+        self.assertFalse(f.warmup_problems(j, p))
+        p[2].pop("wait_log")
+        problems = f.pipeline_readiness.problems(j, p)
+        self.assertTrue(any("rt_hair_groom_primary_order" in e for e in problems))
+        self.assertTrue(any("rt_hair_primary_passes" in e for e in problems))
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(f.pipeline_readiness.problems(j, p))
+
     def test_startup_only_is_not_a_toggle_loophole(self):
         j, p = fixture()
         j["live_flow"] = dict(startup_only=["rr"])

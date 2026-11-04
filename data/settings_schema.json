@@ -268,19 +268,6 @@
        {"id": "on", "label": "Shadowed", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "all", "label": "All", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
-    {"id": "rr_hair_resolve", "label": "RR hair dither resolve",
-     "description": "Experimental: smooths dotted hair edges and may soften them.",
-     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Experimental: smooths dotted hair edges and may soften them.",
-     "details": "Smooths hair coverage before RR. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured; may soften edges.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {"rr_post": "1"},
-     "required_from_choice": {"rr_post": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_hair_resolve": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_resolve": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
-     ]},
     {"id": "rr_post", "label": "RR order",
      "description": "Experimental: changes how fine hair edges appear through depth of field.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
@@ -462,9 +449,11 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "all", "label": "All", "apply": "live", "caps": [], "keys": {"rt_hair_primary_passes": "7"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "gbuffer", "label": "G-buffer only", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "gbuffer_velocity", "label": "G-buffer and motion vectors", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "3"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "all", "label": "All", "apply": "live", "caps": [], "keys": {"rt_hair_primary_passes": "15"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "gbuffer", "label": "G-buffer and probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "9"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "gbuffer_velocity", "label": "G-buffer, motion vectors and probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "11"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "no_probe", "label": "Swaps without the probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "7"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "none", "label": "No strand pass", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "0"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_primary_order", "label": "Strand header in G-buffer order",
      "description": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
@@ -505,19 +494,6 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_pool_trim": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_pool_trim": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
-    {"id": "exp_cascade_static_only", "label": "Static roof casters only",
-     "description": "Excludes animated and unclassified shadow-map copies from roof sun shadows. May omit some roofs; dialogue motion and roof coverage are unqualified.",
-     "apply": "live", "apply_note": "live; allow two frames for capture replacement", "advanced": true, "experimental": true, "developer": true,
-     "category": "Developer", "summary": "Excludes animated and unclassified shadow-map copies from roof sun shadows. May omit some roofs; dialogue motion and roof coverage are unqualified.",
-     "details": "",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_cascade_static_only": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_cascade_static_only": "1"}, "needs": {"sun_shadows": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
     {"id": "exp_hair_physical_origin", "label": "Physical hair ray origins (advanced)",
      "description": "Adjusts where light rays start on hair to improve secondary lighting. Quality and cost remain unqualified.",
      "apply": "restart", "apply_note": "Enable at startup to reserve ray-origin resources; then live A/B is available.", "advanced": true, "experimental": true, "developer": true,
@@ -543,45 +519,6 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_alpha_spill": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_alpha_spill": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "perf_hitmat_lists", "label": "Hit material CPU batching",
-     "description": "Tests recording-owned candidate lists, short query snapshots and batched material row uploads. No measured gain: G-buffer hooks 1.16 ms in both states. Keep off. Requires Hidden-surface shading at startup.",
-     "apply": "live", "apply_note": "live; native materials need startup", "advanced": false, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Tests recording-owned candidate lists, short query snapshots and batched material row uploads. No measured gain: G-buffer hooks 1.16 ms in both states. Keep off. Requires Hidden-surface shading at startup.",
-     "details": "",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {"rt_hit_material": "1"},
-     "required_from_choice": {"rt_hit_material": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"perf_hitmat_lists": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"perf_hitmat_lists": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "perf_hook_state", "label": "Reuse capture hook state",
-     "description": "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. REJECTED: submit CPU 20.2 -> 26.8 ms; matrix copies 0.31 -> 0.52 ms/build. Keep off.",
-     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. REJECTED: submit CPU 20.2 -> 26.8 ms; matrix copies 0.31 -> 0.52 ms/build. Keep off.",
-     "details": "",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"perf_hook_state": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": [], "keys": {"perf_hook_state": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "perf_submit_batch", "label": "Batch descriptor and submit bookkeeping",
-     "description": "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. Within noise: submit CPU 20.2/20.7 ms off versus 20.3/20.3 ms on. Keep off.",
-     "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": true,
-     "category": "Advanced", "summary": "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. Within noise: submit CPU 20.2/20.7 ms off versus 20.3/20.3 ms on. Keep off.",
-     "details": "",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"perf_submit_batch": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": [], "keys": {"perf_submit_batch": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hit_paks", "label": "Pak material coverage",
      "description": "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
