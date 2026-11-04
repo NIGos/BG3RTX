@@ -275,14 +275,14 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rt_omm", "0"}, {"rt_omm_dyn", "0"}, {"rt_alpha_fine_lod", "0"}, {"rt_omm_reference", "0"}}, {}, {}, false, false, false, Apply::Restart},
     {"on", "On", kCapRayQuery | kCapOpacityMicromap, {{"rt_omm", "1"}, {"rt_omm_dyn", "1"}, {"rt_alpha_fine_lod", "1"}, {"rt_omm_reference", "0"}},
      {{"rt_geometry", 2}, {"exp_vt_alpha_masks", 1}}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"}}, true, "Advanced", {"Measured", "About -1 ms", "Up to 256 MB micromap cache", "RTX 5090; camp om4; 2026-11-03 08:10; RT passes 8.65-8.75 ms vs reference 9.37-10.08 ms; 1.17G rays compared, 0 not compared, 0 violations. Reference only."}},
+   {}, {0, 0, 1, 1}, false, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"}}, true, "Advanced", {"Measured", "About -1 ms", "Up to 256 MB micromap cache", "RTX 5090; camp om4; 2026-11-03 08:10; RT passes 8.65-8.75 ms vs reference 9.37-10.08 ms; 1.17G rays compared, 0 not compared, 0 violations. Reference only."}},
 
   {"exp_vt_alpha_masks", "Offline cutout masks",
    "Uses foliage masks prepared locally from your game installation. Required for accelerated cutout shadows; unavailable masks keep the original path.",
    Kind::Choice, Apply::Live, "live", true,
    {{"off", "Off", 0, {{"rt_vt_alpha_masks", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_vt_alpha_masks", "1"}}, {{"rt_geometry", 2}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, true, "Advanced", {"Measured", "Not measured", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
+   {}, {0, 0, 1, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, true, "Advanced", {"Measured", "Not measured", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
 
   {"exp_water_hit_shade", "Water: hidden-surface reflections",
    "Experimental: adds lighting from hidden surfaces to water reflections.",
@@ -733,9 +733,9 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_generated", "0"},
     {"rt_hit_material_paks", "0"},
     {"rt_hit_reference", "0"},
-    {"rt_omm", "0"},
+    {"rt_omm", "1"},
     {"rt_omm_reference", "0"},
-    {"rt_omm_dyn", "0"},
+    {"rt_omm_dyn", "1"},
     {"rt_omm_dyn_bake_tris", "131072"},
     {"rt_omm_dyn_mb", "256"},
     {"rt_native_hair", "0"},
@@ -754,8 +754,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_alpha_unknown", "1"},
     {"rt_alpha_auto", "1"},
     {"rt_alpha_spill", "0"},
-    {"rt_vt_alpha_masks", "0"},
-    {"rt_alpha_fine_lod", "0"},
+    {"rt_vt_alpha_masks", "1"},
+    {"rt_alpha_fine_lod", "1"},
     {"rt_vt_alpha_miss_log", "0"},
     {"rt_alpha_max_pct", "60"},
     {"rt_strips", "1"},
@@ -1242,8 +1242,8 @@ inline void enforce_release_policy(Map& m) {
     m["ls_shadowed"] = map_int(m, "ls_samples", 0) == 0 ? "3" : "0";
   if (map_int(m, "rt_native_tileset", 0)) write("exp_native_coverage", 1);
   m["rt_hair_pool_trim"] = map_int(m, "rt_native_hair", 0) ? "1" : "0";
-  // Full geometry in High still awaits its own OMM/mask qualification.
-  bool qualified_full = lookup(m, "preset") == "ultra" && map_int(m, "rt_alpha", 0) &&
+  // OMM and offline masks are qualified for Full geometry in High and Ultra.
+  bool qualified_full = (lookup(m, "preset") == "high" || lookup(m, "preset") == "ultra") && map_int(m, "rt_alpha", 0) &&
       lookup(m, "rt_build") != "0";
   write("exp_vt_alpha_masks", qualified_full ? 1 : 0);
   write("exp_omm", qualified_full ? 1 : 0);

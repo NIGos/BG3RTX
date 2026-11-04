@@ -191,7 +191,7 @@
      "cost": {"status": "Measured", "gpu": "About -1 ms", "vram": "Up to 256 MB micromap cache", "provenance": "RTX 5090; camp om4; 2026-11-03 08:10; RT passes 8.65-8.75 ms vs reference 9.37-10.08 ms; 1.17G rays compared, 0 not compared, 0 violations. Reference only."},
      "required_on": {"rt": "1", "rt_bvh_split": "1"},
      "required_from_choice": {"rt": 1, "rt_bvh_split": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_omm": "0", "rt_omm_dyn": "0", "rt_alpha_fine_lod": "0", "rt_omm_reference": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1", "rt_omm_dyn": "1", "rt_alpha_fine_lod": "1", "rt_omm_reference": "0"}, "needs": {"rt_geometry": 2, "exp_vt_alpha_masks": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
@@ -204,7 +204,7 @@
      "cost": {"status": "Measured", "gpu": "Not measured", "vram": "80.9 MB camp masks", "provenance": "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."},
      "required_on": {"rt": "1", "rt_alpha": "1"},
      "required_from_choice": {"rt": 1, "rt_alpha": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_vt_alpha_masks": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}

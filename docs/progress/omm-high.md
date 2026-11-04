@@ -1,0 +1,2 @@
+## OMM and offline masks enabled for High (branch omm-high, kept, 2026-11-04)
+- High now enables exp_omm and exp_vt_alpha_masks with Full geometry and rt_alpha, like Ultra. rel2-smoke-high-s8 (12:13, VALID): 528331332 compared, 0 not compared, 0 violations, 13.9% fewer candidates, 0 scene-wait timeouts; all gates passed. Check High at S8; GPU ms not supplied. Schema/defaults checks passed; settings_test 4679/4679 and launcher_web_bridge_test 987/987; shader request delta 0. No game launch.
