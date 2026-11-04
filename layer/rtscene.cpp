@@ -981,6 +981,16 @@ bool rt_cascade_convert(VkCommandBuffer cmd, VkBuffer xfb, uint32_t tris, uint32
   return true;
 }
 
+// This build's camera, set by rt_after_capture under g_mu before bvh_build: read by code inside the build (g_mu is
+// already held there: rt_build_camera would lock it again; hv6 2026-11-04: the process vanished at the first publish).
+float g_this_build_cam[3] = {};
+uint64_t g_this_build_frame = 0;
+bool rt_this_build_camera(uint64_t frame, float pos[3]) {
+  if (!frame || g_this_build_frame != frame) return false;
+  std::memcpy(pos, g_this_build_cam, sizeof g_this_build_cam);
+  return true;
+}
+
 bool rt_build_camera(uint64_t frame, float pos[3]) {
   std::lock_guard<std::mutex> lock(g_mu);
   for (const CamHist& h : g_cam_hist)
@@ -1127,10 +1137,13 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   capx.cascade_frame = 0;
   {
     const uint64_t now = frame_index();
+    g_this_build_frame = 0;
     if (source_camera_valid) {
       CamHist& h = g_cam_hist[now % 4];
       h.frame = now;
       std::memcpy(h.pos, source_camera + 52, sizeof h.pos);
+      std::memcpy(g_this_build_cam, source_camera + 52, sizeof g_this_build_cam);
+      g_this_build_frame = now;
     }
     if (cfg_int("rt_cascade_casters", 0)) attach_cascade(capx, source_camera_valid ? source_camera + 52 : nullptr, now);
   }
