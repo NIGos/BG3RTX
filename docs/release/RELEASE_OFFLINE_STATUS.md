@@ -13,7 +13,7 @@ PASS means only the named offline check. This is not release approval or final h
 - Approve the explicit deferral of the remaining unqualified non-hair backlog?
 - Only RTX 5090 has been tested. Memory/transition and Act 2/3 acceptance remain open; no broader GPU claim.
 - Which installer ships: current ZIP legacy helpers, or separately integrated/qualified lifecycle/Inno?
-- Accept ambient ratio 1.44 and the remaining water shadow/glint appearance? Emission stays mode 1.
+- Appearance decided by the user (2026-11-04): native ambient kept (S8 ratio 1.44 is not a data error), native S8 water shadow edge and glint kept, rt_hit_emission mode 1, water Fresnel stays Experimental.
 - After build/acceptance and legal decisions, approve the final archive and upload?
 
 Temporal promotion is accepted on user visual verdict; its statistical/energy limits remain.
