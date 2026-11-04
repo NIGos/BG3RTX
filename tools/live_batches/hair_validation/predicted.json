@@ -70,5 +70,58 @@
   "prediction": "One order-0 mask-15 warm-all retains cards and readies groom pipelines; then order 1 masks 0 (header only), 8 (probe only), 15 (all). Every order-1 window holds two complete 300-frame periods after readiness and requires periodic [fault] hair primary breadcrumbs. Coverage is required only with probe bit 8; swaps and conditional strand participation only with swap passes enabled.",
   "status": "OFFLINE_PREPARED; no live authorization",
   "runtime_dependency": "Current layer logs periodic breadcrumbs with [hair primary], and [fault] only on device loss; the requested periodic [fault] producer must be supplied before live validation."
+ },
+ "hv9": {
+  "status": "OFFLINE_PREPARED; no live authorization",
+  "save": "Test Dialogue1",
+  "launches": 1,
+  "stats_period_frames": 60,
+  "windows": [
+   "a-cards",
+   "b-strands",
+   "c-strands-plus",
+   "d-strands",
+   "return-camera",
+   "d-cards"
+  ],
+  "counts": {
+   "static_png_and_float_means": 3,
+   "rendered_K8_bursts": 2,
+   "rendered_frames_per_burst": 8,
+   "samples_per_burst": 20,
+   "measured_periods_per_window": 1
+  },
+  "expected_lines": [
+   "depth orphans ...: none in every strands window",
+   "prepass card depth dropped without its G-buffer swap 0 in every strands window",
+   "0 pipelines refused in every strands window",
+   "coverage with per-draw swapped frames > 0 in b, c, d-strands",
+   "shadow transmittance in c",
+   "strand G-buffer draws GPU ms in c",
+   "K8 transport ok in d-strands and d-cards"
+  ],
+  "flicker": {
+   "expectation": "strands <= cards",
+   "reason": "unknown, first measurement",
+   "gate": false,
+   "measurement": "Use existing edge_flicker burst/masks/registration/metric functions on pan_98900 and pan_98901, fixed player hair ROI and rigid control. Report both residuals; no automatic two-window comparison gate exists. Rotation/registration failure means incomparable, never PASS."
+  },
+  "energy": "Record pre-post scene float means from dumps.json for a/b/c; no energy gate (shading changes).",
+  "e_reserved": {
+   "enabled": false,
+   "flag": "HV9_CASCADE",
+   "window": "e-cascade",
+   "key": "rt_hair_groom_cascade",
+   "value": 1,
+   "frames": 60,
+   "png_and_float_mean": 1,
+   "dependency": "claude/hair-cascade merged"
+  },
+  "restoration": "Final phase restores startup live keys; auto-run restores original INI on exit/failure.",
+  "plan_seconds": 63.8,
+  "load_allowance_seconds": 120,
+  "total_target_seconds": 183.8,
+  "plan_phases": 10,
+  "readiness": "New-state timing medians unproven; bounded readiness may extend the target. No live qualification."
  }
 }
