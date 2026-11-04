@@ -223,7 +223,15 @@ Every generator reaches `pipeline_readiness.apply` through the shared retime
 hook; combine also applies it after inserting settings resets. Active jobs are
 explicitly marked in `duration_lint.json`; historical artifacts remain inactive.
 `python tools/live_batches/live_flow.py --active --preflight` and the
-`batch_jobs_lint_test` CTest gate the current active inventory. Direct preflight
+`batch_jobs_lint_test` CTest gate the current active inventory. CTest uses the
+checked-in `lint_corpus_snapshot.json`, not mutable queue results or log files.
+After regenerating jobs against current live evidence, explicitly refresh with
+`python -m tools.live_batches.lint_snapshot`. Review that snapshot alongside the
+job changes. It stores FPS by save/diagnostic signature, trace-export p95,
+readiness estimates by save/pattern/key transition, and regex match counts;
+it retains no logs. New readiness queries or regexes require a refresh.
+Historical replay stays a live-evidence audit, outside this deterministic test.
+Runtime preflight continues to use the live corpus. Direct preflight
 of an inactive job still checks all rules; inactive does not authorize a launch.
 `readiness_report.json` records before/after scheduled seconds, median readiness
 seconds and their preflight sum. Missing VALID readiness samples remain unproven.

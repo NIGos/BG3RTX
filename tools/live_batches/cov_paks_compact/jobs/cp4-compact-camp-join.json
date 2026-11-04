@@ -47,7 +47,7 @@
   "window_mode": "visible_unfocused_fg",
   "name": "cp4-compact-camp-join",
   "live_batch": "cov-paks-compact",
-  "timeout": 1744.0,
+  "timeout": 970.0,
   "args": [
     "-RealPresent",
     "-Move",
@@ -95,13 +95,13 @@
           0,
           0
         ],
-        "fps": 12.39669421487566,
-        "windows": 115,
+        "fps": 12.106537530270467,
+        "windows": 110,
         "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
@@ -121,8 +121,9 @@
           0
         ],
         "fps": 7.562389715155868,
-        "windows": 14,
+        "windows": 17,
         "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
@@ -143,9 +144,8 @@
           0
         ],
         "fps": 6.949270326617158,
-        "windows": 3,
+        "windows": 2,
         "logs": [
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
         ]
@@ -154,7 +154,7 @@
     "trace_export": {
       "seconds": 0.3169999999954598,
       "quantile": 0.95,
-      "samples": 429,
+      "samples": 431,
       "maximum": 0.43699999999807915
     }
   }

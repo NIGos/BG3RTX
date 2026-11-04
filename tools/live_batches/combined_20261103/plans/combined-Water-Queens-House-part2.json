@@ -1027,7 +1027,7 @@
       "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0,
+    "wait_log_timeout": 2.0,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
@@ -1082,7 +1082,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "b2-wf9-s8-compose-shift--energy-static-2",
@@ -1108,7 +1108,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "b2-wf9-s8-compose-shift--energy-static-3",
@@ -1134,7 +1134,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "b2-wf9-s8-compose-shift--diag-view-static",
@@ -1157,7 +1157,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "b2-wf9-s8-compose-shift--cost-turn-0",
@@ -1245,7 +1245,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "b2-wf9-s8-compose-shift--snap-turn-1",
@@ -1317,7 +1317,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "b2-wf9-s8-compose-shift--snap-turn-2",
@@ -1389,7 +1389,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "b2-wf9-s8-compose-shift--snap-turn-3",
@@ -1460,6 +1460,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   }
 ]

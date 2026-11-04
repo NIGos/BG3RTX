@@ -54,7 +54,7 @@
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0,
+    "wait_log_timeout": 2.0,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
@@ -80,7 +80,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "observe-off",
@@ -103,7 +103,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "observe-on-repeat",
@@ -126,7 +126,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "restore",
@@ -149,6 +149,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   }
 ]

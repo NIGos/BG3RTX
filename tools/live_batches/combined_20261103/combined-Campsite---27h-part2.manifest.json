@@ -12,7 +12,7 @@
         "session": false,
         "traces": 0,
         "hold": 90,
-        "timeout": 1276.0,
+        "timeout": 1280,
         "repeat": 1,
         "live_batch": "gpu-opt2",
         "window_mode": "visible_unfocused_fg",
@@ -166,13 +166,13 @@
                 0,
                 0
               ],
-              "fps": 12.39669421487566,
-              "windows": 115,
+              "fps": 12.106537530270467,
+              "windows": 110,
               "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
@@ -192,8 +192,9 @@
                 0
               ],
               "fps": 7.562389715155868,
-              "windows": 14,
+              "windows": 17,
               "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
@@ -214,22 +215,21 @@
                 0
               ],
               "fps": 6.949270326617158,
-              "windows": 3,
+              "windows": 2,
               "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
               ]
             }
           ],
           "trace_export": {
-            "seconds": 0.3169999999954598,
+            "seconds": 0.31900000000041473,
             "quantile": 0.95,
-            "samples": 439,
+            "samples": 411,
             "maximum": 0.43699999999807915
           }
         },
-        "estimated_phase_seconds": 241.0
+        "estimated_phase_seconds": 244.6
       },
       "plan": [
         {
@@ -253,7 +253,7 @@
           "wait_log": [
             "gi: trace pass .*GPU median"
           ],
-          "wait_log_timeout": 14.680000000000291
+          "wait_log_timeout": 14.911999999996624
         },
         {
           "label": "warmup-scaled",
@@ -276,7 +276,7 @@
         {
           "label": "settle-off-a",
           "kind": "static",
-          "seconds": 3.6,
+          "seconds": 3.7,
           "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
           "wait_log": [
             "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -292,7 +292,7 @@
         {
           "label": "cost-off-a",
           "kind": "static",
-          "seconds": 49.5,
+          "seconds": 50.6,
           "set": "qa_exposure_hold=1"
         },
         {
@@ -309,7 +309,7 @@
         {
           "label": "settle-on",
           "kind": "static",
-          "seconds": 3.6,
+          "seconds": 3.7,
           "set": "rt_trace_scale=0.5,qa_exposure_hold=1",
           "wait_log": [
             "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -325,7 +325,7 @@
         {
           "label": "cost-on",
           "kind": "static",
-          "seconds": 49.5,
+          "seconds": 50.6,
           "set": "qa_exposure_hold=1"
         },
         {
@@ -342,7 +342,7 @@
         {
           "label": "settle-off-b",
           "kind": "static",
-          "seconds": 3.6,
+          "seconds": 3.7,
           "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
           "wait_log": [
             "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -358,7 +358,7 @@
         {
           "label": "cost-off-b",
           "kind": "static",
-          "seconds": 49.5,
+          "seconds": 50.6,
           "set": "qa_exposure_hold=1"
         },
         {
@@ -397,7 +397,7 @@
       "wait_log": [
         "gi: trace pass .*GPU median"
       ],
-      "wait_log_timeout": 14.680000000000291
+      "wait_log_timeout": 14.911999999996624
     },
     {
       "label": "b1-go2-camp-high--warmup-scaled",
@@ -420,7 +420,7 @@
     {
       "label": "b1-go2-camp-high--settle-off-a",
       "kind": "static",
-      "seconds": 3.6,
+      "seconds": 3.7,
       "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
       "wait_log": [
         "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -436,7 +436,7 @@
     {
       "label": "b1-go2-camp-high--cost-off-a",
       "kind": "static",
-      "seconds": 49.5,
+      "seconds": 50.6,
       "set": "qa_exposure_hold=1"
     },
     {
@@ -453,7 +453,7 @@
     {
       "label": "b1-go2-camp-high--settle-on",
       "kind": "static",
-      "seconds": 3.6,
+      "seconds": 3.7,
       "set": "rt_trace_scale=0.5,qa_exposure_hold=1",
       "wait_log": [
         "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -469,7 +469,7 @@
     {
       "label": "b1-go2-camp-high--cost-on",
       "kind": "static",
-      "seconds": 49.5,
+      "seconds": 50.6,
       "set": "qa_exposure_hold=1"
     },
     {
@@ -486,7 +486,7 @@
     {
       "label": "b1-go2-camp-high--settle-off-b",
       "kind": "static",
-      "seconds": 3.6,
+      "seconds": 3.7,
       "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
       "wait_log": [
         "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -502,7 +502,7 @@
     {
       "label": "b1-go2-camp-high--cost-off-b",
       "kind": "static",
-      "seconds": 49.5,
+      "seconds": 50.6,
       "set": "qa_exposure_hold=1"
     },
     {

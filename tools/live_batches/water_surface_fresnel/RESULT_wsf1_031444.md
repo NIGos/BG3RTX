@@ -1,0 +1,16 @@
+# wsf1 03:14:44, 2026-11-04: partial evidence, run INVALID
+- Source: captures/queue/logs/wsf1-s8-interface-column.1.031444.log and sibling runner; six shots in test-main/captures/20261104-031651 through 031720.
+- Stopped at phase 5, partition-static-2: 1 abort / (234,155 rays/frame x 120 frames) = 3.559e-8; invalid 0. Exact-zero abort gate rejected a bounded traversal event.
+- Usable complete ON interval, 03:17:06.320: coverage-weighted owned 6,914,793; marked owned 6,919,213; partial 6,919,213, zero/full 0/0.
+- Foam texture and edge/flow mask sources each 6,919,213; native/missing FS marker 25,820,739; unmarked/layout, FS spec off, compose spec off all 0.
+- ON partition invalid 0; energy partition checked within 8 float eps. This checks coefficient algebra, not physical image quality or equal brightness.
+- Complete OFF0 / ON1 / OFF2 compose medians: 0.433 / 0.458 / 0.433 ms; copy 0.022 / 0.022 / 0.022 ms; dispatch 0.410 / 0.435 / 0.410 ms.
+- Compose ON delta +0.025 ms versus either OFF; p90 0.435 / 0.461 / 0.435 ms. Usable static compose cost only; extra native/clean forward FS evaluation is outside this timer.
+- First straddling compose samples 0.456 / 0.456 / 0.434 ms are excluded; their mixed partition counts are not ON/OFF evidence.
+- Usable post-water RR float luminance pairs from dumps.json, OFF0: 0.1664516994 / 0.1656467072; ON1: 0.1709411180 / 0.1688758878; OFF2: 0.1658093026 / 0.1667199496.
+- Float RGB means OFF0: (0.187318, 0.160306, 0.165887) / (0.186106, 0.159580, 0.165498).
+- Float RGB means ON1: (0.192572, 0.164740, 0.168674) / (0.189982, 0.162731, 0.167597).
+- Float RGB means OFF2: (0.186302, 0.159730, 0.165687) / (0.187321, 0.160640, 0.166285).
+- All six selected full-resolution post-water float colour records have nonfinite 0; lighting pre-exposure 0.0003021 in all six. Values above are pre-exposed, not PNG means.
+- Shading-model mean may change; these shots alone do not qualify appearance/reference agreement. No equal-mean acceptance claim.
+- Not usable: ON3 repeat, all four turn-cost windows and complete batch post gate (never reached); no whole-water/forward-pass cost claim or feature promotion.

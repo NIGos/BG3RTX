@@ -65,6 +65,7 @@ Prints one line per failure and exits 1 if any gate fails; exit 0 and "every-win
 """
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -210,9 +211,30 @@ def line_matches(gate, line):
     required_if requires this gate only with complete matching trigger periods in
     the same window. A separate gate must require the trigger producer.
     first_only judges the first selected startup line.
+    share: regex group 1 / product(remaining groups + offsets) <= max on
+    every line, in addition to match/items. Missing or nonpositive denominators fail.
     """
     if not re.search(gate.get("match", ""), line):
         return False
+    share = gate.get('share')
+    if share:
+        # Group 1 is the numerator; remaining groups multiply to its denominator.
+        # Offsets allow a conservative lower bound for rounded counters.
+        found = re.search(share['pattern'], line)
+        if not found:
+            return False
+        try:
+            values = [float(v) for v in found.groups()]
+            offsets = share.get('offsets', [0] * (len(values) - 1))
+            factors = [v + o for v, o in zip(values[1:], offsets)]
+            denominator = math.prod(factors)
+            if (len(offsets) != len(values) - 1 or not all(math.isfinite(v) and v >= 0 for v in values)
+                    or not all(v > 0 for v in factors) or not math.isfinite(denominator)
+                    or not 0 <= float(share['max']) < math.inf
+                    or values[0] > float(share['max']) * denominator):
+                return False
+        except (ValueError, TypeError, OverflowError):
+            return False
     rule = gate.get("items")
     if not rule:
         return True

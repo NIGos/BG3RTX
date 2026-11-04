@@ -301,7 +301,9 @@ def main(argv=None):
     groups = {}
     for path in a.jobs:
         job, plan, _ = flow.load_job(path)
-        flow.pipeline_readiness.apply(job, plan)
+        # Keep source slices exact for extraction and their independent lint.
+        # retime below applies readiness to the composed plan; applying it here
+        # also resets learned source timeouts to 180 seconds without retiming.
         groups.setdefault(job["save"], []).append((path, job, plan))
     names = {j["name"] for sources in groups.values() for _, j, _ in sources}
     if any(names.intersection(j.get("requires_success_of", []))

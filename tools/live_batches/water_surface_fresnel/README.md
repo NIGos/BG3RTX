@@ -19,6 +19,16 @@ Actual FS plus compose cost is unmeasured: ON evaluates native and clean shading
 Compose GPU timing excludes the extra forward FS evaluation; report its measurement limit.
 Coverage histogram bins use ceil(255c); bin 255 includes near-full coverage. Radiance uses float c. Last phase restores key 0 and releases exposure hold.
 
+Compose aborts use the maximum share from VALID compose intervals with invalid 0:
+151 / (60 x 270255.5) = 9.312175577e-6, 2,529 intervals across 89 VALID logs.
+The witness is hq1-s8-water-fg2.1.053911.log. The half-ray subtraction bounds
+rounding of the producer's %.0f rays/frame counter (core/water.cpp); there is no
+extra tolerance. The generator refreshes this derivation in predicted.json.
+Every selected interval must meet aborted / (frames x (rays/frame - 0.5)) <= bound;
+invalid still requires exactly zero. Missing/zero denominators fail closed.
+The stopped wsf1's one abort has share 3.559e-8. See
+[partial result](RESULT_wsf1_031444.md); this does not qualify the feature.
+
 Offline checks: `python tools/live_batches/live_flow.py tools/live_batches/water_surface_fresnel`
 and `powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/water_surface_fresnel/dryrun.ps1`.
 Dryrun uses scratch fake roots only. Material proof: [evidence](../../../docs/evidence/water-foam-coverage.md).
