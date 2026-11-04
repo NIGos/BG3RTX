@@ -14,7 +14,7 @@ Per family with >= 1 bright px per frame, from the `[em] ours/game per family` l
   pass when |ln r| <= t sigma, t two-sided at ALPHA_FW / families (Bonferroni, as
   scripts/qa/thresholds.py), with the Welch-Satterthwaite degrees of freedom of sigma: the
   temporal term is estimated from W - 1 window differences, the counting term is known.
-  Fewer than 2 windows after the first: not evaluated (no temporal spread measured).
+  Fewer than 2 windows after the first: INVALID (no temporal spread measured).
 
     python -m scripts.qa.em_gate captures/queue/logs/em10-af-check.*.log ...
 
@@ -50,21 +50,22 @@ def windows(path):
     one, as in older logs; a job must keep that line in its patterns)."""
     out = []
     slices = 1
-    for line in open(path, encoding="utf-8", errors="replace"):
-        m = slice_pat.search(line)
-        if m:
-            slices = max(int(m.group(1)), 1)
-            continue
-        if "[em] ours/game per family" not in line:
-            continue
-        fam = {}
-        for m in pat.finditer(line):
-            f, name, r, rb, nb, _, approx = m.groups()
-            fam[f] = (name, float(rb) if (rb and not approx) else float(r), int(nb) * slices, bool(approx))
-        if "(part 1/" in line or "(part" not in line:
-            out.append(fam)
-        else:
-            out[-1].update(fam)
+    with open(path, encoding="utf-8", errors="replace") as source:
+        for line in source:
+            m = slice_pat.search(line)
+            if m:
+                slices = max(int(m.group(1)), 1)
+                continue
+            if "[em] ours/game per family" not in line:
+                continue
+            fam = {}
+            for m in pat.finditer(line):
+                f, name, r, rb, nb, _, approx = m.groups()
+                fam[f] = (name, float(rb) if (rb and not approx) else float(r), int(nb) * slices, bool(approx))
+            if "(part 1/" in line or "(part" not in line:
+                out.append(fam)
+            else:
+                out[-1].update(fam)
     return out
 
 
@@ -74,18 +75,25 @@ def evaluate(path):
     for i, w in enumerate(ws):
         for f, v in w.items():
             fams.setdefault(f, []).append((i, v))
-    gated = {f: v for f, v in fams.items() if mean(x[1][2] for x in v) >= 1 and all(x[1][1] > 0 for x in v)}
+    gated = {f: v for f, v in fams.items() if mean(x[1][2] for x in v) >= 1}
     z = NormalDist().inv_cdf(1 - ALPHA_FW / (2 * max(len(gated), 1)))
     print(f"{path}: {len(ws)} windows, {len(gated)} families gated, z = {z:.2f}")
-    ok_all = True
+    ok_all = bool(gated)
+    if not gated:
+        print("  INVALID: no bright-family evidence")
     for f, v in sorted(gated.items()):
         name, approx = v[-1][1][0], v[-1][1][3]
+        if any(x[1][1] <= 0 or not math.isfinite(x[1][1]) for x in v):
+            print(f"  {f} {name}: nonpositive or nonfinite ratio FAIL")
+            ok_all = False
+            continue
         lr = [math.log(x[1][1]) for x in v]
         later = lr[1:]
         s_w = stdev(later) if len(later) > 1 else float("nan")
         n = mean(x[1][2] for x in v)
         if math.isnan(s_w):
-            print(f"  {f} {name}: fewer than 2 windows after the first, not evaluated")
+            print(f"  {f} {name}: INVALID: fewer than 2 windows after the first")
+            ok_all = False
             continue
         var_t = s_w ** 2 if approx else s_w ** 2 / len(later)
         stat = lr[-1] if approx else mean(later)
@@ -101,7 +109,7 @@ def evaluate(path):
 
 
 if __name__ == "__main__":
-    ok = True
+    ok = bool(sys.argv[1:])
     for p in sys.argv[1:]:
         ok &= evaluate(p)
     sys.exit(0 if ok else 1)

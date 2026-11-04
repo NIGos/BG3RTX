@@ -83,14 +83,61 @@ def outline(img, mask):
     return o
 
 
+def nonfinite_check(traces):
+    """Compare each dump to matching OFF dumps, including count and image support."""
+    def counts(trace):
+        occurrences = {}
+        result = {}
+        for dump in trace.dumps.values():
+            signature = (dump["fmt"], dump["pass_fs"], dump.get("slot"), dump.get("w"), dump.get("h"))
+            ordinal = occurrences.get(signature, 0)
+            occurrences[signature] = ordinal + 1
+            result[(signature, ordinal)] = int(dump.get("nonfinite") or 0)
+        return result
+    by = {n: counts(t) for n, t in traces.items()}
+    baseline = {}
+    for n, dumps in by.items():
+        if n.startswith("off"):
+            for key, count in dumps.items():
+                baseline[key] = max(baseline.get(key, 0), count)
+    excess = {n: sum(max(0, count - baseline.get(key, 0)) for key, count in dumps.items())
+              for n, dumps in by.items() if not n.startswith("off")}
+    worst = max(excess.values(), default=0)
+    return {"detector": "nonfinite", "effect": "all", "buffer": "every dump", "on": "*", "off": "*",
+            "score": worst, "threshold": 0, "pass": worst == 0,
+            "unit": "values above matching OFF dump counts (max over ON traces)",
+            "metrics": {"per_trace": {n: t.nonfinite() for n, t in traces.items()}, "excess": excess,
+                        "dumps": {n: t.nonfinite_by_dump() for n, t in traces.items()}}}
+
+
 # ---------------------------------------------------------------- scene analysis
 def analyze_scene(d: Path, pool):
     t0 = time.time()
     meta = json.loads((d / "run.json").read_text())
     raw = d / "raw"
-    # warm* (--warmup) only let the scene settle after the load: never analysed.
-    traces = {name: Trace(raw / sub) for name, sub in meta["traces"].items()
-              if not name.startswith("warm") and (raw / sub / "dumps.json").exists()}
+    # Validate planned evidence before analysis; missing captures cannot qualify a run.
+    expected = {name for name, _ in meta.get("phases", []) if not name.startswith("warm")}
+    expected.update(name for name in meta["traces"] if not name.startswith("warm"))
+    expected.update(("on0", "off0"))
+    traces, missing = {}, []
+    for name in sorted(expected):
+        sub = meta["traces"].get(name)
+        if sub is None or not (raw / sub / "dumps.json").is_file():
+            missing.append(name)
+            continue
+        try:
+            trace = Trace(raw / sub)
+            if trace.final_key() is None:
+                raise ValueError("no final frame")
+            for dump in trace.dumps.values():
+                image = trace.path / dump["png"]
+                if not image.is_file() and not image.with_suffix(".f32").is_file():
+                    raise ValueError(f"missing image {dump['png']}")
+            traces[name] = trace
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            missing.append(f"{name}: {error}")
+    if any(sum(n.startswith(prefix) for n in traces) < 2 for prefix in ("on", "off")):
+        missing.append("temporal comparison requires at least 2 ON and 2 OFF captures")
     fr = {n: Frame(t) for n, t in traces.items()}
     crops = d / "crops"
     if crops.exists():
@@ -101,8 +148,12 @@ def analyze_scene(d: Path, pool):
            "traces": list(traces), "checks": [], "crops": [], "notes": [],
            # Layer counters that explain RT geometry artifacts (alpha-test fallbacks, dropped draws).
            "log": [l for l in meta.get("log_tail", []) if "[alpha]" in l or "RT capture" in l][-2:]}
-    if "on0" not in fr:
-        res["notes"].append("no all-on trace: nothing to analyse")
+    if missing:
+        res["invalid"] = missing
+        res["run_ok"] = False
+        res["notes"].extend(missing)
+        res["summary"] = summarize(res)
+        (d / "result.json").write_text(json.dumps(res, indent=1, default=_json))
         return res
 
     # Load every image the detectors need, in parallel (PNG decode releases the GIL).
@@ -571,19 +622,7 @@ def analyze_scene(d: Path, pool):
                                          "buffer": "debug diffuse", "bbox": g["bbox"], "shape": list(lmean.shape), **info})
 
     # ---- non-finite values
-    # A dump (pass, format) that holds non-finite values with every RT effect off too is the
-    # game's own (S6: the D32F depth of 76433aef, ~5000 per trace in on* and off* alike):
-    # reported, not scored. Scored: those only seen with RT on.
-    nf = {n: t.nonfinite() for n, t in traces.items()}
-    by = {n: t.nonfinite_by_dump() for n, t in traces.items() if nf[n]}
-    game_sigs = {(v[0], v[1]) for n, d in by.items() if n.startswith("off") for v in d.values()}
-    ours = {n: sum(v[2] for v in d.values() if (v[0], v[1]) not in game_sigs) for n, d in by.items()}
-    worst = max(ours.values()) if ours else 0
-    res["checks"].append({"detector": "nonfinite", "effect": "all", "buffer": "every dump", "on": "*", "off": "*",
-                          "score": worst, "threshold": 0, "pass": worst == 0,
-                          "unit": "values (max over traces), excluding dumps non-finite with RT off",
-                          "metrics": {"per_trace": nf, "game_owned": sorted(f"{p} {f}" for f, p in game_sigs),
-                                      "dumps": by}})
+    res["checks"].append(nonfinite_check(traces))
 
     # ---- temporal stability
     # Sets: on* (all on), off* (all RT off), nogi* (all on but the GI neutral: --temporal-gi).
@@ -623,6 +662,10 @@ def analyze_scene(d: Path, pool):
                       f"{meta['scene']} flicker ({eff}) at x{x0}-{x1} y{y0}-{y1}: {info}", crops / name)
                 res["crops"].append({"file": f"crops/{name}", "detector": "flicker", "effect": eff, "buffer": "final",
                                      "bbox": g["bbox"], "shape": list(s_on.shape), **info})
+
+    else:
+        res.setdefault("invalid", []).append("same-view temporal comparison requires 2 ON and 2 OFF captures")
+        res["run_ok"] = False
 
     # ---- reference (optional)
     if "ref" in data:
@@ -702,7 +745,9 @@ def _json(o):
 def summarize(res):
     fails = [c for c in res["checks"] if not c["pass"] and c.get("gate", True)]
     warns = [c for c in res["checks"] if not c["pass"] and not c.get("gate", True)]
-    if not res["run_ok"]:
+    if res.get("invalid"):
+        head = "INVALID: " + "; ".join(res["invalid"])
+    elif not res["run_ok"]:
         head = "RUN INCOMPLETE"
     else:
         head = "FAIL" if fails else "PASS"
@@ -803,8 +848,7 @@ def analyze_all(dirs, out: Path, keep_raw=False):
                 if (d / "result.json").exists():
                     results.append(json.loads((d / "result.json").read_text()))
                     continue
-                print(f"{d}: no raw captures")
-                continue
+                print(f"{d}: no raw captures; validating missing evidence")
             r = analyze_scene(d, pool)
             results.append(r)
             # A scene whose run stalled or moved has no summary, only an error.

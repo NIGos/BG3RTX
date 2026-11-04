@@ -25,7 +25,12 @@ function Enter-VsShell {
 }
 
 function Invoke-Build([string]$target) {
-  if (-not (Test-Path (Join-Path $build "build.ninja"))) {
+  $cache = Join-Path $build "CMakeCache.txt"
+  $cachedConfig = if (Test-Path $cache) {
+    $configMatch = Select-String -LiteralPath $cache -Pattern '^CMAKE_BUILD_TYPE:STRING=(.*)$'
+    if ($configMatch) { $configMatch.Matches[0].Groups[1].Value } else { "" }
+  } else { "" }
+  if (-not (Test-Path (Join-Path $build "build.ninja")) -or $cachedConfig -cne $Config) {
     cmake -S $root -B $build -G Ninja "-DCMAKE_BUILD_TYPE=$Config"
     if ($LASTEXITCODE) { throw "configure failed" }
   }

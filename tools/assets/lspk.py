@@ -14,6 +14,8 @@ Files are only ever opened for reading; nothing here writes to the game director
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import time
 import os
 import struct
 from dataclasses import dataclass
@@ -132,8 +134,12 @@ class PackageSet:
                 continue  # a numbered part of another package
             try:
                 self.packages.append(Package(os.path.join(data_dir, fn)))
-            except PackageError:
-                continue
+            except PackageError as exc:
+                raise PackageError(f"rejected package {fn}: {exc}") from exc
+        if wanted is not None:
+            missing = wanted - {os.path.basename(p.path).lower() for p in self.packages}
+            if missing:
+                raise PackageError(f"required packages missing: {', '.join(sorted(missing))}")
         self.packages.sort(key=lambda p: (p.priority, _patch_rank(os.path.basename(p.path)), os.path.basename(p.path).lower()))
         self._index: dict[str, tuple[Package, Entry]] | None = None
 
@@ -167,20 +173,35 @@ class PackageSet:
     def owner(self, name: str) -> str:
         return os.path.basename(self.index[name][0].path)
 
-    def fingerprint(self) -> list[dict]:
-        """Name, size and modification time of every package read (for the manifest)."""
+    def fingerprint(self, log=print) -> list[dict]:
+        """Manifest metadata plus a content hash of every package part."""
         out = []
+        total = sum(os.path.getsize(p.part_path(i)) for p in self.packages for i in range(max(1, p.num_parts)))
+        done, started = 0, time.monotonic()
+        last = started
         for p in self.packages:
+            sha = hashlib.sha256()
+            for part in range(max(1, p.num_parts)):
+                with open(p.part_path(part), "rb") as source:
+                    while chunk := source.read(1024 * 1024):
+                        sha.update(chunk)
+                        done += len(chunk)
+                        now = time.monotonic()
+                        if now - last >= 30:
+                            rate = done / max(now - started, 1e-9)
+                            log(f"package hashing: {done}/{total} bytes, {rate:.0f} B/s, ETA {(total-done)/max(rate,1):.0f}s, failures 0")
+                            __import__("sys").stdout.flush()
+                            last = now
             st = os.stat(p.path)
             out.append({"name": os.path.basename(p.path), "size": st.st_size, "mtime": int(st.st_mtime),
-                        "priority": p.priority, "md5": p.md5.hex()})
+                        "priority": p.priority, "md5": p.md5.hex(), "sha256": sha.hexdigest()})
         return out
 
 
-def _patch_rank(fn: str) -> tuple[int, int]:
+def _patch_rank(fn: str) -> tuple:
     """Patch and hotfix packages load after the base game; HotFix10 after HotFix9."""
     low = fn.lower()
     if not low.startswith("patch"):
-        return (0, 0)
+        return (0, ())
     digits = [int(t) for t in "".join(c if c.isdigit() else " " for c in low).split()]
-    return (1, digits[-1] if digits else 0)
+    return (1, tuple(digits))

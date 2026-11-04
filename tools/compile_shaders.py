@@ -81,15 +81,15 @@ references = [(spv(f), ("RT_NATIVE_TILESET=1" in defines(f) or "RT_SPEC_NATIVE=1
               for f, rc, _ in res if not rc and f.partition("?")[0].rsplit("/", 1)[-1] in
                   ("rt_hit_direct.hlsl", "rt_hit_two_bounce.hlsl")]
 checker = root / "bin" / "native_hit_gi_bindings_test.exe"
-if (material_gi or references or sun_gi) and checker.exists():
+if (material_gi or references or sun_gi or em_gi) and checker.exists():
     for tileset in (False, True):
         gi = [p for p, t in material_gi if t == tileset]
         sgi = [p for p, t in sun_gi if t == tileset]
         refs = [p for p, t in references if t == tileset]
-        if not gi and not refs and not sgi:
-            continue
         egi = [p for p, t, s in em_gi if t == tileset and not s]
         esgi = [p for p, t, s in em_gi if t == tileset and s]
+        if not gi and not refs and not sgi and not egi and not esgi:
+            continue
         args = [*(["--tileset"] if tileset else []), *gi, "--sun", *sgi,
                 "--em", *esgi, "--nosun", *egi, "--reference", *refs]
         # A response file (one argument per line, expanded in place by the checker): every module
@@ -102,8 +102,9 @@ if (material_gi or references or sun_gi) and checker.exists():
             res.append(("GI host descriptor interface", result.returncode, result.stdout + result.stderr))
         else:
             print(f"GI/reference host descriptor interface checked: {len(gi)} GI + {len(sgi)} GI sun + {len(egi) + len(esgi)} GI emission + {len(refs)} reference SPIR-V modules; native tileset={tileset}")
-elif material_gi or references or sun_gi:
-    print("SKIP GI/reference host descriptor interface: build native_hit_gi_bindings_test first; shader compilation alone is not interface validation")
+elif material_gi or references or sun_gi or em_gi:
+    res.append(("GI/reference host descriptor interface", 1,
+                "missing native_hit_gi_bindings_test; build the checker before qualification"))
 # rf_hit_shade (common/native_hit_rf_bindings.h): each compiled tier (b) module against its layout.
 rf_hit = [(f, spv(f)) for f, rc, _ in res if not rc and
           f.partition("?")[0] in ("gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
@@ -125,10 +126,11 @@ if rf_hit and rf_checker.exists():
     if not any(r[1] and r[0].startswith("rf hit shade") for r in res):
         print(f"rf hit shade descriptor interface checked: {len(rf_hit)} SPIR-V modules")
 elif rf_hit:
-    print("SKIP rf hit shade descriptor interface: build native_hit_rf_bindings_test first")
+    res.append(("rf hit shade descriptor interface", 1,
+                "missing native_hit_rf_bindings_test; build the checker before qualification"))
 if verify:
     for r in verify_pp(tree, files, verify, tool, cache):
-        res.append(("preprocessed cache key self-check " + r, 1, "cached SPIR-V differs from a fresh compile"))
+        res.append(("preprocessed cache key self-check " + r, 1, "compile failed or cached SPIR-V differs from a fresh compile"))
 bad = [r for r in res if r[1]]
 for f, rc, msg in bad:
     print(f"FAIL {f}")
