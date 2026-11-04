@@ -60,15 +60,15 @@ struct CoveragePeriod {
 std::unordered_map<uint64_t, CoveragePeriod> g_coverage_period;
 uint32_t g_ambiguous = 0;
 uint64_t g_fallbacks = 0;
-bool g_depth_fallback_ready = true; // any uncloneable native hair pipeline forbids later depth drops
 hair_primary::DrawSlots g_slots, g_live_slots;
 std::unordered_set<uint64_t> g_without_slot;
 uint64_t g_published = 0;                                     // frame_index + 1 of the last publish with grooms
-struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, refused = 0, publishes = 0, orphan = 0; } g_st;
-// Keys whose prepass card depth went (each G-buffer pass after it must swap them: else counted as orphan).
+struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, publishes = 0, orphan = 0; } g_st;
+hair_primary::PeriodFailures g_failures;
+// Keys whose prepass card depth went; native draws must restore it during the frame latch.
 hair_primary::DepthLatch g_depth;
-std::unordered_set<uint64_t> g_depth_resolved, g_depth_safe_keys, g_depth_failed;
-struct DepthOrphan { uint64_t key, prepass, drop; };
+std::unordered_set<uint64_t> g_depth_safe_keys;
+struct DepthOrphan { uint64_t key, prepass, draw, pipeline; const char* reason; };
 DepthOrphan g_depth_orphans[4] = {};
 uint32_t g_depth_orphan_count = 0;
 uint64_t g_logged_pipes = 0;
@@ -76,7 +76,7 @@ uint64_t g_logged_pipes = 0;
 // (rt/hair_primary_count.hlsl) at the next publish, copied to a host-visible ring and read kCountSlots - 1 publishes
 // later. With them the keys and whether each one's G-buffer variant ran in the counted frame.
 constexpr uint32_t kCountSlots = 4;
-struct CountSlot { uint64_t frame = 0, gframe = 0; bool valid = false; uint32_t tag = 0; uint64_t keys[hair_primary::kMaxGrooms] = {};
+struct CountSlot { uint64_t frame = 0, gframe = 0, rec = 0; bool valid = false; uint32_t tag = 0; uint64_t keys[hair_primary::kMaxGrooms] = {};
                    uint8_t lods[hair_primary::kMaxGrooms] = {};
                    bool drew[hair_primary::kMaxGrooms] = {}; VkBuffer rb = VK_NULL_HANDLE; VkDeviceMemory rb_mem = VK_NULL_HANDLE;
                    const uint32_t* map = nullptr; };
@@ -94,7 +94,7 @@ uint8_t g_last_lods[hair_primary::kMaxGrooms] = {};
 // frame its draw key, LOD, strand pixels and pool-bound refusals.
 struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; uint8_t lods[hair_primary::kMaxGrooms] = {};
                    uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {};
-                   uint32_t traced = 0, hit = 0, tag = 0, evidence_tag = 0, tag_totals[hair_primary::kCountTags] = {};
+                   uint32_t traced = 0, hit = 0, tag = 0, evidence_tag = 0, tag_totals[hair_primary::kCountTags] = {}, accepted_totals[hair_primary::kCountTags] = {};
                    uint64_t evidence_frame = 0;
                    float ray[16] = {}; };
 CountSeen g_seen;
@@ -244,11 +244,12 @@ bool count_pipeline() {
 // g_mu held, outside a render pass, before this publish's header update and SwapGate::publish. Reads the oldest
 // slot's counts into the gate, then counts the previous frame's pixel record into it. False: no feedback possible
 // (the caller then stops every swap: fail safe).
-bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
+bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
   DeviceData* dd = g_dd;
   CountSlot& s = g_cnt[g_cnt_next];
+  if (s.valid && hair_primary::readback_state(s.frame, life_gpu_done(), bvh_rec_submitted(s.rec)) == hair_primary::ReadbackState::Drop) s.valid = false;
   if (s.valid) {
-    if (!(life_gpu_done() > s.frame + 1)) return true;   // still in flight: no new count this frame
+    if (hair_primary::readback_state(s.frame, life_gpu_done(), bvh_rec_submitted(s.rec)) == hair_primary::ReadbackState::Wait) return true;   // still in flight: no new count this frame
     uint32_t total = 0, other_total = 0, other[hair_primary::kMaxGrooms];
     g_seen.frame = s.frame;
     g_seen.traced = s.map[hair_primary::kTracedOffset / 4];
@@ -272,8 +273,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
       uint32_t totals[hair_primary::kCountTags] = {};
       const uint32_t* tc = s.map + hair_primary::kTagCountOffset / 4;
       const uint32_t* cc = s.map + hair_primary::kCardCountOffset / 4;
-      for (uint32_t j = 0; j < hair_primary::kCountTags; ++j)
-        for (uint32_t k = 0; k < 64; ++k) totals[j] += cc[j * 64 + k];
+      hair_primary::count_marker_totals(cc, tc, totals, g_seen.accepted_totals);
       std::memcpy(g_seen.tag_totals, totals, sizeof totals);
       const int j = hair_primary::newest_counted_tag(totals);
       bool ambiguous = false;
@@ -347,7 +347,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
     s.lods[k] = g_last_lods[k];
     s.drew[k] = g_last_keys[k] && g_gate.gbuffer_now.count(g_last_keys[k]) != 0;   // the counted frame's G-buffer
   }
-  s.frame = now;
+  s.frame = now; s.rec = rec;
   s.tag = tag;
   s.valid = true;
   g_cnt_next = (g_cnt_next + 1) % kCountSlots;
@@ -448,7 +448,7 @@ void observe_depth(uint64_t image, uint64_t now) {
   g_gate.clear();
   g_coverage.clear();
   g_depth_safe_keys.clear();
-  g_depth = {}; g_depth_resolved.clear(); g_depth_failed.clear(); g_depth_orphan_count = 0;
+  g_depth = {}; g_depth_orphan_count = 0;
 
   for (auto& gf : g_gb_frames) gf = GbFrame{};
 
@@ -516,7 +516,7 @@ void coverage_log(uint64_t now) {
 void hair_primary_stats_reset() {
   std::lock_guard<std::mutex> lock(g_mu);
   g_stats_start = frame_index();
-  g_st = Stats{}; g_coverage_period.clear();
+  g_st = Stats{}; g_failures.reset(); g_depth_orphan_count = 0; g_coverage_period.clear();
   g_ambiguous = 0; g_fallbacks = 0; g_without_slot.clear();
   g_adjacent_window = 0; g_transmit_rows = 0; g_ms_sum = 0; g_ms_frames = 0;
   std::fill_n(g_slot_frame, kTimeSlots, uint64_t(0));
@@ -562,10 +562,9 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_draw_variants.clear();
   for (auto& [game, v] : g_fallback) dd->vk.DestroyPipeline(dd->device, v, nullptr);
   g_fallback.clear();
-  g_depth_fallback_ready = true;
   g_coverage.clear();
   g_depth_safe_keys.clear();
-  g_depth = {}; g_depth_resolved.clear(); g_depth_failed.clear(); g_depth_orphan_count = 0;
+  g_depth = {}; g_depth_orphan_count = 0;
   g_coverage_period.clear();
   for (auto& st : g_staged) st = StagedHeader{};
   g_staged_next = 0;
@@ -667,9 +666,8 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
         g_fallback[out[i]] = fallback;
       }
     }
-    if (pass == Pass::Gbuffer && !g_fallback.count(out[i])) g_depth_fallback_ready = false;
     if (library || dynamic_depth || !ds) {
-      if (g_st.refused++ < 8)
+      if (g_failures.refused++ < 8)
         log("[hair primary] FS %016llx pipeline refused (%s): its draws keep the cards", (unsigned long long)hash,
             library ? "pipeline library" : dynamic_depth ? "dynamic depth state" : "no depth state");
       continue;
@@ -684,7 +682,7 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       Bg3ShaderBlob blob{};
       const char* file = pass == Pass::Gbuffer ? "rt/hair_primary_gbuffer.hlsl" : "rt/hair_primary_velocity.hlsl";
       if (!shader_get(file, "main", "ps_6_6", &blob)) {
-        if (g_st.refused++ < 8) log("[hair primary] strand fragment shader unavailable: hair keeps its cards");
+        if (g_failures.refused++ < 8) log("[hair primary] strand fragment shader unavailable: hair keeps its cards");
         continue;
       }
       VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
@@ -716,7 +714,7 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     const VkResult r = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &v);
     if (mod) vk.DestroyShaderModule(device, mod, nullptr);
     if (r != VK_SUCCESS || !v) {
-      if (g_st.refused++ < 8) log("[hair primary] variant pipeline creation failed (%d): hair keeps its cards", int(r));
+      if (g_failures.refused++ < 8) log("[hair primary] variant pipeline creation failed (%d): hair keeps its cards", int(r));
       continue;
     }
     auto it = g_variant.find(out[i]);
@@ -870,17 +868,8 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
     std::lock_guard<std::mutex> lock(g_mu);
     if (g_dd) {
       observe_depth(uint64_t(p.depth_image), frame_index());
-      if (!p.color_count && p.width == g_px_w && p.height == g_px_h && g_depth.gbuffer_seen) {
-        for (uint64_t key : g_depth_resolved) if (!g_depth_failed.count(key)) g_depth.resolved(key);
-        g_depth_resolved.clear(); g_depth_failed.clear();
-        for (const auto& [key, frame] : g_depth.previous) {
-          if (g_depth_orphan_count == 4) break;
-          g_depth_orphans[g_depth_orphan_count++] = {key, frame, frame_index()};
-        }
-        g_st.orphan += g_depth.begin();
-      }
+      g_depth.prune(frame_index());
       if (p.color_count >= 4 && p.width == g_px_w && p.height == g_px_h) {
-        g_depth.gbuffer();
         timing_before_gbuffer(cmd, frame_index());
       }
     }
@@ -924,6 +913,14 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
   std::memcpy(gf.draw_keys, g_staged[i].slots.keys, sizeof gf.draw_keys);
 }
 
+// g_mu held. Called only at a native G-buffer draw with no depth fallback.
+void depth_orphan(uint64_t key, uint64_t now, VkPipeline pipeline, const char* reason) {
+  if (!g_depth.orphan(key, now, false, false)) return;
+  ++g_st.orphan;
+  if (g_depth_orphan_count < 4)
+    g_depth_orphans[g_depth_orphan_count++] = {key, g_depth.keys.at(key), now, uint64_t(pipeline), reason};
+}
+
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if (args.kind != 1 || !s->pipe[0] || !hair_primary_wanted()) return false;
   std::lock_guard<std::mutex> lock(g_mu);
@@ -935,14 +932,15 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   const uint64_t key = hair_primary_draw_key(s, args);
   if (it == g_variant.end()) {
     if (s->pass.color_count >= 4) {
+      g_depth.observe_pipeline(key, now, false, g_fallback.count(s->pipe[0]) != 0);
       if (g_live_keys.count(key)) g_coverage.invalidate(key, now + 1);
-      if (g_depth.needs_card_depth(key, false)) {
+      if (g_depth.needs_card_depth(key, now, false)) {
         const auto fb = g_fallback.find(s->pipe[0]);
         if (fb != g_fallback.end()) {
           g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, fb->second);
-          ++g_fallbacks; g_depth_resolved.insert(key); return true;
+          ++g_fallbacks; return true;
         }
-        g_depth_failed.insert(key);
+        depth_orphan(key, now, s->pipe[0], "no variant");
       }
     }
     return false;
@@ -971,17 +969,21 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // G-buffer apply (g_applied_frame: frame_index + 1 of that G-buffer). The game records the next frame's prepass before
   // the present that advances frame_index, so that apply is this frame's number or the next (an equality with now
   // refused every prepass: hv7 2026-11-04, 0 prepass strand draws next to 187 G-buffer ones).
-  if (g_order && pass == Pass::Prepass && (!g_depth_fallback_ready || !g_depth_safe_keys.count(key) || g_applied_frame < now || g_applied_frame > now + 1 || !g_live_keys.count(key)))
+  if (g_order && pass == Pass::Prepass && !hair_primary::prepass_drop_allowed(g_applied_frame, now, g_live_keys.count(key) != 0,
+      g_depth_safe_keys.count(key) != 0, g_depth.allow_prepass(key, now)))
     allowed = false;
+  if (pass == Pass::Gbuffer && !g_depth.dropped(key, now)) allowed = false;
   if (pass == Pass::Gbuffer && !probe && !allowed && g_live_keys.count(key)) g_coverage.invalidate(key, now + 1);
   if (pass == Pass::Gbuffer && g_fallback.count(s->pipe[0])) g_depth_safe_keys.insert(key);
   if (pass == Pass::Gbuffer && (draw == hair_primary::kDrawSlots || dv == g_draw_variants.end() || !dv->second.strand[draw])) allowed = false;
-  if (pass == Pass::Gbuffer && g_depth.needs_card_depth(key, allowed)) {
+  if (pass == Pass::Gbuffer)
+    g_depth.observe_pipeline(key, now, draw < hair_primary::kDrawSlots && dv != g_draw_variants.end() && dv->second.strand[draw],
+                             g_fallback.count(s->pipe[0]) != 0);
+  if (pass == Pass::Gbuffer && g_depth.needs_card_depth(key, now, allowed)) {
     const auto fb = g_fallback.find(s->pipe[0]);
-    if (fb == g_fallback.end()) { g_depth_failed.insert(key); return false; }
+    if (fb == g_fallback.end()) { depth_orphan(key, now, s->pipe[0], "no fallback"); return false; }
     g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, fb->second);
     ++g_fallbacks;
-    g_depth_resolved.insert(key);
     if (probe && (passes & 8)) { s->hp_coverage = kProbeAfter; g_coverage_period[key].probed = true; }
     return true;
   }
@@ -996,7 +998,6 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (pass == Pass::Gbuffer) {
     g_gate.gbuffer_drew(key);
-    g_depth_resolved.insert(key);
     auto& period = g_coverage_period[key];
     if (period.last_swap != now) { ++period.swapped; period.last_swap = now; }
   }
@@ -1067,8 +1068,8 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_pixels_fresh = true;
     log("[hair primary] pixel record %ux%u: %.1f MB", width, height, double(g_pixels.size) / 1048576.0);
   }
-  if (!count_feedback(cmd, now)) {
-    if (g_st.refused++ < 8) log("[hair primary] strand feedback unavailable: hair keeps its cards");
+  if (!count_feedback(cmd, now, rec)) {
+    if (g_failures.feedback++ < 8) log("[hair primary] strand feedback unavailable: hair keeps its cards");
     g_gate.clear();
     return;
   }
@@ -1137,13 +1138,14 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       const float* r = g_seen.ray;
       log("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
           "origin (%.4f %.4f %.4f), card distance %.3f, direction (%.4f %.4f %.4f), committed %.0f, hit distance %.3f, "
-          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f); counted with tag %u, header tag now %u; strand pixels "
-          "with tag %u/%u/%u/%u: %u/%u/%u/%u, evidence from tag %u (G-buffer frame %llu: "
+          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f); counted with tag %u, header tag now %u; card pixels "
+          "with tag %u/%u/%u/%u: %u/%u/%u/%u; accepted pixels: %u/%u/%u/%u, evidence from tag %u (G-buffer frame %llu: "
           "same-pass unique pixel counts)",
           (unsigned long long)g_seen.frame, g_seen.traced,
           g_seen.hit, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14],
           g_seen.tag, g_last_tag, g_seen.tag, g_seen.tag - 1, g_seen.tag - 2, g_seen.tag - 3, g_seen.tag_totals[0],
-          g_seen.tag_totals[1], g_seen.tag_totals[2], g_seen.tag_totals[3], g_seen.evidence_tag,
+          g_seen.tag_totals[1], g_seen.tag_totals[2], g_seen.tag_totals[3],
+          g_seen.accepted_totals[0], g_seen.accepted_totals[1], g_seen.accepted_totals[2], g_seen.accepted_totals[3], g_seen.evidence_tag,
           (unsigned long long)g_seen.evidence_frame);
     }
     log("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
@@ -1154,19 +1156,19 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   if (stats_due(now)) {
     log("[hair primary] frame %llu: %u grooms published; last %u frames: %llu publishes, %llu prepass, %llu "
-        "G-buffer and %llu velocity strand draws, %llu pipelines refused; prepass card depth dropped without its G-buffer "
+        "G-buffer and %llu velocity strand draws, %llu pipelines refused, %llu feedback failures; prepass card depth dropped without its G-buffer "
         "swap %llu",
         (unsigned long long)now, count, stats_period(300), (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
-        (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_st.refused,
+        (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_failures.refused, (unsigned long long)g_failures.feedback,
         (unsigned long long)g_st.orphan);
-    char per[320] = {};
+    char per[768] = {};
     size_t at = 0;
     for (uint32_t i = 0; i < g_depth_orphan_count; ++i) {
       const auto& o = g_depth_orphans[i];
-      at += std::snprintf(per + at, sizeof per - at, " %04llx:prepass=%llu,drop=%llu",
-          (unsigned long long)(o.key >> 48), (unsigned long long)o.prepass, (unsigned long long)o.drop);
+      at += std::snprintf(per + at, sizeof per - at, " %04llx:prepass=%llu,draw=%llu,%s,pipeline=0x%llx",
+          (unsigned long long)(o.key >> 48), (unsigned long long)o.prepass, (unsigned long long)o.draw, o.reason, (unsigned long long)o.pipeline);
     }
-    log("[hair primary] depth orphans (last %u frames, first 4; key prefix:prepass frame_index,drop frame_index):%s",
+    log("[hair primary] depth orphans (last %u frames, first 4; key prefix:prepass frame_index,draw frame_index,reason,pipeline):%s",
         stats_period(300), at ? per : " none");
     g_depth_orphan_count = 0;
   }
@@ -1188,7 +1190,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (stats_due(now) && g_ms_frames)
     log("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
         g_ms_sum / g_ms_frames, g_ms_frames);
-  if (stats_due(now)) g_st.orphan = 0, g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0, g_ms_sum = 0, g_ms_frames = 0;
+  if (stats_due(now)) g_failures.reset(), g_st.orphan = 0, g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0, g_ms_sum = 0, g_ms_frames = 0;
 }
 
 }  // namespace bg3

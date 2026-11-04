@@ -170,9 +170,9 @@
   "estimated_phase_seconds": 66.6,
   "expect_every": [
     {
-      "name": "zero refused pipelines and orphan depth",
+      "name": "zero refused pipelines",
       "select": "\\[hair primary\\] frame \\d+:",
-      "match": "\\b0 pipelines refused; prepass card depth dropped without its G-buffer swap 0\\b",
+      "match": "\\b0 pipelines refused",
       "min": 1,
       "period_frames": 60,
       "windows": [
@@ -180,6 +180,19 @@
         "c-strands-plus",
         "d-strands"
       ]
+    },
+    {
+      "name": "zero orphan depth",
+      "select": "\\[hair primary\\] frame \\d+:",
+      "match": "prepass card depth dropped without its G-buffer swap 0\\b",
+      "min": 1,
+      "period_frames": 60,
+      "windows": [
+        "b-strands",
+        "c-strands-plus",
+        "d-strands"
+      ],
+      "fail_fast": false
     },
     {
       "name": "depth orphans none",
@@ -191,7 +204,8 @@
         "b-strands",
         "c-strands-plus",
         "d-strands"
-      ]
+      ],
+      "fail_fast": false
     },
     {
       "name": "swapped frames in every strand window",

@@ -609,6 +609,29 @@ def test_tips_dither():
                          primary.tips_keep(0.5, samples[:, :2], samples[:, 2].astype(int) + 4, samples[:, 3])))
 
 
+def test_strand_source_safety():
+    velocity = (ROOT / "shaders/rt/hair_primary_velocity.hlsl").read_text()
+    count = (ROOT / "shaders/rt/hair_primary_count.hlsl").read_text()
+    check("velocity uses accepted tag and key map ownership", "accepted >> 8u" in velocity and "(accepted & 255u)" in velocity and
+          "rec + 3248u + k * 4u" in velocity)
+    check("zero low-24-bit count tag excluded", "(tag & 0xFFFFFFu) != 0u" in count)
+
+    # Protect the exact cause from hv8: discard demotes, so a return must end
+    # each rejected lane before a subsequent buffer read. No shader edits here.
+    import re
+    for name in ('gbuffer', 'velocity'):
+        src = (ROOT / f'shaders/rt/hair_primary_{name}.hlsl').read_text()
+        code = re.sub(r'//[^\n]*|/\*.*?\*/', '', src, flags=re.S)
+        rejects = list(re.finditer(r'\bdiscard\s*;', code))
+        check(f'{name}: every demoted lane immediately returns', bool(rejects) and all(
+            re.match(r'\s*return\s+\w+\s*;', code[m.end():]) for m in rejects))
+    src = (ROOT / 'shaders/rt/hair_primary_gbuffer.hlsl').read_text()
+    check('transparent card marker uses native combined alpha and grazing before strand rejection',
+          'if (hp_tips_keep(card_M.w * grazing, pos.xy, tag, aux.x))\n    vk::RawBufferStore<uint>(marker, packed_marker, 4);' in src
+          and src.index('const float4 card_M = max(sign(card_ma), sign(card_mb))') < src.index('hp_tips_keep(card_M.w')
+          < src.index('if (e.x == hair_primary_no_strand)'))
+
+
 def test_publish_lock():
     # hair_primary_publish runs inside the scene build, where rt_after_capture holds rtscene's g_mu: a locking camera
     # read there killed the game at the first publish (hv6 2026-11-04, exit 0xFFFF7001, no crash log).
@@ -1015,7 +1038,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

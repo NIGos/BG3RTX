@@ -454,7 +454,7 @@ struct GroomSlot {
   uint64_t bounds_frame[4] = {};   // the frame whose bounds each ring slot (at 64 + 32 * slot) holds; 0 none
   int compact = 0;             // 0 none, 1 size queried (query, query_frame), 2 compacted
   uint32_t query = 0;
-  uint64_t query_frame = 0;
+  uint64_t query_frame = 0, query_rec = 0;
 };
 struct DynSlot {
   AsAlloc as;
@@ -831,7 +831,7 @@ bool g_groom_on = false;                 // this capture: device feature, rt_hai
 struct GroomUvState { uint64_t id = 0; hair_groom::JoinMiss miss = hair_groom::JoinMiss::UvPending; };
 std::unordered_map<uint64_t, GroomUvState> g_groom_uv;
 constexpr uint32_t kGroomUvJobs = 16;      // readbacks in flight at most (256 bytes each)
-struct GroomUvJob { uint64_t identity = 0, frame = 0; uint32_t count = 0; bool used = false; };
+struct GroomUvJob { uint64_t identity = 0, frame = 0, rec = 0; uint32_t count = 0; bool used = false; };
 GroomUvJob g_groom_uv_jobs[kGroomUvJobs];
 Buf g_groom_uv_rb;                         // host-visible, kGroomUvJobs x 32 x (u, v)
 std::unordered_set<uint32_t> g_groom_uv_logged;
@@ -842,7 +842,7 @@ struct GroomAsset {
   // One LOD's arrays in the mesh pool [base, base + size): uploaded when a slot first selects it, evicted
   // (oldest first) when the groom budget needs room.
   struct Lod { VkDeviceSize tri = 0, bary = 0, radius = 0, seg = 0, segtri = 0, base = 0, size = 0; uint32_t points = 0, segments = 0;
-               float keep = 1; bool ready = false; uint64_t last_used = 0; };
+               float keep = 1; bool ready = false; uint64_t last_used = 0, upload_frame = 0, upload_rec = 0; };
   std::vector<Lod> lods;
   uint32_t indices = 0;
   bool failed = false;
@@ -853,7 +853,7 @@ uint64_t g_groom_budget_refusals = 0;
 uint64_t g_groom_soup_refused = 0;
 std::vector<std::shared_ptr<GroomSlot>> g_groom_seen;   // this frame's groom slots (next frame's crowd plan)   // matched draws without a live soup range this frame (held, not captured)
 std::unordered_map<uint64_t, GroomAsset> g_groom_assets;
-struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; };
+struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; GroomAsset::Lod* lod = nullptr; };
 std::vector<GroomUpload> g_groom_uploads;   // recorded at the start of this build's GPU section
 VkDescriptorSetLayout g_groom_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_groom_pl = VK_NULL_HANDLE;
@@ -954,7 +954,7 @@ bool groom_make_room(VkDeviceSize need, uint64_t now) {
     GroomAsset::Lod& l = *refs[size_t(key)];
     g_pending_free.push_back({now + kGroomFreeLag, -1, l.base, l.size});
     g_groom_pool_used -= (std::min)(g_groom_pool_used, l.size);
-    l.ready = false;
+    l = {}; // clear upload proof too: an evicted range must never become ready again
   }
   return true;
 }
@@ -977,6 +977,16 @@ GroomAsset* groom_asset(uint64_t id, uint32_t indices) {
 const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a, int lod, uint64_t now) {
   GroomAsset::Lod& d = a.lods[size_t(lod)];
   if (d.ready) { d.last_used = now; return &d; }
+  if (d.size) {
+    if (!d.upload_rec) return nullptr; // still staged; no copy recording yet
+    const auto state = hair_primary::readback_state(d.upload_frame, life_gpu_done(), rec_submitted(d.upload_rec));
+    if (state == hair_primary::ReadbackState::Wait) return nullptr;
+    if (state == hair_primary::ReadbackState::Ready) { d.ready = true; d.last_used = now; return &d; }
+    // Discarded upload: retire its range and stage a fresh copy, never build from it.
+    g_pending_free.push_back({now + kGroomFreeLag, -1, d.base, d.size});
+    g_groom_pool_used -= (std::min)(g_groom_pool_used, d.size);
+    d = {};
+  }
   const hair_groom::Loaded* src = hair_groom::find(id, a.indices);
   std::vector<uint8_t> bytes;
   hair_groom::Asset full;
@@ -1014,15 +1024,15 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
     std::memcpy(u.staging.map + n.segtri + VkDeviceSize(s) * 4, &tri, 4);
   }
   n.tri += base; n.bary += base; n.radius += base; n.seg += base; n.segtri += base;
-  n.base = base; n.size = total; n.ready = true; n.last_used = now;
+  n.base = base; n.size = total; n.last_used = now;
   d = n;
-  u.dst = base; u.bytes = total;
+  u.dst = base; u.bytes = total; u.lod = &d;
   g_groom_uploads.push_back(u);
   g_groom_pool_used += total;
   log("[hair groom] %016llx LOD %d uploaded: %.1f MB in the mesh pool at %llu (grooms %.0f of %.0f MB)", (unsigned long long)id,
       lod, double(total) / 1048576.0, (unsigned long long)base, double(g_groom_pool_used) / 1048576.0,
       double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0);
-  return &d;
+  return nullptr; // usable only after this upload recording was submitted and completed
 }
 
 VkAccelerationStructureGeometryKHR groom_geometry(const GroomAsset::Lod& l, VkDeviceSize pos_off,
@@ -2424,7 +2434,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // UV joins whose readback completed on the GPU: match against the files with that index count.
     for (uint32_t j = 0; j < kGroomUvJobs; ++j) {
       GroomUvJob& job = g_groom_uv_jobs[j];
-      if (!job.used || life_gpu_done() <= job.frame + 1) continue;
+      if (!job.used) continue;
+      const auto state = hair_primary::readback_state(job.frame, life_gpu_done(), rec_submitted(job.rec));
+      if (state == hair_primary::ReadbackState::Wait) continue;
+      if (state == hair_primary::ReadbackState::Drop) {
+        g_groom_uv.erase(job.identity); // allow a new copy for this identity
+        job = GroomUvJob{}; continue;
+      }
       float got[hair_groom::kSamples * 2];
       std::memcpy(got, g_groom_uv_rb.map + VkDeviceSize(j) * 256, sizeof got);
       GroomUvState st{0, hair_groom::JoinMiss::UvMismatch};
@@ -2651,7 +2667,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // UV join: copy the 32 sampled corners' UVs (soup +16, untouched by the conversion) in this build.
       for (uint32_t j = 0; j < kGroomUvJobs; ++j) {
         if (g_groom_uv_jobs[j].used) continue;
-        g_groom_uv_jobs[j] = {fd.groom_identity, now, fd.groom_indices, true};
+        g_groom_uv_jobs[j] = {fd.groom_identity, now, rec, fd.groom_indices, true};
         g_groom_uv[fd.groom_identity] = GroomUvState{};
         groom_uv_copies.push_back({j, fd.soup_off});
         fd.groom_miss = hair_groom::JoinMiss::UvPending;
@@ -2718,7 +2734,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         g.built = false; g.compact = 0;
       }
       // Compaction: the size queried after the first build, read once that frame completed on the GPU.
-      if (ok && g.compact == 1 && life_gpu_done() > g.query_frame + 1) {
+      if (ok && g.compact == 1 &&
+          hair_primary::readback_state(g.query_frame, life_gpu_done(), rec_submitted(g.query_rec)) == hair_primary::ReadbackState::Drop) {
+        g_groom_free_queries.push_back(g.query);
+        g.compact = 0; g.built = false; // redo both the full build and its query
+      }
+      if (ok && g.compact == 1 &&
+          hair_primary::readback_state(g.query_frame, life_gpu_done(), rec_submitted(g.query_rec)) == hair_primary::ReadbackState::Ready) {
         uint64_t size = 0;
         std::memcpy(&size, g.readback.map + 32, 8);
         g_groom_free_queries.push_back(g.query);
@@ -3018,6 +3040,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // rt_hair_groom: groom arrays into the pool, compacted copies of last builds, then this frame's points.
     barrier(cmd, kCS | kXfer | kAS, VK_ACCESS_MEMORY_WRITE_BIT, kXfer | kAS, kRW);
     for (auto& u : g_groom_uploads) {
+      u.lod->upload_rec = rec; u.lod->upload_frame = now;
       const VkBufferCopy c{0, u.dst, u.bytes};
       dd->vk.CmdCopyBuffer(cmd, u.staging.b, g_pool.b, 1, &c);
       free_buf(u.staging);
@@ -3399,7 +3422,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       dd->vk.CmdCopyQueryPoolResults(cmd, g_groom_qp, w.g->query, 1, w.g->readback.b, 32, 8,
                                      VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
       w.g->compact = 1;
-      w.g->query_frame = now;
+      w.g->query_frame = now; w.g->query_rec = rec;
     }
     for (GroomWork& w : groom_work) w.g->built = true;
     // All fallible build allocations have succeeded. A recorded relocation

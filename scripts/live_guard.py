@@ -88,6 +88,10 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
         if segment and (segment["offset"] in failed or segment.get("fail_fast", True) is False):
             continue
         for gate in job.get("expect_every", []):
+            # Some evidence gates must retain the window's capture before rejecting.
+            # They remain mandatory in the final queue_gates.check verdict.
+            if gate.get("fail_fast", True) is False:
+                continue
             if gate.get("trend") or w["label"] not in gate.get("windows", []):
                 continue
             one = dict(gate, windows=[w["label"]])
