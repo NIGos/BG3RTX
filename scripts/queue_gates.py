@@ -207,7 +207,8 @@ def trend_failures(g, name, picked, wins):
 def line_matches(gate, line):
     """items: repeated named value/active groups, bound regex group 1.
 
-    Every active item must meet the bound. Empty inventories fail.
+    Every active item must meet the bound (and the upper bound, regex group 1 of items.upper, when given).
+    Empty inventories fail.
     required_if requires this gate only with complete matching trigger periods in
     the same window. A separate gate must require the trigger producer.
     first_only judges the first selected startup line.
@@ -242,8 +243,12 @@ def line_matches(gate, line):
     items = list(re.finditer(rule["pattern"], line))
     if not items and rule.get('empty') and re.search(rule['empty'], line):
         return True
+    upper = re.search(rule["upper"], line) if rule.get("upper") else None
+    if rule.get("upper") and not upper:
+        return False
     try:
-        return bool(bound and items) and all(float(m["active"]) == 0 or float(m["value"]) >= float(bound[1]) for m in items)
+        return bool(bound and items) and all(float(m["active"]) == 0 or (
+            float(m["value"]) >= float(bound[1]) and (upper is None or float(m["value"]) <= float(upper[1]))) for m in items)
     except ValueError:
         return False
 

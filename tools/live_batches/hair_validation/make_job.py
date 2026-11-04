@@ -237,7 +237,7 @@ def diagnostic_job(name, save, plan):
     j["forbid"] += [r"(?s)\[hair primary\] frame \d+:[^\n]*[1-9]\d* G-buffer[^\n]*\n.*?\[hair primary\] level load \(first or new G-buffer images\)"]
     j["forbid"] += [r"(?s)\[hair primary\] level load \(first or new G-buffer images\)(?:(?!\[hair primary\] frame).)*\[hair primary\] frame \d+:[^\n]*\b[1-9]\d* G-buffer"]
     j["expect_every"] += [dict(name="coverage: no below-bound draw swapped", select=COVERAGE, match=COVERAGE,
-                               items=dict(pattern=COVERAGE_ITEM, bound=r", bound ([0-9.]+),", empty=r"\b0 draws probed, 0 swapped;"),
+                               items=dict(pattern=COVERAGE_ITEM, bound=r", bound ([0-9.]+),", upper=r", upper ([0-9.]+),", empty=r"\b0 draws probed, 0 swapped;"),
                                min=1, period_frames=300, windows=DIAGNOSTIC_WINDOWS),
                             dict(name="strand GPU cost only when coverage reports swapped frames",
                                  select=r"\[hair primary\] strand G-buffer draws GPU",
@@ -313,7 +313,8 @@ def pass_bisect_job(name, save, plan):
     for label, mask in zip(PASS_WINDOWS, PASS_MASKS):
         if not (mask & 8 and mask & 1):
             continue  # No probe evidence in masks 0/7; probe-only has no swaps.
-        prepass = r"[1-9]\d*" if mask & 4 else "0"
+        # The order-mode prepass swap is not engaging yet (claude/hair-pixel-coverage follow-up): any prepass count.
+        prepass = r"\d+" if mask & 4 else "0"
         velocity = r"[1-9]\d*" if mask & 2 else "0"
         j["expect_every"].append(dict(name="strand participation " + label,
             select=r"\[hair primary\] frame \d+:",

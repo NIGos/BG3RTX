@@ -341,6 +341,16 @@ int main() {
     CHECK(g.allow(0xA, 23));
     g.observe(0, 23, card, card);
     CHECK(!g.allow(0, 23));
+    // Upper side: the maximum offline ratio plus the same noise; strands covering clearly more than the cards (hv7
+    // 2026-11-04: 2.55 from overdrawn samples) keep the cards.
+    CHECK(std::abs(kCoverMax - (1.0752640637962045 + noise)) < 1e-14);
+    const uint64_t above = uint64_t(kCoverMax * card) + 1;
+    g.observe(0xA, 24, card, above);
+    CHECK(!g.allow(0xA, 24));
+    g.observe(0xA, 25, card, above - 2);
+    CHECK(g.allow(0xA, 25));
+    g.observe(0xA, 26, 93085, 237443);
+    CHECK(!g.allow(0xA, 26));
   }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;
