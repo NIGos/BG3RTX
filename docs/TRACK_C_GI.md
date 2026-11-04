@@ -224,7 +224,11 @@ core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
 
 ## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; live S8 energy gate failed, kept off)
 
-2026-11-04: One-ray Ultra GI qualification and roof-leak fix cost (`2aa9d0f3`) are in progress; neither has final acceptance. Retain current defaults pending qualification.
+2026-11-04 outcomes. One-ray Ultra GI (`ultra-gi-1ray`, gi1 live 17:48, all 16 window gates OK): GI trace
+6.74/4.71/9.22/4.48 ms (OFF-a/ON-a/OFF-b/ON-b), saving 3.27/3.50 ms. Float energy ON -7.8%/+3.9%, inside the
+OFF repeat spread 11.6%. Static flicker: ON-a passes, ON-b fails against both OFF repeats (PQ std excess
+0.0032/0.0022 > 0.00098). Pan registration unavailable. Rejected for Ultra: quality before frame rate; Ultra keeps
+two rays. Roof-leak fix (`2aa9d0f3`) kept: rel1 17:52 VALID, GI 11.46 ms vs 11.97 ms before, no measurable cost.
 
 Key `gi_far` (live; GUI Experimental "Far-field sun bounce" off / 4 / 6 / 8 m, needs `exp_gi_hit_sun`).
 Variant: request flag `kGiFar` adds `RT_GI_FAR=1` to the four gi_hit_sun files only (common/shader_variant.h);
