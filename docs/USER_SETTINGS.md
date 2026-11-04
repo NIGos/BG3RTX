@@ -59,10 +59,13 @@ Reconstruction replaces the game's DLSS; it cannot run with FSR, XeSS or TAA.
 ## Comparing with the original image
 
 Press **Ctrl+Shift+F9** while playing to switch every ray-traced effect off, and again to switch
-it back on: sun and local shadows, GI, reflections, emissive light, the radiance cache. You then
+it back on, regardless of the last saved Experimental choice: sun and local shadows, GI,
+reflections, water, RT hair, emissive light, and the radiance cache. You then
 see the game's own lighting in the same frame and view. DLSS and frame generation are not
 touched, so the comparison is lighting only. Each press is logged in `bg3rtx.log` as `[ab]`.
-`ab_hotkey=0` in `bg3rtx_user.ini` turns the hotkey off.
+Press **Ctrl+Shift+F10** to flip the last saved eligible Experimental choice instead. Without
+a saved eligible choice, F10 does nothing. Its changed keys are logged as `A/B: <key>=<value>`.
+`ab_hotkey=0` in `bg3rtx_user.ini` turns both hotkeys off. The queue's `ab_off` master toggle is unchanged.
 
 ## Presets
 

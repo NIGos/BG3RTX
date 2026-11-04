@@ -19,7 +19,9 @@ Per provare After post spegni prima RR hair dither resolve.
 | Retire unused hair snapshots / `rt_hair_pool_trim` | Dialogue3; poi cambia inquadratura | Recupero del pool; nessuna variazione visiva attesa | GPU non misurato; pool -11–42% nei test |
 | Single-sample hair coverage / `rt_hair_cheap` | Dialogue1/Dialogue3; ombre fini su viso e collo | Copertura secondaria semplificata; verifica perdita di ombre o variazioni di luce | Guadagno entro il rumore; qualità non qualificata |
 
-Ctrl+Shift+F9 alterna l'ultimo controllo Experimental modificato e salvato.
+Ctrl+Shift+F9 spegne e riaccende tutti gli effetti RT, indipendentemente dalla scelta Experimental salvata.
+Ctrl+Shift+F10 alterna l'ultimo controllo Experimental modificato e salvato; senza una scelta valida non fa nulla.
+`ab_hotkey=0` disabilita entrambi i tasti; `ab_off` della coda resta il toggle generale.
 Per Hair + scalp cambia entrambe le chiavi; per RR order alterna i due ordini.
 Le dipendenze devono essere già attive; il tasto non cambia preset.
 Il cambio A/B è temporaneo: Save o una rilettura delle impostazioni lo ripristina.

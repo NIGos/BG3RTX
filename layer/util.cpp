@@ -200,14 +200,16 @@ static void cfg_log_effective(const settings::Map& raw, bool derived) {
   log("[cfg] keys:%s%s", keys.c_str(), derived ? " (rt_build from auto)" : "");
 }
 
-// A/B hotkey (ab_hotkey=1): Ctrl+Shift+F9 flips the last saved Experimental GUI choice.
-// Without a selected target it switches every ray-traced effect
-// off and on while playing, so the game's own image can be compared with ours live. It only
-// overrides the settings the QA's all-off set uses (rt, gi, rt_reflections, rt_shadows,
-// rt_local_shadows, rt_emissive, sharc); everything else (DLSS, frame generation) is untouched.
+// A/B hotkeys (ab_hotkey=1): Ctrl+Shift+F9 always switches all RT off/on;
+// Ctrl+Shift+F10 flips the last saved Experimental GUI choice, if eligible.
+// The master override leaves DLSS and frame generation untouched.
 static std::atomic<bool> g_ab_off{false};
+// rt is a startup capability, not a live dispatch gate. Water has a separate forward-pass
+// route; geometry also gates its native shader/Fresnel replacement. Groom gates primary
+// strand swaps even when their startup capability remains enabled.
 static const char* const kAbOffKeys[] = {"rt", "gi", "rt_reflections", "rt_shadows",
-                                         "rt_local_shadows", "rt_emissive", "sharc"};
+                                         "rt_local_shadows", "rt_emissive", "sharc",
+                                         "rt_water_geometry", "rt_water_reflections", "rt_hair_groom"};
 
 static bool ab_overridden(const char* key) {
   if (!g_ab_off.load(std::memory_order_relaxed)) return false;
@@ -217,7 +219,7 @@ static bool ab_overridden(const char* key) {
 }
 
 static void ab_poll_hotkey() {
-  static bool was_down = false;
+  static bool was_master_down = false, was_target_down = false;
   // The toggle's cost: the longest gap between presents in the 3 s after it (a shader fetched
   // or compiled on the render thread, a pipeline created) is logged once.
   static LARGE_INTEGER freq{}, last{}, since{};
@@ -249,25 +251,28 @@ static void ab_poll_hotkey() {
         "entirely after the A/B change (global ray tracing %s)", double(now.QuadPart - toggle_t.QuadPart) * 1000.0 / double(freq.QuadPart),
         (unsigned long long)toggle_frame, (unsigned long long)frame_index(), g_ab_off.load() ? "OFF" : "ON");
   }
-  bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
-              (GetAsyncKeyState(VK_F9) & 0x8000);
+  const bool modifiers = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
+  const bool master_down = modifiers && (GetAsyncKeyState(VK_F9) & 0x8000);
+  const bool target_down = modifiers && (GetAsyncKeyState(VK_F10) & 0x8000);
   // ab_off (ini, default 0): the same toggle from the settings, for the queue (it cannot press the hotkey): a
   // change of the key toggles A/B to its value.
   static int ab_cfg = -1;
   const int ab_now = cfg_int("ab_off", 0) != 0 ? 1 : 0;
   const bool cfg_edge = ab_cfg >= 0 && ab_now != ab_cfg && (ab_now != 0) != g_ab_off.load();
   ab_cfg = ab_now;
-  const bool hotkey_edge = down && !was_down && cfg_int("ab_hotkey", 1);
-  if (hotkey_edge || cfg_edge) {
-    std::string indicator;
-    bool targeted = false;
-    if (hotkey_edge && !cfg_edge) {
-      std::lock_guard<std::mutex> lock(g_cfg_mu);
-      targeted = experimental_ab::flip(g_cfg,indicator);
-    }
-    if (targeted) {
+  const auto action = experimental_ab::hotkey_action(master_down && !was_master_down,
+                                                     target_down && !was_target_down, cfg_int("ab_hotkey", 1) != 0);
+  was_master_down = master_down;
+  was_target_down = target_down;
+  if (action != experimental_ab::HotkeyAction::None || cfg_edge) {
+    if (!cfg_edge && action == experimental_ab::HotkeyAction::Experimental) {
+      std::string indicator;
+      {
+        std::lock_guard<std::mutex> lock(g_cfg_mu);
+        if (!experimental_ab::flip(g_cfg, indicator)) return;
+      }
       // There is no in-game text/notification renderer. Keep the requested line in the log.
-      log("%s",indicator.c_str());
+      log("%s", indicator.c_str());
     } else {
       bool off = !g_ab_off.load();
       g_ab_off.store(off);
@@ -282,7 +287,6 @@ static void ab_poll_hotkey() {
     toggle_t = now;
     latency_pending = true;
   }
-  was_down = down;
 }
 
 static void cfg_read_files();
