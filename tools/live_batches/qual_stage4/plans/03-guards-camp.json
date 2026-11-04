@@ -12,7 +12,7 @@
     "motion_end": 30.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_stats=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,pan_capture=0,pan_prepare=0,qa_exposure_hold=1",
+    "set": "rt_stats=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,pan_capture=0,pan_prepare=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",

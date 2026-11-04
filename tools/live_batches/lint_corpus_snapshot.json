@@ -188,8 +188,8 @@
         0,
         0
       ],
-      "fps": 18.66832607347135,
-      "windows": 565
+      "fps": 26.155187445573738,
+      "windows": 582
     },
     {
       "save": "Water Queens House",
@@ -235,12 +235,12 @@
     "maximum": 0.43699999999807915
   },
   "trace_capture_stall": {
-    "seconds": 2.7200900000000003,
-    "source": "wf1-s8-fg2.1.100826.log",
+    "seconds": 2.71857,
+    "source": "wf7a-s8-fg2.1.164300.log",
     "quantile": 0.95,
-    "samples": 402,
+    "samples": 428,
     "maximum": 2.9799,
-    "logs": 65
+    "logs": 73
   },
   "readiness": [
     {

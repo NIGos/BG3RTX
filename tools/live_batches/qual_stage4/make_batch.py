@@ -35,13 +35,13 @@ def main():
   if scene=='camp':base=copy.deepcopy(job)
  job=copy.deepcopy(base)
  job['expect_every']=[]
- job['expect']=[r'\[auto\] scene ready',r'\[trace\] frame \d+ written']
+ job['expect']=[r'\[auto\] scene ready',r'\[trace\] frame \d+ written',r'\[rrpost\] exposure held']
  job['patterns'] += [r'\[pan\]',r'gi:.*GPU',r'gi: gi/gi_temporal']
  job['purpose']='GI fix-or-reject screen only: static float energy and Q/E images with per-bit cost; cannot promote without original K16 transient qualification.'
  job['set'] += ',gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,rt_hit_material_generated=0,pan_capture=0,pan_prepare=0'
  plan=[]
  for label,mv,pg in [('warm-off',0,0),('warm-mv',1,0),('warm-prev',0,1),('warm-off-return',0,0)]:
-  plan.append(phase(label,f'rt_stats=0,gi_temporal_mv_sample={mv},gi_prev_radiance_guard={pg},pan_capture=0,pan_prepare=0,qa_exposure_hold=1',30 if label=='warm-off' else 5))
+  plan.append(phase(label,f'rt_stats=0,gi_temporal_mv_sample={mv},gi_prev_radiance_guard={pg},pan_capture=0,pan_prepare=0,qa_exposure_hold={0 if label=="warm-off" else 1}',30 if label=='warm-off' else 5))
  for label,mv,pg in [('off-a',0,0),('mv',1,0),('prev',0,1),('off-b',0,0)]:
   settings=f'rt_stats=0,gi_temporal_mv_sample={mv},gi_prev_radiance_guard={pg},qa_exposure_hold=1,pan_capture=0,pan_prepare=0'
   p=phase('shot-'+label,settings,8);p['trace_at']=[5];plan.append(p)

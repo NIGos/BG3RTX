@@ -47,7 +47,8 @@
   ],
   "expect": [
     "\\[auto\\] scene ready",
-    "\\[trace\\] frame \\d+ written"
+    "\\[trace\\] frame \\d+ written",
+    "\\[rrpost\\] exposure held"
   ],
   "expect_every": [
     {
