@@ -766,7 +766,7 @@ only), or patch the forward shaders' shadow lookup to read a world-space visibil
 patched lookup. Water is the most visible case and also needs the forward capture of
 backlog item 12 to cast. Do it with item 12.
 
-### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, measured, off by default)
+### 9.11 Exact-k + RIS remainder (DESIGN_SOTA_NEXT 1a; 2026-10-27, qualified k1 in Ultra 2026-11-04)
 
 `ls_k` and `ls_rest_samples` (with `ls_main_k`): removed 2026-10-31 (CONSOLIDATION.md C1: over
 budget), **re-added 2026-11-01 as a shader variant, off by default** (see "Re-add" at the end of
@@ -900,8 +900,10 @@ removed only for the 0.5 ms Grymforge budget, which is a preset question, not a 
 - Counters moved to 350-355 (`kLkStatFirst`; 122-127 are the primary-fade counters now). Logs:
   `ls exact-k: active|inactive (ls_k K, ls_rest_samples N)`, `ls exact-k stats` (ls_stats=1),
   and the `ls: local-light shadow pass GPU` line names `exact-k K + N (variant 0|1)`.
-- GUI: Experimental "Local light sampling (exact-k)" (`exp_ls_exact_k`: Off / 1 / 2 exact
-  lights, needs Local light shadows Full), off in every preset.
+- Release policy (user decision 2026-11-04): exact-k k1 (`ls_k=1`, `ls_rest_samples=1`)
+  is automatic in Ultra with Full local shadows and ray-traced geometry. No release control;
+  `exp_ls_exact_k` remains a developer override. Lower presets stay Off because the approved
+  Full-path evidence does not cover them. Existing LS_K requests are selected; catalogue delta 0.
 - Expected cost: the 9.11 numbers (k1 −22% of a 0.78 ms Grymforge pass, −9.5% at camp; k2 −8%
   / −1%). Live gate: job `lsk1-exact-k-inn-s7-fg2` (tools/live_batches/ls_exact_k, S7 inn, one
   launch, NOT queued). Keep k only where its `ls:` GPU median is below the OFF-a/OFF-b spread
@@ -943,7 +945,8 @@ static camera, OFF / k1 / k2 / OFF, then k1 / OFF / k1 / OFF alternated).**
   (soft shadows, GI). The fix belongs to the post chain, not to D-LS: build the bloom prefilter
   from RR's denoised colour (rr_post already runs at that point; TRACK_A_RR "RR before post"), or
   leave it (below the final image's precision here). Not done (not an ls file; no visible effect).
-- Verdict: unbiased, −23% cost at k1. Still off by default: the preset decision (k1 for a lower
-  preset; quality before frame rate on Ultra) is the user's. Next live run: the scene-colour float
-  means of k1 within the OFF spread in each alternation (expected), bloom lower (expected, not a
-  gate).
+- Verdict (user decision 2026-11-04): keep qualified k1 automatic in Ultra, without a release
+  user control. Inn cost 0.717 -> 0.555 ms (-23%); scene energy -0.38/-0.34/+0.12% is within
+  OFF spread 0.89%. Lower presets remain Off: their qualification is not covered by this evidence.
+  Developer mode retains Off/k1/k2 for comparisons. To inspect in game, use S7 inn and the
+  existing `ls exact-k: active` / `ls:` GPU lines; this update requires no new live batch.

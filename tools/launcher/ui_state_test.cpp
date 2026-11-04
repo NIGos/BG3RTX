@@ -26,8 +26,8 @@ int main() {
   st::Map reopened;for(auto& kv:persisted)if(kv.first.rfind("baseline_",0)==0)reopened[kv.first.substr(9)]=kv.second;
   check(ui::restart_count(reopened,saved)==3); // Closing/reopening keeps the process baseline.
   check(ui::restart_count(start,start)==0); // Saving a revert clears it.
-  check(ui::restart_banner(3)=="Restart BG3 to apply 3 changes");
-  check(ui::restart_banner(1)=="Restart BG3 to apply 1 change");check(ui::restart_banner(0).empty());
+  check(ui::restart_banner(3)=="Restart the game to apply 3 changes.");
+  check(ui::restart_banner(1)=="Restart the game to apply 1 change.");check(ui::restart_banner(0).empty());
   for(const char* initial:{"0","1"}){
     st::Map startup{{"rt_native_tileset",initial}},candidate=startup;
     candidate["rt_native_tileset"]=initial[0]=='0'?"1":"0";

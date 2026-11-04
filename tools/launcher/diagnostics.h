@@ -7,10 +7,9 @@
 
 namespace launcher::diagnostics {
 inline constexpr const char* privacy_text =
-  "Creates a ZIP on your PC with BG3RTX logs, graphics settings, version and system graphics details. "
-  "Logs may contain file paths. We remove common personal path details, but you should review the "
-  "files before sharing. Nothing is uploaded. Saves, screenshots and crash dumps are excluded. "
-  "This collector does not accept attachments.";
+  "Saves selected logs, settings and graphics details as a ZIP on your PC. "
+  "Personal paths are partly removed; review every file before sharing. Nothing is uploaded. "
+  "Saves, screenshots and crash dumps are excluded.";
 enum class Status { Complete, Partial, Cancelled, Failed };
 struct Entry {
   std::string name, text, note; // Exact sanitized UTF-8 bytes to preview and export.

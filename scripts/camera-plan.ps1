@@ -151,6 +151,24 @@ function Test-CameraPlanReconciledPattern([string]$pattern) {
     ($pattern -match '^gi: |water.*: built|shaders|watch|read from the cache|cache: prefetched |pipelines 0')
 }
 
+# Only a pending prefetch witness gets an inactivity timeout. Count completed
+# shader builds, not watch/cache summaries (which may repeat unchanged counts).
+# Seed at wait entry so historical lines cannot buy extra time. The runner's
+# absolute launch deadline is independent and is never extended here.
+function Get-CameraPlanWaitAnchor($state, $step, [string]$text, [double]$now, [double]$started) {
+  $count=[regex]::Matches($text, '(?m)^.*\[shaders\] \S+:\w+ compiled in \d+ ms[^\r\n]*$').Count
+  if (-not $state.initialized) {
+    $state.initialized=$true; $state.count=$count; $state.at=$started
+  }
+  $pending=@($step.wait_log | Where-Object {
+    $_ -match 'cache: prefetched' -and $text -notmatch $_
+  }).Count -gt 0
+  if ($pending -and $count -gt $state.count) { $state.at=$now }
+  $state.count=$count
+  if ($pending) { return [Math]::Max($started,$state.at) }
+  return $started
+}
+
 function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
   $ack=$null
   $observationText=$freshText
