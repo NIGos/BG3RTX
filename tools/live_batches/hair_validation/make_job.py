@@ -248,10 +248,15 @@ def diagnostic_job(name, save, plan):
                                  min=1, period_frames=300, windows=["order-gbuffer-1", "order-gbuffer-2", "tips-on"])]
     for label in CAPTURE_WINDOWS:
         serial = 98600 + CAPTURE_WINDOWS.index(label)
-        j["expect_every"].append(dict(name="consecutive rendered hair frames " + label,
-                                      select=rf"\[pan\] burst {serial} complete",
-                                      match=rf"\[pan\] burst {serial} complete: 8 frames, 20 samples, transport ok",
-                                      event=True, min=1, windows=[label]))
+        gate = dict(name="consecutive rendered hair frames " + label,
+                    select=rf"\[pan\] burst {serial} complete",
+                    match=rf"\[pan\] burst {serial} complete: 8 frames, 20 samples, transport ok",
+                    event=True, min=1, windows=[label])
+        # Strand windows: the burst samples strand pixels, which exist only once draws swapped (coverage evidence first;
+        # hv6 2026-11-04 failed fast in order-prepass-1 on the same cause as its 0 strand samples).
+        if not label.startswith("cards"):
+            gate["required_if"] = dict(select=COVERAGE, match=SWAPPED)
+        j["expect_every"].append(gate)
     j["expect_every"].append(dict(name="strand participation after quiet window when swaps happened",
         select=r"\[hair primary\] frame \d+:", match=hp.STRANDS,
         required_if=dict(select=COVERAGE, match=SWAPPED), min=1, period_frames=300, windows=DIAGNOSTIC_WINDOWS))

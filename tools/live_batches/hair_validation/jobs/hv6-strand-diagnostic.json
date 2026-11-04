@@ -246,7 +246,11 @@
       "min": 1,
       "windows": [
         "order-prepass-1"
-      ]
+      ],
+      "required_if": {
+        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+      }
     },
     {
       "name": "consecutive rendered hair frames order-gbuffer-1",
@@ -256,7 +260,11 @@
       "min": 1,
       "windows": [
         "order-gbuffer-1"
-      ]
+      ],
+      "required_if": {
+        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+      }
     },
     {
       "name": "consecutive rendered hair frames order-prepass-2",
@@ -266,7 +274,11 @@
       "min": 1,
       "windows": [
         "order-prepass-2"
-      ]
+      ],
+      "required_if": {
+        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+      }
     },
     {
       "name": "consecutive rendered hair frames order-gbuffer-2",
@@ -276,7 +288,11 @@
       "min": 1,
       "windows": [
         "order-gbuffer-2"
-      ]
+      ],
+      "required_if": {
+        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+      }
     },
     {
       "name": "consecutive rendered hair frames tips-on",
@@ -286,7 +302,11 @@
       "min": 1,
       "windows": [
         "tips-on"
-      ]
+      ],
+      "required_if": {
+        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+      }
     },
     {
       "name": "strand participation after quiet window when swaps happened",
