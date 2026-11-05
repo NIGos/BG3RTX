@@ -20,14 +20,14 @@ def generate():
     quiet = r'\[watch\].*\| pipelines 0 \(0 ms in driver\)'
     warm_state = dict(state, cpu_opt1='1')
     plan = [phase('warmup', 20, set=assignments(warm_state),
-                  wait_log=[r'\[auto\] scene ready', r'\[cfg\] keys:.*\bcpu_opt1=1(?:\s|$)', quiet],
+                  wait_log=[r'\[auto\] scene ready', r'\[cfg\] settings read', quiet],
                   wait_log_fresh=[quiet], wait_log_timeout=30)]
     labels = []
     for label, value in [('off-a', '0'), ('on-a', '1'), ('off-b', '0'), ('on-b', '1')]:
         setting = 'cpu_opt1='+value
         plan.append(phase('ready-'+label, 1.1, set=setting,
-            wait_log=[rf'\[cfg\] keys:.*\bcpu_opt1={value}(?:\s|$)', quiet],
-            wait_log_fresh=[quiet], wait_log_timeout=10))
+            wait_log=[r'\[cfg\] settings read', quiet],
+            wait_log_fresh=[r'\[cfg\] settings read', quiet], wait_log_timeout=10))
         name = label+'--static-a'
         labels.append(name)
         plan.append(phase(name, 20.1, set=setting, frames=600, settle_frames=0,
@@ -58,7 +58,7 @@ def generate():
                  'saving claim if delta is inside OFF spread. Inspect every ON window and lifecycle forbids.',
         timers='Watch totals / actual rendered presents; never displayed FG presents. '
                'Scene/matrix 300-build producers drop first receipt; life is minute-wide context only.',
-        readiness='Scene-ready, cfg witness and fresh zero-pipeline watch only. No shader/pipeline generation waits.',
+        readiness='Scene-ready, fresh settings-read witness (cpu_opt1 is not a knob, so it is absent from the cfg keys line) and fresh zero-pipeline watch only. No shader/pipeline generation waits.',
         pending='Coordinator commit and authorized live run. No launch or queue staging by this lane.'))
 
 
