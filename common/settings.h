@@ -620,6 +620,7 @@ inline constexpr KV kDefaults[] = {
     {"replay_pack", "0"},
     {"replay_pack_cap_mb", "2048"},
     {"fg_input_copy", "1"},
+    {"sl_init_after_create", "0"},
     {"qa_zero", "0"},
     {"qa_exposure_hold", "0"},
     {"rt_max_candidates", "0"},
