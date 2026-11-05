@@ -52,26 +52,26 @@ class PipelineReadinessTests(unittest.TestCase):
         p = [phase('before', values=''), phase('high', values='ls_box=0,ls_k=0,gi_far=0,gi_hit_direct=0,gi_hit_sun=0')]
         f.pipeline_readiness.apply(j, p)
         self.assertFalse(any('rt_local_shadows_box' in rx or '_k' in rx for rx in p[1]['wait_log']))
-        self.assertIn(f.pipeline_readiness.GI_TRACE, p[1]['wait_log'])
+        self.assertEqual(p[1]['wait_log'], [f.pipeline_readiness.QUIET])
 
-    def test_explicit_conservative_mapping_keeps_generic_completion_and_quiet(self):
+    def test_explicit_conservative_mapping_requires_only_fresh_quiet(self):
         j = dict(set="rt_hair_fibre=0")
         p = [phase("before"), phase("on", values="rt_hair_fibre=1")]
         f.pipeline_readiness.apply(j, p)
         self.assertFalse(f.pipeline_readiness.problems(j, p))
-        self.assertIn(f.pipeline_readiness.GENERIC, p[1]['wait_log'])
-        p[1]['wait_log'].remove(f.pipeline_readiness.GENERIC)
+        self.assertEqual(p[1]['wait_log'], [f.pipeline_readiness.QUIET])
+        p[1]['wait_log_fresh'].remove(f.pipeline_readiness.QUIET)
         self.assertTrue(f.pipeline_readiness.problems(j, p))
 
-    def test_each_changed_key_requires_its_completion_even_after_prefetch(self):
+    def test_each_shader_change_requires_fresh_quiet_even_after_prefetch(self):
         j = dict(set="rt_water_surface_fresnel=0", live_flow={})
         p = [phase("warm"), phase("on", values="rt_water_surface_fresnel=1"),
              phase("off", values="rt_water_surface_fresnel=0")]
         self.assertEqual(len(f.pipeline_readiness.problems(j, p)), 2)
         f.pipeline_readiness.apply(j, p)
         self.assertFalse(f.pipeline_readiness.problems(j, p))
-        self.assertIn("enabled 1,", p[1]["wait_log"][0])
-        self.assertIn("enabled 0,", p[2]["wait_log"][0])
+        self.assertEqual(p[1]["wait_log"], [f.pipeline_readiness.QUIET])
+        self.assertEqual(p[2]["wait_log"], [f.pipeline_readiness.QUIET])
         self.assertEqual(set(p[1]["wait_log"]), set(p[1]["wait_log_fresh"]))
         before = deepcopy(p)
         f.pipeline_readiness.apply(j, p)
@@ -99,13 +99,13 @@ class PipelineReadinessTests(unittest.TestCase):
         p = [phase('before', values='ls_k=0'), phase('settings-reset', values='ls_k=1')]
         f.pipeline_readiness.apply(j, p)
         self.assertFalse(f.pipeline_readiness.problems(j, p))
-        self.assertIn(r'gi: gi/rt_local_shadows[^ ]*_k\.hlsl[^ ]* generation ', p[1]['wait_log'])
+        self.assertEqual(p[1]['wait_log'], [f.pipeline_readiness.QUIET])
 
-    def test_temporal_wait_uses_cached_pipeline_and_fresh_quiescence(self):
+    def test_temporal_wait_requires_only_fresh_quiescence(self):
         j = dict(set="rr_post_temporal=0")
         p = [phase("before"), phase("on", values="rr_post_temporal=1")]
         f.pipeline_readiness.apply(j, p)
-        self.assertIn("temporal", p[1]["wait_log"][0])
+        self.assertEqual(p[1]["wait_log"], [f.pipeline_readiness.QUIET])
         self.assertEqual(p[1]["wait_log_fresh"], [f.pipeline_readiness.QUIET])
 
 

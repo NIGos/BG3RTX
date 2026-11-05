@@ -2,7 +2,8 @@
 
 Build/status patterns in existing bundle13 plans are conditional witnesses in
 camera-plan.ps1: acknowledge settings, then reconcile starts and completions.
-Resident pipelines need neither a new completion nor a quiet watch interval.
+Shader changes require fresh driver quiescence, never guessed request names.
+Layer-only and push-constant changes need no pipeline wait.
 """
 import re
 
@@ -108,23 +109,9 @@ def requirements(job, plan):
         for key, value in changed.items():
             if key in NO_PIPELINE:
                 continue
-            patterns = [p.format(value=value) for p in TABLE.get(key, [])]
-            # Disabled post temporal bypasses its pass and needs no temporal pipeline.
-            if key == "rr_post_temporal" and str(value) == "0":
-                patterns = []
-            # These families are never requested when disabled (core/gi.cpp).
-            # A preset switch must reconcile builds for the target, not wait
-            # for a completion that only the previous preset could produce.
-            if key in ("ls_box", "ls_k") and str(value) == "0":
-                patterns = []
-            if WATER_COMPOSE in patterns and str(state.get("rt_water_compose", "1")) == "0":
-                patterns = []
-            if key == "rt_water_reflections" and str(value) == "0":
-                patterns = []
-            if patterns:
-                wanted[key] = patterns + [QUIET]
-            elif key in TABLE:
-                # Disabled family: nothing to build, only let in-flight work settle.
+            if key in TABLE:
+                # Pipeline requests depend on the complete target state and may
+                # already be resident. Only fresh driver quiescence is required.
                 wanted[key] = [QUIET]
             else:
                 # Unknown keys need an explicit contract, never an invented
@@ -146,8 +133,6 @@ def apply(job, plan):
                 continue
             patterns.extend(required)
             fresh.append(QUIET)
-            if key == "rt_water_surface_fresnel":
-                fresh.extend(required)
         phase["wait_log"] = list(dict.fromkeys(patterns))
         phase["wait_log_fresh"] = list(dict.fromkeys(fresh))
         phase["wait_log_timeout"] = max(float(phase.get("wait_log_timeout", 0)), 180)
@@ -168,8 +153,8 @@ def problems(job, plan):
                             key in p]
                 if not specific:
                     missing.append("unknown pipeline mapping; declare key-specific wait_log")
-            if patterns and (QUIET not in fresh or key == "rt_water_surface_fresnel" and any(p not in fresh for p in patterns)):
-                missing.append("fresh completion after settings write")
+            if patterns and QUIET not in fresh:
+                missing.append("fresh quiescence after settings write")
             if missing:
                 errors.append(f"readiness: {phase.get('label')}: changed {key} requires pipeline wait_log ({'; '.join(missing)})")
     return errors

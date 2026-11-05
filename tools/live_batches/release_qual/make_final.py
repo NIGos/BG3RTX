@@ -7,7 +7,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from tools.live_batches.release_qual import make_jobs as release
-from tools.live_batches import live_flow as flow
+from tools.live_batches import live_flow as flow, pipeline_readiness
 from tools.live_batches.combine import assignments, settings, combine_group
 from tools.live_batches.release_qual.analyze_final import costs, energy
 
@@ -135,6 +135,9 @@ def main():
     for p in sp:
         if p['label'] in ('warmup-diagnostic-settings', 'diag-warm-omm', 'diag-omm'):
             p = deepcopy(p)
+            if p['label'] == 'warmup-diagnostic-settings':
+                # This is a settings transition, not a cold-cache startup.
+                p['wait_log'] = p['wait_log_fresh'] = [pipeline_readiness.QUIET]
             p['set'] = p['set'].replace('rt_scene_wait_ms=100', 'rt_scene_wait_ms=12').replace('rt_scene_wait_log_frames=60', 'rt_scene_wait_log_frames=120')
             highp.append(p)
     highp.append(dict(energy_phase(), label='restore-diagnostics', trace_at=[], seconds=2,
