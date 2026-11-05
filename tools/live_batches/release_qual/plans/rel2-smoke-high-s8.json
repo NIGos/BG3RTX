@@ -74,7 +74,6 @@
     "stats_reset": true,
     "wait_log_timeout": 30,
     "wait_stats": [
-      "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[mem\\] ours \\(",
@@ -103,7 +102,6 @@
     "stats_reset": true,
     "wait_log_timeout": 30,
     "wait_stats": [
-      "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[mem\\] ours \\(",
@@ -132,7 +130,6 @@
     "stats_reset": true,
     "wait_log_timeout": 30,
     "wait_stats": [
-      "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[mem\\] ours \\(",
@@ -161,7 +158,6 @@
     "stats_reset": true,
     "wait_log_timeout": 30,
     "wait_stats": [
-      "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[mem\\] ours \\(",
@@ -190,7 +186,6 @@
     "stats_reset": true,
     "wait_log_timeout": 30,
     "wait_stats": [
-      "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[mem\\] ours \\(",
