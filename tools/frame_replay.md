@@ -1,4 +1,4 @@
-# Offline frame replay (gi_hit_direct)
+# Offline frame replay (GI and production Ultra local shadows)
 
 Re-run one production pass on one captured frame without the game (docs/OFFLINE_OPPORTUNITIES.md A).
 Pass: `gi_hit_direct` (`shaders/gi/gi_trace_rt_hit_direct.hlsl`, base variant). It was chosen over
@@ -119,9 +119,9 @@ bin/frame_replay --compile-only --compile-pass local-shadows --spv .scratch/rf-l
 compare `--spec 1031=0` / `--spec 1031=1` on the same module. Core keeps it OFF when
 `rf_hit_gi=0`: that trial gained a register. No shader requests are added.
 
-These selectors only create pipelines and print driver statistics. They do not replay RF/LS
-outputs. A future shader reduction needs ON/OFF specialized SPIR-V review of stored-result logic
-and a live in-run energy/image A/B; compile-only statistics cannot establish image exactness.
+These compile-only selectors only create pipelines and print driver statistics. Ordinary
+`--pack` replay also supports production Ultra local shadows as described below. RF output
+replay remains unsupported. Compile-only statistics cannot establish image exactness.
 
 With `--repeat N`, the summary prints the median, min, max and max-minus-min spread of **all**
 dispatch GPU timestamps, including the first dispatch. Retain the individual run lines to diagnose
@@ -507,3 +507,46 @@ record elements, `lighting_inputs`); `frame_replay_test` writes its synthetic pa
 replays it, and runs the image read on every mapped format.
 Open: the exact VT cache sizes, formats, layers and mips at S8 (the next pack's `textures` line),
 then the choice between a larger cap for this one job and a hit-sampled tile capture.
+
+
+## Production Ultra local shadows
+
+New `pass local_shadows` packs dispatch `gi/rt_local_shadows_box_k.hlsl` with the
+actual captured `RT_SPEC_NATIVE`, `RT_SPEC_HAIR_ORIGIN`, `RT_SPEC_CASCADE` request
+and all actual specialization values (`spec ID VALUE`). `--spec` overrides a captured
+value; `--ab-spec ID=A,B` varies it in paired ABBA/BAAB dispatches. `--pipeline-stats`
+works with this pass. Stock visible hair and non-OMM Ultra are the capture contract.
+Old GI packs cannot be converted: they lack LS-time inputs and references.
+
+The pack includes LS-time shadow records/atlas, projector records/2D cookies,
+AO/sun mask/auxiliary state, material/class/frame data, joined light slots and the
+same alpha geometry/TLAS inputs. Shadow traversal does not read hit-material caches
+(set 1 b12-15); these large unused inputs are excluded. Sun set 2 holds b0-6;
+box set 3 holds b16/b29/b45. Counter buffers remain device-local during LS replay.
+
+`output S B FORMAT W H REFERENCE INITIAL` adds an exact initial storage image;
+`-` means no live reference. The initial native R11G11B10 diffuse/specular and
+RGBA16F auxiliary bytes are restored before **every** dispatch, outside timestamps.
+`counter_initial FILE` restores the primary raw counter bins; `counters FILE`
+provides the live post-dispatch reference. Extra counter buffers at set 4 are
+restored from their captured buffer bytes and included in raw paired comparisons.
+Every output is compared byte for byte in the paired run. Live packed colour is
+compared as bytes; reconstructed AS traversal can differ from the game's AS.
+
+`BG3RPKZ1` files use lossless, checksummed 4 MiB XPRESS_HUFF blocks. The reader
+also accepts legacy raw files. Image uploads index compressed blocks and decode
+one block at a time, retaining the existing bounded staging budget. The manifest's
+sizes and sparse offsets always describe decoded bytes.
+
+```powershell
+bin/frame_replay --pack captures/replay-NEW --out .scratch/ls-ab `
+  --ab-spec ID=0,1 --repeat 40 --ab-require-equal --pipeline-stats
+```
+
+`frame_replay_ls_test` (`--ls-self-test DIR`) writes a synthetic LS pack with a
+shadowed slab, nonzero native packed colours, a populated shadow view/atlas and
+projector cookie element 7. It requires colour modification, changed output for
+black-cookie/dark-atlas controls, repeat identity, captured specs/counter round trip,
+and exact paired restoration under Vulkan validation. `replay_pack_test` also checks
+legacy manifest round trips and malformed new directives. `replay_codec_test` checks
+lossless framing, random reads, corruption and legacy raw input without a GPU.

@@ -611,6 +611,8 @@ add_executable(dlss5_runtime_policy_test tests/dlss5_runtime_policy_test.cpp)
 add_test(NAME dlss5_runtime_policy_test COMMAND dlss5_runtime_policy_test)
 add_test(NAME frame_replay_origin_adapter_test COMMAND frame_replay --origin-self-test)
 add_test(NAME frame_replay_ab_statistics_test COMMAND frame_replay --ab-self-test)
+add_test(NAME frame_replay_ls_test COMMAND frame_replay --ls-self-test ${CMAKE_BINARY_DIR}/frame_replay_ls_test)
+set_tests_properties(frame_replay_ls_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
 add_test(NAME frame_replay_test COMMAND frame_replay --self-test ${CMAKE_BINARY_DIR}/frame_replay_test)
 set_tests_properties(frame_replay_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
 # Offline PT reference (tools/pt_reference.hlsl): furnace and slab checks of the path tracer.
@@ -618,6 +620,8 @@ add_test(NAME pt_reference_test COMMAND frame_replay --pt-self-test ${CMAKE_BINA
 set_tests_properties(pt_reference_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 # The pack writer's CPU side (common/replay_pack.h: manifest writer round trip, InstInfo spans,
 # budget) that the live writer (layer/replay.cpp) and --synthesize share.
+add_executable(replay_codec_test tests/replay_codec_test.cpp)
+add_test(NAME replay_codec_test COMMAND replay_codec_test)
 add_executable(replay_pack_test tests/replay_pack_test.cpp)
 add_test(NAME replay_pack_test COMMAND replay_pack_test)
 

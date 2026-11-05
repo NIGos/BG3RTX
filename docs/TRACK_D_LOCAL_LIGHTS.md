@@ -958,3 +958,21 @@ without a pack or dispatch. Native + hair-origin + cascade request, cascade 1000
 168 registers, driver Shared Memory Size 7168 bytes, Local Memory Size 68719476752 (anomalous;
 not a reliable spill measurement). No LS shader change; the existing split/reload remains intact.
 No specialization 1032 or setting was added without a demonstrated candidate.
+
+## Offline production LS replay (ls-pack, 2026-11-05)
+
+`replay_pack=1` requests one production Ultra box exact-k frame. The snapshot must
+be taken after the light-slot join and immediately around the LS dispatch: game
+shadow records/atlas, projector records/2D cookies, pre-LS diffuse/specular, folded
+AO, sun mask, auxiliary state, push bytes and actual specialization constants.
+Post-dispatch outputs and counters are references. Each offline repeat restores
+all mutable inputs before the timed region; paired A/B compares raw output bytes
+and counters. No LS shader or variant request is added (request delta 0).
+
+ABI 27 extends the diagnostic dispatch payload for this two-phase snapshot and
+additional sets/specs. Rebuild both host and core. Pack generation is off by
+default; capture overhead is not a rendering cost measurement. Real inn capture
+and replay/live equality remain READY_FOR_LIVE, not qualified. Prepared static
+job: `tools/live_batches/ls_pack/jobs/ls-pack-inn.json`, save `The Blushing Mermaid -
+96h 39m`, Ultra, 2048 MiB cap, no queued work. See `tools/frame_replay.md` and
+`docs/progress/ls-pack.md` for offline verification and limitations.

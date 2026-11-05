@@ -53,6 +53,26 @@ int main() {
     check(!rp::parse("bg3rtx_replay_pack 1\npass gi_hit_direct\npush p\ndispatch 1 1 1\nrange 1 6 0 f 0\n", bad, error), "a range slice without BYTES is rejected");
   }
 
+  {
+    rp::Manifest ls=m;ls.pass="local_shadows";
+    ls.specs={{1000,1},{1008,0}};ls.counter_initial="before.bin";ls.counters="after.bin";
+    ls.outputs={{0,6,122,128,128,"live.bin","initial.bin"},{0,7,122,128,128,"","initial.bin"}};
+    rp::Manifest back;
+    const auto text=rp::serialize(ls);
+    check(rp::parse(text,back,error) && rp::serialize(back)==text,"LS specs, counter snapshots and output initial round-trip");
+    check(back.outputs[1].reference.empty() && back.outputs[1].initial=="initial.bin","LS initial without live reference round-trip");
+    rp::Manifest bad;
+    check(!rp::parse(text+"spec 1000 0\n",bad,error),"duplicate specialization ID rejected");
+    bad={};check(!rp::parse(text+"spec 1009\n",bad,error),"truncated specialization rejected");
+    bad={};check(!rp::parse(text+"counter_initial\n",bad,error),"truncated counter initial rejected");
+    const auto* pass=rp::find_pass("local_shadows");
+    bool unique=true;
+    for(uint32_t i=0;i<pass->slot_count;++i)for(uint32_t j=0;j<i;++j)
+      unique &= pass->slots[i].set != pass->slots[j].set || pass->slots[i].binding != pass->slots[j].binding;
+    check(unique && rp::find_slot(*pass,3,45)->kind==rp::kSampled2D && rp::find_slot(*pass,0,6)->storage_format==122,
+          "LS unique descriptor contract, 2D cookies and native packed colour");
+  }
+
   // 2. InstInfo spans: soup vs pool, legacy / hair / empty entries name nothing.
   const uint32_t info[] = {
       0, 64, 0, 2,                                   // soup, 2 tris of stride 64: [0, 384)

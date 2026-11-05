@@ -30,6 +30,7 @@
 #include <string>
 #include <vector>
 #include "../common/replay_pack.h"
+#include "../common/replay_codec.h"
 #include "replay_ab.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_gi_bindings.h"
@@ -343,15 +344,15 @@ void fill_image(const Img& im, const std::vector<uint8_t>& data, uint64_t stage_
 }
 // Streamed from a pack file, piece by piece.
 void fill_image_file(const Img& im, const fs::path& p, uint64_t stage_max = kStageBytes) {
-  std::ifstream f(p, std::ios::binary | std::ios::ate);
+  std::ifstream f(p,std::ios::binary);
   check(bool(f), "read " + p.string());
+  bg3::replay::codec::Reader reader(f);
+  check(reader.good(), "image codec: " + reader.error());
   const uint64_t bytes = rp::image_bytes(im.format, im.w, im.h, im.layers, im.mips);
-  check(uint64_t(f.tellg()) == bytes, "image data size: " + p.string());
-  fill_image_pieces(im, [&](uint64_t offset, uint64_t n, uint8_t* dst) {
-    f.seekg(std::streamoff(offset));
-    f.read(reinterpret_cast<char*>(dst), std::streamsize(n));
-    check(bool(f), "read " + p.string());
-  }, stage_max);
+  check(reader.size() == bytes, "image data size: " + p.string());
+  fill_image_pieces(im, [&](uint64_t offset,uint64_t n,uint8_t* dst) {
+    check(reader.read(offset,size_t(n),dst),"image codec read: " + reader.error());
+  },stage_max);
 }
 // Every mip and layer back, packed (the self-test's round trip).
 std::vector<uint8_t> read_image_all(const Img& im) {
@@ -408,9 +409,10 @@ void clear_storage(VkCommandBuffer c, const Img& im) {
 std::vector<uint8_t> read_file(const fs::path& p) {
   std::ifstream f(p, std::ios::binary | std::ios::ate);
   check(bool(f), "read " + p.string());
-  std::vector<uint8_t> out(static_cast<size_t>(f.tellg()));
-  f.seekg(0); f.read(reinterpret_cast<char*>(out.data()), std::streamsize(out.size()));
-  check(bool(f) || out.empty(), "read " + p.string());
+  bg3::replay::codec::Reader reader(f);
+  check(reader.good(),"codec: " + reader.error());
+  std::vector<uint8_t> out(static_cast<size_t>(reader.size()));
+  check(reader.read(0,out.size(),out.data()),"codec read: " + reader.error());
   return out;
 }
 void write_file(const fs::path& p, const void* data, size_t n) {
@@ -679,10 +681,16 @@ ImageResult summarize(const std::string& name, uint32_t format, uint32_t w, uint
   ImageResult r{name, format, w, h, std::move(raw), 0, {0, 0, 0, 0}, 0};
   r.hash = fnv1a(r.raw);
   const uint64_t px = uint64_t(w) * h;
-  uint32_t comps = format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
+  uint32_t comps = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? 3 : format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
   for (uint64_t i = 0; i < px; ++i)
     for (uint32_t k = 0; k < comps; ++k) {
-      float v = format == VK_FORMAT_R16G16B16A16_SFLOAT ? half_to_float(reinterpret_cast<const uint16_t*>(r.raw.data())[i * 4 + k])
+      auto ufloat = [](uint32_t x, uint32_t mantissa) {
+        const uint32_t e = x >> mantissa, m = x & ((1u << mantissa)-1);
+        return e == 31 ? (m ? std::nanf("") : INFINITY) : std::ldexp(float(e ? (1u << mantissa) + m : m), int(e ? e : 1)-15-int(mantissa));
+      };
+      const uint32_t packed = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? reinterpret_cast<const uint32_t*>(r.raw.data())[i] : 0;
+      float v = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? ufloat((packed >> (k == 0 ? 0 : k == 1 ? 11 : 22)) & (k == 2 ? 1023u : 2047u),k == 2 ? 5 : 6) :
+                format == VK_FORMAT_R16G16B16A16_SFLOAT ? half_to_float(reinterpret_cast<const uint16_t*>(r.raw.data())[i * 4 + k])
                                                        : reinterpret_cast<const float*>(r.raw.data())[i * comps + k];
       if (!std::isfinite(v)) { ++r.nonfinite; continue; }
       r.mean[k] += v / double(px);
@@ -890,6 +898,10 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     buffers[key(b.set, b.binding)] = buf;
   }
   if (!casters.empty()) upload(buffers[key(1, 6)], casters_base, casters.data(), casters.size());
+  std::map<uint64_t,std::vector<uint8_t>> mutable_counters;
+  if (m.pass == "local_shadows") for (const auto& b:m.buffers) if (b.set==4 && !b.file.empty()) {
+    auto initial=file(b.file);initial.resize(size_t(b.bytes),0);mutable_counters[key(b.set,b.binding)]=std::move(initial);
+  }
   std::map<std::string, std::vector<uint8_t>> range_files;   // the live writer puts many slices in one file
   for (const auto& r : m.ranges) {
     auto it = buffers.find(key(r.set, r.binding)); check(it != buffers.end(), "range before its buffer");
@@ -900,7 +912,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     check(r.file_offset + n <= d.size() && r.offset + n <= it->second.size, "range outside its file or buffer: " + r.file);
     upload(it->second, r.offset, d.data() + r.file_offset, size_t(n));
   }
-  Buf stats = make_buffer(kCounters * 64 * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true);
+  Buf stats = make_buffer(kCounters * 64 * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, m.pass != "local_shadows");
   // Images (inputs), outputs, dummies.
   std::map<uint64_t, std::map<uint32_t, Img>> images;   // slot -> element -> image
   // The writer stores each VkImage once and names its file from every descriptor element that binds
@@ -909,6 +921,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   std::map<std::string, Img> by_file;
   uint32_t decoded = 0, decoded_bc = 0;
   for (const auto& i : m.images) {
+    if (std::any_of(m.outputs.begin(),m.outputs.end(),[&](const auto& o){return o.set==i.set && o.binding==i.binding && o.initial==i.file;})) continue;
     const rp::Slot* slot = rp::find_slot(pass, i.set, i.binding);
     check(slot && (slot->kind == rp::kSampled2D || slot->kind == rp::kSampled2DArray || slot->kind == rp::kSampledCube || slot->kind == rp::kStorage) &&
               i.element < slot->count,
@@ -941,7 +954,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     result.warnings.push_back("sun trust from " + g_sun_trust.filename().string() + ": " + std::to_string(n) + " roof volumes, flags " + std::to_string(flags) +
                               "; Push::ls_flags bit 25 set");
   }
-  struct Out { Img img; std::string name, reference; };
+  struct Out { Img img; std::string name, reference; Buf initial; };
   std::vector<Out> outputs;
   for (const auto& o : m.outputs) {
     const rp::Slot* slot = rp::find_slot(pass, o.set, o.binding);
@@ -949,7 +962,15 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     Img im = make_image(o.format, o.w, o.h, 1, 1, true, false);
     fill_image(im, {});
     images[key(o.set, o.binding)][0] = im;
-    outputs.push_back({im, slot->name, o.reference});
+    Buf initial;
+    if (!o.initial.empty()) {
+      const auto bytes = file(o.initial);
+      check(bytes.size() == rp::image_bytes(o.format,o.w,o.h,1,1), "output initial image size");
+      initial = make_buffer(bytes.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false);
+      upload(initial,0,bytes.data(),bytes.size());
+    }
+    check(m.pass != "local_shadows" || initial.b, "LS output requires exact initial bytes");
+    outputs.push_back({im, slot->name, o.reference, initial});
   }
   const float nan = std::nanf("");
   const float nan4[4] = {nan, nan, nan, nan};
@@ -1164,6 +1185,8 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   pl.setLayoutCount = pass.set_count; pl.pSetLayouts = setLayouts.data(); pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &pushRange;
   VkPipelineLayout layout; vkcheck(vkCreatePipelineLayout(g.dev, &pl, nullptr, &layout), "pipeline layout");
+  const auto user_specs = g_specs;
+  for (const auto& spec : m.specs) if (!g_specs.count(spec.id)) g_specs[spec.id] = spec.value;
   const auto common_specs = g_specs;
   for (const auto& [id, values] : g_ab_specs) g_specs[id] = values.first;
   VkPipeline pipeline = make_pipeline(spirv, layout), pipeline_b = pipeline;
@@ -1179,7 +1202,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     }
     pipeline_b = make_pipeline(code_b, layout);
   }
-  g_specs = common_specs;
+  g_specs = user_specs;
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; qi.queryType = VK_QUERY_TYPE_TIMESTAMP; qi.queryCount = 2;
   VkQueryPool queries; vkcheck(vkCreateQueryPool(g.dev, &qi, nullptr, &queries), "query pool");
   if (!quiet) {   // what the pack costs the GPU (a 2 GB VT cache included; host staging is kStageBytes)
@@ -1190,6 +1213,12 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     for (const auto& [k, im] : by_file) largest = std::max(largest, rp::image_bytes(im.format, im.w, im.h, im.layers, im.mips));
     std::printf("[replay] loaded %zu images (largest %.1f MB), device-local %.1f MB of a %.1f MB heap, staging pieces of %.0f MB\n", by_file.size(),
                 largest / 1048576.0, g.device_bytes / 1048576.0, heap / 1048576.0, kStageBytes / 1048576.0);
+  }
+  std::vector<uint8_t> initial_stats(size_t(stats.size),0);
+  if (!m.counter_initial.empty()) {
+    const auto bytes = file(m.counter_initial);
+    check(bytes.size() <= initial_stats.size() && bytes.size() % 4 == 0, "initial counter size");
+    std::copy(bytes.begin(),bytes.end(),initial_stats.begin());
   }
   ReplayProgress progress;
   std::vector<double> timings;
@@ -1213,7 +1242,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     const uint32_t pair = ab_mode() && !warmup ? (run - 4) / 4 : 0;
     const uint32_t phase = ab_mode() ? run % 4 : 0;
     const bool use_b = ab_mode() && (warmup ? (run & 1) != 0 : ((phase == 1 || phase == 2) != ((pair & 1) != 0)));
-    std::memset(stats.map, 0, size_t(stats.size));
+    if (stats.map) std::memcpy(stats.map, initial_stats.data(), initial_stats.size());
+    else upload(stats,0,initial_stats.data(),initial_stats.size());
+    for (const auto& [binding,initial]:mutable_counters) upload(buffers.at(binding),0,initial.data(),initial.size());
     push = push_pack;
     if (hooks && hooks->patch) hooks->patch(run, push);
     apply_push_set(push);
@@ -1223,7 +1254,13 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     submit([&](VkCommandBuffer c) {
       barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
               VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
-      for (auto& o : outputs) clear_storage(c, o.img);
+      for (auto& o : outputs) {
+        if (o.initial.b) {
+          VkBufferImageCopy region{}; region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
+          region.imageExtent = {o.img.w,o.img.h,1};
+          vkCmdCopyBufferToImage(c,o.initial.b,o.img.image,VK_IMAGE_LAYOUT_GENERAL,1,&region);
+        } else clear_storage(c, o.img);
+      }
       vkCmdResetQueryPool(c, queries, 0, 2);
       barrier(c, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
               VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -1243,9 +1280,17 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     RunResult rr;
     rr.gpu_ms = double(ticks[1] - ticks[0]) * g.tick_ns * 1e-6;
     if (!warmup) timings.push_back(rr.gpu_ms);
-    std::vector<uint8_t> raw(static_cast<size_t>(stats.size)); std::memcpy(raw.data(), stats.map, raw.size());
+    std::vector<uint8_t> raw(static_cast<size_t>(stats.size));
+    if (stats.map) std::memcpy(raw.data(), stats.map, raw.size()); else raw = download(stats,stats.size);
     rr.stats = fold(raw);
     rr.raw_stats = std::move(raw);
+    if (m.pass == "local_shadows") for (uint32_t binding : {0u,1u}) {
+      const auto it = buffers.find(key(4,binding));
+      if (it != buffers.end()) {
+        const auto extra = download(it->second,it->second.size);
+        rr.raw_stats.insert(rr.raw_stats.end(),extra.begin(),extra.end());
+      }
+    }
     for (auto& o : outputs) rr.outputs.push_back(summarize(o.name, o.img.format, o.img.w, o.img.h, read_image(o.img)));
     if ((!quiet && !ab_mode()) || run == 0) {
       std::printf("[replay] %s run %u: dispatch %u x %u x %u, GPU %.3f ms\n", m.pass.c_str(), run, m.groups[0], m.groups[1], m.groups[2], rr.gpu_ms);
@@ -1349,6 +1394,12 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       const size_t component = r.format == VK_FORMAT_R16G16B16A16_SFLOAT ? 2 : 4;
       g_reference_mismatch |= !reference_equal(g_reference_out / (r.name + ".raw"), r.raw, component, r.name);
     }
+    if (!outputs[i].reference.empty() && m.pass == "local_shadows") {
+      const auto live = file(outputs[i].reference);
+      const auto diff = rp::byte_difference(live,r.raw);
+      std::printf("  vs live %s: %zu differing bytes of %zu (exact packed format %u)\n",r.name.c_str(),diff.count,r.raw.size(),r.format);
+      if (diff.count) result.warnings.push_back("live output differs: " + r.name);
+    }
     if (!hooks && !outputs[i].reference.empty() && r.format == VK_FORMAT_R16G16B16A16_SFLOAT) {
       auto live = file(outputs[i].reference);
       if (live.size() != r.raw.size()) { result.warnings.push_back("reference " + outputs[i].reference + " has another size"); continue; }
@@ -1363,6 +1414,15 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   // The raw counters (kCounters x 64 bins of uint32): per-slot diagnostics such as HM_BLOCKERS
   // (native_hit_material.hlsli, tools/hit_material_blockers.py) read their slots from it.
   if (!hooks) write_vec(out / "rtstats.bin", result.runs.back().raw_stats);
+  if (!hooks && !m.counters.empty()) {
+    auto live = file(m.counters);
+    check(live.size() <= stats.size && live.size() % 4 == 0, "live counter size");
+    live.resize(size_t(stats.size),0);
+    const auto& raw = result.runs.back().raw_stats;
+    const bool same = std::equal(live.begin(),live.end(),raw.begin());
+    std::printf("  vs live counters: %s\n",same ? "bit-equal" : "DIFFER");
+    if (!same) result.warnings.push_back("live counters differ");
+  }
   if (!hooks && !g_reference_out.empty()) {
     g_reference_mismatch |= !reference_equal(g_reference_out / "rtstats.bin", result.runs.back().raw_stats, 4, "counters");
   }
@@ -2258,6 +2318,105 @@ int pt_self_test(const fs::path& dir) {
   return failures ? 1 : 0;
 }
 
+int ls_self_test(const fs::path& dir) {
+  if (int r = init_gpu(true,true)) return r;
+  const fs::path pack = dir / "pack";
+  synthesize(pack,false);
+  rp::Manifest m; std::string error;
+  { const auto bytes = read_file(pack / "manifest.txt"); check(rp::parse(std::string(bytes.begin(),bytes.end()),m,error),error); }
+  m.pass = "local_shadows";
+  m.defines = "RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1";
+  m.specs = {{1000,1},{1008,0},{1009,0},{1010,0},{1020,0},{1026,0}};
+  const auto& pass = *rp::find_pass(m.pass);
+  m.buffers.erase(std::remove_if(m.buffers.begin(),m.buffers.end(),[&](const auto& b){return !rp::find_slot(pass,b.set,b.binding);}),m.buffers.end());
+  m.images.erase(std::remove_if(m.images.begin(),m.images.end(),[&](const auto& i){return !rp::find_slot(pass,i.set,i.binding);}),m.images.end());
+  auto push_bytes = read_file(pack / m.push);
+  Push push{}; std::memcpy(&push,push_bytes.data(),sizeof push);
+  push.ls_strength = 1; push.ls_shadowed = 3; push.ls_clear = 0.2f;
+  push.ls_flags = 31u << 8; push.ls_kmode = 1; push.ao_direct = 0; push.rt_stats = 1;
+  write_file(pack / m.push,&push,sizeof push);
+  auto light_bytes = read_file(pack / "llights.bin");
+  Light light{}; std::memcpy(&light,light_bytes.data(),sizeof light);light.pos[1]=3.5f;
+  write_file(pack / "llights.bin",&light,sizeof light);
+  const uint32_t W = push.full[0], H = push.full[1];
+  m.groups[0] = (W+7)/8; m.groups[1] = (H+7)/8;
+  auto flags=read_file(pack / "lflags.bin");std::memcpy(flags.data()+16,&W,4);std::memcpy(flags.data()+20,&H,4);write_vec(pack / "lflags.bin",flags);
+  const uint32_t cluster[4]={0,1,1,0};write_file(pack / "lclusters.bin",cluster,sizeof cluster);
+  auto constants=read_file(pack / "lconsts.bin");const float atlas_constants[4]={0.25f,0.25f,1,0};
+  std::memcpy(constants.data()+31*16,&W,4); // one screen-sized froxel for direct LS pixel coordinates
+  std::memcpy(constants.data()+33*16,atlas_constants,16);write_vec(pack / "lconsts.bin",constants);
+  const uint32_t colour = (15u << 6) | ((15u << 6) << 11) | ((15u << 5) << 22); // RGB 1 exactly
+  std::vector<uint32_t> initial(size_t(W)*H,colour);
+  write_vec(pack / "colour.bin",initial);
+  std::vector<uint16_t> auxiliary(size_t(W)*H*4,0); for(size_t i=0;i<auxiliary.size();i+=4) auxiliary[i]=0x3c00;
+  write_vec(pack / "aux.bin",auxiliary);
+  m.outputs = {{0,6,122,W,H,"","colour.bin"},{0,7,122,W,H,"","colour.bin"},{0,44,97,W,H,"","aux.bin"}};
+  auto image = [&](uint32_t b,uint32_t format,const char* name,const std::vector<uint8_t>& bytes) {
+    write_vec(pack / name,bytes); m.images.push_back({0,b,0,format,W,H,1,1,name});
+  };
+  std::vector<float> albedo(size_t(W)*H*4,0.5f), material(size_t(W)*H*4,0);
+  for(size_t i=0;i<material.size();i+=4){material[i]=0.5f;material[i+1]=0.5f;}
+  auto raw = [](const auto& v){const auto* b=reinterpret_cast<const uint8_t*>(v.data());return std::vector<uint8_t>(b,b+v.size()*sizeof(v[0]));};
+  image(3,109,"ls-albedo.bin",raw(albedo)); image(4,109,"ls-material.bin",raw(material));
+  image(12,64,"ls-ao.bin",raw(std::vector<uint32_t>(size_t(W)*H,0xffffffffu)));
+  image(16,9,"ls-mask.bin",std::vector<uint8_t>(size_t(W)*H,255));
+  float shadow[24]{};shadow[11]=0.5f;shadow[15]=1;shadow[18]=1;shadow[21]=1;shadow[23]=1;
+  write_file(pack / "shadow.bin",shadow,sizeof shadow); m.buffers.push_back({0,27,sizeof shadow,"shadow.bin"});
+  const std::vector<float> atlas(16,1);write_vec(pack / "atlas.bin",atlas); m.images.push_back({0,28,0,100,4,4,1,1,"atlas.bin"});
+  std::vector<uint8_t> projector(128,0);
+  auto pf=[&](size_t offset,float value){std::memcpy(projector.data()+offset,&value,4);};
+  auto pu=[&](size_t offset,uint32_t value){std::memcpy(projector.data()+offset,&value,4);};
+  pf(0,0.5f);pf(4,0.5f);pf(8,0.5f);pu(12,16); // cookie element 7
+  pf(16,0);pf(20,1);pf(32,4);pf(36,4);pu(40,1);pf(44,1);
+  pf(48,0.05f);pf(60,0.5f);pf(68,0.05f);pf(76,0.25f);pf(88,0.05f);pf(92,0.5f);
+  pu(108,1);pf(112,0.6f);pf(116,-0.8f); // oblique light: the visible slab shadows adjacent back-plane pixels
+  write_vec(pack / "projector.bin",projector); m.buffers.push_back({3,29,128,"projector.bin"});
+  const float cookie[4]={0.5f,0.75f,1,1};write_file(pack / "cookie.bin",cookie,sizeof cookie);
+  m.images.push_back({3,45,7,109,1,1,1,1,"cookie.bin"});
+  m.samplers.push_back({3,16,0,1,1,1,2,2,2,0,1000});
+  std::vector<uint8_t> counters(kCounters*64*4,0); counters.back()=17;
+  write_vec(pack / "initial-counters.bin",counters); m.counter_initial="initial-counters.bin";
+  // Exercise codec integration through both ordinary file reads and staged image upload.
+  auto encoded_file = [&](const char* name,const std::vector<uint8_t>& bytes) {
+    std::ofstream output(pack / name,std::ios::binary);rp::codec::Writer writer(output,bytes.size());
+    check(writer.write(bytes.data(),bytes.size()) && writer.finish(),"LS fixture compressed file");
+  };
+  encoded_file("colour.bin",raw(initial));encoded_file("initial-counters.bin",counters);encoded_file("atlas.bin",raw(atlas));
+  auto save = [&]{ const auto text=rp::serialize(m);write_file(pack / "manifest.txt",text.data(),text.size()); };
+  save();
+  rp::Manifest roundtrip; check(rp::parse(rp::serialize(m),roundtrip,error),error);
+  check(roundtrip.specs.size()==m.specs.size() && roundtrip.outputs[0].initial=="colour.bin" && roundtrip.counter_initial==m.counter_initial,"LS manifest round trip");
+  const auto a = replay(pack,nullptr,{}, {},dir / "first",2,true);
+  check(a.runs[0].raw_stats == a.runs[1].raw_stats,"LS repeat counters");
+  check(a.runs[0].stats.t[118]==0 && a.runs[0].stats.t[119]==0 && a.runs[0].stats.t[120]==0,"LS synthetic input ranges and rays valid");
+  bool changed = false;
+  for(size_t i=0;i<a.runs[0].outputs.size();++i) {
+    const auto& x=a.runs[0].outputs[i];
+    check(x.raw==a.runs[1].outputs[i].raw,"LS mutable images restored every repeat");
+    check(x.nonfinite==0,"LS finite packed outputs");
+    if(i<2) changed |= x.raw != raw(initial);
+    m.outputs[i].reference="reference"+std::to_string(i)+".bin";write_vec(pack / m.outputs[i].reference,x.raw);
+  }
+  check(changed,"LS fixture exercises colour modification");
+  const auto spv_bytes=read_file(dir / "first" / "pass.spv");std::vector<uint32_t> code(spv_bytes.size()/4);
+  std::memcpy(code.data(),spv_bytes.data(),spv_bytes.size());
+  const float black[4]={0,0,0,1};write_file(pack / "cookie.bin",black,sizeof black);
+  const auto no_cookie=replay(pack,&code,{}, {},dir / "black-cookie",1,true);
+  write_file(pack / "cookie.bin",cookie,sizeof cookie);
+  check(no_cookie.runs[0].outputs[0].raw != a.runs[0].outputs[0].raw,"LS reads projector cookie element 7");
+  write_vec(pack / "atlas.bin",std::vector<float>(16,0));
+  const auto no_atlas=replay(pack,&code,{}, {},dir / "dark-atlas",1,true);
+  write_vec(pack / "atlas.bin",atlas);
+  check(no_atlas.runs[0].outputs[0].raw != a.runs[0].outputs[0].raw,"LS reads shadow-view and atlas PCF");
+  m.counters="reference-counters.bin";write_vec(pack / m.counters,a.runs[0].raw_stats);save();
+  g_ab_specs[2147483647u]={0,1}; g_ab_require_equal=true;
+  replay(pack,&code,{}, {},dir / "paired",2,true);
+  check(!g_reference_mismatch,"LS paired restoration bit-equal");
+  g_ab_specs.clear();g_ab_require_equal=false;
+  std::puts("LS synthetic pack: production Ultra shader, packed colour restoration, auxiliary, atlas/projector/cookie, specs and counters PASS");
+  return g_validation_errors.load() ? 1 : 0;
+}
+
 int self_test(const fs::path& dir) {
   if (int r = init_gpu(true, true)) return r;
   int failures = 0;
@@ -2391,7 +2550,7 @@ int self_test(const fs::path& dir) {
 
 int main(int argc, char** argv) {
   std::vector<std::string> args(argv + 1, argv + argc);
-  fs::path pack, out, hlsl, spv, synth, test;
+  fs::path pack, out, hlsl, spv, synth, test, ls_test;
   std::vector<std::string> defines;
   uint32_t repeat = 1;
   bool repeat_given = false;
@@ -2443,6 +2602,7 @@ int main(int argc, char** argv) {
     else if (args[i] == "--box") synth_box = true;            // --synthesize: the closed box (PT furnace)
     else if (args[i] == "--lighting") synth_lighting = true;  // --synthesize: with the lighting inputs (kSynthAmbient)
     else if (args[i] == "--casters") synth_casters = true;    // --synthesize: the box's floor as rt_cascade_casters
+    else if (args[i] == "--ls-self-test") ls_test = next();
     else if (args[i] == "--self-test") test = next();
     else if (args[i] == "--load-test") return load_test();
     else if (args[i] == "--pt-self-test") pt_test = next();
@@ -2467,6 +2627,7 @@ int main(int argc, char** argv) {
     check(repeat <= (UINT32_MAX - 4) / 4, "paired repeat count too large");
     if (!repeat_given) repeat = 40;
   }
+  if (!ls_test.empty()) return ls_self_test(ls_test);
   if (!test.empty()) return self_test(test);
   if (!pt_test.empty()) return pt_self_test(pt_test);
   if (!synth.empty()) { synthesize(synth, dark, synth_box || synth_casters, synth_lighting, synth_casters); std::printf("synthetic pack written to %s\n", synth.string().c_str()); return 0; }
