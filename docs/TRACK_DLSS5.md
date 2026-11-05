@@ -1,8 +1,10 @@
-# DLSS 5 Neural Rendering: phase 1 feasibility
+# DLSS 5 Neural Rendering: feasibility and phase 2a
 
-2026-11-05, branch `dlss5`. Design only: no game, build, runtime load or queue work.
-Recommendation: **Vulkan/D3D12 transport + direct DCS NR evaluator inside our layer**.
-No ReShade or separate neural add-on. Conditional feasibility: compliant same-frame synchronization and runtime loading remain blockers. No phase 2 code implemented.
+2026-11-05, branch `dlss5`. Phase 2a offscreen fixture; no game or queue work.
+Recommendation: **direct NGX Vulkan core feature 18**, with the DCS Vulkan codec.
+Core Init/create/evaluate now work with signed 310.8.0; no D3D12, interop or command
+buffer split is needed. Validation and shutdown qualification remain blocked.
+No ReShade, separate neural add-on, game integration or live qualification yet.
 
 ## Evidence roots
 
@@ -51,7 +53,7 @@ including NR, composition and optical flow, excluding game/DX11 transport costs.
 finite changed output and zero NR failures. Do not equate stage sums with game FPS.
 BR README's CPU example (`BR/README.md:205`) is not a 5090 NR GPU benchmark.
 
-## 2. Bridge transport: what is implemented
+## 2. Bridge transport: historical fallback, not the chosen native path
 
 BR mirrors a game's **SR contract**, not NR itself (`BR/src/vkmirror.inc:4`).
 `Synth12EvaluateShared` calls private D3D12 SR (`BR/src/synth.inc:2721`), where
@@ -126,44 +128,45 @@ RR output is pre-DoF/pre-grade **linear HDR, already pre-exposed/eye-adapted**
 Keep the NR codec around this domain and validate energy; do not feed PQ or apply exposure twice. Replay remains `grade(((A * NR + C) * k) + B)` (`:451`).
 Tonemap/UI follow; Streamline tags at present (`BG/layer/streamline.cpp:2505`, called at `layer/layer.cpp:856`) therefore consume the NR-processed real frame.
 
-**Blocker 1 remains, narrowed by source:** BR solves the boundary using invalid
-host-event synchronization, not a legal reusable split. `BG/layer/layer.cpp:490`
-submits whole game command buffers (`:519`). A semaphore wait on that whole buffer
-would stall the RR producer too. Owning QueueSubmit alone cannot split commands
-already recorded inside one buffer. `layer/cmd.cpp:471`/`:526` wrap begin/end but
-provide no proven arbitrary continuation/replay mechanism.
-Production needs a legal producer/continuation boundary preserving recorded state,
-secondary buffers, barriers, query scopes, submit ordering and the game's final fence.
-Only then can ready/done D3D12-fence timeline imports order the two APIs legally.
-Do not submit D3D12 at CPU record time, use stale output, or move NR to Present.
+### Phase 2b direct Vulkan design (not implemented)
+
+The core-route fixture supersedes the proposed continuation-buffer split: encode,
+feature-18 evaluate and decode now execute in **one original Vulkan command buffer**
+(`tools/dlss5_fixture.cpp:574`). No redirection, extra Vulkan submit, external memory,
+shared D3D12 fence or worker event park is needed for native NR.
+Guard the RR boundary outside a render pass: pass-end clears in_pass (`cmd.cpp:240`)
+but Detour_Eval currently has no assertion (`ngx.cpp:1554`). Save/restore the actual
+compute state our codec disturbs; no global census of redirected vkCmd calls is needed.
+
+Put verified NR search paths into the **existing Streamline-owned** NGX Init,
+not a second Vulkan core instance. Streamline builds FeatureCommonInfo paths from
+plugin/config paths (`external/streamline-sdk-v2.14.16/source/plugins/sl.common/commonEntry.cpp:1455`, `:1471`);
+our preferences currently supply one path (`layer/streamline.cpp:1337`). Confirm
+NR path propagation without replacing the SR/RR/FG snippets or shipping NR.
+At device creation query/enable feature-18 requirements: binary_import,
+image_view_handle, buffer_device_address, push_descriptor; supported storage-image
+read/write-without-format bits are also needed by this runtime's internal shaders.
+
+Port a Vulkan-only provider/codec into layer/dlss5.cpp/.h, call at ngx.cpp:1440,
+use g_z or select decoded output explicitly for rrpost, reset on RR/reset/size/mode
+changes, and retire all resources on actual submission completion. Touch device
+setup/Streamline paths, CMake/settings/INI/generated defaults and focused tests;
+keep Surfaces experimental dlss5_nr=0 in all presets, cold enable requires restart.
+No common/host_api.h ABI change expected. Revised 2b estimate: roughly 1-2 KLOC
+provider/integration plus shader/settings/tests; **remove** the earlier 1-3 KLOC
+command-redirection project. Resolve the internal layout finding and shutdown stall
+before game integration/live permission; successful API calls are not a quality pass.
 
 ## 4. Port surface and quick add-on alternative
 
-ReShade-specific pieces to **drop**: effect-runtime/command-list discovery and
-lifecycle callbacks (`BR/src/vkmirror.inc:343`, `:380`, `:525`), get_native wrappers
-(`BR/src/synth.inc:3303`), proxy unwrapping (`BR/src/bridge.inc:996`), add-on
-registration, NGX scanning/MinHook detours in dlss5-bridge.cpp, panels/config/hotkeys,
-SR mirroring, synthetic DLAA, substitute Present path, optical flow/private D3D11,
-PQ backbuffer handling and the invalid event-park worker. BG already owns the hooks.
-
-| Source to adapt | Native role |
-|---|---|
-| BR `synth.inc:1701` Synth12MakeTexture; `:3422` SynthVkImport; `:3274` release | Shared images/handles, lifetime and format mapping using actual Vulkan headers. |
-| BR `synth.inc:3228` SynthVkBarrier; `:3256` copy; `:1776` depth unpack | Transport helpers after replacing layout assumptions and validating usages. |
-| BR `vkmirror.inc:878` VkmReadContract | Reference for scalar/subrect extraction; BG already has NGX inputs. |
-| DCS `dlss_nr.cpp:270`, `:375`, `:541`, `:915`, `:1000` | Runtime init, feature create, GPU resources, codec dispatch and direct NR evaluate. |
-| DCS `nr_codec_shader.hpp:24` and guide/history/lifetime helpers | HDR encode/decode, converted guides, reset and submission completion tracking. |
-
-DCS helper candidates: `nr_guides.hpp`, `dlss_nr_contract.hpp`, `nr_parameters.hpp`,
-`dlss_nr_lifetime.hpp` and `nr_runtime_module.hpp` (`dlss_nr.cpp:1` through `:21`).
-Port into `layer/dlss5.cpp/.h` plus a small interop unit; no second SR evaluation,
-no renodx interception, no ReShade headers. Trim DCS stereo/gaze/foveation/crops,
-model-tuning UI, debug borders and DCS telemetry; retain one full-frame history,
-codec/guide correctness, failure retention and real completion tracking.
-Estimate **3-5 KLOC adapted provider/transport/helpers**, plus tests; not all of
-BR's 2102-line mirror or 8K-line synth.inc. A compliant command-boundary mechanism
-is separate, potentially larger, and cannot yet be sized reliably from these sources.
-No host/core ABI change expected (`common/host_api.h`, ABI 26).
+Current reusable provider pieces are the public NGX client/core session, DCS
+feature-18 parameter block, Vulkan image/codec helpers and exact encode/decode
+SPIR-V in tools/dlss5_nr_vulkan_spv.h (from DCS vulkan_shaders.hpp). Keep a full-frame
+history, correct guides/energy, failure handling and completion-based lifetimes.
+Drop ReShade discovery/proxies/MinHook, SR mirroring, optical flow, synthetic DLAA,
+Present/PQ substitution, stereo/gaze/foveation and D3D11/D3D12 transport from the
+native game path. Bridge MIT image-sharing helpers remain only in the fallback
+fixture; their notice stays. No external add-on callback is required for native NR.
 
 **Simply installing BR beside renodx is not a proven solution today.** It needs
 ReShade's Vulkan layer/full add-on support (`BR/README.md:89`) and compatible hook
@@ -177,14 +180,12 @@ not proof that BR itself cannot ever coexist with FG. Conversely, BR's D3D12
 mirror route does not rely on that Vulkan Present fallback; its own RR skip,
 SR replacement, hook ordering and park still prevent claiming this stack works.
 
-Smallest **exposure hook**, if pursuing compatibility: a versioned optional
-post-RR recording callback at `ngx.cpp:1440`, passing cmd/device, post.output,
-tracked layouts, depth/MV/subrects, jitter/scales/reset and colour-domain metadata.
-The callback records NR transport/return before rrpost; return a selected image or
-failure. BR would need an NR-only consumer bypassing SR reconstruction and RR skip.
-A renamed NGX entry or notification alone is insufficient: callback recording does
-not make RR execute. It still needs the compliant scheduling contract above.
-Keep this host-side; do not expand Bg3HostApi just to serve an external add-on.
+If exposing an optional host callback to another consumer later, place it at the
+same post-RR point and pass the real g_z image, depth/MV, layouts/subrects and
+jitter/scales/reset/colour-domain metadata. A Vulkan-core consumer can append its
+commands directly; a D3D12 consumer still requires legal cross-API scheduling.
+A renamed NGX export alone does not make the unmodified bridge NR-only or stop
+its intentional RR bypass. No external callback was implemented in phase 2a.
 
 ## 5. Runtime and source licences
 
@@ -193,12 +194,12 @@ Use an explicitly selected x64 NVIDIA-signed runtime; verify signature/version/h
 before loading, record provenance, reject unsigned/modified files. DCS's broader
 patched-binary allowance (`DCS/docs/USER_GUIDE.md:172`) is not BG policy.
 OTA-installed files are candidates only after verification; no NR download or
-redistribution grant is established. `BG/docs/release/THIRD_PARTY.md:24` inventories
+redistribution grant is established. `BG/docs/release/THIRD_PARTY.md:41` inventories
 SR/RR/FG, not NR. The NVIDIA exception names those features (`LICENSE-EXCEPTION.md:23`)
 and grants no rights to NVIDIA binaries (`:31`); clarify NR coverage before release.
 DCS loader `external/cheeky/src/nr_runtime_module.cpp:91` spoofs caller identity and
 `:151` patches an imported function in memory. Establish an acceptable load route;
-do not silently port this workaround or ship any altered NVIDIA binary.
+the supported core route below avoids this workaround. Never ship an altered NVIDIA binary.
 
 BR is MIT (`BR/LICENSE:3`, permission/retention `:5`/`:12`): reused portions may be
 combined into GPL-3.0-or-later BG3RTX while retaining the complete copyright,
@@ -208,42 +209,73 @@ when code is ported. This grants rights to BR code, not the NVIDIA runtime.
 Depth GLSL/SPIR-V has additional Alan Z/NIGos MIT provenance
 (`BR/src/depth_convert_spv.h:29`, `BR/README.md:356`); preserve both notices if reused.
 Drop ReShade/MinHook rather than importing their dependencies/notices unnecessarily.
-No licence inventory change is needed yet: this phase reuses no source code.
+The bridge MIT notice is now retained in `docs/release/licences/DLSS5-bridge-MIT.txt`
+and its fixture reuse is recorded in `docs/release/THIRD_PARTY.md`. New core tests
+copy only the user-authorized, byte-identical signed NR DLL into ignored .scratch;
+no NVIDIA DLL is added to source control or the player payload.
 
-## 6. Revised phase 2 and qualification
+## 6. Core-route results and remaining gates
 
-1. First build an offscreen shared-image fixture from BR allocation/import helpers:
-   explicit LUID matching, queried formats, actual layouts, D24 and RG16F cases.
-2. Prove a **compliant same-frame producer -> D3D12 -> continuation** with shared
-   D3D12 fences imported as timeline semaphores. This fixture alone does not prove
-   the game command-buffer split: design/test that boundary before game integration.
-   Stop promotion if it requires BR's validation-invalid event park.
-3. Add DCS NR-only create/evaluate + codec, full output resolution, one history;
-   validate finite changed pixels, bypass, reset/recreate, failure and teardown.
-4. Integrate at ngx.cpp boundary, device/submit setup in layer.cpp/host.h and cmd.cpp
-   only as needed; rrpost.cpp only for result-view selection; CMake and focused tests.
-   Keep Streamline's shared Vulkan NGX lifecycle (`BG/docs/TRACK_B_FG.md:348`).
-5. One Surfaces setting: **DLSS 5 Neural Rendering (experimental)**, `dlss5_nr=0|1`,
-   off in all presets; metadata `dlss5_nr_runtime` for the verified path. Require RR
-   before post. Cold enable needs restart; disable drains safely, initialized A/B
-   re-enable resets history. Update settings.h/INI/generated defaults/schema/notices.
+The earlier direct-snippet --nr Init_Ext PlatformError (0xbad00002) did not test
+the supported core path. New modes --nr-core-vulkan and --nr-core-d3d12 use the
+public SDK client (nvsdk_ngx_s.lib) to call the verified driver's NGX core.
+Core 32.0.16.2114 / driver 621.14 was selected; the original first-directory search
+had selected older core 32.0.16.2101. Source and scratch NR copy are NVIDIA-signed
+310.8.0.0, both SHA-256 e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e.
+The BG3-folder 310.8.3 DLL remains HashMismatch and is not loaded.
 
-Offline first: fake NGX parameter contracts, signature rejection, depth precision,
-MV sign/scales/jitter/subrects, HDR codec bypass/energy, completion/failure lifetimes,
-submit-split state fixtures, offscreen validation and same-frame readback stamps.
-Include failed create/evaluate, timeout without stale copy, resolution changes and
-key-off identity. BelowNormal builds; existing shader helpers, no direct DXC.
-Count fixed shader requests added; no on/off define multiplication. No queue access.
+CoreSession keeps PathListInfo strings/pointers alive and logs verbosely to
+.scratch/dlss5-core-<route>-<pid>/logs/ngx-callback.log. SDK public Init signatures
+are used, not a cast of driver/snippet Init_Ext to a different ABI.
+Vulkan feature-extension discovery must have a non-null ApplicationDataPath: the
+first probe omitted it and faulted; corrected once, discovery returns 0x1 and all
+four extensions above. This invalid first probe is not evidence against Vulkan.
 
-**One later live qualification gate**, only on fresh explicit user authorization:
-one same-run OFF/ON/OFF session at Dialogue1, real Ultra with FG off then 2x/4x.
-Require every ON window: actual NR output before post/FG, finite pre-post float
-energy and QA within derived OFF-repeat noise/encoding bounds, visible stable
-skin/hair/DoF/UI, correct real/generated-frame ordering, no device lost, validation
-errors, stale frames, hangs or failed evaluations. NR relighting needs PT/user
-review separately; reduced residual with lost energy is not a pass.
-Report NR, codec/transport GPU ms, CPU waits, VRAM and rendered latency separately.
-Planning only: DCS pixel scaling gives 7.55 ms at 3840 x 1600; reserve roughly
-8-12 ms total initially. Not a BG3 measurement, hard limit or promised interop cost.
-Same-frame adds critical-path work, not a mandatory extra frame. Scope any later
-water/transition coverage to a concrete missing observable, after this gate.
+| Observable | Vulkan core | D3D12 core |
+|---|---|---|
+| Init / GetCapabilityParameters / AllocateParameters | all 0x1 | all 0x1 |
+| DLSSNR.Available / NeedsUpdatedDriver / FeatureInitResult | 1 / 0 / 0x1 | 1 / 0 / 0x1 |
+| Feature 18 Create / Evaluate / Release | all 0x1 | all 0x1 |
+| Synthetic output through DCS HDR codec | six 3840 x 1600 frames finite/changed, alpha preserved | four 128 x 64 frames finite/changed, ingress exact |
+| Shutdown1 | no return within 30 s; process exits 2 | same |
+
+The core log says denial value 0 and loads the staged signed snippet. It also
+reports cache misses for versions/0/files before choosing PathListInfo; a cache
+miss alone is **not** a final load failure. Exact capability keys work; speculative
+18.Available-style keys return 0xbad00010 (unknown key), not unsupported NR.
+
+**3840 x 1600 Vulkan NR cost, validation explicitly off:** after two warmup frames,
+NR samples 46.119, 97.012, 6.221, 97.294 ms; tool's upper median **97.012 ms**,
+range **6.221-97.294 ms**, codec+NR upper median 100.649 ms. These timestamps exclude
+upload/readback and CPU checks. Large variation makes this **unqualified cost**;
+do not replace it with the fastest sample or the earlier 8-12 ms estimate.
+No D3D12 device/shared images/timeline semaphore exists on this Vulkan path.
+
+Default validation exposed missing storage-image read/write-without-format device
+bits; enabling supported bits removed those feature errors. Retest still reports
+VUID-vkCmdDraw-None-09600 on runtime-owned nv.ngx.dlssnr.resource (UNDEFINED versus
+GENERAL). Fixture images have explicit transitions. Do not suppress the finding
+or invent a barrier for an internal image handle/ownership contract we do not own.
+The no-validation run measures API/pixel feasibility, not zero validation errors.
+
+Both core routes stall in Shutdown1 after the last telemetry-shutdown log message.
+That message does not establish the cause. Cleanup is bounded, prints every 5 s,
+and terminates the standalone process at 30 s without unloading active runtime
+code. All measured work/fences and feature release completed first; overall exit 2
+remains **BLOCKED**, even when the sequence prints success. No device lost observed.
+
+Evidence: .scratch/dlss5-core-vulkan-3840.log (pid 4972); default-validation retest
+.scratch/dlss5-core-vulkan-validation.log (pid 31836); D3D12 fallback
+.scratch/dlss5-core-d3d12-small.log (pid 44620). Each has its own full callback log.
+DCS Vulkan shader arrays are byte-identical to source and pass spirv-val Vulkan 1.2.
+CPU LUID/fence CTest passes. No game, queue, git writes or layer/core ABI changes.
+
+Earlier --copy remains PASS: six 3840 x 1600 frames, exact all four images,
+validation 0, Vulkan A+B upper median 2.532 ms and D3D12 copy 0.207 ms. Its transport
+cost is **not added** to the direct Vulkan NR path. No new shader request variants:
+the fixture uses two exact embedded DCS kernels, not new production shader requests.
+
+NOT READY_FOR_LIVE: resolve validation/shutdown and qualify stable cost, then finish
+offline provider/guide/reset/lifetime gates. Only afterward request one explicit
+same-run OFF/ON/OFF Dialogue1 Ultra gate with FG off and 2x/4x, float energy/QA,
+UI/DoF/skin/hair and no device lost/stale frames. No jobs prepared or queued.

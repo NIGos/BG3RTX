@@ -590,6 +590,16 @@ target_include_directories(frame_replay PRIVATE ${VULKAN_SDK}/Include)
 target_link_directories(frame_replay PRIVATE ${VULKAN_SDK}/Lib)
 target_link_libraries(frame_replay PRIVATE vulkan-1)
 target_compile_definitions(frame_replay PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}" BG3RTX_DXC="${VULKAN_SDK}/Bin/dxc.exe")
+
+# Standalone DLSS5 external-memory/timeline fixture: never launched by CTest.
+# GPU runs are explicit and refuse while bg3.exe/bg3_dx11.exe is running.
+add_executable(dlss5_fixture tools/dlss5_fixture.cpp)
+target_include_directories(dlss5_fixture PRIVATE ${VULKAN_SDK}/Include ${CMAKE_SOURCE_DIR}/external/DLSS/include)
+target_link_directories(dlss5_fixture PRIVATE ${VULKAN_SDK}/Lib)
+target_link_libraries(dlss5_fixture PRIVATE vulkan-1 d3d12 dxgi d3dcompiler wintrust crypt32 bcrypt version
+  ${BG3RTX_EXTERNAL}/DLSS/lib/Windows_x86_64/x64/nvsdk_ngx_s.lib)
+add_executable(dlss5_fixture_logic_test tests/dlss5_fixture_logic_test.cpp)
+add_test(NAME dlss5_fixture_logic_test COMMAND dlss5_fixture_logic_test)
 add_test(NAME frame_replay_test COMMAND frame_replay --self-test ${CMAKE_BINARY_DIR}/frame_replay_test)
 set_tests_properties(frame_replay_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
 # Offline PT reference (tools/pt_reference.hlsl): furnace and slab checks of the path tracer.
