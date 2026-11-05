@@ -1,55 +1,35 @@
-# BG3RTX progress - 2026-11-05 (consolidation)
+# BG3RTX progress - 2026-11-05
 
-## Report: project consolidated offline, final qualification ready
+## Report: optimisation night 2026-11-05 (main, release candidate rc-20261105-2aa5dcf8 PASS 12/12)
 
-**Final qualification live (user go, 2026-11-04 23:24-23:38, main 66ed523b, release candidate rc-20261104-66ed523b PASS 12/12).**
-- Stock hair, Dialogue1: VALID, 123 s. Float energy +0.23% vs 21:04 (0.37525 vs 0.37439). One-sample costs vs rel3:
-  RT +0.57 ms, GI +0.45 ms, GI trace +1.0 ms (9.84 ms): single windows, not a measured regression.
-- Ultra, Water Queens House: every Ultra window gate passed in two launches (statics, pans, rotations, Ctrl+Shift+F9
-  A/B); 0 device lost, 0 deferred destroys. GI 11.3-12.2 ms in measured windows (11.46 ms at 17:52), RR 2.38-2.40 ms,
-  post temporal 0.14 ms. First launch timed out on the cold shader cache (50 compiles after today's shader changes).
-- High part not completed: its readiness waits were generated wrong (rt_build=auto printed as 1; a box-light
-  pipeline that High never builds). Test-job defects, not product faults; the alpha/OMM path High uses is the same
-  as Ultra's. No further reruns (lean rule). Post-release: fix release_qual/make_final.py readiness for presets.
-- Found by the user before the live and fixed: the package lacked the runtime alpha table (all foliage was opaque in
-  ray tracing, "cardboard" tree shadows); release logging was verbose (now quiet, Detailed logging switch).
+**Question for the user (only one): pubblichiamo la 0.9.1?** Files: `.scratch/rc-test/rc-20261105-2aa5dcf8-30de6495/`
+(Setup.zip, Setup.exe, portable ZIP). Nothing uploaded.
 
-**Released: BG3RTX 0.9.0 beta** (user approval 2026-11-04 after their own test: vegetation shadows fixed). Git tag
-`v0.9.0-beta` on 66ed523b. Files for Nexus (upload by the user): `.scratch/release/v0.9.0-beta/`
-BG3RTX-0.9.0-beta-Setup.zip (main file), BG3RTX-0.9.0-beta-Portable.zip (SHA256 b479fda0..., same as the RC check),
-SHA256SUMS.txt. Next: overnight optimisation goal (no visible quality loss), Codex-driven.
+**Qualified, always on** (in-run A/B at the inn, 600-frame windows, OFF repeats as noise):
+- `rt_scene_compact_holds`: High scene build -0.87 ms GPU (OFF spread 0.075); energy within OFF spread; BVH identical by fixtures.
+- `cpu_opt1`: layer hook bodies -0.13 ms/frame CPU (spread 0.016); BVH build -0.2 ms.
+- `cpu_opt2`: -0.30 ms/frame CPU (spread 0.088). `cpu_opt3`: -0.24 ms/frame CPU (spread 0.054).
+- Total CPU about -0.67 ms/frame at the inn on Ultra (layer hooks 12.4 -> about 11.7 ms/frame).
 
-**Done (all on main, pushed).**
-- Five independent reviews (layer; core, shaders, common; product surface; shaders; tools). Every finding
-  confirmed in the code first; table with the outcome of every row: [CONSOLIDATION_20261105](CONSOLIDATION_20261105.md).
-- Fixed: 19 layer findings (resource lifetime kept until GPU completion, per-queue pruning, FG state only on
-  SDK success, init/bind/recording failures unwound, asset DB bounds, latches), 8 core, 15 product (launcher
-  failure paths, rejected options out of the opt-in, ZIP install rollback), 5 shader (rr_post overflow,
-  alpha mip clamp, UV edge loads, reprojection validity, half-float clamps), 20 tooling (shader identity trusts
-  only intact blobs, QA gates fail on missing data, deterministic asset DB, about 170 unregistered tests).
-- Not confirmed, written with the reason: C4, C7, C8, C12 (rings larger than frames in flight).
-  Deferred with the reason: L11, L12, L17 (need submission-dependency tracking), S-F05, S-F02, T2.
-- Cleanup: 8 of 9 rejected options removed (pak publication, generated rows, IP grass, alpha spill, water
-  hit shading and cost bits, half resolution, current sun, GI guards, 3 GPU candidates). SHaRC stays: its
-  device capability also serves water and hair. Shader requests 167 -> 122; about 4,000 source lines removed.
-  Release path proven equivalent with frozen specialization constants (71 identical, 139 equivalent, hair
-  requests identical against main, control differs). Last code with them: tag `archive-20261105/pre-cleanup`.
-- UI/UX (Opus review, 26 changes, before/after screenshots at 100-200%): plain help texts with restart notes,
-  Experimental shows only Water surface reflections (strand hair hidden until its update, user decision),
-  preset review, Help & support, first-run folder notice, installer texts.
-- Installer: Inno Setup 6.7.3 pinned by hash, same payload as the ZIP; status text while preparing;
-  lifecycle install 63 -> 15 s. Payload 229 -> 219 files (removed shaders).
-- Release check PASS 12/12 on the candidate ([RC_CHECK](release/RC_CHECK.md)): build, 219 files, hashes,
-  licences, ZIP install/update/uninstall, setup install/update/uninstall and Apps entry.
-- Tests: 172+ CTests green at every merge; merge-green now lints only active or new live jobs.
-- Nexus kit (`docs/release/nexus/`): title, short and main description (the published version plus intro,
-  Beware of Dragons, NVIDIA RTX + Vulkan only), sticky post, header 1300 x 372, graphics script.
-- Lives today (user go): rel1 Ultra S8 VALID 166 s, rel3 stock hair VALID 127 s on main ce1448bf
-  (after the layer fixes): no deferred destroys, no device lost, RR temporal 0.12-0.13 ms.
+**Before/after on the release build (static, ms GPU, profile runs 00:13/00:20 vs 06:51/06:55, all VALID):**
+| Scene | Preset | Scene build | GI | Local shadows | RR |
+|---|---|---|---|---|---|
+| Water Queens House | Ultra | 1.19 -> 1.18 | 12.20 -> 12.10 | 0.69 -> 0.59 | 2.60 -> 2.53 |
+| Water Queens House | High | 1.92 -> 1.27 | 2.06 -> 2.24 | 0.13 -> 0.12 | 2.48 -> 2.48 |
+| Inn | Ultra | 2.45 -> 2.49 | 21.27 -> 21.18 | 2.03 -> 2.01 | 2.53 -> 2.54 |
+| Inn | High | 3.42 -> 2.14 | 3.09 -> 3.07 | 1.07 -> 0.87 | 2.61 -> 2.57 |
+Single static windows; differences under about 0.2 ms are within run-to-run noise. Camp and Dialogue1 were profiled
+(OPTIMIZATION doc) but not re-run after the changes. Stock-hair final smoke VALID (124 s).
 
-**Open, not claimed.** Live confirmation of the cleanup, shader fixes and UI on the release build (the final
-qualification); S8 float energy has no historical baseline (reported as unavailable, not pass); signing;
-fresh-PC install; Act 2/3 acceptance (user).
+**Rejected with numbers** (code removed): gi_roof_reject (inn GI 21.75/21.58 OFF vs 21.87/21.95 ON), rt_origin_lazy_normal
+(no saving), cpu_opt4 (+0.47/+0.54 ms CPU, slower). Dropped offline: GI temporal current-sample, reflection/local-shadow
+early-outs (no exact proof or under 0.05 ms); ray flags already first-hit. Rounds stopped when a round found no win.
+
+**Not reached:** Ultra GI trace (8-13.5 ms) stays the largest GPU cost; per-feature attribution needs a live tool that sees
+cached pipelines (post-release). The final Ultra+High S8 release-smoke job is refused by its own trace-window preflight
+(tooling); the profile runs above served as the smoke. Next per user: bug fixing.
+
+Details: [OPTIMIZATION_20261105](OPTIMIZATION_20261105.md), [RC_CHECK](release/RC_CHECK.md).
 
 ## Current user decisions
 
@@ -61,3 +41,6 @@ fresh-PC install; Act 2/3 acceptance (user).
 - Lean: only the tests that are really needed; one final live on the user's go.
 
 Full folded branch notes: [2026-11-05](archive/PROGRESS_CODEX_2026-11-05.md), [2026-11-04](archive/PROGRESS_CODEX_2026-11-04.md).
+- Optimisations that qualify are always on; no player option.
+
+Full notes of the night: [archive](archive/PROGRESS_CODEX_2026-11-05-night.md); release 0.9 report: [archive](archive/PROGRESS_CODEX_2026-11-05.md).
