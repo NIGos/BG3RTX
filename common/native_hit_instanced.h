@@ -80,6 +80,17 @@ inline DeferredQualify deferred_qualify(bool exact_pipeline, uint32_t kind, uint
   if (!exact_pipeline || kind > 1 || !instances || stride < kStaticMinStride) return DeferredQualify::PipelineDeclined;
   return DeferredQualify::Accept;
 }
+// One draw's pure classification, reusable across the provider mutex wait when
+// the live instanced switch is unchanged. This never caches bindings or records.
+struct DeferredClassification {bool tileset;Family family;const native_vt::Recipe* recipe;DeferredQualify result;};
+inline DeferredClassification classify_deferred(uint64_t vs,uint64_t fs,bool tileset,bool enabled,bool wind_rgb,
+                                                bool exact,uint32_t kind,uint32_t instances,uint32_t stride){
+ const auto family=!tileset && enabled?deferred_family(vs,fs,wind_rgb):None;
+ const auto* ir=family!=None?recipe(vs,fs,wind_rgb):nullptr;
+ const auto result=ir?deferred_qualify(exact,kind,instances,stride):
+  native_hit::deferred_qualify(audited_static_family(vs,fs)||tileset||ir,tileset,exact,kind,instances,stride);
+ return {tileset,family,ir,result};
+}
 // The gather (shaders/rt/hit_material_gather.hlsl) reads the 8995 engine layout: v[4] p0 @64, v[5] p1
 // @80, words.y tile-set index @100, words.z channel @104, and the 1:1 x @0 of a separate binding. The
 // STI engine bytes (p0 @transform, p1 @+16, index and channel at the recipe's offsets) and the 1:1

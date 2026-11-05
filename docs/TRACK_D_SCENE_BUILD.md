@@ -1,6 +1,7 @@
 # Track D: geometry capture, BVH and scene build
 
 Part of Track D (hardware ray tracing); index and old section map: [TRACK_D_RT.md](TRACK_D_RT.md).
+
 Sections 1-6 and 11 keep their original numbers.
 
 **Phase 2 (2026-10-26): ray-traced sun shadows and AO run on the game's own Vulkan
@@ -1264,3 +1265,36 @@ lifecycle faults. READY_FOR_LIVE; no live saving or quality pass. Full units,
 normalization and scope limitations are in that directory's README.
 Offline build/test: `scripts/build.ps1 -Test` PASS 180/180, 273.19 s CTest,
 using the checkout-local shader cache. Final analyzer fixtures pass separately.
+
+## CPU hook candidate cpu_opt2 (2026-11-05, default 0)
+
+Layer-only, ABI and shader requests unchanged. Offline candidate; no live saving or
+quality pass claimed. Inn Ultra capture pre-draw costs 8.785 ms static / 9.764 ms
+pan; enclosing pass-after costs 2.449 / 4.047 ms. Nested receipts must not be summed.
+
+- Alpha descriptor slots use a capture-local index, keeping the ordered view list
+  authoritative. The first occurrence's layout, slot numbering and full-list
+  behavior stay identical. Capture reset clears membership; key-off appends are
+  indexed before the next key-on lookup. No resource identity crosses captures.
+- BVH classification stages at most 16 vertex ranges plus one index range on the
+  stack. Only newly extracted meshes copy them to owned eviction storage. Cached,
+  rejected and unsupported draws need no range-vector allocation. Mesh keys,
+  validation, range arithmetic and eviction ordering remain the same.
+- Alpha snapshots stage at most two view/image pairs on the stack. Lifetime
+  extension order and duplicates are preserved. The existing present-refreshed
+  settings table supplies rt_dyn_hold, with its canonical default 4.
+- Each TLAS slot stores its allocation-time size receipt. The repeated query has
+  exactly the same device, capacity, flags, BUILD mode, TOP_LEVEL type and one
+  zero-address INSTANCES geometry (flags 0, arrayOfPointers false). Reuse removes
+  one driver size query per build. Successful slot growth refreshes the receipt;
+  device teardown resets the slot. Scene buffers and matrix contents are not cached.
+- G-buffer hooks reuse their pure qualification result across the mutex wait only
+  while the live instanced policy matches. Material queries index first source
+  records within that query, preserving duplicate winners and out-of-range fallback.
+  Small table additions and lifetime retention avoid temporary heap vectors.
+
+cpu_opt2_scene_test compares first-slot/layout/order behavior through full lists,
+key toggles and capture resets; all 0 through 17 eviction ranges; and all 0 through
+4 lifetime handles. Synthetic alpha-slot and eviction-range benchmarks report CPU
+cost separately from game savings. Full validation and the prepared inn Ultra
+600-frame A/B batch are recorded in [opt-cpu2](progress/opt-cpu2.md).

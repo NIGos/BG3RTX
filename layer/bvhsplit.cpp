@@ -1,5 +1,6 @@
 #include "../common/perf_hook_state.h"
 #include "../common/cpu_build_keys.h"
+#include "../common/cpu_deferred_ranges.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_pool.h"
 #include "mesh_content_id.h"
@@ -659,7 +660,12 @@ std::vector<JobBatch> g_batches;
 // the GPU may still be tracing. The refit reads the previous slot's TLAS
 // (src) and writes this slot's (dst).
 Buf g_scratch;
-struct TlasSlot { Buf buf; VkAccelerationStructureKHR as = VK_NULL_HANDLE; uint32_t cap = 0; };
+struct TlasSlot {
+  Buf buf;
+  VkAccelerationStructureKHR as = VK_NULL_HANDLE;
+  uint32_t cap = 0;
+  VkAccelerationStructureBuildSizesInfoKHR sizes{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+};
 TlasSlot g_tlas[kSceneSlots];
 TlasSlot g_omm_tlas[kSceneSlots];
 Buf g_omm_instances[kSceneSlots],g_omm_rows[kSceneSlots],g_omm_replacements[kSceneSlots];
@@ -1212,6 +1218,7 @@ bool ensure_tlas(uint32_t slot, uint32_t n,TlasSlot* extra=nullptr) {
   ts.as = t;
   ts.buf = nb;
   ts.cap = cap;
+  ts.sizes = sz;
   g_tlas_cap_hint = cap;
   if (!extra && int(slot) == g_tlas_prev) g_tlas_valid = false;
   log("[bvh] TLAS storage of slot %u for %u instances: %llu KB", slot, cap,
@@ -1947,6 +1954,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   *token = uint32_t(g_draws.size());
   g_draws.emplace_back();
   FrameDraw& fd = g_draws.back();
+  cpu_opt::DeferredRanges<Range, CmdState::kMaxVertexBindings + 1> ranges(fd.ranges, cfg_hot(CfgHot::cpu_opt2) != 0);
   fd.alpha = d.alpha;
   fd.instances = d.args.instances;
   fd.first_instance = d.args.first_instance;
@@ -2010,7 +2018,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     // vertices as it has indices, from vertexOffset on).
     VkDeviceSize vs = vb.stride ? vb.stride : 16;
     VkDeviceSize lo = vb.offset + VkDeviceSize(indexed ? (std::max)(d.args.vertex_offset, 0) : int32_t(d.args.first)) * vs;
-    fd.ranges.push_back({vb.buffer, lo, lo + VkDeviceSize(d.args.count) * (std::max)(vs, VkDeviceSize(64))});
+    ranges.push_back({vb.buffer, lo, lo + VkDeviceSize(d.args.count) * (std::max)(vs, VkDeviceSize(64))});
   }
   if (indexed) {
     if (!s->ib) {
@@ -2020,7 +2028,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     VkDeviceSize isz = s->ib_type == VK_INDEX_TYPE_UINT32 ? 4 : s->ib_type == VK_INDEX_TYPE_UINT8_EXT ? 1 : 2;
     mk = mix(mix(mix(mk, uint64_t(s->ib)), s->ib_offset), s->ib_type);
     VkDeviceSize lo = s->ib_offset + VkDeviceSize(d.args.first) * isz;
-    fd.ranges.push_back({s->ib, lo, lo + VkDeviceSize(d.args.count) * isz});
+    ranges.push_back({s->ib, lo, lo + VkDeviceSize(d.args.count) * isz});
   }
   if (!mk) mk = 1;
   fd.mesh_key = mk;
@@ -2045,7 +2053,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   auto it = g_meshes.find(mk);
   if (it == g_meshes.end()) {
     auto rj = g_rejected.find(mk);
-    if (rj == g_rejected.end() || frame_index() >= rj->second.until) fd.extract = true;
+    if (rj == g_rejected.end() || frame_index() >= rj->second.until) { fd.extract = true; ranges.commit(); }
     return capture(BVH_CAPTURE);
   }
   Mesh& m = it->second;
@@ -3380,8 +3388,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     tbi.pGeometries = &tg;
     VkAccelerationStructureBuildSizesInfoKHR tsz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
     uint32_t cap_inst = g_tlas[slot].cap;
-    dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tbi, &cap_inst,
-                                                 &tsz);
+    // Same device, capacity, flags and zero-address instance geometry as
+    // ensure_tlas's query. Slot replacement refreshes this immutable result;
+    // device teardown destroys the slot. No scene contents are cached.
+    if (cfg_hot(CfgHot::cpu_opt2)) tsz = g_tlas[slot].sizes;
+    else dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tbi, &cap_inst,
+                                                      &tsz);
     if (!ensure_scratch((std::max)({scratch, tsz.buildScratchSize, tsz.updateScratchSize}))) {
       g_failed = true;
       log("[bvh] scratch allocation failed (%llu MB); the split is off", (unsigned long long)(scratch >> 20));

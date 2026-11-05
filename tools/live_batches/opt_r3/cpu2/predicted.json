@@ -1,0 +1,13 @@
+{
+  "status": "READY_FOR_LIVE",
+  "key": "cpu_opt2",
+  "default": 0,
+  "shader_request_delta": 0,
+  "launches": 1,
+  "frames_per_window": 600,
+  "prediction": "Lower capture pre-draw classification, alpha records and material-hook CPU; deferred extracted-mesh eviction ranges avoid temporary allocations, and cached TLAS size receipts remove one driver size query per build. Native draws, submit and GPU/energy are unchanged. Offline exact-output fixtures are not a measured game saving.",
+  "decision": "Compare ON medians to both OFF windows and OFF repeat spread; keep no positive saving claim if delta is inside OFF spread. Inspect every ON window and lifecycle forbids.",
+  "timers": "Watch totals / actual rendered presents; never displayed FG presents. Scene/matrix 300-build producers drop first receipt; life is minute-wide context only.",
+  "readiness": "Warmup scene-ready; ready phases wait only for a fresh zero-pipeline watch. Settings acknowledgement is handled by the runner without a custom cfg witness. No shader/pipeline generation waits.",
+  "pending": "Authorized live run. No launch or queue staging by this lane."
+}

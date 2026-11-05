@@ -16,6 +16,7 @@
 #include "../common/native_hit_recycle.h"
 #include "../common/vram_guard.h"
 #include "../common/native_hit_recording.h"
+#include "../common/cpu_material_scratch.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -822,12 +823,16 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  CpuTimer timer(CpuMaterial);
  // rt_hit_material_lean_hooks: the key (bindings, mapped reads, buffer sizes) only for a draw that qualifies.
  const bool lean_key=lean_hooks();bool keyed=false;DrawKey draw{};
- {const bool ts=tileset_deferred(state->vs,state->fs);
-  const auto fam=!ts && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on):instanced::None;
-  const auto* ir=fam!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on):nullptr;
-  const auto q=ir?instanced::deferred_qualify(exactPipeline,args.kind,args.instances,stride):
-   deferred_qualify(audited_static_family(state->vs,state->fs)||ts||ir,ts,exactPipeline,args.kind,args.instances,stride);
-  if(!lean_key || (q!=DeferredQualify::FamilyDeclined && q!=DeferredQualify::PipelineDeclined)){draw=key(cmd,*state,args);keyed=true;}}
+ const bool cpu_opt2=cfg_hot(CfgHot::cpu_opt2)!=0;
+ // Pipeline hashes and draw arguments are immutable during this hook. The
+ // instanced runtime switch can change while waiting for mutex: reuse only
+ // when its current value still matches the early qualification's value.
+ auto classify=[&](bool instanced_enabled){
+  return instanced::classify_deferred(state->vs,state->fs,tileset_deferred(state->vs,state->fs),instanced_enabled,
+                                     wind_rgb_on,exactPipeline,args.kind,args.instances,stride);
+ };
+ const bool early_instanced=instanced_live();const auto early=classify(early_instanced);
+ if(!lean_key || (early.result!=DeferredQualify::FamilyDeclined && early.result!=DeferredQualify::PipelineDeclined)){draw=key(cmd,*state,args);keyed=true;}
  std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);const bool lean=recycle_live();if(!lean)collect();
  auto it=packets.find(state->recording);
  if(it==packets.end()){
@@ -843,12 +848,13 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  }
  const auto hold=it->second;auto& p=*hold; // held: collect() keeps a packet with another owner
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
- const bool tileset=tileset_deferred(state->vs,state->fs);
+ const bool current_instanced=instanced_live();
+ const auto qualified=cpu_opt2 && early_instanced==current_instanced?early:classify(current_instanced);
+ const bool tileset=qualified.tileset;
  // rt_hit_material_instanced: the instanced wind / 2S pairs take the per-draw path, any instance count.
- const auto family=!tileset && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on):instanced::None;
- const auto* irecipe=family!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on):nullptr;
- const bool audited=audited_static_family(state->vs,state->fs)||tileset||irecipe;
- const auto qualify=irecipe?instanced::deferred_qualify(exactPipeline,args.kind,args.instances,stride):deferred_qualify(audited,tileset,exactPipeline,args.kind,args.instances,stride);
+ const auto family=qualified.family;
+ const auto* irecipe=qualified.recipe;
+ const auto qualify=qualified.result;
  if(qualify==DeferredQualify::FamilyDeclined){++p.family_declined;
   if(pool::uncaptured_recipe(state->vs,state->fs)){++p.uncaptured_draws;p.uncaptured_instanced+=args.instances>1;p.uncaptured_vertices+=uint64_t(args.count)*args.instances;}
   if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)p.declined.add(state->vs,state->fs,args.instances,uint64_t(args.count)*args.instances);return false;}++p.seen;
@@ -1266,9 +1272,13 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   deferred_join=&packet_snapshot->join;pair_materials=&packet_snapshot->materials;
   lock.unlock();
  }
+ const bool cpu_opt2=cfg_hot(CfgHot::cpu_opt2)!=0;
+ cpu_opt::FirstRecordIndex<nh_material_rows> source_index;
+ bool source_index_built=false;
  for(const auto& deferred:*pair_materials){
   uint32_t record=0;if(!join_packets(*pair_join,*deferred_join,deferred.key,deferred.row.valid-1,record))continue;
-  auto source=std::find_if(pair_pre->begin(),pair_pre->end(),[&](const auto& pre){return pre.record==record;});
+  if(cpu_opt2 && !source_index_built){source_index.build(*pair_pre);source_index_built=true;}
+  auto source=cpu_opt2?source_index.find(*pair_pre,record):std::find_if(pair_pre->begin(),pair_pre->end(),[&](const auto& pre){return pre.record==record;});
   if(source==pair_pre->end() || source->stride!=deferred.row.stride || source->triangles!=deferred.row.triangles ||
      (deferred.row.reserved==2 ? (source->alpha.rec.kind!=5 || source->alpha.rec.p0[2]!=0.f || source->alpha.rec.p0[1]!=0.f || source->alpha.tex!=deferred.tileset_views[3].view || source->alpha.tex_id!=deferred.tileset_views[3].image_id) :
       (!source->opaque && (source->alpha.tex!=deferred.table.view || source->alpha.cache!=deferred.albedo.view))) || !material_current(deferred))continue;
@@ -1381,15 +1391,21 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  auto same=[](const View& a,const View& b){return a.view==b.view && a.id==b.id && a.image_id==b.image_id && a.layout==b.layout;};
  auto fits=[&](const Material& m){
   if(m.row.reserved!=1 && m.row.reserved!=2 && m.row.reserved!=3)return true;
-  std::vector<const View*> added;auto need=[&](const View& v){
+  std::vector<const View*> added;cpu_opt::UniqueAppend<View,12> fixed_added;auto need=[&](const View& v){
+   if(cpu_opt2){fixed_added.need(v,table_views,same);return;}
    if(std::any_of(table_views.begin(),table_views.end(),[&](const View& t){return same(t,v);}) || std::any_of(added.begin(),added.end(),[&](const View* t){return same(*t,v);}))return;
    added.push_back(&v);};
   if(m.layout==native_vt::LayoutIridescent)for(const auto& v:m.plain)need(v);
   else if(m.row.reserved!=2)need(m.table);else for(const auto& v:m.tileset_views)need(v);
   if(m.layout==native_vt::LayoutDetail){need(m.detail_normal);need(m.detail_mask);}
   if(m.layout==native_vt::LayoutMask)need(m.detail_mask);
-  if(table_views.size()+added.size()>table_free)return false;
-  for(const View* v:added){table_views.push_back(*v);tables.push_back({VK_NULL_HANDLE,v->view,v->layout});}
+  if(cpu_opt2){
+   if(!fixed_added.fits(table_views.size(),table_free))return false;
+   for(const View* v:fixed_added){table_views.push_back(*v);tables.push_back({VK_NULL_HANDLE,v->view,v->layout});}
+  }else{
+   if(table_views.size()+added.size()>table_free)return false;
+   for(const View* v:added){table_views.push_back(*v);tables.push_back({VK_NULL_HANDLE,v->view,v->layout});}
+  }
   return true;
  };
  std::erase_if(q.materials,[&](const Material& m){if(fits(m))return false;++table_overflow;return true;});
@@ -1437,8 +1453,14 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  for(const auto& m:q.materials){
   if(m.row.reserved!=2){caches[m.row.normal]={VK_NULL_HANDLE,m.normal.view,m.normal.layout};caches[m.row.albedo]={VK_NULL_HANDLE,m.albedo.view,m.albedo.layout};caches[m.row.physical]={VK_NULL_HANDLE,m.physical.view,m.physical.layout};}
   samplers[m.row.sampler]={packet->samplers[m.row.sampler],VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};
-  std::vector<View> retained;if(m.row.reserved==2)retained.assign(m.tileset_views.begin(),m.tileset_views.end());else retained={m.table,m.normal,m.albedo,m.physical};
-  for(const auto& view:retained){slot.handles.push_back(uint64_t(view.view));slot.handles.push_back(uint64_t(view.image));life_note(cmd,uint64_t(view.view));life_note(cmd,uint64_t(view.image));}
+  auto retain=[&](const View& view){slot.handles.push_back(uint64_t(view.view));slot.handles.push_back(uint64_t(view.image));life_note(cmd,uint64_t(view.view));life_note(cmd,uint64_t(view.image));};
+  if(cpu_opt2){
+   if(m.row.reserved==2)for(const auto& view:m.tileset_views)retain(view);
+   else for(const View* view:{&m.table,&m.normal,&m.albedo,&m.physical})retain(*view);
+  }else{
+   std::vector<View> retained;if(m.row.reserved==2)retained.assign(m.tileset_views.begin(),m.tileset_views.end());else retained={m.table,m.normal,m.albedo,m.physical};
+   for(const auto& view:retained)retain(view);
+  }
  }
  for(const auto& m:q.pool_rows){
   if(m.layout!=native_vt::LayoutIridescent){caches[m.row.normal]={VK_NULL_HANDLE,m.normal.view,m.normal.layout};caches[m.row.albedo]={VK_NULL_HANDLE,m.albedo.view,m.albedo.layout};caches[m.row.physical]={VK_NULL_HANDLE,m.physical.view,m.physical.layout};}

@@ -25,6 +25,7 @@
 // triangles are rasterised on the CPU and compared with the frame's own depth
 // buffer, and the world-space triangle normals with the G-buffer normals.
 #include "host.h"
+#include "cpu_detail.h"
 #include "hit_material.h"
 #include "../common/native_hit_writes.h"
 #include "../common/native_hit_pipeline.h"
@@ -168,6 +169,7 @@ std::atomic<uint64_t> g_pipe_generation{1};
 // Registry values are immutable after publication. Invalidate on create/destroy,
 // including handle reuse. No command-state pointers are retained across hooks.
 static bool draw_pipe(VkPipeline pipe, PipeInfo& out, uint64_t* generation = nullptr) {
+  CpuDetailTimer timer(CpuDetailPipeline);
   auto load = [&] {
     std::lock_guard lock(g_mu);
     auto it = g_pipes.find(pipe);
@@ -1182,6 +1184,7 @@ int cascade_layer(const Bg3PassInfo& p) {
 
 // The draw's identity for the camera/cascade dedupe. place 0: unknown (never deduplicated).
 cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const PipeInfo& pi) {
+  CpuDetailTimer timer(CpuDetailCascade);
   cascade::DrawId d;
   d.kind = a.kind, d.count = a.count, d.instances = a.instances, d.first = a.first;
   d.first_instance = a.first_instance, d.vertex_offset = a.vertex_offset;
@@ -2275,6 +2278,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
 
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if(geo_is(s,GeoKind::Material)){
+    CpuDetailTimer timer(CpuDetailMaterial);
     bool exact=false,pool_pipeline=false,basis_pipeline=false;InstPipe pool_inst{};
     PipeInfo p{}; uint64_t generation = 0;
     if(draw_pipe(s->pipe[0], p, &generation)) {
@@ -2429,11 +2433,12 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     BvhDraw bd{list && pi.inst.ok && (!alpha_fs || (pi.inst.uv_ok && a.kind != 4 && a.kind != 3 && a.kind != 5)) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
                args, s};
     uint32_t mesh_tris = 0;
-    BvhVerdict v = bvh_classify(cmd, bd, &token, &mesh_tris);
+    BvhVerdict v;
+    {CpuDetailTimer timer(CpuDetailBvh);v = bvh_classify(cmd, bd, &token, &mesh_tris);}
     if (camera_fade) bvh_set_camera_fade(token);
     if (v != BVH_CAPTURE) {
       uint32_t rec = UINT32_MAX;
-      if (alpha_fs && !alpha_add_draw(cmd, a, 0, mesh_tris, &rec)) rec = UINT32_MAX;
+      if (alpha_fs) {CpuDetailTimer timer(CpuDetailAlpha);if(!alpha_add_draw(cmd, a, 0, mesh_tris, &rec)) rec = UINT32_MAX;}
       bvh_set_record(token, rec);
       if (v == BVH_CACHED) return;
       audit = true;   // also captured (opaque region), for the cache's position check
@@ -2443,6 +2448,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   bool alpha = false;
   uint32_t rec = UINT32_MAX;
   if (alpha_fs && !audit) {
+    CpuDetailTimer timer(CpuDetailAlpha);
     c->alpha_demand += d.reserved;
     if (c->alpha_cursor + d.reserved > c->xfb.size) {
       ++c->alpha_overflow;

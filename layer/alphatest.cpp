@@ -40,6 +40,8 @@
 #include "assetdb.h"
 #include "../common/vt_alpha_masks.h"
 #include "../common/alpha_record_source.h"
+#include "../common/cpu_first_slots.h"
+#include "../common/cpu_snapshot_handles.h"
 
 #include <algorithm>
 #include <map>
@@ -239,6 +241,7 @@ bool make_image(bool array, Img& out) {
 // resident at the requested level no longer falls back to a coarser one. Loaded and uploaded once, at the first
 // alpha_commit with the key on (outside any render pass); records are rewritten from the next capture on.
 uint32_t slot_of(std::vector<std::pair<VkImageView, VkImageLayout>>& list, uint32_t cap, VkImageView v, VkImageLayout l);
+cpu_opt::FirstSlots g_texture_slots, g_cache_slots;
 // fine: a mip-0-only view (rt_alpha_fine_lod, option B of docs/P4_OMM.md 11.1): tex_alpha clamps its LOD to the
 // view's last level, so every ray reads mip 0 with the hard cut (k = saturate(lvl - 1) = 0); a micromap baked at
 // mip 0 then agrees with the test for every ray. No shader change.
@@ -542,6 +545,10 @@ bool read_bound(VkCommandBuffer cmd, uint32_t set, uint32_t binding, VkDeviceSiz
 // Slot of `view` in `list` (appended if new); 0 if the list is full.
 uint32_t slot_of(std::vector<std::pair<VkImageView, VkImageLayout>>& list, uint32_t cap, VkImageView v,
                  VkImageLayout l) {
+  // alpha_begin_capture clears the authoritative lists. No cross-capture
+  // resource identity or descriptor content is cached here.
+  if (cfg_hot(CfgHot::cpu_opt2))
+    return (&list == &g_tex ? g_texture_slots : g_cache_slots).get(list, cap, v, l);
   for (size_t i = 0; i < list.size(); ++i)
     if (list[i].first == v) return uint32_t(i + 1);
   if (list.size() + 1 >= cap) return 0;
@@ -835,6 +842,8 @@ void alpha_begin_capture() {
   g_native_samplers.clear();
   g_tex.clear();
   g_cache.clear();
+  g_texture_slots.clear();
+  g_cache_slots.clear();
   std::lock_guard<std::mutex> fade(g_fade_mu);
   g_fade_now = {};
   g_fade_capsule_ok = false;
@@ -1088,7 +1097,8 @@ static bool alpha_snapshot_impl(uint32_t index, AlphaSnapshot* out, bool native)
     out->cache = c.first; out->cache_layout = c.second;
   }
   // Keep both the view and its image alive until the last possible held use.
-  std::vector<uint64_t> handles;
+  const bool cpu_opt2 = cfg_hot(CfgHot::cpu_opt2) != 0;
+  cpu_opt::SnapshotHandles handles(cpu_opt2);
   {
     std::shared_lock<std::shared_mutex> tl(tracker().mu);
     for (VkImageView v : {out->tex, out->cache}) if (v) {
@@ -1099,8 +1109,8 @@ static bool alpha_snapshot_impl(uint32_t index, AlphaSnapshot* out, bool native)
   }
   out->tex_id = view_image_id(out->tex);
   out->cache_id = view_image_id(out->cache);
-  const uint64_t until = frame_index() + uint64_t((std::clamp)(cfg_int("rt_dyn_hold", 0), 0, 120));
-  for (uint64_t h : handles) life_extend(h, until);
+  const uint64_t until = frame_index() + uint64_t((std::clamp)(cpu_opt2 ? cfg_hot(CfgHot::rt_dyn_hold) : cfg_int("rt_dyn_hold", 0), 0, 120));
+  handles.for_each([&](uint64_t h) { life_extend(h, until); });
   return true;
 }
 

@@ -4,6 +4,7 @@
 #include "omm_submit.h"
 #include "omm_content.h"
 #include "assetdb.h"
+#include "cpu_detail.h"
 
 #include <cstring>
 
@@ -12,6 +13,8 @@ namespace bg3 {
 // cpu_timing=1: CPU time our geometry-capture hooks add while recording (P3 base frame rate).
 // Slots: pass begin, pre-draw, the driver's draw call itself on captured draws, post-draw, pass end.
 std::atomic<bool> g_cpu_timing{false};
+std::atomic<bool> g_cpu_detail{false};
+std::atomic<uint64_t> g_cpu_detail_ticks[CpuDetailCount];
 std::atomic<uint64_t> g_cpu_ticks[7], g_cpu_draws{0};
 static const char* const kCpuSlot[7] = {"pass before/begun", "pre-draw", "driver draw (XFB)", "post-draw", "pass ending", "pass after", "draw bookkeeping"};
 struct CpuTimer {
@@ -25,14 +28,18 @@ static void count_cpu_draw() {
 }
 void cmd_cpu_report(uint64_t frames) {
   g_cpu_timing.store(cfg_int("cpu_timing", 0) != 0, std::memory_order_relaxed);
+  g_cpu_detail.store(g_cpu_timing.load(std::memory_order_relaxed) && cfg_int("detailed_logging",0)!=0,std::memory_order_relaxed);
   static uint64_t last = 0;
   static int mode = -1;
+  static int cpu_opt2_mode = -1;
   const int current = cfg_hot(CfgHot::perf_hook_state);
+  const int current_cpu_opt2=cfg_hot(CfgHot::cpu_opt2);
   static int reset_token = 0;
   const bool reset = stats_window::reset(cfg_int, reset_token);
-  if (reset || !g_cpu_timing.load() || mode != current || !last) {
+  if (reset || !g_cpu_timing.load() || mode != current || cpu_opt2_mode!=current_cpu_opt2 || !last) {
     for (auto& ticks : g_cpu_ticks) ticks.exchange(0);
-    g_cpu_draws.exchange(0); last = frames; mode = current; return;
+    for (auto& ticks : g_cpu_detail_ticks) ticks.exchange(0);
+    g_cpu_draws.exchange(0); last = frames; mode = current; cpu_opt2_mode=current_cpu_opt2; return;
   }
   if (!g_cpu_timing.load() || frames - last < stats_period(300)) return;
   const uint64_t n = frames - last; last = frames;
@@ -44,6 +51,9 @@ void cmd_cpu_report(uint64_t frames) {
   }
   log("[cpu] capture hooks over %llu frames, ms/frame (all threads): total %.3f; %s; captured draws %.1f/frame; perf_hook_state %d",
       (unsigned long long)n, total, o.c_str(), double(g_cpu_draws.exchange(0)) / double(n), current);
+  double detail[CpuDetailCount];for(int i=0;i<CpuDetailCount;++i)detail[i]=double(g_cpu_detail_ticks[i].exchange(0))*1000.0/double(f.QuadPart)/double(n);
+  if(g_cpu_detail.load(std::memory_order_relaxed))log("[cpu] capture detail over %llu frames, ms/frame (nested): pipeline lookup %.3f, cascade identity %.3f, bvh classify %.3f, alpha records %.3f, material hooks %.3f; dispatch tracking pre %.3f, post %.3f (driver excluded)",
+    (unsigned long long)n,detail[0],detail[1],detail[2],detail[3],detail[4],detail[5],detail[6]);
 }
 #else
 // Diagnostics compiled out: no timers, cpu_timing has no effect on these hooks.
@@ -837,13 +847,16 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, uint32_t y, uint32_t z) {
   diag(DIAG_DISPATCH);
+  {CpuDetailTimer timer(CpuDetailDispatchPre);
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, false, {x, y, z},pre->cs_native_validation};
     rrpost_dispatch_pre(cmd, pre->cs);
     core_on_dispatch_pre(cmd, &info);
     assetdb_on_dispatch_pre(cmd);
   }
+  }
   vk(cmd).CmdDispatch(cmd, x, y, z);
+  CpuDetailTimer timer(CpuDetailDispatchPost);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
   rrpost_dispatch_post(cmd, s->cs);
@@ -857,13 +870,16 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, u
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o) {
   diag(DIAG_DISPATCH);
+  {CpuDetailTimer timer(CpuDetailDispatchPre);
   if (CmdState* pre = cmd_state(cmd)) {
     Bg3DispatchInfo info{pre->cs, true, {0, 0, 0},pre->cs_native_validation};
     rrpost_dispatch_pre(cmd, pre->cs);
     core_on_dispatch_pre(cmd, &info);
     assetdb_on_dispatch_pre(cmd);
   }
+  }
   vk(cmd).CmdDispatchIndirect(cmd, b, o);
+  CpuDetailTimer timer(CpuDetailDispatchPost);
   CmdState* s = cmd_state(cmd);
   if (!s) return;
   rrpost_dispatch_post(cmd, s->cs);
