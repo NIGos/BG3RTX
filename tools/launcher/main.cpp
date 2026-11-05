@@ -12,6 +12,7 @@
 // The WebView UI and native Win32 fallback share the settings table in common/settings.h.
 #include "launcher.h"
 #include "web_host.h"
+#include "dlss5_runtime.h"
 
 #include <commctrl.h>
 #include <shellapi.h>
@@ -179,6 +180,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     }
   }
   if (do_launch && rc == 0) {
+    const bool game_launch = exe.empty() || _wcsicmp(std::filesystem::path(exe).filename().c_str(), L"bg3.exe") == 0;
+    if (game_dir.empty() && !exe.empty() && game_launch) game_dir = game_dir_from_path(exe);
     if (game_dir.empty()) game_dir = saved_game_dir();
     if (!valid_game_dir(game_dir)) game_dir = detect_game_dir();
     if (exe.empty() && !valid_game_dir(game_dir)) {
@@ -188,12 +191,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
       LaunchPlan p = make_plan(game_dir, exe, game_args, clean, effective_fg(s));
       if (dry) {
         emit(describe(p));
-      } else if (exe.empty() && game_running()) {
+      } else if (game_launch && game_running()) {
         emit(L"the game is already running\n");
         rc = 1;
       } else {
         DWORD pid = 0;
-        if (exe.empty()) {
+        if (game_launch) {
+          std::wstring runtime_note;
+          if (!launcher::dlss5::stage(s, game_dir, runtime_note, err)) {
+            emit(L"error: " + err + L"\n"); rc = 1; flush_output(); return rc;
+          }
+          if (!runtime_note.empty()) emit(runtime_note + L"\n");
           std::wstring note = guard_game_upscaler(s);
           if (!note.empty()) emit(note + L"\n");
         }

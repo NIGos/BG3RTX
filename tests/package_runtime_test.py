@@ -13,7 +13,9 @@ PLAN = None
 # Generated output, user configuration and developer-only directories are not inputs.
 EXCLUDED = {'bg3rtx_user.ini', 'trace_terrain_packet.request', 'trace', 'bg3rtx',
             'shaders', 'common', 'captures', 'sl_logs', 'bin/hot', 'bin/hot/',
-            'bin/GFSDK_Aftermath_Lib.x64.dll'}
+            'bin/sl', 'bin/sl/',  # NGX snippet search directories, not payload files.
+            'bin/GFSDK_Aftermath_Lib.x64.dll',
+            'bin/sl/nvngx_dlssnr.dll'}  # Launcher-staged user runtime, never bundled.
 PREFIXES = ('captures/', 'external/', '../../../external/')
 TOKEN = re.compile(r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*', re.S)
 
@@ -80,6 +82,8 @@ def runtime_files():
 def check_plan(plan, required):
     entries = json.loads(Path(plan).read_text(encoding='utf-8-sig'))
     destinations = {e['Destination'].replace('\\', '/') for e in entries}
+    if any(Path(p).name.lower() == 'nvngx_dlssnr.dll' for p in destinations):
+        raise AssertionError('User-supplied nvngx_dlssnr.dll must never be packaged')
     missing = sorted(required - destinations)
     if missing:
         raise AssertionError('Runtime inputs absent from package plan: ' + ', '.join(missing))
@@ -87,6 +91,26 @@ def check_plan(plan, required):
 
 
 class PackageRuntimeTest(unittest.TestCase):
+    def test_snippet_search_directory_is_not_a_required_file(self):
+        self.assertEqual(direct_paths('bin_dir() + "/sl";'), set())
+        self.assertEqual(direct_paths(r'bin_dir() + "\\sl\\";'), set())
+        self.assertEqual(direct_paths('bin_dir() + "/sl/nvngx_dlssnr.dll";'), set())
+        # Excluding the directory must not exclude ordinary required files inside it.
+        self.assertEqual(direct_paths('bin_dir() + "/sl/nvngx_dlssd.dll";'),
+                         {'bin/sl/nvngx_dlssd.dll'})
+
+    def test_neural_runtime_excluded_even_when_staged(self):
+        (ROOT / '.scratch').mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='nr-package-', dir=ROOT / '.scratch') as temp:
+            plan = Path(temp) / 'payload-list.json'
+            plan.write_text(json.dumps([{'Source': 'local staged runtime',
+                                         'Destination': 'bin/sl/nvngx_dlssnr.dll'}]), encoding='utf-8')
+            with self.assertRaisesRegex(AssertionError, 'must never be packaged'):
+                check_plan(plan, set())
+        manifest = json.loads((ROOT / 'scripts/package-third-party.json').read_text(encoding='utf-8'))
+        self.assertFalse(any(Path(e['destination']).name.lower() == 'nvngx_dlssnr.dll'
+                             for e in manifest['binaries']))
+
     def test_source_runtime_inputs_in_package_plan(self):
         required = runtime_files()
         self.assertTrue({'shaders/rt/alpha_fs.txt', 'shaders/rt/camera_fade_fs.txt',

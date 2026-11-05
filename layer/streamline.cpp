@@ -29,6 +29,7 @@
 #include "recording_init.h"
 #include "../common/fg_extent.h"
 #include "../common/async_capture_queue.h"
+#include "../common/sl_init_trigger.h"
 
 #include <psapi.h>
 #include <dbghelp.h>
@@ -46,6 +47,8 @@
 #include <sl_reflex.h>
 
 namespace bg3 {
+
+void sl_game_ngx_init();   // the game called NVSDK_NGX_VULKAN_Init* (shared NGX)
 
 // ---------------------------------------------------------------------------
 // state
@@ -556,6 +559,12 @@ std::atomic<uint32_t> g_gpa_redirects{0};
 int game_ngx_mode() { return g_sl_init ? cfg_int("fg_game_ngx", 2) : 0; }
 int64_t ngx_unsupported() { return int64_t(int32_t(0xBAD00001)); }   // NVSDK_NGX_Result_FAIL_FeatureNotSupported
 int64_t ngx_success() { return 1; }                                  // NVSDK_NGX_Result_Success
+// The game's NGX Init while shared: with sl_init_after_create=1 Streamline's
+// NGX is created here (common/sl_init_trigger.h), then success as above.
+int64_t ngx_init_shared() {
+  sl_game_ngx_init();
+  return ngx_success();
+}
 
 FARPROC WINAPI hk_GetProcAddress_game(HMODULE mod, LPCSTR name) {
   if (reinterpret_cast<uintptr_t>(name) > 0xFFFF && !strncmp(name, "NVSDK_NGX_", 10)) {
@@ -564,7 +573,8 @@ FARPROC WINAPI hk_GetProcAddress_game(HMODULE mod, LPCSTR name) {
     bool shutdown = !strncmp(name, "NVSDK_NGX_VULKAN_Shutdown", 25);
     FARPROC repl = nullptr;
     if (mode == 1 && init) repl = reinterpret_cast<FARPROC>(&ngx_unsupported);
-    if (mode == 2 && (init || shutdown)) repl = reinterpret_cast<FARPROC>(&ngx_success);
+    if (mode == 2 && shutdown) repl = reinterpret_cast<FARPROC>(&ngx_success);
+    if (mode == 2 && init) repl = reinterpret_cast<FARPROC>(&ngx_init_shared);
     static std::mutex mu;
     static std::set<std::string> seen;
     {
@@ -1733,20 +1743,38 @@ void sl_device_post(SlDeviceScratch* s, DeviceData* dd, VkResult r) {
   g_pending = std::move(own);
 }
 
-void sl_device_ready(DeviceData* dd, bool at_swapchain) {
+static void sl_device_trigger(DeviceData* dd, sl_init::Trigger t) {
   if (!g_pending || dd != g_dd) return;
   // sl_init_at=1 (default): at the first swapchain creation, which BG3 does
   // after initialising its own NGX instance (for DLSS SR). 0: at the first
-  // vkGetDeviceQueue.
+  // vkGetDeviceQueue, or with sl_init_after_create=1 at the game's NGX Init.
   // Sharing the game's NGX needs Streamline's NGX to exist before the game's init.
   int at = cfg_int("sl_init_at", game_ngx_mode() == 2 ? 0 : 1);
-  if (!at_swapchain && at != 0) return;
+  bool after_create = cfg_int("sl_init_after_create", 0) != 0;
+  if (!sl_init::init_now(at, after_create, t)) return;
+  static bool logged = false;
+  if (!logged) {
+    logged = true;
+    log("[sl] slSetVulkanInfo trigger: %s (sl_init_at=%d sl_init_after_create=%d)",
+        t == sl_init::Trigger::Swapchain     ? "first swapchain"
+        : t == sl_init::Trigger::GameNgxInit ? "the game's NGX Init"
+                                             : "first vkGetDeviceQueue",
+        at, int(after_create));
+  }
   std::unique_ptr<SlDeviceScratch> s;
   {
     std::lock_guard<std::mutex> lock(g_pending_mu);
     s = std::move(g_pending);
   }
   if (s) finish_device(s.get(), dd);
+}
+
+void sl_device_ready(DeviceData* dd, bool at_swapchain) {
+  sl_device_trigger(dd, at_swapchain ? sl_init::Trigger::Swapchain : sl_init::Trigger::DeviceQueue);
+}
+
+void sl_game_ngx_init() {
+  if (g_dd) sl_device_trigger(g_dd, sl_init::Trigger::GameNgxInit);
 }
 
 static void finish_device(SlDeviceScratch* s, DeviceData* dd) {

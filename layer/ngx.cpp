@@ -17,6 +17,7 @@
 // rr is read on every evaluate, so it switches without a restart; the first
 // evaluate after a switch carries Reset=1.
 #include "host.h"
+#include "dlss5.h"
 
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_defs_dlssd.h>
@@ -126,6 +127,19 @@ static bool hook_install(InlineHook& h, void* fn, void* detour, const char* name
   h.active = true;
   log("[ngx] hooked %s at %p (prologue %d bytes relocated)", name, t, n);
   return true;
+}
+
+// A retained-owner Shutdown is never forwarded, so it needs no relocated
+// original/trampoline. The installed driver's Shutdown prologues contain RIP-
+// relative loads inside the first 14 bytes, which ordinary hook_install correctly
+// rejects. This uses the existing absolute-jump patch only for terminal no-op
+// Shutdown exports; both this host and the core remain pinned until process exit.
+static bool hook_terminal(InlineHook& h,void* fn,void* detour,const char* name){
+  if(!fn)return false;auto* target=follow_jumps(static_cast<uint8_t*>(fn));DWORD old{};
+  if(!VirtualProtect(target,14,PAGE_EXECUTE_READWRITE,&old))return false;
+  write_abs_jump(target,detour);DWORD ignored{};VirtualProtect(target,14,old,&ignored);
+  FlushInstructionCache(GetCurrentProcess(),target,14);h.target=target;h.trampoline=nullptr;h.active=true;
+  log("[ngx] terminal no-op hook %s at %p (no original call, process-lifetime retention)",name,target);return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -995,6 +1009,7 @@ static void ts_mark(DeviceData* dd, VkCommandBuffer cmd, uint32_t slot, uint32_t
 
 void ngx_on_present() {
   rrpost_on_present();
+  dlss5_on_present();
   std::lock_guard<std::mutex> lock(g_mu);
   ULONGLONG now = GetTickCount64();
   static int reset_token = 0;
@@ -1438,6 +1453,36 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   if (result != NVSDK_NGX_Result_Success && eval_logs++ < 8)
     log("[ngx] RR evaluate failed: %s (0x%08x)", result_name(result), unsigned(result));
   if (g_qpool) ts_mark(dd, cmd, ts_slot, 2);
+  if (cfg_int("dlss5_nr",0)) {
+    Dlss5Frame nr{};nr.color=post.output;nr.rr_success=result==NVSDK_NGX_Result_Success;nr.use_post=use_post;
+    nr.debug=show || cfg_int("rt_debug",0) || cfg_int("ls_debug",0) || cfg_int("gi_debug",0) || cfg_int("rf_debug",0);
+    nr.depth_inverted=(f.flags&NVSDK_NGX_DLSS_Feature_Flags_DepthInverted)!=0;
+    nr.guides.reset=reset || old_reset!=0;
+    nr.guides.jittered=(f.flags&NVSDK_NGX_DLSS_Feature_Flags_MVJittered)!=0;
+    nr.guides.render[0]=w;nr.guides.render[1]=h;nr.guides.output[0]=ow;nr.guides.output[1]=oh;
+    bool valid=true;unsigned subrect{};
+    if(get_ui(p,"DLSS.Render.Subrect.Dimensions.Width",subrect) && subrect)nr.guides.render[0]=subrect;
+    if(get_ui(p,"DLSS.Render.Subrect.Dimensions.Height",subrect) && subrect)nr.guides.render[1]=subrect;
+    if(nr.guides.render[0]>w || nr.guides.render[1]>h)valid=false;
+    for(unsigned i=0;i<2;++i){
+      auto* resource=get_res(p,i?NVSDK_NGX_Parameter_MotionVectors:NVSDK_NGX_Parameter_Depth);
+      if(!resource || resource->Type!=NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW){valid=false;continue;}
+      const auto& im=resource->Resource.ImageViewInfo;
+      if(im.SubresourceRange.baseMipLevel || im.SubresourceRange.baseArrayLayer || im.SubresourceRange.levelCount!=1 || im.SubresourceRange.layerCount!=1){valid=false;continue;}
+      auto& b=i?nr.motion:nr.depth;b.image=im.Image;b.view=im.ImageView;b.format=im.Format;b.width=im.Width;b.height=im.Height;
+      b.layout=sl_input_layout(cmd,b.image,i?VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+      auto* extent=i?nr.guides.motion_extent:nr.guides.depth_extent;extent[0]=im.Width;extent[1]=im.Height;
+    }
+    const char* depth_keys[]={"DLSS.Input.Depth.Subrect.Base.X","DLSS.Input.Depth.Subrect.Base.Y"};
+    const char* mv_keys[]={"DLSS.Input.MV.Subrect.Base.X","DLSS.Input.MV.Subrect.Base.Y"};
+    for(unsigned axis=0;axis<2;++axis){unsigned v{};if(get_ui(p,depth_keys[axis],v))nr.guides.depth_base[axis]=v;
+      v=0;if(get_ui(p,mv_keys[axis],v))nr.guides.motion_base[axis]=v;
+      nr.guides.motion_size[axis]=(f.flags&NVSDK_NGX_DLSS_Feature_Flags_MVLowRes)?nr.guides.render[axis]:nr.guides.output[axis];}
+    valid=valid && get_f(p,NVSDK_NGX_Parameter_Jitter_Offset_X,nr.guides.jitter[0]) && get_f(p,NVSDK_NGX_Parameter_Jitter_Offset_Y,nr.guides.jitter[1]) &&
+      get_f(p,NVSDK_NGX_Parameter_MV_Scale_X,nr.guides.scale[0]) && get_f(p,NVSDK_NGX_Parameter_MV_Scale_Y,nr.guides.scale[1]);
+    if(!valid){nr.depth={};nr.motion={};}
+    dlss5_evaluate(dd,cmd,nr);
+  }
   if (use_post && result == NVSDK_NGX_Result_Success) {
     Bg3Binding inputs[2]{};
     const char* keys[] = {NVSDK_NGX_Parameter_Depth, NVSDK_NGX_Parameter_MotionVectors};
@@ -1643,6 +1688,55 @@ static NVSDK_NGX_Result Detour_Eval(VkCommandBuffer cmd, const NVSDK_NGX_Handle*
 // Hook installation
 // ---------------------------------------------------------------------------
 
+// Driver-export ABI: Version precedes FeatureCommonInfo. These forward the
+// owner's existing Init exactly once, preserving its instance/device/callbacks.
+using NrInit=NVSDK_NGX_Result(*)(unsigned long long,const wchar_t*,VkInstance,VkPhysicalDevice,VkDevice,unsigned);
+using NrInitExt=NVSDK_NGX_Result(*)(unsigned long long,const wchar_t*,VkInstance,VkPhysicalDevice,VkDevice,unsigned,const NVSDK_NGX_FeatureCommonInfo*);
+using NrInitExt2=NVSDK_NGX_Result(*)(unsigned long long,const wchar_t*,VkInstance,VkPhysicalDevice,VkDevice,PFN_vkGetInstanceProcAddr,PFN_vkGetDeviceProcAddr,unsigned,const NVSDK_NGX_FeatureCommonInfo*);
+static InlineHook g_nr_init,g_nr_init_ext,g_nr_init_ext2,g_nr_shutdown,g_nr_shutdown1;
+struct NrInitPaths {
+  NVSDK_NGX_FeatureCommonInfo info{};
+  std::vector<std::wstring> storage;std::vector<const wchar_t*> paths;
+};
+static const NVSDK_NGX_FeatureCommonInfo* nr_paths(const NVSDK_NGX_FeatureCommonInfo* original){
+  if(!cfg_int("dlss5_nr",0))return original;
+  // NGX may retain the path pointers: these tiny records intentionally live as
+  // long as the process, just like the existing core's shared initialization.
+  static std::mutex mu;static std::vector<std::unique_ptr<NrInitPaths>> retained;
+  if(original && original->PathListInfo.Length>=128){log("[dlss5] NGX Init path list too large to augment; forwarded unchanged");return original;}
+  auto entry=std::make_unique<NrInitPaths>();if(original)entry->info=*original;
+  const std::string staged=bin_dir()+"/sl";int size=MultiByteToWideChar(CP_UTF8,0,staged.c_str(),-1,nullptr,0);
+  if(size<=0)return original;std::wstring path(size,L'\0');MultiByteToWideChar(CP_UTF8,0,staged.c_str(),-1,path.data(),size);path.resize(size-1);
+  entry->storage.push_back(path);
+  if(original && original->PathListInfo.Path && original->PathListInfo.Length<128)
+    for(unsigned i=0;i<original->PathListInfo.Length;++i)if(original->PathListInfo.Path[i])entry->storage.emplace_back(original->PathListInfo.Path[i]);
+  for(auto& value:entry->storage)entry->paths.push_back(value.c_str());
+  entry->info.PathListInfo.Path=entry->paths.data();entry->info.PathListInfo.Length=unsigned(entry->paths.size());
+  log("[dlss5] existing NGX Init search path first: %ls (owner and logging unchanged)",path.c_str());
+  const auto* result=&entry->info;std::lock_guard<std::mutex> lock(mu);retained.push_back(std::move(entry));return result;
+}
+static NVSDK_NGX_Result nr_init(unsigned long long app,const wchar_t* data,VkInstance instance,VkPhysicalDevice physical,VkDevice dev,unsigned version){
+  if(g_nr_init_ext.active)return reinterpret_cast<NrInitExt>(g_nr_init_ext.trampoline)(app,data,instance,physical,dev,version,nr_paths(nullptr));
+  return reinterpret_cast<NrInit>(g_nr_init.trampoline)(app,data,instance,physical,dev,version);
+}
+static NVSDK_NGX_Result nr_init_ext(unsigned long long app,const wchar_t* data,VkInstance instance,VkPhysicalDevice physical,VkDevice dev,unsigned version,const NVSDK_NGX_FeatureCommonInfo* info){
+  return reinterpret_cast<NrInitExt>(g_nr_init_ext.trampoline)(app,data,instance,physical,dev,version,nr_paths(info));
+}
+static NVSDK_NGX_Result nr_init_ext2(unsigned long long app,const wchar_t* data,VkInstance instance,VkPhysicalDevice physical,VkDevice dev,PFN_vkGetInstanceProcAddr gipa,PFN_vkGetDeviceProcAddr gdpa,unsigned version,const NVSDK_NGX_FeatureCommonInfo* info){
+  return reinterpret_cast<NrInitExt2>(g_nr_init_ext2.trampoline)(app,data,instance,physical,dev,gipa,gdpa,version,nr_paths(info));
+}
+static NVSDK_NGX_Result nr_shutdown(){
+  log("[dlss5] existing NGX Shutdown skipped (process-lifetime owner retention; no NR-owned Shutdown)");
+  return NVSDK_NGX_Result_Success;
+}
+static NVSDK_NGX_Result nr_shutdown1(VkDevice){return nr_shutdown();}
+static NVSDK_NGX_Result nr_create(VkDevice device,VkCommandBuffer cmd,NVSDK_NGX_Feature id,NVSDK_NGX_Parameter* p,NVSDK_NGX_Handle** out){
+  Nest nested;if(g_h_create1.active)return orig_create1()(device,cmd,id,p,out);return orig_create()(cmd,id,p,out);
+}
+static NVSDK_NGX_Result nr_evaluate(VkCommandBuffer cmd,const NVSDK_NGX_Handle* h,const NVSDK_NGX_Parameter* p,PFN_NVSDK_NGX_ProgressCallback cb){
+  Nest nested;return orig_eval()(cmd,h,p,cb);
+}
+
 static void hook_module(HMODULE mod) {
   if (g_ngx_mod) return;
   auto proc = [&](const char* n) { return reinterpret_cast<void*>(GetProcAddress(mod, n)); };
@@ -1667,6 +1761,31 @@ static void hook_module(HMODULE mod) {
   if (create1) ok &= hook_install(g_h_create1, create1, reinterpret_cast<void*>(&Detour_Create1), "VULKAN_CreateFeature1");
   ok &= hook_install(g_h_eval, eval, reinterpret_cast<void*>(&Detour_Eval), "VULKAN_EvaluateFeature");
   ok &= hook_install(g_h_release, release, reinterpret_cast<void*>(&Detour_Release), "VULKAN_ReleaseFeature");
+  if(ok && cfg_int("dlss5_nr",0)) {
+    if(auto fn=proc("NVSDK_NGX_VULKAN_Init_Ext"))hook_install(g_nr_init_ext,fn,reinterpret_cast<void*>(&nr_init_ext),"VULKAN_Init_Ext (NR path)");
+    if(auto fn=proc("NVSDK_NGX_VULKAN_Init_Ext2"))hook_install(g_nr_init_ext2,fn,reinterpret_cast<void*>(&nr_init_ext2),"VULKAN_Init_Ext2 (NR path)");
+    if(auto fn=proc("NVSDK_NGX_VULKAN_Init"))hook_install(g_nr_init,fn,reinterpret_cast<void*>(&nr_init),"VULKAN_Init (NR path)");
+    // Fixture evidence: Shutdown1 stalls even after Release/idle. Keep the
+    // existing owner loaded until process exit; release NR resources at device
+    // drain, never invoke another Init/Shutdown ourselves. The host is already
+    // pinned by ngx_init because every existing NGX inline hook points here.
+    HMODULE pinned_core{};
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
+        reinterpret_cast<LPCWSTR>(mod),&pinned_core)){
+      log("[dlss5] NR disabled: cannot retain the existing NGX owner");return;
+    }
+    bool shutdown_safe=true;
+    if(auto fn=proc("NVSDK_NGX_VULKAN_Shutdown"))shutdown_safe &= hook_terminal(g_nr_shutdown,fn,reinterpret_cast<void*>(&nr_shutdown),"VULKAN_Shutdown (NR retention)");
+    if(auto fn=proc("NVSDK_NGX_VULKAN_Shutdown1"))shutdown_safe &= hook_terminal(g_nr_shutdown1,fn,reinterpret_cast<void*>(&nr_shutdown1),"VULKAN_Shutdown1 (NR retention)");
+    if(!shutdown_safe){log("[dlss5] NR disabled: owner teardown could not be retained safely");return;}
+    if(!g_nr_init.active || !g_nr_init_ext.active || !g_nr_init_ext2.active){
+      log("[dlss5] NR disabled: existing NGX Init path forwarding unavailable; owner unchanged, restart with supported loader required");return;
+    }
+    auto destroy=reinterpret_cast<NVSDK_NGX_Result(*)(NVSDK_NGX_Parameter*)>(proc("NVSDK_NGX_VULKAN_DestroyParameters"));
+    auto capabilities=reinterpret_cast<NVSDK_NGX_Result(*)(NVSDK_NGX_Parameter**)>(proc("NVSDK_NGX_VULKAN_GetCapabilityParameters"));
+    dlss5_set_ngx({&nr_create,&nr_evaluate,orig_release(),g_alloc_params,destroy,capabilities});
+    log("[dlss5] experimental provider armed on existing Vulkan NGX; runtime-internal validation finding remains unsuppressed");
+  }
   if (!ok) log("[ngx] some NGX hooks failed; RR will not be available");
 }
 

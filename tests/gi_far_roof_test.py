@@ -56,6 +56,16 @@ class FarGiRoof(unittest.TestCase):
         self.assertIn("if (t3 >= t0 && t0 <= t) return false;", SOURCE)
         self.assertIn("(pc.ls_flags & (1u << 25)) == 0u || (st_u(4) & 2u) == 0u", SOURCE)
 
+    def test_early_rejection_diagnostic_policy(self):
+        self.assertIn('constant_id(1038)', SOURCE)
+        self.assertIn('kGiFarRoofEarly != 0u && pc.rt_stats == 0u', SOURCE)
+        self.assertIn('gi_far_inside_first_roof(o, dir, t)', SOURCE)
+        self.assertIn('t > RB && pc.gi_rt_fallback == 0u', SOURCE)
+        self.assertLess(SOURCE.index('bounce += he.radiance * w;'), SOURCE.index('const bool roof_early'))
+        self.assertIn('&& !roof_early', SOURCE)
+        host = (ROOT / 'core/gi.cpp').read_text(encoding='utf-8')
+        self.assertRegex(host, r'specs.add\(sv::kSpecIdGiFarRoofEarly,\s*host->cfg_int\("rt_stats", 0\) == 0 && host->cfg_int\("gi_far_roof_early", 1\) != 0 \? 1u : 0u\)')
+
     def test_segment_radiance_fixtures(self):
         identity = (0, 0, 0, 1)
         room = [((0, 0, 0), identity, (1, 1, 1))]

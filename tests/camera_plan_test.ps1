@@ -217,6 +217,15 @@ foreach ($bad in @(@{wait_logs=@('ready')}, @{wait_log=@('ready')},
   Check $rejected 'unknown or invalid readiness/recenter fields fail closed'
 }
 # Cached/no-op transitions need cfg values, not synthetic build announcements.
+$quiet='\[watch\].*\| pipelines 0 \(0 ms in driver\)'
+$cached=@{set='gi_hit_sun=0';wait_log=@($quiet);wait_log_fresh=@($quiet)}
+$qline='[watch] ready | pipelines 0 (0 ms in driver)'
+$qack="[cfg] settings read`n[cfg] keys: gi_hit_sun=0`ngi: gi/gi_trace_rt_hit_direct.hlsl building in the background"
+Check (-not (Test-CameraPlanReady $cached "$qline`n$qack" $qack)) 'cached GI needs fresh QUIET after acknowledgement'
+Check (-not (Test-CameraPlanReady $cached "$qline`n$qack" "$qline`n$qack")) 'QUIET before settings read cannot release cached GI'
+Check (-not (Test-CameraPlanReady $cached "$qack`n$qline" "[cfg] settings read`n$qline`n[cfg] keys: gi_hit_sun=0")) 'QUIET before keys acknowledgement cannot release cached GI'
+Check (Test-CameraPlanReady $cached "$qack`n$qline" "$qack`n$qline") 'cached GI needs no generation for abandoned alternative'
+Check (-not (Test-CameraPlanReady $cached "$qack`n$qline" "[cfg] settings read`n[cfg] keys: gi_hit_sun=1`n$qline")) 'wrong settings still block cached GI'
 $resident=@{set='rr_post_temporal=1,gi_strength=1';wait_log=@('gi: gi/test.hlsl generation ', '\[watch\].*pipelines 0');wait_log_fresh=@('\[watch\].*pipelines 0')}
 $ack="[cfg] settings read`n[cfg] keys: rr_post_temporal=1 gi_strength=1.00"
 Check (Test-CameraPlanReady $resident $ack $ack) 'resident variant releases at matching cfg without watch or generation'

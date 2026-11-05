@@ -421,14 +421,14 @@ static void test_gui_levels() {
     // a knob in any other category would be in the schema but never shown.
     if (!k.dev_only) {
       const std::string c = k.category;
-      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Advanced" || c == "Support");   // the Memory page shows capacity only
+      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Advanced" || c == "DLSS 5" || c == "Support");   // the Memory page shows capacity only
     }
     // Off in every preset for experimental knobs.
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 0);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 16));
+  CHECK(user_exp == 1);   // Release has no experimental controls.
+  CHECK(dev.size() == size_t(kKnobCount - 17));
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
@@ -962,7 +962,7 @@ static void test_gui_review_safety() {
   const auto& fg=*find_knob("frame_generation");
   for(int from=0;from<4;++from)for(int to=0;to<4;++to)
     CHECK(transition_apply(fg,from,to)==((from==0)!=(to==0)?Apply::Restart:Apply::Live));
-  for(const auto& k:kKnobs)if(k.experimental&&!k.dev_only)CHECK_EQ(k.category,"Advanced");
+  for(const auto& k:kKnobs)if(k.experimental&&!k.dev_only)CHECK_EQ(k.category,"DLSS 5");
   const auto& fresnel=*find_knob("water_surface_fresnel");
   CHECK(!choice_available(fresnel,1,false,false,~0u));
   CHECK(!choice_available(fresnel,1,false,true,~0u));
@@ -1077,6 +1077,26 @@ static void test_retired_rejected_controls() {
   enforce_release_policy(release); CHECK_EQ(get(release,"rt_scene_compact_holds"),"1");
   Map developer=release; developer["dev"]="1"; developer["rt_scene_compact_holds"]="0";
   enforce_release_policy(developer); CHECK_EQ(get(developer,"rt_scene_compact_holds"),"0");
+  CHECK(find_knob("rt_compact_hit_state") == nullptr);
+  CHECK_EQ(code_default("rt_compact_hit_state"), "1");
+  for (int p=0; p<kPresetCount; ++p) {
+    Map preset; for (const auto& kv : expand_preset(p)) preset[kv.first]=kv.second;
+    CHECK_EQ(get(preset,"rt_compact_hit_state"),"1");
+  }
+  release=code_defaults(); release["rt_compact_hit_state"]="0";
+  enforce_release_policy(release); CHECK_EQ(get(release,"rt_compact_hit_state"),"1");
+  developer=release; developer["dev"]="1"; developer["rt_compact_hit_state"]="0";
+  enforce_release_policy(developer); CHECK_EQ(get(developer,"rt_compact_hit_state"),"0");
+  CHECK(find_knob("gi_far_roof_early") == nullptr);
+  CHECK_EQ(code_default("gi_far_roof_early"), "1");
+  for (int p=0; p<kPresetCount; ++p) {
+    Map preset; for (const auto& kv : expand_preset(p)) preset[kv.first]=kv.second;
+    CHECK_EQ(get(preset,"gi_far_roof_early"),"1");
+  }
+  release=code_defaults(); release["gi_far_roof_early"]="0";
+  enforce_release_policy(release); CHECK_EQ(get(release,"gi_far_roof_early"),"1");
+  developer=release; developer["dev"]="1"; developer["gi_far_roof_early"]="0";
+  enforce_release_policy(developer); CHECK_EQ(get(developer,"gi_far_roof_early"),"0");
   const Map defaults=code_defaults();
   const Map legacy=parse_ini("rr_hair_resolve=1\nrt_cascade_static_only=1\nperf_hitmat_lists=1\nperf_hook_state=1\nperf_submit_batch=1\n");
   CHECK(knob_values(merge_layers({&defaults,&legacy})) == knob_values(merge_layers({&defaults})));
@@ -1145,7 +1165,7 @@ static void test_consolidation_policy() {
 
 static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
-    "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water",
+    "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water", "dlss5_nr",
     "exp_hidden_surface", "box_lights", "rr_post_temporal", "exp_native_coverage", "detailed_logging"};
   std::vector<std::string> visible;
   for (const auto& k : kKnobs) {
@@ -1166,16 +1186,11 @@ static void test_release_migration() {
        "exp_hit_reference", "exp_hair_primary_passes", "exp_hair_primary_order"})
     CHECK(find_knob(id) && !opt_in_knob(*find_knob(id)) && !knob_visible(*find_knob(id), false, true));
   {
-    Map opt = parse_ini("dev=0\npreset=ultra\nrt_water_surface_fresnel=1\nrt_hair_groom=1\nrt_compact_hit_state=1\nperf_submit_batch=1\n");
+    Map opt = parse_ini("dev=0\npreset=ultra\nrt_water_surface_fresnel=1\nrt_hair_groom=1\nperf_submit_batch=1\n");
     Map m = code_defaults(); apply_layer(m, opt);
     CHECK_EQ(get(m, "rt_water_surface_fresnel"), "0"); CHECK_EQ(get(m, "rt_hair_groom"), "0");
     opt["experimental_options"] = "1"; m = code_defaults(); apply_layer(m, opt);
     CHECK_EQ(get(m, "rt_water_surface_fresnel"), "1"); CHECK_EQ(get(m, "rt_hair_groom"), "0"); // post-release
-    CHECK_EQ(get(m, "rt_compact_hit_state"), "0"); CHECK_EQ(get(code_defaults(), "rt_compact_hit_state"), "0");
-    const Knob* compact = find_knob("rt_compact_hit_state");
-    CHECK(compact && std::string(compact->category) == "Advanced" && compact->dev_only);
-    Map dev = code_defaults(); apply_layer(dev, parse_ini("dev=1\npreset=ultra\nrt_compact_hit_state=1\n"));
-    CHECK_EQ(get(dev, "rt_compact_hit_state"), "1");
     CHECK_EQ(get(m, "perf_submit_batch"), "0");
     Map again = m; enforce_release_policy(again); CHECK(again == m);
   }
@@ -1203,8 +1218,9 @@ static void test_release_migration() {
     CHECK(!m.count("rt_water_rf_edge") && !m.count("rt_water_rr_hitdist"));
     Map again = m; enforce_release_policy(again); CHECK(again == m);
     Map reloaded = code_defaults();
-    apply_layer(reloaded, parse_ini(render_user_ini("rt_hair_groom_primary=1\nrt_compact_hit_state=1\n",
+    apply_layer(reloaded, parse_ini(render_user_ini("rt_hair_groom_primary=1\nrt_compact_hit_state=0\n",
       p, presentation_values(m, false))));
+    CHECK_EQ(get(reloaded, "rt_compact_hit_state"), "1");
     CHECK(knob_values(reloaded) == knob_values(m));
   }
   Map m = code_defaults();
@@ -1316,6 +1332,26 @@ static void test_detailed_logging() {
   }
 }
 
+static void test_dlss5_native_setting() {
+  const auto* k = find_knob("dlss5_nr");
+  CHECK(k && k->experimental && !k->dev_only && k->apply == Apply::Restart);
+  CHECK(k && !opt_in_knob(*k) && knob_visible(*k, false, true) && knob_visible(*k, false));
+  CHECK_EQ(code_default("hotkey_rt_toggle"), "Ctrl+Shift+F9");
+  CHECK_EQ(code_default("hotkey_dlss5"), "Ctrl+Shift+F8");
+  CHECK_EQ(code_default("dlss5_nr"), "0");
+  CHECK_EQ(code_default("dlss5_nr_runtime"), "");
+  CHECK_EQ(code_default("dlss5_nr_bypass"), "0");
+  for (int p=0;p<kPresetCount;++p) CHECK(preset_values(p)[knob_index("dlss5_nr")] == 0);
+  CHECK(key_change_needs_restart("dlss5_nr", "0", "1"));
+  CHECK(key_change_needs_restart("dlss5_nr", "1", "0"));
+  CHECK(key_change_needs_restart("dlss5_nr_runtime", "", "C:/runtime/nvngx_dlssnr.dll"));
+  CHECK(!key_change_needs_restart("dlss5_nr_runtime", "same", "same"));
+  Map released=code_defaults();released["dev"]="0";released["dlss5_nr"]="1";
+  enforce_release_policy(released);CHECK_EQ(get(released,"dlss5_nr"),"1");
+  released["experimental_options"]="1";released["dlss5_nr"]="1";
+  enforce_release_policy(released);CHECK_EQ(get(released,"dlss5_nr"),"1");
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1323,6 +1359,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_dlss5_native_setting();
   test_detailed_logging();
   test_consolidation_policy();
   test_stats_window();

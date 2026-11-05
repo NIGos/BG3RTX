@@ -1,10 +1,10 @@
 {
   "generated_from": "common/settings.h",
   "presets": [
-    {"id": "low", "label": "Low", "description": "Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.", "extra": {"rt_scene_compact_holds": "1"}},
-    {"id": "medium", "label": "Medium", "description": "Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.", "extra": {"rt_scene_compact_holds": "1"}},
-    {"id": "high", "label": "High", "description": "Adds foliage to ray tracing, Full local light shadows and Standard reflections.", "extra": {"rt_scene_compact_holds": "1"}},
-    {"id": "ultra", "label": "Ultra", "description": "Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.", "extra": {"rt_rebuild_frames": "600", "rt_scene_compact_holds": "1"}}
+    {"id": "low", "label": "Low", "description": "Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.", "extra": {"rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1"}},
+    {"id": "medium", "label": "Medium", "description": "Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.", "extra": {"rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1"}},
+    {"id": "high", "label": "High", "description": "Adds foliage to ray tracing, Full local light shadows and Standard reflections.", "extra": {"rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1"}},
+    {"id": "ultra", "label": "Ultra", "description": "Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.", "extra": {"rt_rebuild_frames": "600", "rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1"}}
   ],
   "knobs": [
     {"id": "rr", "label": "DLSS Ray Reconstruction",
@@ -156,6 +156,19 @@
        {"id": "reflections", "label": "Reflections", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_compose", "rt_water_reflections", "rt_water_geometry"], "developer": false, "maturity": "qualified"},
        {"id": "shadows", "label": "Reflections and shadows", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false, "maturity": "qualified"},
        {"id": "refraction", "label": "Include refraction", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false, "maturity": "qualified"}
+     ]},
+    {"id": "dlss5_nr", "label": "DLSS 5 Neural Rendering (experimental)",
+     "description": "(experimental) Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
+     "apply": "restart", "apply_note": "Restart the game after changing DLSS 5 or its runtime file", "advanced": false, "experimental": true, "developer": false,
+     "category": "DLSS 5", "summary": "(experimental) Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
+     "details": "Experimental and off in every preset. Requires Ray Reconstruction before post effects and a compatible user-provided nvngx_dlssnr.dll. The launcher prepares the runtime before Play; custom or unsigned runtimes are identified in the log and may be rejected by NVIDIA (0xbad0000b). Restart after changing this option or the runtime file.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rr_post": "1"},
+     "required_from_choice": {"rr_post": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"dlss5_nr": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["dlss"], "keys": {"dlss5_nr": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
      ]},
     {"id": "water_surface_fresnel", "label": "Water surface reflections",
      "description": "Experimental: works out the reflection at the water surface separately from the water's depth colour. Mostly visible at the edges of shallow pools; open water barely changes.",
@@ -424,19 +437,6 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_physical_origin": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_physical_origin": "1"}, "needs": {"rt_geometry": 2, "exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "rt_compact_hit_state", "label": "Compact GI hit state",
-     "description": "Reduces GI shader state while preserving the lighting result. Experimental; off by default.",
-     "apply": "hitch", "apply_note": "First use builds a pipeline in the background.", "advanced": false, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Reduces GI shader state while preserving the lighting result. Experimental; off by default.",
-     "details": "",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {"rt": "1"},
-     "required_from_choice": {"rt": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_compact_hit_state": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_compact_hit_state": "1"}, "needs": {"gi": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "detailed_logging", "label": "Detailed logging",
      "description": "Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.",

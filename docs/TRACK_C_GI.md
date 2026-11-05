@@ -222,6 +222,124 @@ core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
 - Live gate: as M4.1 at S3 Campsite; cost = `gi: trace pass` GPU median ON minus OFF (one more
   ray per supported hit, expected +0.1 ms).
 
+## Deferred hidden-hit sun visibility (rejected and removed, 2026-11-05)
+
+The `gi_sun_wave` prototype deferred eligible hidden-hit sun rays into a dense dispatch,
+then replayed individual additions in original ray order. It was 100% bit-equal in outputs
+and raw counters on S8/camp/inn, statistics on and off, but all paired timings were slower.
+Forty ABBA/BAAB samples per pack gave ON-OFF median [95% median interval], in ms:
+S8 +0.735776 [+0.540272, +0.849120], camp +3.114312 [+2.451616, +3.897856],
+inn +0.737392 [+0.638336, +0.863264]. The 1,158 MB scratch did not earn a speed gain.
+Code, key, settings, specialization wiring, two requests and feature tests are removed.
+SpecId 1034 is retired, never reuse. Requests return to 125. Paired replay remains.
+The cleaned ordinary shaders are byte-identical to main for all 215 unique requests.
+Cleanup full build and all 191 CTests pass (158.05 s).
+See [sunwave](progress/sunwave.md) for retained receipts and current checks.
+
+## Far GI cost split, 2026-11-05
+
+Offline RTX 5090, main `5b076d9`, S8/camp/inn, sun trust, radius 6 m, two rays, statistics off.
+Each entry is its own 40-sample ABBA/BAAB median [95% median interval], ms.
+N=near; Q=6 m query with extra hits discarded and near math retained; L=far/screens without extra hidden shading;
+Fc=full far with exact frozen GI roof answers; F=original far. These conditional program costs are not additive.
+N/Q outputs/near shading counters match; roof controls match all output/counter bits, with zero cache/mismatch guards.
+
+| Pack | (a) Traversal Q-N | (b) Extra hidden shading Fc-L | (c) Matched GI roof loop | (d) Other policy/context L-Q |
+|---|---|---|---|---|
+| S8 | 0.325 [0.324, 0.326] | 1.562 [1.227, 2.396] | 0.465 [0.351, 0.772] | 0.562 [0.561, 0.563] |
+| Camp | 3.787 [3.641, 4.060] | 2.037 [1.500, 3.377] | 0.332 [-0.074, 1.362] | 3.217 [2.761, 3.822] |
+| Inn | 2.065 [1.973, 2.329] | 0.926 [0.512, 1.154] | 0.374 [-0.007, 0.650] | 1.711 [1.372, 2.074] |
+
+(c) retains both bodies in one SPV, selects via runtime push comparison/SpecId 1900, and charges both for the same lookup;
+it measures the original loop plus verification comparison. Only S8 excludes zero. Simple real-minus-cached substitution
+was confounded (0.204 / -0.668 / -0.387 ms), so is not called a physical loop cost or combined with (c).
+Fresh F-N totals: 2.762 [2.555, 3.102] / 9.132 [8.331, 9.627] / 4.702 [4.350, 4.928] ms; historical
+2.430 / 5.460 / 2.448 ms are a different context. The original four-edge telescope closes within its intervals.
+(d) includes fade/base-fade, screen/near outside-froxel eligibility and compilation context. Statistics atomics do zero work;
+original near/far driver registers rise 168 -> 255. Anomalous memory figures support no spill/occupancy inference.
+Native sun roof work stays in (b); cascade casters bypass that loop in camp/inn. Screen/hidden memo overlap is zero everywhere.
+Inn's added hidden shading changes no stored output: all qualified far hidden hits are roof-vetoed.
+
+Two exact candidates (implemented and measured below); the original planning estimates were:
+- Early inside-roof rejection after emission, before hidden shading, only t > RB: the ORIGINAL ray origin inside the first
+  padded roof proves the segment veto and zero base-fade fallback. Keep diagnostics and conservative unknown/non-finite handling.
+  Covered extra-qualified cohorts: 75,984/246,920 S8; 21,144/25,699 inn. Proportional-work targets less guard cost:
+  0.2-0.5 ms S8 / 0.4-0.7 ms inn; camp has no covered cohort and could lose.
+- Exact-bit (0,0,0,1) quaternion path: omit two rotations, retaining subtraction, slabs/order/boundaries and finite/subnormal
+  fallbacks. It covers 76.6% / 100% / 100% of GI roof volume visits. A 20-40% roof-work target suggests
+  0.1-0.2 ms S8 / 0-0.2 ms camp/inn, whose loop costs remain unresolved.
+
+Implementation and coordinator correction (roofrej, 2026-11-05): restore only early rejection under new SpecId 1038.
+`gi_far_roof_early` was initially a developer raw key, default 0 and release-forced OFF; qualification below promotes it ON. IDs 1035 / 1036 remain retired;
+identity stays removed (its camp production loss was +0.080 [0.048, 0.117] ms). Request delta 0, ABI unchanged.
+The coordinator overturned early rejection's diagnostic-mode rejection: production uses rt_stats=0, whose earlier
+S8/camp/inn intervals passed (-0.748 [-1.034,-0.400] / -0.002 [-0.483,+0.393] / -1.023 [-2.393,-0.394] ms).
+
+The host now forces specialization 1038=0 whenever rt_stats != 0. Key ON/OFF then select the identical module,
+specialization payload and cached pipeline slot: diagnostic shading, counters and executable allocation stay original.
+The shader also retains its pc.rt_stats==0 guard. The original-origin/first-padded-roof/t > RB proof remains after
+emission, with conservative unknown/non-finite/subnormal fallbacks. All three modules (S8, cascade, Ultra emission)
+are byte-identical to the prior early-only candidate after renaming the SpecId decoration.
+
+Fresh ID 1038 proof: S8/camp/inn, sun trust, 6 m, two rays, all outputs and raw counter bins 100% bit-equal.
+At rt_stats=0 compare 0/1 for 40 ABBA/BAAB pairs; at rt_stats=1 compare both main vs candidate 0 and host key
+ON/OFF 0/0 for two pairs each. Fresh production ON-OFF median [95% median interval], ms:
+
+| Pack | rt_stats=0, 40 pairs |
+|---|---|
+| S8 | -1.734 [-2.734, -1.398] |
+| Camp | +0.495 [+0.103, +1.696] |
+| Inn | -1.361 [-2.429, -0.798] |
+
+The 40-pair camp loss conflicted with the earlier inconclusive result; the restored candidate remained OFF for coordinator review.
+The subsequent stability check below did not reproduce a camp loss. Camp identical OFF/OFF control, 40 pairs:
++0.128 [-0.821, +0.323] ms, all output/counter bits equal. No candidate timing was discarded or rerun to select a pass.
+Subsequent camp stability check (no production changes): three back-to-back 80-pair A/B runs, each preceded by
+its own 80-pair OFF/OFF control, GPU idle before each phase and no bg3/other game. ON-OFF median [95% CI], ms:
+
+- Run 1: -0.005904 [-0.143744, +0.059024]; control +0.008064 [-0.132944, +0.245616].
+- Run 2: -0.110912 [-0.211504, +0.079696]; control +0.022808 [-0.174240, +0.104528].
+- Run 3: +0.100592 [-0.012960, +0.200400]; control +0.000448 [-0.076752, +0.093728].
+
+Pooled all 240 raw A/B pairs: +0.005064 [-0.060240, +0.059024] ms, same exact-binomial median interval.
+No reproducible camp loss; every timing output/counter bit matched. Separate scratch-only output view counted
+0 early rejections from 492,480 guard evaluations across 5,463,040 rays. Hence no hidden shading is saved on camp.
+A cost could come from per-hit volume loads, rotations, finite/containment/slab tests or compiler live-state changes;
+these timings do not establish a nonzero net cost. Cheapest candidate if needed: reject non-finite/outside local
+origins before direction rotation/slabs. Existing SunTrustFrame.volumes permits a host zero-roof bypass, but camp
+has 15 volumes: it cannot skip this pack. A dispatch-wide bypass needs conservative disjoint receiver-origin/first-roof
+bounds; camera-outside alone is insufficient. No code changed. Worktree receipts: `.scratch/roofrej-camp-repeat/summary.json`.
+
+Registers unchanged: compact hit state 0, near 168 / far 255; production compact state 1, near 168 / far 243.
+Both OFF/ON match main. Key-off equivalence vs main `9b38f38c`: all 215 requests / 2,048 assignments pass;
+negative control passes. Full `scripts/build.ps1 -Test`: all 192 CTests pass (169.53 s).
+
+`tools/live_batches/opt_r6/roof` is prepared READY_FOR_LIVE, not staged or launched: exact compact_hit observation
+profile/schedule with qualified compact state 1 fixed, inn + S8 Ultra, dev=1, four static OFF/ON/OFF/ON 600-frame
+windows and fresh QUIET. GI trace decides; JSON and stdout show preceding-OFF pair deltas for each ON window.
+The readiness TABLE maps gi_far_roof_early to [GI_TRACE]. Additive extend_readiness adds six queries only;
+all earlier receipts/models remain unchanged. Frozen and non-frozen lints pass 2/2. Build-free roof_jobs is in the
+single CMake foreach; no merge_scope build-only exclusion applies. READY_FOR_LIVE is job preparation status,
+not an offline performance qualification; coordinator review and explicit user steering precede any live batch.
+
+Sun replay packs lack emission descriptors; emission ordering is unchanged and the production emission request
+supplies registers. Trust inputs: CTY_Main_A / WLD_Main_A / SCL_Main_A, 159 / 15 / 37 volumes.
+Fresh receipts: main checkout `.scratch/roofrej1038/summary.json` and adjacent commands, modules, counters, CSVs and logs.
+Historical ID 1035/1036 receipts: `.scratch/roofrej/summary.json`. Historical attribution's `.scratch/far-cost/` was absent.
+The shared proof normalizer repeats its optimizer schedule to clean constant branches exposed by specialization.
+The offline preparation above made no game, queue or git writes. Builds BelowNormal; GPU only without bg3.exe.
+
+Qualification (roof-on, 2026-11-05): keep SpecId 1038 as an always-on exact optimisation, like
+`rt_compact_hit_state`. Defaults, every preset and release policy force `gi_far_roof_early=1`;
+`dev=1` preserves a raw 0 for A/B. No player knob. Host statistics mode still forces the original path.
+S8 Ultra `opt-roof-s8.1.211159` VALID: GI trace OFF/ON/OFF/ON 7.655/6.275/7.937/6.226 ms
+(-1.38/-1.71 ms); GI total 12.349/10.514/12.386/10.382 ms. RR costs about +0.2 ms in ON windows.
+The inn run is INVALID (last window short); complete windows give about 12.2 ms ON vs 12.5/13.2 ms OFF.
+Offline paired trace deltas: S8 -1.73 ms, inn -1.36 ms; camp neutral over 240 pairs,
++0.005 [-0.06,+0.06] ms. Outputs are exact (bit-equal). Request delta 0; ABI unchanged.
+In-game check: S8 Ultra, inspect roofed-room far bounce; developer A/B should leave the image unchanged
+while reducing GI trace time. These are supplied live results; this qualification edit is offline only.
+
 ## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; live S8 energy gate failed, kept off)
 
 2026-11-04 outcomes. One-ray Ultra GI (`ultra-gi-1ray`, gi1 live 17:48, all 16 window gates OK): GI trace
@@ -535,19 +653,52 @@ Release-path equivalence is checked against main with both retired IDs at their
 baseline release value 0; retained specialization domains remain exhaustive.
 
 
-## Compact hit state offline result (gi-livestate, 2026-11-05)
+## Compact hit state qualification (gi-livestate, 2026-11-05)
 
-`rt_compact_hit_state` (developer Advanced, default 0, spec 1029) keeps the already
+`rt_compact_hit_state` (always on, default 1, spec 1029; no UI knob) keeps the already
 computed geometric normal across direct-light queries, allowing the full hit state
 to expire earlier. Repeated range-guard counters are preserved. Ray sets, samples,
 float precision and accumulation order are unchanged; shader request delta is 0.
 RTX 5090 production gi_trace_rt_hit_sun_em with native, hit-instancing, cascade and
-far specialization: registers 255 -> 243, shared memory 816 -> 44 bytes, with wind
+far specialization: registers 255 -> 243, spill 816 -> 44 bytes, with wind
 RGB both off and on. The replayable direct-only request stays at 168 registers.
 S8/camp/inn ON vs baseline: 100% bit-equal outputs and raw counters, 24 dispatches
-per run. Timings overlap OFF-repeat noise; no GPU-time saving is qualified.
+per run. Offline replay timings overlap OFF-repeat noise.
 Key-OFF release equivalence: all 214 unique requests pass, 2,120 assignments.
-Full build and all 183 CTests pass, including settings and the replay fixture.
+Promotion build and all 184 CTests pass (189.60 s), including settings and the replay fixture.
 Projection-matrix reload was rejected for changing 50 S8 output components.
+
+Live qualification: inn Ultra, two VALID runs `opt-compact-hit-inn.1.105908`
+and `opt-compact-hit-inn.1.110402`. GI trace OFF/ON/OFF/ON was
+12.721/12.555/13.228/12.634 and 12.683/12.563/13.115/12.843 ms.
+Every ON was below its preceding OFF (-0.17, -0.59, -0.12, -0.27 ms;
+mean about -0.29 ms). GI total and other passes stayed within OFF spread.
+The camp run was confounded by scene drift (all passes moved about 7 ms
+between pairs) and is not used. Qualified as exact (100% bit-equal offline)
+with no regression. The inn GI trace gain is about 0.3 ms, not separated
+from the OFF repeat spread (0.43-0.51 ms). Occupancy stays at 8 warps;
+the gain is from spill reduction. Every preset and release policy force 1;
+`dev=1` retains raw `rt_compact_hit_state=0` for in-run A/B at the inn.
+Default-OFF shader requests retain release equivalence; the default spec
+value is now 1. Shader request delta remains 0.
 See [branch evidence](progress/gi-livestate.md) for timings/spreads and
 [offline commands](../tools/frame_replay.md) for statistics and exact comparisons.
+
+
+## Far GI live-state trial (farregs, rejected, 2026-11-05)
+
+Production Ultra sun/emission, native/hit-inst/cascade/far, 1029=1 and 1038=1: near/far
+168/243 registers. Moving the pure roof-volume decision before hidden-hit lighting retained
+one veto bit instead of the original ray origin: 240 registers. Rematerializing the original
+base/far fade at consumption reached 239. Moving eleven far-stat uint accumulators to
+lane-owned shared words (same integer accumulation and wave/group reduction) reached 218,
+with 2816 extra shared bytes. None reached the requested 168/128-register occupancy step.
+
+Sun-trust S8/camp/inn: 40 paired ABBA/BAAB samples each, both rt_stats=0 and 1, for both
+candidates (480 pairs total); every output byte and raw counter bin 100% equal. Roof/fade
+production ON-OFF median [95% median interval], ms: +0.439 [-0.313,+1.329] /
+-0.176 [-0.547,+0.133] / +0.353 [+0.138,+0.609]. Shared-stat candidate:
++0.959 [+0.635,+1.956] / +0.132 [-0.059,+0.957] / +0.093 [-0.173,+0.251].
+No consistent timing gain; inn loses with roof/fade and S8 loses with shared stats.
+Rejected and all candidate code removed; 1039 retired, no shipped key or new shader request.
+Full diagnostic intervals and receipts: docs/progress/farregs.md and worktree .scratch/farregs/.

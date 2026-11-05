@@ -12,6 +12,8 @@ struct Hooks {
   std::function<diagnostics::Snapshot(const std::string&, bool, bool, bool)> prepareReport;
   std::function<bool(const diagnostics::Snapshot&, std::string&)> exportReport;
   std::function<std::string()> browseGame;
+  std::function<std::string()> browseDlss5Runtime;
+  std::function<std::string(const std::string&)> dlss5RuntimeStatus;
   std::function<GraphicsInspection()> recheck;
   std::function<void()> notices;
   std::function<std::string()> reportHint;

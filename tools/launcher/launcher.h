@@ -75,6 +75,9 @@ struct State {
   bool settings_readable = true;
   unsigned caps = ~0u;
   int suggested = bg3::settings::kHigh;
+  std::string dlss5_runtime_path, loaded_dlss5_runtime_path, dlss5_runtime_status;
+  std::string shortcuts[2]={"Ctrl+Shift+F9","Ctrl+Shift+F8"};
+  std::string loaded_shortcuts[2]={"Ctrl+Shift+F9","Ctrl+Shift+F8"};
 };
 void load_state(State& s);
 bg3::settings::KVList forced_keys(const State& s);

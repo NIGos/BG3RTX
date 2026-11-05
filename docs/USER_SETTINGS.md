@@ -9,7 +9,8 @@ and memory limits.
 
 ## Release controls
 
-Lighting, Surfaces and Performance contain the player controls below. Advanced is developer-only.
+Lighting, Surfaces, Performance and DLSS 5 contain the player controls below.
+Advanced contains the all-ray-tracing keyboard shortcut.
 Help & support contains the game folder, compatibility, memory information, overlay advice and local
 reports. Each card shows how a change applies: "Applies after saving", "May briefly pause" or
 "Restart to apply". After saving, the footer counts the changes that wait for the next game start.
@@ -28,6 +29,7 @@ reports. Each card shows how a change applies: "Applies after saving", "May brie
 | Surfaces | Reflections | Off / Glossy / Standard / Rough | Live |
 | Surfaces | Water lighting | Off / Reflections / Reflections and shadows / Include refraction | On or higher level: restart; lower or Off: live |
 | Surfaces | Depth of field and bloom smoothing | Off / On | Live; needs Ray Reconstruction |
+| DLSS 5 | DLSS 5 Neural Rendering (experimental) | Off / On, runtime picker and status | Restart to activate; shortcut toggles live after activation |
 | Performance | Frame Generation | Off / 2x / 3x / 4x | On or off: restart; 2x/3x/4x: live |
 | Performance | NVIDIA Reflex | Off / On / On + Boost | Live; Frame Generation needs On or On + Boost |
 | Performance | Rendered frame limit | Off / 30-240 fps, step 1 | Live; counts rendered frames, before Frame Generation |
@@ -65,7 +67,19 @@ old hidden settings do not enable unsupported release features.
 
 ## Compare in game
 
-Press **Ctrl+Shift+F9** in game to switch all ray-traced lighting off and on together.
+The **DLSS 5** page has its own On/Off control, runtime file picker and runtime status.
+DLSS 5 is experimental, Off in every preset, and requires Ray Reconstruction. Enable it
+and select a runtime before starting the game. Changing activation or the runtime needs a restart.
+
+**Ctrl+Shift+F8** toggles DLSS 5 Neural Rendering off/on live when it was enabled at game start.
+This switches the runtime bypass, without restarting or changing Ray Reconstruction.
+
+Under **Keyboard shortcuts**, change the RT shortcut on **Advanced** and the NR shortcut on
+**DLSS 5**. Select the capture field and press Ctrl, Shift and/or Alt with F1?F12, A?Z or 0?9.
+A single key is also accepted. **None** disables a shortcut; **Reset to default** restores it.
+Duplicate shortcuts and the reserved Ctrl+Shift+F10 are rejected. Save to apply.
+
+By default, press **Ctrl+Shift+F9** in game to switch all ray-traced lighting off and on together.
 DLSS and Frame Generation stay unchanged, so you compare lighting in the same view. Each switch is
 logged in `bg3rtx.log`. This shortcut does not open a settings menu.
 

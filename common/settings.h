@@ -253,6 +253,14 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","Ray-tracing support"},{"sharc_device","1","Ray-tracing support"}}, false, "Surfaces", {"Estimate", "0.5–0.7 ms", "Up to 520 MB", "Estimated water cost: 0.5–0.7 ms and up to 520 MB on RTX 5090 at Water Queens House."}, "Needs Ray-tracing detail. Turning water on or raising its level needs a game restart; lowering it or turning it off applies after saving. Uses up to about 520 MB of video memory."},
 
+  {"dlss5_nr", "DLSS 5 Neural Rendering (experimental)",
+   "(experimental) Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
+   Kind::Choice, Apply::Restart, "Restart the game after changing DLSS 5 or its runtime file", false,
+   {{"off", "Off", 0, {{"dlss5_nr", "0"}}, {}, {}, false, false, false, Apply::Restart},
+    {"on", "On", kCapDlss, {{"dlss5_nr", "1"}}, {{"rr", 1}}, {}, false, false, true, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "Ray Reconstruction before post effects"}}, false, "DLSS 5", {},
+   "Experimental and off in every preset. Requires Ray Reconstruction before post effects and a compatible user-provided nvngx_dlssnr.dll. The launcher prepares the runtime before Play; custom or unsigned runtimes are identified in the log and may be rejected by NVIDIA (0xbad0000b). Restart after changing this option or the runtime file."},
+
   {"water_surface_fresnel", "Water surface reflections",
    "Experimental: works out the reflection at the water surface separately from the water's depth colour. Mostly visible at the edges of shallow pools; open water barely changes.",
    Kind::Choice, Apply::Restart, "on: restart; off: live", true,
@@ -423,13 +431,6 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage",1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}, true, "Developer", {}},
 
-  {"rt_compact_hit_state", "Compact GI hit state",
-   "Reduces GI shader state while preserving the lighting result. Experimental; off by default.",
-   Kind::Choice, Apply::Hitch, "First use builds a pipeline in the background.", false,
-   {{"off", "Off", 0, {{"rt_compact_hit_state", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_compact_hit_state", "1"}}, {{"gi", 2}}, {}, false, false, false, Apply::Hitch}},
-   {}, {0, 0, 0, 0}, true, {{"rt", "1", "Ray-tracing support"}}, true, "Advanced", {}},
-
   {"detailed_logging", "Detailed logging",
    "Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.",
    Kind::Choice, Apply::Restart, "Restart the game to apply", false,
@@ -512,9 +513,11 @@ inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_
 // (rt_bvh_split=1, TRACK_D_RT.md 11) rt_rebuild_frames only paces the per-draw
 // BLAS of the captured (skinned, wind, per-draw matrix) draws, staggered per draw;
 // static meshes are built once for trace speed and never refit.
-inline constexpr KV kPresetExtra[kPresetCount][3] = {
-  {{"rt_scene_compact_holds", "1"}}, {{"rt_scene_compact_holds", "1"}},
-  {{"rt_scene_compact_holds", "1"}}, {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}}};
+inline constexpr KV kPresetExtra[kPresetCount][4] = {
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
+  {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}}};
 
 // ---- defaults: one source (docs/SETTINGS_DESIGN.md "Defaults: one source") ----
 // kDefaults is every key bg3rtx.ini sets, with its value; kReleaseDefaults the developer
@@ -532,6 +535,11 @@ inline constexpr KV kDefaults[] = {
     {"ab_hotkey", "1"},
     {"ab_off", "0"},
     {"experimental_options", "0"},
+    {"dlss5_nr", "0"},
+    {"dlss5_nr_runtime", ""},
+    {"dlss5_nr_bypass", "0"},
+    {"hotkey_rt_toggle", "Ctrl+Shift+F9"},
+    {"hotkey_dlss5", "Ctrl+Shift+F8"},
     {"game_dlss_guard", "1"},
     {"core", "1"},
     {"dump_shaders", "1"},
@@ -625,6 +633,7 @@ inline constexpr KV kDefaults[] = {
     {"replay_pack", "0"},
     {"replay_pack_cap_mb", "2048"},
     {"fg_input_copy", "1"},
+    {"sl_init_after_create", "1"},
     {"qa_zero", "0"},
     {"qa_exposure_hold", "0"},
     {"rt_max_candidates", "0"},
@@ -706,13 +715,15 @@ inline constexpr KV kDefaults[] = {
     {"rt_strips", "1"},
     {"gi_rt", "1"},
     {"gi_rt_radius", "1.0"},
-    {"rt_compact_hit_state", "0"},
+    {"rt_compact_hit_state", "1"},
+    {"rf_compact_probe_state", "0"},
     {"gi_rt_depth_k", "1.0"},
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
+    {"gi_far_roof_early", "1"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
@@ -883,6 +894,7 @@ inline Map code_defaults() {
 // Keys read only at instance/device creation (or by static initialisers).
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (from == to) return false;
+  if (key == "dlss5_nr" || key == "dlss5_nr_runtime") return true;
   // core/gi.cpp initialize_hair_origin persists the startup reservation across core reloads.
   if (key == "rt_hair_physical_origin") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   if (key == "rt_hair_groom_primary") return true; // Safety gate until hot activation is verified.
@@ -1189,6 +1201,8 @@ inline void enforce_release_policy(Map& m) {
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
   m["rr_post"] = "1";
   m["rt_scene_compact_holds"] = "1";
+  m["rt_compact_hit_state"] = "1";
+  m["gi_far_roof_early"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
        "sharc",
        "rt_hair_receiver_guard"}) m[key] = "0";
@@ -1306,7 +1320,7 @@ inline bool choice_visible(const Knob& k, int c, bool dev, bool opt_in = false) 
 }
 
 inline bool choice_requires_experimental(const Knob& k, int c) {
-  return k.kind==Kind::Choice && c>=0 && c<choice_count(k) &&
+  return std::string(k.id)!="dlss5_nr" && k.kind==Kind::Choice && c>=0 && c<choice_count(k) &&
     (k.choices[c].awaiting_qualification || k.choices[c].experimental || (k.experimental && c>0));
 }
 

@@ -704,3 +704,33 @@ against OFF-repeat spread 0.019 ms in the retained analysis). Evidence:
 prewarm registration, candidate-only tests and `tools/live_batches/opt_r2/origin`
 were removed. Specialization ID 1027 remains reserved. The design and offline
 receipts above are historical, not a pending candidate or quality pass.
+
+
+## Origin exact optimization audit (2026-11-05, origin-opt, rejected)
+
+- Production already searches `t0=max(dist-w,0)` through `dist+w`, with
+  `w=depth_tol(dist,pa,dot(depthNormal,V),kJitterPx,1)+kTlasRel*dist`.
+  The 0.005 term is a measured error bin, not an encoding bound that can be tightened.
+  Preserving accepted hits alone is insufficient: removing a nearer rejected hit can
+  expose another hit, and traversal changes can affect caps/equal-distance winners.
+- Alpha candidates must preserve their tests; opaque BLAS triangles already avoid
+  candidate shader work. Every positive-depth pixel can feed full-resolution and
+  arbitrary projected-hit consumers. A half-grid skip is not exact. Lazy shading
+  normal remains rejected; aborted normal reads can affect guard counters.
+- New trial `gi_origin_fast=0`, SpecId 1037: cooperative 10 x 10 scalar depth tile
+  for each 8 x 8 group (100 loads versus 256 neighbour loads). Centre load, clamped
+  coordinates, per-pixel position/normal arithmetic, rays and output encoding unchanged.
+  Full groups reach the barrier before sky/padding exits. Equality threshold: 0 bits.
+- S8 pack `replay-20261101-142819-1`, validated 40-pair ABBA/BAAB: ON-OFF
+  +0.068368 ms, 95% median CI [-0.093328,+0.333072] ms. Outputs and raw counters
+  100% bit-equal across every measured quartet. No demonstrated gain: removed code,
+  setting and raw key; 1037 retired. Request delta 0. No live or git mutation.
+- RTX 5090 driver statistics: OFF/ON 80/80 registers, executable 59008/59776 bytes,
+  shared memory 2304/2192 bytes, stack 0/0; reported local memory 68719476752/68719476752.
+  That last value is retained verbatim, not evidence of spills. Achieved occupancy
+  is unavailable through this interface. Timing is offline, not the live 1.27-1.46 ms.
+- Replay support retained: `--origin`, `--compile-pass origin`, CPU adapter CTest.
+  Original/candidate-OFF replay also bit-equal. S8 live-reference comparison has
+  max component difference 6.103516e-05; rebuilt AS is not a universal live proof.
+  Evidence: `.scratch/origin-opt/{s8-valid,off-equivalence,stats-off,stats-on}` and logs.
+  Earlier binding-invalid runs exposed missing descriptors, then were corrected and repeated.

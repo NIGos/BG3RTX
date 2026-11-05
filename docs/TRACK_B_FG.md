@@ -275,6 +275,7 @@ minutes, with more than 7 minutes of frame generation in the last one.
 | `fg_state_every` | 60 | log `DLSSGState` every N frames while FG runs |
 | `sl_log_barriers` / `fg_log_presents` / `fg_log_camera` | 0 / 6 / 0 | debug logging |
 | `sl_init_at` | auto | 0 = `slSetVulkanInfo` at the first `vkGetDeviceQueue`, 1 = at the first swapchain. The default is 0 when the NGX instance is shared |
+| `sl_init_after_create` | 0 | with `sl_init_at=0`: run `slSetVulkanInfo` at the game's NGX Init (stubbed while shared) instead of the first `vkGetDeviceQueue`. ReShade (a layer above ours) gets queues inside its own `vkCreateDevice`, before the loader has filled the device table, so NGX loaded null device functions and Streamline crashed (2026-11-05, `common/sl_init_trigger.h`). The first swapchain stays the fallback |
 | `sl_veh` | 1 | log fatal exceptions (module+offset and stack) before the game's crash handler exits silently |
 
 ## Verified with the display on (2026-10-26)

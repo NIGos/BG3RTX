@@ -100,10 +100,13 @@ Stock hair stays visible; no replacement hair is part of this release.
 **Show experimental options** in the launcher to try it; it needs a game restart. Options rejected
 in testing are not part of this release.
 
-**Compare with the original image:** press **Ctrl+Shift+F9** in game to switch every ray-traced effect off
+**Compare with the original image:** by default, press **Ctrl+Shift+F9** in game to switch every ray-traced effect off
 and on again. DLSS and frame generation stay as they are. **Ctrl+Shift+F10** switches the last
 Experimental option off and on, but only options that apply without a restart; in this release
-there is none, so it has no effect yet.
+there is none, so it has no effect yet. **Ctrl+Shift+F8** toggles experimental DLSS 5 Neural Rendering
+when it was enabled at game start. DLSS 5 has its own launcher page, runtime picker and status.
+Customise the RT shortcut on Advanced and the DLSS 5 shortcut on DLSS 5 under Keyboard shortcuts.
+Choose None to disable or Reset to default to restore; save changes to apply.
 
 ## Known limits (beta)
 
@@ -118,7 +121,10 @@ there is none, so it has no effect yet.
 - Other overlays (Steam, Discord, EOS, GOG Galaxy) can conflict. If the game crashes at start or frame
   generation does nothing, turn them off for one launch. NVIDIA Smooth Motion is turned off
   automatically while frame generation is on.
-- ReShade, other graphics mods and HDR are untested together with BG3RTX.
+- ReShade 6 (its Vulkan layer) works with BG3RTX, frame generation included (tested 2026-11-05: DLSS offered,
+  Ray Reconstruction and frame generation 2x running with ReShade loaded). ReShade effects that redo
+  ambient occlusion or global illumination duplicate BG3RTX's work; colour and sharpening effects are fine.
+- Other graphics mods and HDR are untested together with BG3RTX.
 - The DirectX 11 renderer is not supported.
 
 ## Reporting a bug

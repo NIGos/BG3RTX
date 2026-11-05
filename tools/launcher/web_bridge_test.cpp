@@ -1,4 +1,4 @@
-﻿// CPU-only bridge fixture: injected effects never launch or write real settings.
+// CPU-only bridge fixture: injected effects never launch or write real settings.
 #include "web_bridge.h"
 #include "ui_state.h"
 #include "session_logging.h"
@@ -44,6 +44,39 @@ int main(int argc,char** argv){
     pb.handle("{\"type\":\"play\"}"); pb.handle("{\"type\":\"confirm\"}");
     check(effects=="SP"&&pb.dirty()==0);
   }
+  {
+    launcher::State runtime;runtime.base={{"dev","0"}};runtime.values=st::preset_values(st::kHigh);
+    launcher::web::Hooks rh;rh.browseDlss5Runtime=[](){return std::string("C:/User runtime/nvngx_dlssnr.dll");};
+    rh.save=[](launcher::State&,const st::KVList&,std::string&){return true;};
+    launcher::web::Bridge rb(runtime,rh);
+    rb.handle("{\"type\":\"browseDlss5Runtime\"}");
+    check(runtime.dlss5_runtime_path=="C:/User runtime/nvngx_dlssnr.dll" && rb.dirty()==1);
+    check(rb.state_json().find("C:/User runtime/nvngx_dlssnr.dll")!=std::string::npos);
+    rb.handle("{\"type\":\"discard\"}");check(runtime.dlss5_runtime_path.empty()&&rb.dirty()==0);
+    rb.handle("{\"type\":\"browseDlss5Runtime\"}");rb.handle("{\"type\":\"save\"}");rb.handle("{\"type\":\"confirm\"}");
+    check(runtime.loaded_dlss5_runtime_path==runtime.dlss5_runtime_path&&rb.dirty()==0);
+    rb.handle("{\"type\":\"clearDlss5Runtime\"}");check(runtime.dlss5_runtime_path.empty()&&rb.dirty()==1);
+    rb.handle("{\"type\":\"discard\"}");check(!runtime.dlss5_runtime_path.empty()&&rb.dirty()==0);
+  }
+  {
+    launcher::State ks;ks.base={{"dev","0"}};ks.values=st::preset_values(st::kHigh);
+    launcher::web::Hooks kh;bool saved=false;
+    kh.save=[&](launcher::State& c,const st::KVList&,std::string&){saved=c.shortcuts[1]=="Alt+N";return true;};
+    launcher::web::Bridge kb(ks,kh);
+    check(kb.state_json().find("\"category\":\"DLSS 5\"")!=std::string::npos);
+    check(st::choice_available(*st::find_knob("dlss5_nr"),1,false,false,~0u));
+    kb.handle(R"({"type":"set","id":"dlss5_nr","value":1})");
+    check(ks.values[st::knob_index("dlss5_nr")]==1&&!kb.experimental);
+    kb.handle(R"({"type":"discard"})");check(kb.dirty()==0);
+
+    kb.handle(R"({"type":"shortcut","id":"hotkey_dlss5","value":"Ctrl+Shift+F9"})");check(kb.dirty()==0);
+    kb.handle(R"({"type":"shortcut","id":"hotkey_dlss5","value":"Ctrl+Shift+F10"})");check(kb.dirty()==0);
+    kb.handle(R"({"type":"shortcut","id":"hotkey_dlss5","value":"Alt+N"})");check(kb.dirty()==1);
+    kb.handle(R"({"type":"save"})");kb.handle(R"({"type":"confirm"})");check(saved&&kb.dirty()==0);
+    kb.handle(R"({"type":"resetShortcut","id":"hotkey_dlss5"})");check(ks.shortcuts[1]=="Ctrl+Shift+F8");
+    kb.handle(R"({"type":"discard"})");check(ks.shortcuts[1]=="Alt+N"&&kb.dirty()==0);
+    kb.handle(R"({"type":"shortcut","id":"hotkey_rt_toggle","value":"None"})");check(ks.shortcuts[0]=="None");
+  }
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
   check(launcher::web::Bridge::is_export_intent("{\"type\":\"exportReport\"}"));
   check(!launcher::web::Bridge::is_export_intent("{\"type\":\"prepareReport\",\"issue\":\"exportReport\"}"));
@@ -82,7 +115,7 @@ int main(int argc,char** argv){
       const auto before=s.values;bridge.handle("{\"type\":\"set\",\"id\":\""+std::string(k.id)+"\",\"value\":"+std::to_string(c)+"}");check(s.values==before);
     }
   }
-  check(visible==16);
+  check(visible==17);
   // Support edits stay independent of the rendering preset and last-session evidence.
   {
     launcher::State ls;ls.caps=~0u;ls.base={{"dev","0"}};ls.values=st::preset_values(st::kHigh);ls.preset=st::kHigh;

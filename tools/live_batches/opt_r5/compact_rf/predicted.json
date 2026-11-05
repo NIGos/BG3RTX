@@ -1,0 +1,39 @@
+{
+  "status": "READY_FOR_LIVE",
+  "key": "rf_compact_probe_state",
+  "spec_constant": 1031,
+  "shader_request_delta": 0,
+  "launches": 2,
+  "preset": "Ultra release",
+  "frames_per_window": 600,
+  "timer_period_frames": 120,
+  "jobs": {
+    "inn": {
+      "scheduled_seconds": 142.3,
+      "load_allowance_seconds": 120,
+      "expected_readiness_seconds": 0,
+      "estimated_seconds": 262.3,
+      "nominal_rendered_fps": 30,
+      "historical_p10_fps": 11.69134840218328,
+      "historical_frame_estimate_seconds": 387.58,
+      "readiness": "Unproven: conditional fresh QUIET waits; hard stop 300 s."
+    },
+    "s8": {
+      "scheduled_seconds": 139.3,
+      "load_allowance_seconds": 120,
+      "expected_readiness_seconds": 0,
+      "estimated_seconds": 259.3,
+      "nominal_rendered_fps": 30,
+      "historical_p10_fps": 25.48853016135551,
+      "historical_frame_estimate_seconds": 273.46,
+      "readiness": "Unproven: conditional fresh QUIET waits; hard stop 300 s."
+    }
+  },
+  "prediction": "Reflections lower by 0-0.2 ms at inn/S8; registers 255 -> 245, driver shared bytes 800 -> 32. Other passes unchanged within OFF repeat spread. Image identical (construction/SPIR-V proof only).",
+  "offline_proof": "docs/progress/rf-ls-regs.md",
+  "decision": "SAVING only when both ON reflection medians beat both OFF medians by more than the OFF repeat spread; otherwise NO_SAVING. Energy outside OFF-derived noise is ENERGY_CHANGE; missing evidence is INVALID.",
+  "energy": "One trace per separate energy phase; reusable rrpost slot-2 float reader. Two OFF repeats derive Student noise band (df=1); both ON versus preceding OFF, RGB and luminance.",
+  "pairs": "Every ON minus preceding OFF and per-window medians retained; aggregate saving requires every ON beat every OFF beyond OFF spread.",
+  "readiness": "No 1031 binding in experimental_specs. Warmup exercises ON, then fresh QUIET after every toggle; no build-generation witness required.",
+  "pending": "Offline only. No launch, queue writes or live saving claim."
+}

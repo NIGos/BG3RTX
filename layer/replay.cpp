@@ -26,7 +26,8 @@
 //          constants, transmittance LUT and cloud shadows; all droppable ("[replay] pack N lighting
 //          inputs: ..." says what was bound, kept and its MB).
 // Buffers without TRANSFER_SRC usage are read by a small compute shader (shaders/replay_copy.hlsl).
-// Images without TRANSFER_SRC (most game textures and the VT caches) are read through a sampled
+// Sampled BCn images gain TRANSFER_SRC at creation and retain their raw blocks.
+// Other images without TRANSFER_SRC are read through a sampled
 // 2D-array view by shaders/replay_image.hlsl and stored decoded (rp::shader_read_format: BCn as
 // 8-bit or half texels; `image ... SOURCE` names the game format). Images in pieces of at most a
 // staging chunk. Integer formats without TRANSFER_SRC stay "omitted" (replayed as NaN).
@@ -36,6 +37,7 @@
 // layouts restored.
 #include "host.h"
 #include "../common/replay_pack.h"
+#include "../common/replay_codec.h"
 
 #include <algorithm>
 #include <cstring>
@@ -92,10 +94,15 @@ bool is_buffer_desc(VkDescriptorType t) {
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice d, const VkImageCreateInfo* ci, const VkAllocationCallbacks* a, VkImage* out) {
-  const VkResult r = g_next.CreateImage(d, ci, a, out);
+  // Raw compressed readback needs this usage from allocation time, even when
+  // replay_pack is enabled later. This wrapper exists only in diagnostic builds.
+  VkImageCreateInfo patched = *ci;
+  if (rp::block_compressed(uint32_t(ci->format)) && (ci->usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+    patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  const VkResult r = g_next.CreateImage(d, &patched, a, out);
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(g_obj_mu);
-    g_imgs[*out] = {ci->imageType, ci->format, ci->extent.width, ci->extent.height, ci->extent.depth, ci->mipLevels, ci->arrayLayers, ci->usage};
+    g_imgs[*out] = {ci->imageType, ci->format, ci->extent.width, ci->extent.height, ci->extent.depth, ci->mipLevels, ci->arrayLayers, patched.usage};
   }
   return r;
 }
@@ -241,7 +248,7 @@ struct Copy {
   VkDeviceSize offset = 0;                // in the chunk
   std::string file;
   uint64_t file_offset = 0;
-  bool droppable = false, dropped = false;
+  bool droppable = false, dropped = false, after = false;
   int set = -1;                           // the descriptor it fills (per-slot sizes); -1: by file
   uint32_t binding = 0;
 };
@@ -251,10 +258,12 @@ struct Job {
   std::string label, dir;
   uint64_t record_frame = 0;
   rp::Manifest m;
+  std::vector<ImageCopy> images;
+  bool needs_after = false;
   std::vector<Copy> copies;   // in file order (a file's pieces contiguous, rising file offsets)
   std::vector<Chunk> chunks;
   std::vector<VkImageView> views;   // the shader reads' views, released with the chunks
-  uint64_t bytes = 0;
+  uint64_t bytes = 0, disk_cap = rp::kPackHardCapBytes;
   uint32_t omitted = 0, instances = 0, read_images = 0;
   bool writing = false;
   std::atomic<bool> done{false};
@@ -374,7 +383,7 @@ struct Plan {
   std::vector<Copy> copies;
   std::vector<ImageCopy> images;
   std::map<VkImage, std::vector<size_t>> image_index;   // image -> its captures in Plan::images
-  struct Use { uint32_t set, binding, element; size_t image; bool output; uint32_t format; };   // format: of this use's view
+  struct Use { uint32_t set, binding, element; size_t image; bool output; uint32_t format; VkComponentMapping comp; };   // format: of this use's view
   std::vector<Use> uses;
   uint32_t omit_view = 0, omit_format = 0, omit_transfer = 0, omit_layout = 0, omit_size = 0, omit_budget = 0;
   std::map<uint32_t, uint32_t> omit_formats;   // VkFormat -> descriptor uses omitted for "format"
@@ -500,7 +509,7 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
     uint32_t block = 1, copy_block = 1;
     const uint32_t vb = rp::block_bytes(uint32_t(v.format), block), ib = rp::block_bytes(uint32_t(im.format), copy_block);
     const bool swizzled = !identity(v.comp);
-    if (!transfer || swizzled || !vb || vb != ib || block != copy_block) {
+    if (!transfer || (swizzled && !rp::block_compressed(pack_format)) || !vb || vb != ib || block != copy_block) {
       // Storage images (set 0 outputs) are only ever copied: the read needs SAMPLED usage.
       if (slot.kind == rp::kStorage)
         return transfer ? omit_format("storage format the pack does not carry") : omit(p.omit_transfer, "no TRANSFER_SRC usage");
@@ -544,7 +553,7 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
         ic.droppable = ic.droppable && droppable;
         ic.priority = (std::max)(ic.priority, priority);
         for (size_t k = 0; k < ic.copies; ++k) p.copies[ic.first_copy + k].droppable = ic.droppable;
-        p.uses.push_back({set, binding, element, idx, output, pack_format});
+        p.uses.push_back({set, binding, element, idx, output, pack_format, v.comp});
         return true;
       }
       if (same_range && shader && ic.shader) { own_read = true; continue; }
@@ -603,7 +612,7 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
   for (Copy& c : pieces) p.copies.push_back(std::move(c));
   p.image_index[v.image].push_back(p.images.size());
   p.images.push_back(ic);
-  p.uses.push_back({set, binding, element, p.images.size() - 1, output, pack_format});
+  p.uses.push_back({set, binding, element, p.images.size() - 1, output, pack_format, v.comp});
   return true;
 }
 
@@ -762,6 +771,115 @@ LightingStats add_lighting(Plan& p, VkCommandBuffer cmd, const rp::Pass& pass) {
   return st;
 }
 
+struct PhaseCopies { uint32_t images, transfers, shaders, reads; };
+PhaseCopies record_phase(VkCommandBuffer cmd, Plan& p, Job* job, bool after_phase) {
+  // Copies for exactly one phase; post-dispatch resources stay untouched in phase 1.
+  const VkDeviceFuncs& vk = g_dd->vk;
+  std::vector<VkImageMemoryBarrier> pre, post;
+  for (const ImageCopy& ic : p.images) {   // transfer copies: TRANSFER_SRC_OPTIMAL and back; reads stay in their layout
+    if (ic.dropped || ic.shader || ic.layout == VK_IMAGE_LAYOUT_GENERAL) continue;
+    VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    b.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+    b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    b.oldLayout = ic.layout;
+    b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.image = ic.image;
+    b.subresourceRange = {ic.barrier_aspect, ic.base_mip, ic.mips, ic.base_layer, ic.layers};
+    pre.push_back(b);
+    std::swap(b.oldLayout, b.newLayout);
+    b.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    b.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+    post.push_back(b);
+  }
+  VkMemoryBarrier before{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  before.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+  before.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1,
+                        &before, 0, nullptr, uint32_t(pre.size()), pre.data());
+  uint32_t n_images = 0, n_transfer = 0, n_shader = 0, n_reads = 0;
+  for (const Copy& c : p.copies) {   // one region per piece (rp::transfer_pieces)
+    if (c.after != after_phase || c.dropped || c.kind != Copy::kImage) continue;
+    const ImageCopy& ic = p.images[c.image];
+    if (ic.shader) continue;
+    VkBufferImageCopy r{};
+    r.bufferOffset = c.offset;
+    r.imageSubresource = {ic.copy_aspect, ic.base_mip + c.mip, ic.base_layer + c.layer, c.layers};
+    r.imageOffset = {0, int32_t(c.row), 0};
+    r.imageExtent = {(std::max)(ic.w >> c.mip, 1u), c.rows, 1};
+    vk.CmdCopyImageToBuffer(cmd, ic.image, ic.layout == VK_IMAGE_LAYOUT_GENERAL ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            job->chunks[c.chunk].b, 1, &r);
+    n_images += c.file_offset == 0;
+  }
+  for (const Copy& c : p.copies) {   // one region per call: few transfer sources, all different
+    if (c.after != after_phase || c.dropped || c.kind != Copy::kTransfer) continue;
+    VkBufferCopy r{c.src_offset, c.offset, c.bytes};
+    vk.CmdCopyBuffer(cmd, c.src, job->chunks[c.chunk].b, 1, &r);
+    ++n_transfer;
+  }
+  {
+    VkBuffer bound_src = VK_NULL_HANDLE; VkDeviceSize bound_off = 0, bound_range = 0; uint32_t bound_chunk = UINT32_MAX;
+    for (const Copy& c : p.copies) {
+      if (c.after != after_phase || c.dropped || c.kind != Copy::kShader) continue;
+      if (!n_shader) vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_copy_pipe);
+      if (c.bound.buffer != bound_src || c.bound.offset != bound_off || c.bound.range != bound_range || c.chunk != bound_chunk) {
+        VkDescriptorBufferInfo bi[2] = {c.bound, {job->chunks[c.chunk].b, 0, job->chunks[c.chunk].size}};
+        VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+        for (uint32_t k = 0; k < 2; ++k) {
+          w[k].dstBinding = k; w[k].descriptorCount = 1; w[k].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; w[k].pBufferInfo = bi + k;
+        }
+        vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_copy_pl, 0, 2, w);
+        bound_src = c.bound.buffer; bound_off = c.bound.offset; bound_range = c.bound.range; bound_chunk = c.chunk;
+      }
+      constexpr uint64_t kMaxWords = 65535ull * 256;
+      for (uint64_t word = 0, words = c.bytes / 4; word < words; word += kMaxWords) {
+        const uint32_t n = uint32_t((std::min)(words - word, kMaxWords));
+        const uint32_t push[4] = {uint32_t(c.src_offset + word * 4), uint32_t(c.offset + word * 4), n, 0};
+        vk.CmdPushConstants(cmd, g_copy_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
+        vk.CmdDispatch(cmd, (n + 255) / 256, 1, 1);
+      }
+      ++n_shader;
+    }
+  }
+  {   // image reads (shaders/replay_image.hlsl), one piece per rp::ReadPiece
+    VkImageView bound_view = VK_NULL_HANDLE; uint32_t bound_chunk = UINT32_MAX;
+    for (const Copy& c : p.copies) {
+      if (c.after != after_phase || c.dropped || c.kind != Copy::kImage) continue;
+      const ImageCopy& ic = p.images[c.image];
+      if (!ic.shader) continue;
+      if (!n_reads) vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_read_pipe);
+      if (ic.read_view != bound_view || c.chunk != bound_chunk) {
+        VkDescriptorImageInfo ii{VK_NULL_HANDLE, ic.read_view, ic.layout};
+        VkDescriptorBufferInfo bi{job->chunks[c.chunk].b, 0, job->chunks[c.chunk].size};
+        VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+        w[0].dstBinding = 0; w[0].descriptorCount = 1; w[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; w[0].pImageInfo = &ii;
+        w[1].dstBinding = 1; w[1].descriptorCount = 1; w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; w[1].pBufferInfo = &bi;
+        vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_read_pl, 0, 2, w);
+        bound_view = ic.read_view; bound_chunk = c.chunk;
+      }
+      const uint64_t per = rp::shader_read_per_thread(ic.read), tb = rp::shader_read_texel_bytes(ic.read);
+      const uint64_t thread_bytes = tb >= 4 ? tb : 4, threads = (c.count + per - 1) / per;
+      constexpr uint64_t kMaxThreads = 65535ull * 256;
+      for (uint64_t t = 0; t < threads; t += kMaxThreads) {
+        const uint64_t n = (std::min)(threads - t, kMaxThreads);
+        const uint32_t push[8] = {uint32_t(c.offset + t * thread_bytes), uint32_t(c.first + t * per), uint32_t((std::min)(n * per, c.count - t * per)),
+                                  (std::max)(ic.w >> c.mip, 1u), (std::max)(ic.h >> c.mip, 1u), c.mip, ic.read.encode, ic.read.channels};
+        vk.CmdPushConstants(cmd, g_read_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
+        vk.CmdDispatch(cmd, uint32_t((n + 255) / 256), 1, 1);
+      }
+      ++n_reads;
+    }
+  }
+  vk.CmdFillBuffer(cmd, job->chunks[0].b, 0, kAlign, kMagic);
+  VkMemoryBarrier after{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+  after.dstAccessMask = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &after, 0, nullptr, uint32_t(post.size()),
+                        post.data());
+  return {n_images,n_transfer,n_shader,n_reads};
+}
+
 // The worker: writes every file of the pack from the staging, then the manifest.
 void write_pack(Job* job) {
   bool ok = !job->chunks.empty();
@@ -772,33 +890,81 @@ void write_pack(Job* job) {
   }
   if (ok) {
     make_dirs(job->dir);
-    std::ofstream f;
-    std::string open_file;
-    uint64_t at = 0;
-    for (const Copy& c : job->copies) {
-      if (c.dropped) continue;
-      if (c.file != open_file) {
-        if (f.is_open()) f.close();
-        f.open(job->dir + "\\" + c.file, std::ios::binary | std::ios::trunc);
-        open_file = c.file;
-        at = 0;
+    SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_BELOW_NORMAL);
+    const uint64_t manifest_bytes=rp::serialize(job->m).size();
+    uint64_t disk_bytes=0;
+    bool disk_cap_exceeded=false;
+    if(job->m.pass=="local_shadows") {
+      // Sort a view, keeping image-copy indices intact for the post-dispatch snapshot.
+      std::map<std::string,std::vector<const Copy*>> files;
+      for(const auto& c:job->copies)if(!c.dropped)files[c.file].push_back(&c);
+      uint64_t done=0;const uint64_t started=GetTickCount64();uint64_t next=started+30000;
+      std::vector<uint8_t> zeros(4u<<20,0);
+      for(auto& [name,pieces]:files) {
+        std::sort(pieces.begin(),pieces.end(),[](const Copy* a,const Copy* b){return a->file_offset<b->file_offset;});
+        uint64_t decoded=0;for(auto* c:pieces)decoded=(std::max)(decoded,c->file_offset+c->bytes);
+        std::ofstream file(job->dir+"\\"+name,std::ios::binary|std::ios::trunc);
+        const uint64_t remaining = disk_bytes+manifest_bytes <= job->disk_cap ? job->disk_cap-disk_bytes-manifest_bytes : 0;
+        rp::codec::Writer compressed(file,decoded,remaining);
+        uint64_t at=0;
+        auto append=[&](const uint8_t* src,uint64_t bytes) {
+          while(bytes && ok) {
+            const size_t n=size_t((std::min)(bytes,uint64_t(4u<<20)));
+            const bool wrote=compressed.write(src,n);
+            disk_cap_exceeded=compressed.limit_exceeded();
+            ok=wrote && !disk_cap_exceeded;
+            src+=n;bytes-=n;
+          }
+        };
+        for(const Copy* c:pieces) {
+          if(!ok)break;
+          if(c->file_offset<at){ok=false;break;}
+          while(at<c->file_offset && ok){const uint64_t n=(std::min)(c->file_offset-at,uint64_t(zeros.size()));append(zeros.data(),n);at+=n;}
+          const auto* src=c->kind==Copy::kCpu?c->cpu.data():job->chunks[c->chunk].map+c->offset;
+          append(src,c->bytes);at=c->file_offset+c->bytes;done+=c->bytes;
+          const uint64_t now=GetTickCount64();
+          if(now>=next){const double seconds=double(now-started)/1000.0;const double rate=double(done)/seconds;
+            log("[replay] pack %s writing: %s/%s MB, %.1f MB/s, ETA %.0f s, failures %u",job->label.c_str(),mb(done).c_str(),mb(job->bytes).c_str(),rate/(1024*1024),rate>0?double(job->bytes-done)/rate:0.0,unsigned(!ok));next=now+30000;}
+        }
+        const bool finished=ok && compressed.finish();
+        file.flush();
+        file.close();
+        disk_bytes+=compressed.encoded_bytes();
+        disk_cap_exceeded=disk_cap_exceeded || compressed.limit_exceeded() || disk_bytes+manifest_bytes>job->disk_cap;
+        ok=finished && bool(file) && !disk_cap_exceeded;
+        if(!ok)break;
       }
-      if (c.file_offset != at) f.seekp(std::streamoff(c.file_offset));
-      const uint8_t* src = c.kind == Copy::kCpu ? c.cpu.data() : job->chunks[c.chunk].map + c.offset;
-      f.write(reinterpret_cast<const char*>(src), std::streamsize(c.bytes));
-      at = c.file_offset + c.bytes;
-      ok = ok && bool(f);
+      log("[replay] pack %s compression: %s MB decoded -> %s MB disk (cap %s MB)",job->label.c_str(),mb(job->bytes).c_str(),mb(disk_bytes).c_str(),mb(job->disk_cap).c_str());
+    } else {
+      std::ofstream f;
+      std::string open_file;
+      uint64_t at = 0;
+      for (const Copy& c : job->copies) {
+        if (c.dropped) continue;
+        if (c.file != open_file) {
+          if (f.is_open()) f.close();
+          f.open(job->dir + "\\" + c.file, std::ios::binary | std::ios::trunc);
+          open_file = c.file;at = 0;
+        }
+        if (c.file_offset != at) f.seekp(std::streamoff(c.file_offset));
+        const uint8_t* src = c.kind == Copy::kCpu ? c.cpu.data() : job->chunks[c.chunk].map + c.offset;
+        f.write(reinterpret_cast<const char*>(src), std::streamsize(c.bytes));
+        at = c.file_offset + c.bytes;disk_bytes+=c.bytes;ok = ok && bool(f);
+      }
+      if (f.is_open()) f.close();
     }
-    if (f.is_open()) f.close();
     const std::string text = rp::serialize(job->m);
     rp::Manifest back;
     std::string error;
     if (!rp::parse(text, back, error)) { ok = false; log("[replay] pack %s failed: manifest does not parse (%s)", job->label.c_str(), error.c_str()); }
+    if(job->m.pass=="local_shadows" && disk_bytes+text.size()>job->disk_cap){disk_cap_exceeded=true;ok=false;}
     ok = ok && write_file(job->dir + "\\manifest.txt", text.data(), text.size());
     if (ok)
       log("[replay] pack %s written: %s MB (%u images omitted, %u read by shader), frame %llu, pass %s, instances %u -> %s", job->label.c_str(),
           mb(job->bytes).c_str(), job->omitted, job->read_images, (unsigned long long)job->m.frame, job->m.pass.c_str(), job->instances,
           job->dir.c_str());
+    else if(disk_cap_exceeded)
+      log("[replay] pack %s failed: lossless LS data exceeds the %s MB compressed disk cap (%s MB written); no manifest published: %s",job->label.c_str(),mb(job->disk_cap).c_str(),mb(disk_bytes).c_str(),job->dir.c_str());
     else
       log("[replay] pack %s failed: writing %s", job->label.c_str(), job->dir.c_str());
   }
@@ -857,6 +1023,7 @@ void replay_on_present() {
     return;
   }
   if (life_gpu_done() >= job.record_frame + 2) {   // the frame it was recorded in (or the next) has run
+    if(job.needs_after) { log("[replay] pack %s failed: LS post-dispatch snapshot missing",job.label.c_str()); release_chunks(job.chunks); release_views(job.views); g_job.reset(); return; }
     job.writing = true;
     job.worker = std::thread(write_pack, &job);
   } else if (frame_index() > job.record_frame + 900) {
@@ -871,6 +1038,13 @@ void replay_on_present() {
 int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   if (!g_dd || !d || !cmd) return -1;
   std::lock_guard<std::mutex> job_lock(g_job_mu);
+  if (d->phase==2) {
+    if(!g_job || !g_job->needs_after || g_job->record_frame!=frame_index())return -1;
+    Plan post;post.images=g_job->images;post.copies=g_job->copies;
+    record_phase(cmd,post,g_job.get(),true);
+    g_job->needs_after=false;
+    return 1;
+  }
   if (g_job) return 0;   // the previous pack is still being written
   std::string label;
   if (d->serial > 0) {
@@ -901,9 +1075,10 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   m.pass = pass->name;
   {
     std::string dropped;
-    m.defines = rp::contract_defines(d->defines ? d->defines : "", &dropped);
+    m.defines = d->phase==1 ? (d->defines ? d->defines : "") : rp::contract_defines(d->defines ? d->defines : "", &dropped);
     if (!dropped.empty()) m.notes.push_back(" live variant defines not in the pack contract (the replay compiles without them): " + dropped);
   }
+  for(uint32_t i=0;i<d->spec_count;++i)m.specs.push_back({d->specs[i].id,d->specs[i].value});
   m.frame = d->frame;
   m.groups[0] = d->groups[0]; m.groups[1] = d->groups[1]; m.groups[2] = d->groups[2];
   m.push = "push.bin";
@@ -922,14 +1097,28 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     const rp::Slot* slot = rp::find_slot(*pass, 0, w.dstBinding);
     if (!slot) { m.notes.push_back(" s0 b" + std::to_string(w.dstBinding) + ": not in the pack contract, left out"); continue; }
     if (slot->kind == rp::kTlas) continue;
-    if (w.dstBinding == 20) { m.notes.push_back(" s0 b20 (rtStats) not captured: the replay counts into its own buffer"); continue; }
+    if (w.dstBinding == 20 && d->phase!=1) { m.notes.push_back(" s0 b20 (rtStats) not captured: the replay counts into its own buffer"); continue; }
     if (is_buffer_desc(w.descriptorType)) {
       if (!w.pBufferInfo || !add_buffer(p, 0, w.dstBinding, w.pBufferInfo[0], w.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, slot->name))
         return fail(p.why.empty() ? std::string(slot->name) + ": no buffer info" : p.why);
     } else if (is_image_desc(w.descriptorType)) {
+      if(d->phase==1 && is_output(w.dstBinding) && w.pImageInfo) {
+        if(!add_image(p,0,w.dstBinding,0,w.pImageInfo[0].imageView,w.pImageInfo[0].imageLayout,*slot,false,false))return fail(p.why);
+        // An output has a second snapshot of the same image, recorded only after LS dispatch.
+        p.image_index.erase(p.images.back().image);
+      }
+      const size_t first_output=p.copies.size();
       if (!w.pImageInfo || !add_image(p, 0, w.dstBinding, 0, w.pImageInfo[0].imageView, w.pImageInfo[0].imageLayout, *slot,
                                       is_output(w.dstBinding), false))
         return fail(p.why.empty() ? std::string(slot->name) + ": no image info" : p.why);
+      if(d->phase==1 && is_output(w.dstBinding))for(size_t k=first_output;k<p.copies.size();++k)p.copies[k].after=true;
+    }
+    if(d->phase==1 && w.dstBinding==20 && w.pBufferInfo) {
+      m.counter_initial=slot_file(0,20,".bin");m.counters=slot_file(0,20,".live");
+      const size_t from=p.copies.size();
+      const auto& bi=w.pBufferInfo[0];
+      if(!add_buffer_bytes(p,bi,false,0,resolve_range(bi),m.counters,0,"rtStats reference"))return fail(p.why);
+      for(size_t k=from;k<p.copies.size();++k)p.copies[k].after=true;
     }
   }
 
@@ -966,7 +1155,7 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     } else if (slot.kind == rp::kSampled2D || slot.kind == rp::kSampled2DArray) {
       for (uint32_t el = 0; el < slot.count; ++el)
         if (const Desc* e = entry(slot.binding, el); e && e->view)
-          if (!add_image(p, 1, slot.binding, el, e->view, e->layout, slot, false, true)) return fail(p.why);
+          if (!add_image(p, 1, slot.binding, el, e->view, e->layout, slot, false, d->phase!=1)) return fail(p.why);
     } else if (slot.kind == rp::kSampler) {
       if (slot.binding == 4) add_sampler(p, 4, 0, g_wrap);        // immutable in the layout (alphatest.cpp)
       else if (slot.binding == 5) add_sampler(p, 5, 0, g_clamp);
@@ -975,7 +1164,50 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   }
   // ---- sets 2-3: the deferred lighting's inputs (add_lighting; tools/frame_replay.md "Lighting inputs") ----
   LightingStats lighting;
-  if (pass->set_count > 2) lighting = add_lighting(p, cmd, *pass);
+  if (d->phase!=1 && pass->set_count > 2) lighting = add_lighting(p, cmd, *pass);
+  if(d->phase==1) {
+    auto capture=[&](uint32_t set,const VkWriteDescriptorSet& w)->bool {
+      const rp::Slot* slot=rp::find_slot(*pass,set,w.dstBinding);if(!slot)return true;
+      if(is_buffer_desc(w.descriptorType)) {
+        if(!w.pBufferInfo || !w.pBufferInfo[0].buffer || !resolve_range(w.pBufferInfo[0])){p.why=std::string(slot->name)+": LS buffer is missing";return false;}
+        return add_buffer(p,set,w.dstBinding,w.pBufferInfo[0],slot->kind==rp::kUbo,slot->name);
+      }
+      if(slot->kind==rp::kSampler) {
+        if(w.pImageInfo && add_sampler(p,set,w.dstBinding,w.dstArrayElement,w.pImageInfo[0].sampler))return true;
+        p.why=std::string(slot->name)+": LS sampler is not recorded";return false;
+      }
+      return w.pImageInfo && add_image(p,set,w.dstBinding,w.dstArrayElement,w.pImageInfo[0].imageView,w.pImageInfo[0].imageLayout,*slot,false,false);
+    };
+    for(uint32_t i=0;i<d->extra_count;++i)if(!capture(d->extra_writes[i].set,d->extra_writes[i].write))return fail(p.why);
+    std::vector<std::pair<uint64_t,DescEntry>> game;
+    {std::shared_lock<std::shared_mutex> lock(tracker().mu);auto it=tracker().sets.find(d->game_set);
+      if(it==tracker().sets.end())return fail("LS native lighting set not tracked");
+      for(const auto& e:it->second)game.push_back(e);
+    }
+    bool projector_records=false,cookie_sampler=false;
+    for(const auto& [key,e]:game) {
+      const uint32_t binding=uint32_t(key>>32),element=uint32_t(key);
+      const auto* slot=rp::find_slot(*pass,3,binding);if(!slot)continue;
+      // Native b45 mixes cubes and 2D projector cookies; LS reads only 2D views.
+      if(binding==45) {
+        if(!e.view)continue;
+        std::shared_lock<std::shared_mutex> lock(g_obj_mu);auto it=g_views.find(e.view);
+        if(it==g_views.end())return fail("LS cookie has a nonnull view that is not recorded");
+        if(it->second.type==VK_IMAGE_VIEW_TYPE_CUBE || it->second.type==VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)continue;
+        if(it->second.type!=VK_IMAGE_VIEW_TYPE_2D)return fail("LS cookie view is neither 2D nor a cube");
+      }
+      if(element>=slot->count)return fail("LS native element exceeds replay descriptor capacity");
+      VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};w.dstBinding=binding;w.dstArrayElement=element;w.descriptorCount=1;
+      VkDescriptorBufferInfo bi{e.buffer,e.offset,e.range};VkDescriptorImageInfo ii{e.sampler,e.view,e.layout};
+      w.pBufferInfo=&bi;w.pImageInfo=&ii;
+      w.descriptorType=slot->kind==rp::kSsbo?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:slot->kind==rp::kUbo?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:slot->kind==rp::kSampler?VK_DESCRIPTOR_TYPE_SAMPLER:VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+      if(!capture(3,w))return fail(p.why);
+      if(binding==29)projector_records=true;
+      if(binding==16)cookie_sampler=true;
+    }
+    if(!projector_records)return fail("LS projector records (s3 b29) are not recorded");
+    if(!cookie_sampler)return fail("LS cookie sampler (s3 b16) is not recorded");
+  }
   // The TLAS instance array (InstInfo order) of the same ring region.
   m.instances = "instances.bin";
   m.instance_count = region.count;
@@ -992,6 +1224,7 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     const int why = geo_cascade_soup(region.casc_frame, &now);
     const uint64_t bytes = rp::caster_bytes(region.casc_tris, region.casc_stride);
     if (why || now.xfb != region.casc_xfb || now.sig != region.casc_sig || now.tris != region.casc_tris || now.stride != region.casc_stride) {
+      if(d->phase==1)return fail("LS cascade caster soup was replaced before capture");
       casters_note = " casters: instance " + std::to_string(region.casc_instance) + " (" + std::to_string(region.casc_tris) +
                      " triangles) left out: the cascade soup of frame " + std::to_string(region.casc_frame) + " was replaced (" + std::to_string(why) + ")";
     } else {
@@ -1072,7 +1305,9 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     for (size_t k = before; k < p.copies.size(); ++k) fixed += p.copies[k].bytes;
   }
   // The cap: ini replay_pack_cap_mb (rp::pack_cap_bytes, default 2048 MB = rp::kPackHardCapBytes).
-  const uint64_t cap = rp::pack_cap_bytes(cfg_int("replay_pack_cap_mb", int(rp::kPackHardCapBytes >> 20)));
+  const uint64_t disk_cap=rp::pack_cap_bytes(cfg_int("replay_pack_cap_mb",int(rp::kPackHardCapBytes>>20)));
+  // Lossless LS packs keep every visibility resource; staging is separate from compressed disk size.
+  const uint64_t cap=d->phase==1?uint64_t(rp::kPackCapMaxMb)<<20:disk_cap;
   if (fixed + kAlign > cap) {
     log("[replay] pack %s over budget: %s MB without textures over the %s MB cap (%s); by slot: %s", label.c_str(), mb(fixed).c_str(),
         mb(cap).c_str(), geometry.c_str(),
@@ -1188,10 +1423,15 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     const ImageCopy& ic = p.images[u.image];
     const std::string& file = p.copies[ic.first_copy].file;
     if (ic.dropped) { ++(ic.view_failed ? p.omit_view : p.omit_budget); m.omitted.push_back({u.set, u.binding, u.element}); continue; }
-    if (u.output) m.outputs.push_back({u.set, u.binding, ic.pack_format, ic.w, ic.h, file});
-    else   // a transfer copy shared by raw-compatible views: each use names its own format
+    if (u.output) {
+      std::string initial;
+      if(d->phase==1)for(const auto& input:p.uses)if(!input.output && input.set==u.set && input.binding==u.binding)initial=p.copies[p.images[input.image].first_copy].file;
+      m.outputs.push_back({u.set, u.binding, ic.pack_format, ic.w, ic.h, file,initial});
+    }
+    else if(!(d->phase==1 && u.set==0 && is_output(u.binding)))   // mutable inputs are named by Output::initial
       m.images.push_back({u.set, u.binding, u.element, ic.shader ? ic.pack_format : u.format, ic.w, ic.h, ic.layers, ic.mips, file,
-                          ic.shader && uint32_t(ic.view_format) != ic.pack_format ? uint32_t(ic.view_format) : 0u});
+                          ic.shader && uint32_t(ic.view_format) != ic.pack_format ? uint32_t(ic.view_format) : 0u,
+                          ic.shader ? std::array<uint32_t,4>{} : std::array<uint32_t,4>{uint32_t(u.comp.r),uint32_t(u.comp.g),uint32_t(u.comp.b),uint32_t(u.comp.a)}});
   }
   const uint32_t omitted = uint32_t(m.omitted.size());
   char note[640];
@@ -1212,6 +1452,12 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   if (!lighting_line.empty()) {
     m.notes.push_back(lighting_line);
     log("[replay] pack %s%s", label.c_str(), lighting_line.c_str());
+  }
+
+  if(d->phase==1) {
+    if(!m.omitted.empty()){release_views(views);return fail("LS replay requires every sampled image; omission would change visibility");}
+    for(const auto& image:p.images)if(image.shader && rp::block_compressed(uint32_t(image.view_format)))
+      {release_views(views);return fail("LS replay requires raw BCn bytes; decoded fallback is not bit-exact");}
   }
 
   // ---- staging: chunks, placement ----
@@ -1262,110 +1508,7 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     std::memset(job->chunks[0].map, 0, kAlign);
   }
 
-  // ---- record the copies and reads ----
-  const VkDeviceFuncs& vk = g_dd->vk;
-  std::vector<VkImageMemoryBarrier> pre, post;
-  for (const ImageCopy& ic : p.images) {   // transfer copies: TRANSFER_SRC_OPTIMAL and back; reads stay in their layout
-    if (ic.dropped || ic.shader || ic.layout == VK_IMAGE_LAYOUT_GENERAL) continue;
-    VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-    b.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-    b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    b.oldLayout = ic.layout;
-    b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b.image = ic.image;
-    b.subresourceRange = {ic.barrier_aspect, ic.base_mip, ic.mips, ic.base_layer, ic.layers};
-    pre.push_back(b);
-    std::swap(b.oldLayout, b.newLayout);
-    b.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    b.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-    post.push_back(b);
-  }
-  VkMemoryBarrier before{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-  before.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-  before.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
-  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1,
-                        &before, 0, nullptr, uint32_t(pre.size()), pre.data());
-  uint32_t n_images = 0, n_transfer = 0, n_shader = 0, n_reads = 0;
-  for (const Copy& c : p.copies) {   // one region per piece (rp::transfer_pieces)
-    if (c.dropped || c.kind != Copy::kImage) continue;
-    const ImageCopy& ic = p.images[c.image];
-    if (ic.shader) continue;
-    VkBufferImageCopy r{};
-    r.bufferOffset = c.offset;
-    r.imageSubresource = {ic.copy_aspect, ic.base_mip + c.mip, ic.base_layer + c.layer, c.layers};
-    r.imageOffset = {0, int32_t(c.row), 0};
-    r.imageExtent = {(std::max)(ic.w >> c.mip, 1u), c.rows, 1};
-    vk.CmdCopyImageToBuffer(cmd, ic.image, ic.layout == VK_IMAGE_LAYOUT_GENERAL ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                            job->chunks[c.chunk].b, 1, &r);
-    n_images += c.file_offset == 0;
-  }
-  for (const Copy& c : p.copies) {   // one region per call: few transfer sources, all different
-    if (c.dropped || c.kind != Copy::kTransfer) continue;
-    VkBufferCopy r{c.src_offset, c.offset, c.bytes};
-    vk.CmdCopyBuffer(cmd, c.src, job->chunks[c.chunk].b, 1, &r);
-    ++n_transfer;
-  }
-  {
-    VkBuffer bound_src = VK_NULL_HANDLE; VkDeviceSize bound_off = 0, bound_range = 0; uint32_t bound_chunk = UINT32_MAX;
-    for (const Copy& c : p.copies) {
-      if (c.dropped || c.kind != Copy::kShader) continue;
-      if (!n_shader) vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_copy_pipe);
-      if (c.bound.buffer != bound_src || c.bound.offset != bound_off || c.bound.range != bound_range || c.chunk != bound_chunk) {
-        VkDescriptorBufferInfo bi[2] = {c.bound, {job->chunks[c.chunk].b, 0, job->chunks[c.chunk].size}};
-        VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
-        for (uint32_t k = 0; k < 2; ++k) {
-          w[k].dstBinding = k; w[k].descriptorCount = 1; w[k].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; w[k].pBufferInfo = bi + k;
-        }
-        vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_copy_pl, 0, 2, w);
-        bound_src = c.bound.buffer; bound_off = c.bound.offset; bound_range = c.bound.range; bound_chunk = c.chunk;
-      }
-      constexpr uint64_t kMaxWords = 65535ull * 256;
-      for (uint64_t word = 0, words = c.bytes / 4; word < words; word += kMaxWords) {
-        const uint32_t n = uint32_t((std::min)(words - word, kMaxWords));
-        const uint32_t push[4] = {uint32_t(c.src_offset + word * 4), uint32_t(c.offset + word * 4), n, 0};
-        vk.CmdPushConstants(cmd, g_copy_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
-        vk.CmdDispatch(cmd, (n + 255) / 256, 1, 1);
-      }
-      ++n_shader;
-    }
-  }
-  {   // image reads (shaders/replay_image.hlsl), one piece per rp::ReadPiece
-    VkImageView bound_view = VK_NULL_HANDLE; uint32_t bound_chunk = UINT32_MAX;
-    for (const Copy& c : p.copies) {
-      if (c.dropped || c.kind != Copy::kImage) continue;
-      const ImageCopy& ic = p.images[c.image];
-      if (!ic.shader) continue;
-      if (!n_reads) vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_read_pipe);
-      if (ic.read_view != bound_view || c.chunk != bound_chunk) {
-        VkDescriptorImageInfo ii{VK_NULL_HANDLE, ic.read_view, ic.layout};
-        VkDescriptorBufferInfo bi{job->chunks[c.chunk].b, 0, job->chunks[c.chunk].size};
-        VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
-        w[0].dstBinding = 0; w[0].descriptorCount = 1; w[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; w[0].pImageInfo = &ii;
-        w[1].dstBinding = 1; w[1].descriptorCount = 1; w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; w[1].pBufferInfo = &bi;
-        vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_read_pl, 0, 2, w);
-        bound_view = ic.read_view; bound_chunk = c.chunk;
-      }
-      const uint64_t per = rp::shader_read_per_thread(ic.read), tb = rp::shader_read_texel_bytes(ic.read);
-      const uint64_t thread_bytes = tb >= 4 ? tb : 4, threads = (c.count + per - 1) / per;
-      constexpr uint64_t kMaxThreads = 65535ull * 256;
-      for (uint64_t t = 0; t < threads; t += kMaxThreads) {
-        const uint64_t n = (std::min)(threads - t, kMaxThreads);
-        const uint32_t push[8] = {uint32_t(c.offset + t * thread_bytes), uint32_t(c.first + t * per), uint32_t((std::min)(n * per, c.count - t * per)),
-                                  (std::max)(ic.w >> c.mip, 1u), (std::max)(ic.h >> c.mip, 1u), c.mip, ic.read.encode, ic.read.channels};
-        vk.CmdPushConstants(cmd, g_read_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
-        vk.CmdDispatch(cmd, uint32_t((n + 255) / 256), 1, 1);
-      }
-      ++n_reads;
-    }
-  }
-  vk.CmdFillBuffer(cmd, job->chunks[0].b, 0, kAlign, kMagic);
-  VkMemoryBarrier after{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-  after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-  after.dstAccessMask = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &after, 0, nullptr, uint32_t(post.size()),
-                        post.data());
+  const auto counts=record_phase(cmd,p,job.get(),false);
 
   uint64_t total = 0;
   for (const Copy& c : p.copies) if (!c.dropped) total += c.bytes;
@@ -1375,14 +1518,16 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   job->dir = root_dir() + "\\captures\\replay-" + capture_stamp() + "-" + label;
   job->record_frame = frame_index();
   job->bytes = total;
+  job->disk_cap=(std::min)(disk_cap,rp::kPackHardCapBytes);
   job->omitted = omitted;
   job->read_images = read_images;
   job->instances = region.count;
   job->m = std::move(p.m);
   job->copies = std::move(p.copies);
+  job->images = std::move(p.images); job->needs_after=d->phase==1;
   log("[replay] pack %s recorded at frame %llu: %u image copies, %u image reads (%u BCn decoded, %s MB in %u pieces), %u transfer and %u shader "
       "copies, %s MB in %zu staging chunks (%s); written once the GPU has run it; by slot: %s",
-      label.c_str(), (unsigned long long)job->record_frame, n_images, read_images, read_bc, mb(read_bytes).c_str(), n_reads, n_transfer, n_shader,
+      label.c_str(), (unsigned long long)job->record_frame, counts.images, read_images, read_bc, mb(read_bytes).c_str(), counts.reads, counts.transfers, counts.shaders,
       mb(total).c_str(), job->chunks.size(), geometry.c_str(), by_slot.c_str());
   g_job = std::move(job);
   return 1;

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <vector>
 #include "host.h"
+#include "dlss5.h"
 #include "perf_submit.h"
 #include "../common/submit_batch.h"
 #include "omm_submit.h"
@@ -102,6 +103,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
   uint32_t api = patched.pApplicationInfo && patched.pApplicationInfo->apiVersion ? patched.pApplicationInfo->apiVersion
                                                                                   : VK_API_VERSION_1_0;
   uint32_t want_api = rt_instance_api(api);
+  if(cfg_int("dlss5_nr",0))want_api=(std::max)(want_api,uint32_t(VK_API_VERSION_1_2));
   if (want_api != api) {
     rt_app = patched.pApplicationInfo ? *patched.pApplicationInfo : VkApplicationInfo{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     rt_app.apiVersion = want_api;
@@ -155,6 +157,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
       app && app->pApplicationName ? app->pApplicationName : "?", app && app->pEngineName ? app->pEngineName : "?",
       app ? VK_API_VERSION_MAJOR(app->apiVersion) : 0, app ? VK_API_VERSION_MINOR(app->apiVersion) : 0,
       ci->enabledExtensionCount);
+  // A layer above ours changes when the device is complete (common/sl_init_trigger.h):
+  // say once whether ReShade's implicit layer is in the process.
+  static std::atomic<bool> overlay_logged{false};
+  if (!overlay_logged.exchange(true)) {
+    HMODULE rs = GetModuleHandleA("ReShade64.dll");
+    char path[MAX_PATH] = {};
+    if (rs) GetModuleFileNameA(rs, path, MAX_PATH);
+    log("[compat] ReShade %s%s", rs ? "loaded: " : "not loaded", path);
+  }
   return VK_SUCCESS;
 }
 
@@ -221,7 +232,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   const VkDeviceCreateInfo* use_ci = aftermath_device_create_info(id, phys, fault_use, &am_ci);
   VkDeviceCreateInfo patched;
   SlDeviceScratch* sl_scratch = sl_device_pre(id, phys, use_ci, patched);
-  auto create = reinterpret_cast<PFN_vkCreateDevice>(gipa(id ? id->instance : VK_NULL_HANDLE, "vkCreateDevice"));
+  auto raw_create = reinterpret_cast<PFN_vkCreateDevice>(gipa(id ? id->instance : VK_NULL_HANDLE, "vkCreateDevice"));
+  auto create = [raw_create,id](VkPhysicalDevice physical,const VkDeviceCreateInfo* info,const VkAllocationCallbacks* callbacks,VkDevice* output) {
+    return dlss5_create_device(id,raw_create,physical,info,callbacks,output);
+  };
   VkResult r = create(phys, &patched, alloc, out);
   if (r != VK_SUCCESS && use_ci != fault_use) {
     log("[layer] device creation with VK_NV_device_diagnostics_config failed (%d); retrying without", r);
@@ -361,6 +375,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
 static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCallbacks* alloc) {
   DeviceData* dd = device_of(device);
   if (!dd) return;
+  dlss5_device_destroy(dd);
   sl_device_destroy(dd);
   if (dd == g_main) {
     rrpost_join_prewarm();
@@ -509,6 +524,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   const auto hairSubmit = hair_primary_submit_begin(cmds);
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   hair_primary_submit_end(hairSubmit, r == VK_SUCCESS);
+  dlss5_note_submit(queue,cmds,r==VK_SUCCESS);
   if (r == VK_SUCCESS) {
     if (!batch || !cmds.empty()) sl_note_submit(cmds);
     alpha_submit_recordings(cmds);
@@ -572,6 +588,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   const auto hairSubmit = hair_primary_submit_begin(cmds);
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   hair_primary_submit_end(hairSubmit, r == VK_SUCCESS);
+  dlss5_note_submit(queue,cmds,r==VK_SUCCESS);
   if (r == VK_SUCCESS) {
     if (!batch || !cmds.empty()) sl_note_submit(cmds);
     alpha_submit_recordings(cmds);

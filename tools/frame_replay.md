@@ -1,4 +1,4 @@
-# Offline frame replay (gi_hit_direct)
+# Offline frame replay (GI and production Ultra local shadows)
 
 Re-run one production pass on one captured frame without the game (docs/OFFLINE_OPPORTUNITIES.md A).
 Pass: `gi_hit_direct` (`shaders/gi/gi_trace_rt_hit_direct.hlsl`, base variant). It was chosen over
@@ -11,7 +11,7 @@ the probes, the sky cubes, the DFG LUT and the sun set, which `--native-ambient`
 
 ```
 frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V]... [--repeat N] [--pipeline-stats] [--spec ID=UINT]... [--reference-out <dir>] [--no-validation]
-frame_replay --compile-only (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
+frame_replay --compile-only [--compile-pass gi|origin|reflections|local-shadows] (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
 frame_replay --synthesize <dir> [--dark] [--box] [--lighting] [--casters]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
 frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
@@ -67,9 +67,15 @@ counts are a different measure. Capture is opt-in because it may affect pipeline
 to the measured pipeline. Unspecified IDs keep their shader defaults. It prints the chosen IDs.
 Use the same values as `core/gi.cpp` for a production comparison.
 
-`--compile-only` builds the production **non-SHaRC GI trace** pipeline without a pack, resources or dispatch.
-The fixed layout supports GI sets 0/1, the emission scene at set 2 and the sun at set 3, including
-sun trust and the native tileset sampler. This is not generic shader reflection: arbitrary passes
+`--compile-only` builds a production pipeline without a pack, resources or dispatch.
+`--compile-pass gi` (default) supports non-SHaRC GI sets 0/1, the emission scene at set 2
+and the sun at set 3, including sun trust and the native tileset sampler.
+`--compile-pass reflections` supports non-SHaRC hit-shade reflections: push/material/game/sun
+at sets 0/1/2/3, empty set 4, emission set 5 and hit-GI counters set 6.
+`--compile-pass local-shadows` supports box local shadows: push/material/sun/game/counters
+at sets 0/1/2/3/4. The layouts reuse the production binding tables; the game's runtime
+image array is represented with the replay's 4096-element capacity. Set 0 is an ordinary
+descriptor layout here (no push commands are submitted). This is not generic shader reflection: arbitrary passes
 with other descriptor contracts need their own layout. Give exactly one of `--hlsl` and `--spv`,
 no `--pack`. Default output: `.scratch/pipeline-stats`. Prefer `--spv` from
 `tools/shader_identity.py` for cached compilation and machine-wide DXC slot coordination.
@@ -89,6 +95,34 @@ compile its exact manifest `defines` (S8 has none; camp/inn have `RT_CASCADE_MAS
 The compile-only layout does not support SHaRC's set 4. Driver statistics are printed
 verbatim, including unexpected values; do not interpret them as measured occupancy or spills.
 
+Production RF/LS (Ultra, non-OMM) requests in `shaders/variants.txt`:
+
+```text
+gi/rt_reflections_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1
+gi/rt_local_shadows_box_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1
+```
+
+Compile those exact requests through `tools/shader_identity.py` and pass the cached modules
+with `--spv`. Match `core/gi.cpp::refresh` specialization values; stock visible hair has
+1008/1009/1010/1020/1026 = 0, cascade 1000 = 1, instancing 1003 = 1 and wind RGB
+1004 = 1. Hit GI 1013 = 1 for the requested hit-GI reflection tier (use 0 for the current release Far choice). Example (after checking no `bg3.exe`):
+
+```powershell
+bin/frame_replay --compile-only --compile-pass reflections --spv .scratch/rf-ls-regs/rf.spv --pipeline-stats `
+  --spec 1000=1 --spec 1003=1 --spec 1004=1 --spec 1008=0 --spec 1009=0 --spec 1010=0 `
+  --spec 1013=1 --spec 1020=0 --spec 1026=0
+bin/frame_replay --compile-only --compile-pass local-shadows --spv .scratch/rf-ls-regs/ls.spv --pipeline-stats `
+  --spec 1000=1 --spec 1008=0 --spec 1009=0 --spec 1010=0 --spec 1020=0 --spec 1026=0
+```
+
+`rf_compact_probe_state=0` is a developer raw key, specialization 1031. With hit GI enabled,
+compare `--spec 1031=0` / `--spec 1031=1` on the same module. Core keeps it OFF when
+`rf_hit_gi=0`: that trial gained a register. No shader requests are added.
+
+These compile-only selectors only create pipelines and print driver statistics. Ordinary
+`--pack` replay also supports production Ultra local shadows as described below. RF output
+replay remains unsupported. Compile-only statistics cannot establish image exactness.
+
 With `--repeat N`, the summary prints the median, min, max and max-minus-min spread of **all**
 dispatch GPU timestamps, including the first dispatch. Retain the individual run lines to diagnose
 warm-up or outliers; compare at least two OFF repeats before attributing a small timing change.
@@ -100,6 +134,80 @@ lines and returns nonzero for any changed output bit or counter. This is separat
 and output directories must differ; use `--out` outside source packs to keep captures unchanged.
 For example, run OFF to `.scratch/gi-off`, then ON to `.scratch/gi-on` with
 `--reference-out .scratch/gi-off`, matching every other shader, specialization and push option.
+
+## Paired A/B timing
+
+Use `--ab-spec ID=A,B` (repeatable) with common `--spec ID=UINT` settings to
+create both pipelines once over the same uploaded pack and acceleration structures.
+`--ab-spv <B.spv>` optionally supplies a different module for B; `--spv <A.spv>`
+supplies A. This supports sun versus direct attribution without a new production flag.
+Both modules must use the same descriptor/push contract. Prefer cached SPIR-V from
+`tools/shader_identity.py`, with the exact pack defines.
+
+`--repeat N` means N paired samples (default 40 in A/B mode). Four warmup dispatches
+(two per pipeline) are excluded. Each sample runs ABBA, then the next BAAB, and uses
+`mean(B) - mean(A)` timestamps: the symmetric sample cancels linear drift in dispatch
+order. Timings include the compute dispatch, excluding uploads, output readback
+and clears. A negative delta means B is faster. `ab.csv` retains every pair; the
+console and `ab_summary.txt` report the median delta and a distribution-free 95%
+interval for its population median, using binomial order statistics (conservative
+coverage for ties). Small samples can produce infinite bounds.
+
+`--ab-warmup N` (0..256, default 0) runs N additional untimed dispatches immediately
+before each measured dispatch in the same GPU submission. All mutable outputs and
+counters are restored before every warmup and again before timing. This avoids
+timing a cold GPU after CPU readback gaps; the selected count is printed in the
+receipt. It changes no production shader or global GPU setting. Check a same-module
+40-pair control before interpreting a candidate's interval.
+
+Every measured dispatch is compared byte for byte with the first dispatch in its
+quartet: all stored output components and every raw counter/bin. The summary requires
+all comparisons to match to print `100% bit-equal`. The first failed quartet reports
+the differing-byte count and first output component/pixel/channel, plus the first
+raw counter index/bin and its values when counters differ. That quartet also saves
+`ab_A_<output>.raw` and `ab_B_<output>.raw` for full numeric diagnosis (and
+`ab_A_rtstats.bin` / `ab_B_rtstats.bin` when counters differ). An unexpected
+same-pipeline mismatch uses `_repeat` for its second snapshot. Attribution can intentionally
+change outputs; add `--ab-require-equal` to return failure for any changed bit.
+Ordinary output files contain the final dispatch; use `ab.csv` for paired timings.
+
+`--ab-self-test` checks drift cancellation and confidence bounds without a GPU.
+
+```powershell
+bin/frame_replay --pack <pack> --spv sun.spv --sun-trust trust.bin --push radius=6 `
+  --ab-spec 1007=1,0 --repeat 40 --out .scratch/far-split
+bin/frame_replay --pack <pack> --spv sun.spv --ab-spv direct.spv --spec 1007=0 `
+  --sun-trust trust.bin --repeat 40 --out .scratch/sun-split
+```
+
+## Origin replay (2026-11-05)
+
+`--origin` adapts an existing `gi_hit_direct` pack in memory. It reads `Push::full`,
+requires full-resolution depth/normal images and captured camera buffers, dispatches
+8 x 8 groups over the full image, and replaces GI outputs with `rtOrigin.raw`
+(RGBA16F) and `rtOrigin.pfm`. The captured origin input becomes the live reference;
+input and output never alias. Set 2 b3 supplies material at set 0 b4. Source packs
+are unchanged. `--origin-self-test` checks the adapter without a GPU (also a CTest).
+
+Use cached SPIR-V for the exact production request through `tools/shader_identity.py`.
+`--compile-only --compile-pass origin` includes the material binding missing from the
+GI compile-only layout. Stock Ultra request:
+`gi/rt_origin.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1`.
+Use `Result.path()` / `Result.blob()` from the helper: its CLI JSON digest identifies
+all request entries together, rather than naming an individual SPIR-V blob.
+
+```powershell
+bin/frame_replay --compile-only --compile-pass origin --spv origin.spv --pipeline-stats --spec 1000=1 --out .scratch/origin-stats
+bin/frame_replay --origin --pack <pack> --spv origin.spv --ab-spv candidate.spv --repeat 40 --ab-require-equal --spec 1000=1 --out .scratch/origin-ab
+```
+
+Paired A/B compares **every byte**, including raw counter bins. The rounded `vs live`
+percentage is only context: the S8 pack differed by at most 0.00006103516 in one
+component despite printing 100.0000%. Rebuilt AS order and unsupported/masked instances
+prevent a universal live-equivalence claim. This mode supports stock alpha-card hair;
+native/scalp/groom/physical-hair/tileset specialization values must remain 0. It shares
+the ordinary replay's missing-input/AS limitations. OMM is not reconstructed. Check no
+`bg3.exe` before each GPU command and serialize GPU lanes for useful timing intervals.
 
 ## PT reference: `--pt-reference` (tools/pt_reference.hlsl, M6 offline)
 
@@ -406,3 +514,61 @@ record elements, `lighting_inputs`); `frame_replay_test` writes its synthetic pa
 replays it, and runs the image read on every mapped format.
 Open: the exact VT cache sizes, formats, layers and mips at S8 (the next pack's `textures` line),
 then the choice between a larger cap for this one job and a hit-sampled tile capture.
+
+
+## Production Ultra local shadows
+
+New `pass local_shadows` packs dispatch `gi/rt_local_shadows_box_k.hlsl` with the
+actual captured `RT_SPEC_NATIVE`, `RT_SPEC_HAIR_ORIGIN`, `RT_SPEC_CASCADE` request
+and all actual specialization values (`spec ID VALUE`). `--spec` overrides a captured
+value; `--ab-spec ID=A,B` varies it in paired ABBA/BAAB dispatches. `--pipeline-stats`
+works with this pass. Stock visible hair and non-OMM Ultra are the capture contract.
+Old GI packs cannot be converted: they lack LS-time inputs and references.
+
+The pack includes LS-time shadow records/atlas, projector records/2D cookies,
+AO/sun mask/auxiliary state, material/class/frame data, joined light slots and the
+same alpha geometry/TLAS inputs. Shadow traversal does not read hit-material caches
+(set 1 b12-15); these large unused inputs are excluded. Sun set 2 holds b0-6;
+box set 3 holds b16/b29/b45. Counter buffers remain device-local during LS replay.
+
+`output S B FORMAT W H REFERENCE INITIAL` adds an exact initial storage image;
+`-` means no live reference. The initial native R11G11B10 diffuse/specular and
+RGBA16F auxiliary bytes are restored before **every** dispatch, outside timestamps.
+`counter_initial FILE` restores the primary raw counter bins; `counters FILE`
+provides the live post-dispatch reference. Extra counter buffers at set 4 are
+restored from their captured buffer bytes and included in raw paired comparisons.
+Every output is compared byte for byte in the paired run. Live packed colour is
+compared as bytes; reconstructed AS traversal can differ from the game's AS.
+
+`BG3RPKZ1` files use lossless, checksummed 4 MiB XPRESS_HUFF blocks. The reader
+also accepts legacy raw files. Image uploads index compressed blocks and decode
+one block at a time, retaining the existing bounded staging budget. The manifest's
+sizes and sparse offsets always describe decoded bytes.
+
+```powershell
+bin/frame_replay --pack captures/replay-NEW --out .scratch/ls-ab `
+  --ab-spec ID=0,1 --repeat 40 --ab-require-equal --pipeline-stats
+```
+
+`frame_replay_ls_test` (`--ls-self-test DIR`) writes a synthetic LS pack with a
+shadowed slab, nonzero native packed colours, a populated shadow view/atlas and
+projector cookie element 7. It requires colour modification, changed output for
+black-cookie/dark-atlas controls, repeat identity, captured specs/counter round trip,
+and exact paired restoration under Vulkan validation. `replay_pack_test` also checks
+legacy manifest round trips and malformed new directives. `replay_codec_test` checks
+lossless framing, random reads, corruption and legacy raw input without a GPU.
+
+Raw compressed LS images (ls-pack2): diagnostic image creation adds TRANSFER_SRC
+for sampled BC1-BC7 images, including BC4/BC5 UNORM and SNORM. Capture uses
+`vkCmdCopyImageToBuffer` on the descriptor's base mip/layer and bound range;
+rows are tightly packed block rows, with partial blocks only at mip edges.
+The manifest keeps the view VkFormat and optional `SOURCE R G B A` component
+mapping (SOURCE 0 for raw data). Replay recreates that format and view mapping,
+and uploads the lossless raw blocks. LS rejects any decoded BCn fallback;
+other passes retain the decoded compatibility path. A new diagnostic host build
+must create the images before capture; no additional ABI change is needed.
+The compressed LS disk cap remains 2048 MiB, including manifest and codec
+headers. Each codec block is checked before writing, so even a failed pack
+cannot overrun the cap. Synthetic tests cover raw BC4/BC5 atlas/cookie controls,
+odd block extents, nonzero mip/layer bases, multiple mips/layers, codec byte
+identity and sampled-value identity; no real inn size is inferred from fixtures.

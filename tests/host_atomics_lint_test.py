@@ -155,6 +155,7 @@ HOST_STORAGE = {
 }
 # Files that request host-visible memory types themselves (reviewed for step 2's blind spots).
 HOST_MEMORY_FILES = {
+    "layer/dlss5.cpp",  # uniform_create: 160-byte UNIFORM_BUFFER only; codec/guide constants, no host storage/atomics
     "layer/alphatest.cpp", "layer/bvhsplit.cpp", "layer/dump.cpp", "layer/emissive.cpp", "layer/geocapture.cpp",
     "layer/hit_material.cpp", "layer/hotreload.cpp", "layer/omm_bake.cpp", "layer/omm_content.cpp",
     "layer/replay.cpp", "layer/streamline.cpp", "layer/water.cpp",

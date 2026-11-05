@@ -100,7 +100,7 @@ struct Pipe {
   VkPipelineLayout active_layout = VK_NULL_HANDLE;
   // Cache by complete request, specialization values and layout. Live toggles retain both states,
   // including values which previously collided in the same bit-indexed variant slot.
-  struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; };
+  struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; std::string request; bg3::pipe_async::PipelineSpecs specs; };
   std::unordered_map<std::string, Variant> variants;
 };
 
@@ -1221,6 +1221,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
   PipelineSpecs specs;
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
+  if (std::strncmp(file, "gi/rt_reflections", 17) == 0)
+    // The GI-disabled specialization gained a register in the offline trial; leave it unchanged.
+    specs.add(sv::kSpecIdRfCompactProbeState, rf_gi && host->cfg_int("rf_compact_probe_state", 0) != 0 ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);
   if (hit_family) {
@@ -1229,9 +1232,15 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   }
   // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
   // value keeps its own slot and pipeline, as the cascade constant does.
-  if (sv::gi_far_entry(file)) specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+  if (sv::gi_far_entry(file)) {
+    specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+    // Diagnostic dispatches select the original specialized executable, including its
+    // register allocation: a runtime shader guard alone can still change its cost.
+    specs.add(sv::kSpecIdGiFarRoofEarly,
+              host->cfg_int("rt_stats", 0) == 0 && host->cfg_int("gi_far_roof_early", 1) != 0 ? 1u : 0u);
+  }
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
-    specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 0) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
     specs.add(sv::kSpecIdTileset, tileset ? 1u : 0u);
     specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
@@ -1282,6 +1291,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   slot.pipeline = VkPipeline(r.pipeline);
   slot.generation = r.generation;
   slot.file = slot_key;
+  slot.request = selected; slot.specs = specs;
   p.pipeline = slot.pipeline;
   p.generation = r.generation;
   host->log("gi: %s generation %llu%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)r.generation,
@@ -2273,6 +2283,10 @@ bool dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w
 constexpr VkPipelineStageFlags kCS = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags kAll = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
+// Exact sun descriptors retained only for the armed replay capture (core calls bypass host tracking).
+struct ReplaySun { VkDescriptorBufferInfo ubo{}; VkDescriptorImageInfo img[8]{}; };
+ReplaySun g_replay_sun;
+
 // This frame's sun inputs into the next set of the ring (set 2 of the D-LS layout).
 VkDescriptorSet write_sun_set(const Snapshot& s) {
   const uint64_t now = host->frame_index();
@@ -2318,6 +2332,9 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
     else w[n].pImageInfo = &img[i - 1];
     ++n;
   }
+  if (host->replay_pack && host->cfg_int("replay_pack",0)!=0) {
+    g_replay_sun.ubo=ubo; std::copy_n(img,8,g_replay_sun.img);
+  }
   host->vk->UpdateDescriptorSets(host->device, n, w, 0, nullptr);
   return set;
 }
@@ -2333,11 +2350,55 @@ bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
      !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&selected_alpha)))return false;
   const VkPipelineLayout layout = material_use ? g_hit_reference_layout : box ? g_ls_box_layout : g_ls_layout;
   if(!layout || (material_use && box))return false;
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   VkWriteDescriptorSet w[kLsBindings + kNumExtras];
   uint32_t count=0;
   if(material_use){if(!gather_hit_gi_writes(b,w,count,true))return false;}
   else count=gather_writes(b,kLsBindings,w);
+  Bg3ReplayDispatch replay{};
+  std::vector<Bg3ReplayWrite> extra;
+  std::vector<Bg3ReplaySpec> replay_specs;
+  VkDescriptorBufferInfo replay_counters[2]={{g_bx_buf,0,kLsBoxXBytes},{g_occ_buf,0,kOccBytes}};
+  std::string replay_defines;
+  int* replay_done=nullptr;
+  if(box && !material_use && host->replay_pack && host->cfg_int("replay_pack",0)>0) {
+    const int serial=host->cfg_int("replay_pack",0);
+    replay_done=static_cast<int*>(host->persist("bg3rtx.replay_pack.ls.done",sizeof(int)));
+    if(*replay_done!=serial) {
+      // Capture only the production Ultra request, never the match/check/pan or OMM variants.
+      const Pipe::Variant* selected=nullptr;
+      for(const auto& [key,v]:g_ls_box_k.variants)if(v.pipeline==pipe)selected=&v;
+      if(selected && selected->request.rfind("gi/rt_local_shadows_box_k.hlsl",0)==0) {
+        const size_t q=selected->request.find('?');
+        replay_defines=q==std::string::npos?"":selected->request.substr(q+1);
+        for(uint32_t i=0;i<selected->specs.count;++i)replay_specs.push_back({selected->specs.entries[i].constantID,selected->specs.data[i]});
+        for(uint32_t i=0;i<kSunBindings;++i) {
+          Bg3ReplayWrite e{};e.set=2;e.write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+          e.write.dstBinding=i;e.write.descriptorCount=1;e.write.descriptorType=sun_binding_type(i);
+          if(i==0)e.write.pBufferInfo=&g_replay_sun.ubo;else e.write.pImageInfo=&g_replay_sun.img[i-1];
+          extra.push_back(e);
+        }
+        for(uint32_t i=0;i<2;++i){
+          Bg3ReplayWrite e{};e.set=4;e.write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};e.write.dstBinding=i;
+          e.write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;e.write.descriptorCount=1;e.write.pBufferInfo=&replay_counters[i];extra.push_back(e);
+        }
+        static const uint32_t outputs[]={6,7,44};
+        replay.serial=serial;replay.pass="local_shadows";replay.defines=replay_defines.c_str();
+        replay.frame=pc.frame;replay.groups[0]=gx;replay.groups[1]=gy;replay.groups[2]=1;
+        replay.push=&pc;replay.push_bytes=sizeof(pc);replay.set0=w;replay.set0_count=count;
+        replay.outputs=outputs;replay.output_count=3;replay.set1=selected_alpha;replay.tlas=b.tlas;
+        replay.phase=1;replay.extra_writes=extra.data();replay.extra_count=uint32_t(extra.size());
+        replay.game_set=box->game_set1;replay.specs=replay_specs.data();replay.spec_count=uint32_t(replay_specs.size());
+        const int r=host->replay_pack(cmd,&replay);
+        if(r!=0)*replay_done=serial;
+        if(r!=1)replay.phase=0;
+      } else if(pipe!=g_ls_match.pipeline) {
+        host->log("[replay] pack %d failed: LS capture requires production non-OMM box-k pipeline",serial);
+        *replay_done=serial;
+      }
+    }
+  }
+  // Snapshot shader reads may have changed the compute pipeline and push descriptors.
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,count,w);
   VkDescriptorSet sets[2] = {selected_alpha, sun};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, material_use ? 1u : 2u, sets, 0, nullptr);
@@ -2346,6 +2407,7 @@ bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
   if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &g_bx_set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, gx, gy, 1);
+  if(replay.phase==1){replay.phase=2;host->replay_pack(cmd,&replay);}
   return true;
 }
 
@@ -2638,6 +2700,8 @@ void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,
  if(!host->replay_pack)return;
  const int key=host->cfg_int("replay_pack",0);
  if(key==0 || key<-1)return;
+ // Production box-k LS owns the armed pack on Ultra, even when GI uses emission.
+ if(key>0 && host->cfg_int("ls_box",0) && host->cfg_int("ls_k",0))return;
  int* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.done",sizeof(int)));
  if(key>0 && *done==key)return;
  if(variant){

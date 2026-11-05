@@ -1,5 +1,5 @@
 [center][img]IMAGE_URL:sticky_banner.png[/img]
-[size=3][color=#f2c078][b]Version 0.9 - public beta[/b][/color][/size][/center]
+[size=3][color=#f2c078][b]Version 0.9.1 - public beta[/b][/color][/size][/center]
 
 Thanks for trying BG3RTX. This is a [b]public beta[/b]. It has been tested in a limited set of places and on one card only, an [b]RTX 5090[/b]. Your reports decide what gets fixed first.
 
@@ -10,7 +10,8 @@ Thanks for trying BG3RTX. This is a [b]public beta[/b]. It has been tested in a 
 [*][b]NVIDIA RTX only.[/b] Frame generation 2x needs RTX 40 or newer; 3x and 4x need RTX 50.
 [*]Start with [b]Low[/b] and raise settings step by step. There are no tested VRAM recommendations yet, for any card.
 [*]The [b]first start[/b] compiles shaders: expect a slower load and some stutter the first time. It is quicker afterwards.
-[*]Press [b]Ctrl+Shift+F9[/b] in game to switch all ray tracing off and on. Use it to check whether a problem comes from BG3RTX.
+[*]Press [b]Ctrl+Shift+F9[/b] in game to switch all ray tracing off and on. Use it to check whether a problem comes from BG3RTX. You can change the shortcut in the launcher (Advanced).
+[*][b]New in 0.9.1:[/b] experimental [b]DLSS 5 Neural Rendering[/b] on its own launcher page (off by default; you provide the runtime), [b]ReShade[/b] compatibility, a cheaper Ultra GI and a fix for DLSS mode changes. See the Changelog.
 [*]BG3RTX changes nothing in the game folder, the registry or your saves. Starting the game without the launcher runs the plain game.
 [/list]
 
@@ -44,7 +45,8 @@ Turn Detailed logging off again afterwards: it writes extra data you do not need
 [*]Reflections trace the real scene, but a reflected surface that is hidden or off screen keeps the game's own reflection for now.
 [*]The first time hair shadows are turned on, shaders compile: a short pause or stutter is expected.
 [*]The water flicker at the port is also in the game's own water.
-[*]ReShade, other graphics mods and HDR have not been tested with BG3RTX.
+[*]ReShade works, frame generation included. ReShade effects that redo ambient occlusion or global illumination duplicate BG3RTX's work. Other graphics mods and HDR have not been tested.
+[*]DLSS 5 Neural Rendering is experimental: it changes the look of the image and costs about 6.7 ms per frame on an RTX 5090 at 3840x1600.
 [*]A new game patch can break BG3RTX until it is updated.
 [*]Visible hair is the game's own hair. Strand hair is planned for a later update.
 [/list]
