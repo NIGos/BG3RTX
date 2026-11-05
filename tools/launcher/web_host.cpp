@@ -307,7 +307,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
       };
       hooks.play=[&h](std::string& error){
         if(h.no_game||game_running()||!valid_game_dir(h.game)){error="Choose the game folder or close the running game to enable Play.";return false;}
-        DWORD pid{};std::wstring err;bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?"":std::string("Settings saved, but the game could not start. See Help & support.\n")+narrow(err);return ok;
+        DWORD pid{};std::wstring err;guard_game_upscaler(h.state);bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?"":std::string("Settings saved, but the game could not start. See Help & support.\n")+narrow(err);return ok;
       };
       hooks.reportHint=[] {return session_logging::hint(root_dir());};
       hooks.prepareReport=[&h](const std::string& issue,bool logs,bool settings,bool system){

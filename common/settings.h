@@ -525,6 +525,7 @@ inline constexpr KV kDefaults[] = {
     {"ab_hotkey", "1"},
     {"ab_off", "0"},
     {"experimental_options", "0"},
+    {"game_dlss_guard", "0"},
     {"core", "1"},
     {"dump_shaders", "1"},
     {"shader_debug", "0"},

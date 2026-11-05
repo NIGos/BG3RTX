@@ -193,6 +193,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         rc = 1;
       } else {
         DWORD pid = 0;
+        if (exe.empty()) {
+          std::wstring note = guard_game_upscaler(s);
+          if (!note.empty()) emit(note + L"\n");
+        }
         if (launch(p, &pid, &err)) emit(L"started " + p.exe + L" (pid " + std::to_wstring(pid) + L")\n");
         else emit(L"error: " + err + L"\n"), rc = 1;
       }

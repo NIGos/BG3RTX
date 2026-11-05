@@ -274,7 +274,7 @@ static void select_preset(int p) {
 static void play() {
   if(g_no_game||!g_screenshot.empty()||game_running()||g.stage<4)return;
   if(!save(false)||!valid_game_dir(g.dir))return;
-  auto p=make_plan(g.dir,L"",{},false,effective_fg(g.st));DWORD pid=0;std::wstring err;
+  auto p=make_plan(g.dir,L"",{},false,effective_fg(g.st));DWORD pid=0;std::wstring err;guard_game_upscaler(g.st);
   if(!launch(p,&pid,&err))status(L"Settings saved, but the game could not start. "+err+L" See Help & support.");
   else status(L"Game started.");
 }

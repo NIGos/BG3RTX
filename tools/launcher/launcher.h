@@ -81,4 +81,14 @@ bg3::settings::KVList forced_keys(const State& s);
 bool save_state(State& s, std::wstring* err);
 int effective_fg(const State& s);
 
+// ---- game upscaler guard (game_dlss_guard, docs/TRACK_A_RR.md "Game upscaler guard") ----
+// BG3 rewrites graphicSettings.lsx from defaults (no DLSS) after a startup where it judged
+// DLSS unavailable; every later launch then never creates DLSS, so Ray Reconstruction never
+// runs. Pure text rewrite: ResolutionUpscaleType=3 (DLSS); DLSS2Mode=2 (Quality) only when
+// absent, so the player's own DLSS mode is kept. `changes` lists what was done.
+std::string guard_upscaler_text(const std::string& lsx, std::vector<std::string>* changes);
+// With game_dlss_guard=1 and rr=1: applies it to the player's graphicSettings.lsx (backup
+// .lsx.bg3rtx-bak first). Returns a one-line note, empty when nothing changed.
+std::wstring guard_game_upscaler(const State& s);
+
 }  // namespace launcher

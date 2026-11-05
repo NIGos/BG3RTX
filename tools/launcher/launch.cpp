@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <map>
+#include <regex>
 
 namespace launcher {
 
@@ -350,6 +351,66 @@ int effective_fg(const State& s) {
   st::apply_layer(raw, s.base);
   st::apply_layer(raw, s.user);
   return std::atoi(st::lookup(raw, "fg").c_str());
+}
+
+// ---- game upscaler guard ----
+
+// Sets one int32 ConfigEntry of graphicSettings.lsx; `only_if_absent` keeps an existing value.
+static bool set_lsx_int(std::string& text, const char* key, int value, bool only_if_absent,
+                        std::vector<std::string>* changes) {
+  std::regex entry(std::string("value=\"") + key +
+                   "\"/>\\s*<attribute id=\"Type\" type=\"int32\" value=\"0\"/>\\s*"
+                   "<attribute id=\"Value\" type=\"int32\" value=\"(-?\\d+)\"");
+  std::smatch m;
+  if (std::regex_search(text, m, entry)) {
+    if (only_if_absent || std::atoi(m.str(1).c_str()) == value) return true;
+    if (changes) changes->push_back(std::string(key) + " " + m.str(1) + "->" + std::to_string(value));
+    text.replace(size_t(m.position(1)), size_t(m.length(1)), std::to_string(value));
+    return true;
+  }
+  size_t children = text.find("<children>");
+  if (children == std::string::npos) return false;   // not the file we know: leave it alone
+  size_t eol = text.find('\n', children);
+  if (eol == std::string::npos) return false;
+  const std::string nl = eol > 0 && text[eol - 1] == '\r' ? "\r\n" : "\n";
+  std::string node = "                <node id=\"ConfigEntry\">" + nl +
+                     "                    <attribute id=\"MapKey\" type=\"FixedString\" value=\"" + key + "\"/>" + nl +
+                     "                    <attribute id=\"Type\" type=\"int32\" value=\"0\"/>" + nl +
+                     "                    <attribute id=\"Value\" type=\"int32\" value=\"" + std::to_string(value) +
+                     "\"/>" + nl + "                </node>" + nl;
+  text.insert(eol + 1, node);
+  if (changes) changes->push_back(std::string(key) + " added=" + std::to_string(value));
+  return true;
+}
+
+std::string guard_upscaler_text(const std::string& lsx, std::vector<std::string>* changes) {
+  std::string text = lsx;
+  if (!set_lsx_int(text, "ResolutionUpscaleType", 3, false, changes)) return lsx;
+  if (!set_lsx_int(text, "DLSS2Mode", 2, true, changes)) return lsx;
+  return text;
+}
+
+std::wstring guard_game_upscaler(const State& s) {
+  st::Map raw;
+  st::apply_layer(raw, s.base);
+  st::apply_layer(raw, s.user);
+  if (std::atoi(st::lookup(raw, "game_dlss_guard").c_str()) != 1) return {};
+  if (std::atoi(st::lookup(raw, "rr").c_str()) != 1) return {};
+  wchar_t local[MAX_PATH] = {};
+  DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
+  if (!n || n >= MAX_PATH) return {};
+  std::wstring path = std::wstring(local) + L"\\Larian Studios\\Baldur's Gate 3\\graphicSettings.lsx";
+  std::string text;
+  if (!read_file(path, text)) return {};   // first start: the game writes its own file
+  std::vector<std::string> changes;
+  std::string fixed = guard_upscaler_text(text, &changes);
+  if (changes.empty()) return {};
+  std::wstring err;
+  if (!write_file_atomic(path + L".bg3rtx-bak", text, &err) || !write_file_atomic(path, fixed, &err))
+    return L"game upscaler guard: could not write graphicSettings.lsx: " + err;
+  std::string what;
+  for (const std::string& c : changes) what += (what.empty() ? "" : ", ") + c;
+  return L"game upscaler guard: graphicSettings.lsx set back to DLSS (" + widen(what) + L")";
 }
 
 }  // namespace launcher
