@@ -135,6 +135,44 @@ and output directories must differ; use `--out` outside source packs to keep cap
 For example, run OFF to `.scratch/gi-off`, then ON to `.scratch/gi-on` with
 `--reference-out .scratch/gi-off`, matching every other shader, specialization and push option.
 
+## Paired A/B timing
+
+Use `--ab-spec ID=A,B` (repeatable) with common `--spec ID=UINT` settings to
+create both pipelines once over the same uploaded pack and acceleration structures.
+`--ab-spv <B.spv>` optionally supplies a different module for B; `--spv <A.spv>`
+supplies A. This supports sun versus direct attribution without a new production flag.
+Both modules must use the same descriptor/push contract. Prefer cached SPIR-V from
+`tools/shader_identity.py`, with the exact pack defines.
+
+`--repeat N` means N paired samples (default 40 in A/B mode). Four warmup dispatches
+(two per pipeline) are excluded. Each sample runs ABBA, then the next BAAB, and uses
+`mean(B) - mean(A)` timestamps: the symmetric sample cancels linear drift in dispatch
+order. Timings include the compute dispatch, excluding uploads, output readback
+and clears. A negative delta means B is faster. `ab.csv` retains every pair; the
+console and `ab_summary.txt` report the median delta and a distribution-free 95%
+interval for its population median, using binomial order statistics (conservative
+coverage for ties). Small samples can produce infinite bounds.
+
+Every measured dispatch is compared byte for byte with the first dispatch in its
+quartet: all stored output components and every raw counter/bin. The summary requires
+all comparisons to match to print `100% bit-equal`. The first failed quartet reports
+the differing-byte count and first output component/pixel/channel, plus the first
+raw counter index/bin and its values when counters differ. That quartet also saves
+`ab_A_<output>.raw` and `ab_B_<output>.raw` for full numeric diagnosis (and
+`ab_A_rtstats.bin` / `ab_B_rtstats.bin` when counters differ). An unexpected
+same-pipeline mismatch uses `_repeat` for its second snapshot. Attribution can intentionally
+change outputs; add `--ab-require-equal` to return failure for any changed bit.
+Ordinary output files contain the final dispatch; use `ab.csv` for paired timings.
+
+`--ab-self-test` checks drift cancellation and confidence bounds without a GPU.
+
+```powershell
+bin/frame_replay --pack <pack> --spv sun.spv --sun-trust trust.bin --push radius=6 `
+  --ab-spec 1007=1,0 --repeat 40 --out .scratch/far-split
+bin/frame_replay --pack <pack> --spv sun.spv --ab-spv direct.spv --spec 1007=0 `
+  --sun-trust trust.bin --repeat 40 --out .scratch/sun-split
+```
+
 ## PT reference: `--pt-reference` (tools/pt_reference.hlsl, M6 offline)
 
 ```

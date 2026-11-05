@@ -1223,4 +1223,11 @@ Round 1 supersedes that prewarm/readiness plan: both candidate registrations and
   +3.8 ms slower. Rejected; code, key and batch removed (with `gi_ao_r16f`, exact but at most 0.06 ms). Ids 1032-1033 retired.
 - Attribution, S8 Ultra (opt-attr-s8.1.173918, VALID): GI trace 8.0 ms -> 2.1 ms with `gi_hit_sun=0` (which also
   removes gi_far) and -> 1.5 ms with `gi_hit_direct=0`. Nearly all the trace cost is the hidden-hit branch with sun
-  and far. The far/sun split is next, offline (frame_replay --sun-trust).
+  and far. Paired offline far increments: S8 +2.430 ms, camp +5.460 ms, inn +2.448 ms; sun with far off:
+  +0.098 / +0.427 / +0.005 ms. See TRACK_C_GI "Far GI cost split, 2026-11-05" for the next decomposition.
+- `gi_sun_wave` (SpecId 1034): deferred dense sun queries with ordered resolve, exact outputs and raw counters
+  on S8/camp/inn. Forty paired ABBA/BAAB samples gave ON-OFF +0.735776 ms [95% CI +0.540272, +0.849120],
+  +3.114312 ms [+2.451616, +3.897856], +0.737392 ms [+0.638336, +0.863264]. Rejected: all slower.
+  Code, raw key, setting, scratch buffers, two requests and feature tests removed; 1034 retired, never reuse.
+  The paired replay A/B tool and its tests remain. Manifest requests return to 125; no ABI change.
+  Cleanup passes ordinary release equivalence (215/215 byte-identical to main) and the full build plus 191 CTests.
