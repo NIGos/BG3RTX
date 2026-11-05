@@ -64,7 +64,7 @@ class FarGiRoof(unittest.TestCase):
         self.assertLess(SOURCE.index('bounce += he.radiance * w;'), SOURCE.index('const bool roof_early'))
         self.assertIn('&& !roof_early', SOURCE)
         host = (ROOT / 'core/gi.cpp').read_text(encoding='utf-8')
-        self.assertRegex(host, r'specs.add\(sv::kSpecIdGiFarRoofEarly,\s*host->cfg_int\("rt_stats", 0\) == 0 && host->cfg_int\("gi_far_roof_early", 0\) != 0 \? 1u : 0u\)')
+        self.assertRegex(host, r'specs.add\(sv::kSpecIdGiFarRoofEarly,\s*host->cfg_int\("rt_stats", 0\) == 0 && host->cfg_int\("gi_far_roof_early", 1\) != 0 \? 1u : 0u\)')
 
     def test_segment_radiance_fixtures(self):
         identity = (0, 0, 0, 1)
