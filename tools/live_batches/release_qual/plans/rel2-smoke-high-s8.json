@@ -30,7 +30,6 @@
       "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
       "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
       "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
-      "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
       "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
       "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
       "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
@@ -80,7 +79,6 @@
     "wait_stats": [
       "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
-      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
       "\\[mem\\] ours \\(",
@@ -111,7 +109,6 @@
     "wait_stats": [
       "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
-      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
       "\\[mem\\] ours \\(",
@@ -142,7 +139,6 @@
     "wait_stats": [
       "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
-      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
       "\\[mem\\] ours \\(",
@@ -173,7 +169,6 @@
     "wait_stats": [
       "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
-      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
       "\\[mem\\] ours \\(",
@@ -204,7 +199,6 @@
     "wait_stats": [
       "\\[water\\] reflections \\(\\d+ frames, ",
       "\\[geo\\] RT capture, last \\d+ frames:",
-      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
       "\\[mem\\] ours \\(",
