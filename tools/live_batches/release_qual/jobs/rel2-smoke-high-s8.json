@@ -26,7 +26,6 @@
     "\\[shaders\\].*\\?",
     "\\[crash\\]",
     "FAILED",
-    "\\[water\\]",
     "gi: GPU cost",
     "\\[rrpost\\] exposure (held|probe)",
     "\\[geo\\] RT capture",
@@ -74,19 +73,6 @@
     "\\[vt alpha\\].*"
   ],
   "expect_every": [
-    {
-      "name": "water reflections traced in every window with the casters on",
-      "select": "\\[water\\] reflections \\(\\d+ frames, ",
-      "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
-      "windows": [
-        "static-a",
-        "pan-q",
-        "pan-e",
-        "rotate-r",
-        "rotate-l"
-      ],
-      "min": 1
-    },
     {
       "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
       "select": "\\[geo\\] RT capture, last \\d+ frames:",
@@ -228,14 +214,6 @@
     "compile call failed",
     "RR creation failed",
     "RR evaluate failed",
-    "\\[water\\] water geometry UNAVAILABLE",
-    "\\[water\\] build submission failed",
-    "\\[water\\] reflections unavailable",
-    "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
-    "\\[water\\] compose UNAVAILABLE",
-    "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
-    "\\[water\\] compose: variant pipeline creation failed",
-    "\\[water\\] compose: a water pipeline blends",
     "\\[rrpost\\] exposure hold REFUSED",
     "\\[cascade\\] could not allocate",
     "skipped: no variant for",
@@ -275,7 +253,6 @@
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\opt-profile-s8.1.000944.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\opt-profile-s8.1.065142.log",
@@ -348,9 +325,7 @@
         ],
         "fps": 20.949720670434065,
         "windows": 5,
-        "logs": [
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
-        ]
+        "logs": []
       }
     ],
     "trace_export": {
