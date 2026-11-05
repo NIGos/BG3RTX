@@ -65,9 +65,28 @@ struct Push {
 // GPU truncates on store. flags bit 1 rounds our fp16 chain value the same way
 // before the grade, so the LUT sees the values it always saw.
 float3 trunc_r11g11b10(float3 v) {
-  uint3 u = asuint(max(v, 0.0));
-  u &= uint3(~((1u << 17) - 1u), ~((1u << 17) - 1u), ~((1u << 18) - 1u));
-  return asfloat(u);
+  // Preserve the original normal-range path exactly (including its rounding).
+  if (all(v >= 0.00006103515625) && all(v <= float3(65024.0, 65024.0, 64512.0))) {
+    uint3 u = asuint(max(v, 0.0));
+    u &= uint3(~((1u << 17) - 1u), ~((1u << 17) - 1u), ~((1u << 18) - 1u));
+    return asfloat(u);
+  }
+  uint3 raw = asuint(v);
+  uint3 magnitude = raw & 0x7fffffffu;
+  bool3 nan = magnitude > 0x7f800000u;
+  // Unsigned format: negative finite values/Inf become zero; NaNs keep payload.
+  uint3 u = select(((raw & 0x80000000u) == 0u) | nan, magnitude, 0u);
+  uint3 q = u & uint3(0xfffe0000u, 0xfffe0000u, 0xfffc0000u);
+  // Exponent zero has a fixed step: 2^-20 for R/G, 2^-19 for B.
+  q = select(u < 0x38800000u,
+             asuint(floor(asfloat(u) * float3(1048576.0, 1048576.0, 524288.0)) *
+                    float3(1.0 / 1048576.0, 1.0 / 1048576.0, 1.0 / 524288.0)), q);
+  // Finite overflow saturates, but +Inf remains +Inf. B has one fewer bit.
+  uint3 maximum = uint3(0x477e0000u, 0x477e0000u, 0x477c0000u);
+  q = select((u > maximum) & (u < 0x7f800000u), maximum, q);
+  // A NaN whose payload was entirely truncated must not turn into infinity.
+  q = select(nan & ((q & 0x007fffffu) == 0u), q | uint3(0x20000u, 0x20000u, 0x40000u), q);
+  return asfloat(q);
 }
 
 float3 finite3(float3 v) { return float3(isfinite(v.x) ? v.x : 0.0, isfinite(v.y) ? v.y : 0.0, isfinite(v.z) ? v.z : 0.0); }

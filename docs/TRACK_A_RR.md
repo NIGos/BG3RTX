@@ -491,6 +491,26 @@ frame** (the traced Goblin Camp frame had no DoF; the DoF weights were checked
 only on the earlier build, where the residual error was the uniform store
 offset, independent of the DoF weight).
 
+**S-F05 boundary correction (rrpost-r11, 2026-11-06, offline).** Mantissa masking
+alone retained FP32's exponent range. `trunc_r11g11b10` now uses fixed subnormal
+steps (R/G 2^-20, B 2^-19), saturates finite overflow at 65024/65024/64512,
+preserves positive infinity and reduced NaN payloads, and zeros negative finite
+values/infinity. Normal inputs retain the original path. No new key or request.
+`tests/rr_r11_test.py` runs `tools/rr_r11_fixture.cpp` on an isolated Vulkan device:
+real R11 image stores and subsequent loads versus production HLSL and an independent
+numeric reference, bit for bit. It checks every finite positive FP16 value, R11/R10
+boundaries and their FP32 neighbours, negatives and NaN payload boundaries.
+The fixture refuses GPU work while BG3, Stalker2 or Cyberpunk runs and requires
+Khronos validation. RTX 5090 verified; other devices must pass their own oracle.
+77933 mixed RGB inputs / 233799 channel comparisons pass exactly, with zero
+numeric-reference mismatches, normal changes or Vulkan validation errors.
+Release equivalence uses an explicit normal-input assumption (the exact range
+guard folded true), plus a separate quantisation-OFF proof. It covers both RR
+requests; unrelated requests remain byte-identical. Full-range equality would
+be incorrect: boundary outputs intentionally change. In-game cost was not measured
+(offline-only authorization); normal store rounding is unchanged. To inspect later,
+use the existing `rr_post_check` replication comparison; no live batch was queued.
+
 **A/B against the old path** (foundry, static, one run toggled live with
 `scripts/live_phases.py`: new, old, new; tonemapped HDR10 frames compared in PQ
 code values):
