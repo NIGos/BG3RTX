@@ -747,6 +747,35 @@ player's `fg=2` setup can run different RR versions.
   the display being in standby, and no NGX call through these hooks ever
   failed. Run `scripts/ensure-settings.py` (main) before launching.
 
+## Game upscaler guard (`game_dlss_guard`, 2026-11-05)
+
+**Incident.** After the RenoDX DLSS5 ReShade addon was installed, two player
+sessions logged `no DLSS feature has been created through _nvngx.dll`. The
+game's `graphicSettings.lsx` had lost `ResolutionUpscaleType` and `DLSS2Mode`
+(the 08:28 backup had 3 and 2). BG3 rewrites the file from defaults after a
+start where DLSS failed; the addon's first launches exited after 2-5 s. Every
+later start then runs with no upscaler, so the game never creates DLSS and RR
+never runs. Test runs were already protected by `scripts/ensure-settings.py`;
+player starts were not.
+
+**The game-folder snippets are not involved with fg>=2.** The game's NGX Init and
+Shutdown are stubbed (`fg_game_ngx=2`, `layer/streamline.cpp`), so DLSS SR and RR
+run on Streamline's NGX, which loads `bin\sl\nvngx_dlss.dll` and
+`nvngx_dlssd.dll`. The addon's own log confirmed those paths. Only with `fg=0`
+does the game's own Init pick the game folder's snippets. A hook that rewrites the
+game's feature path list was not built. The driver's Init exports use the
+static client's undocumented arguments (the public `FeatureCommonInfo` overload
+does not exist there), so the hook could not be checked offline.
+
+**Guard.** With `game_dlss_guard=1` and `rr=1`, BG3RTX.exe sets
+`ResolutionUpscaleType=3` before every game start, and sets `DLSS2Mode=2` only when
+the entry is missing, so the player's own DLSS mode is kept. It backs the file up
+to `graphicSettings.lsx.bg3rtx-bak` first (`guard_game_upscaler`,
+`tools/launcher/launch.cpp`; tested in `launcher_launch_test`). Default 1 (2026-11-05, user go): the same rule as `scripts/ensure-settings.py`, which runs before every queue live. The first
+player start through BG3RTX.exe is the confirmation. To check: put the reset file in place, start the game
+from BG3RTX.exe and look for `[ngx] upscaler for feature ...: Ray Reconstruction`
+in `bg3rtx.log`. The launcher log should name the repair.
+
 ## Temporal replayed post (`rr_post_temporal`, Ultra, 2026-11-04)
 
 The ef1 12:10 evidence isolates the replayed jittered CoC coverage/residual and

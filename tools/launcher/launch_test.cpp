@@ -48,6 +48,51 @@ int main() {
   State state;load_state(state);check(!state.settings_readable);
   check(!save_state(state,&error));fail_open=false;
   DeleteFileW(path);
+  // Game upscaler guard: the reset file of 2026-11-05 (no upscaler entries) and a DLSS file.
+  {
+    const std::string head="<save>\n    <region id=\"Config\">\n        <node id=\"root\">\n            <children>\n";
+    const std::string tail="            </children>\n        </node>\n    </region>\n</save>\n";
+    auto entry=[](const char* k,const char* v){return std::string("                <node id=\"ConfigEntry\">\n                    <attribute id=\"MapKey\" type=\"FixedString\" value=\"")+k+"\"/>\n                    <attribute id=\"Type\" type=\"int32\" value=\"0\"/>\n                    <attribute id=\"Value\" type=\"int32\" value=\""+v+"\"/>\n                </node>\n";};
+    const std::string reset=head+entry("ScreenWidth","3840")+tail;
+    std::vector<std::string> ch;
+    std::string fixed=guard_upscaler_text(reset,&ch);
+    check(ch.size()==2&&ch[0]=="ResolutionUpscaleType added=3"&&ch[1]=="DLSS2Mode added=2");
+    check(fixed.find(entry("ResolutionUpscaleType","3"))!=std::string::npos);
+    check(fixed.find(entry("DLSS2Mode","2"))!=std::string::npos);
+    check(fixed.find(entry("ScreenWidth","3840"))!=std::string::npos);
+    ch.clear();check(guard_upscaler_text(fixed,&ch)==fixed&&ch.empty());           // idempotent
+    const std::string fsr=head+entry("DLSS2Mode","4")+entry("ResolutionUpscaleType","1")+tail;
+    ch.clear();std::string f2=guard_upscaler_text(fsr,&ch);
+    check(ch.size()==1&&ch[0]=="ResolutionUpscaleType 1->3");
+    check(f2.find(entry("DLSS2Mode","4"))!=std::string::npos);                     // player's DLSS mode kept
+    check(f2.find(entry("ResolutionUpscaleType","3"))!=std::string::npos);
+    std::string crlf;for(char c:reset){if(c=='\n')crlf+='\r';crlf+=c;}
+    ch.clear();std::string f3=guard_upscaler_text(crlf,&ch);
+    size_t lf=0,bare=0;for(size_t i=0;i<f3.size();++i)if(f3[i]=='\n'){++lf;if(!i||f3[i-1]!='\r')++bare;}
+    check(ch.size()==2&&lf>0&&bare==0);                                             // CRLF file stays CRLF
+    ch.clear();check(guard_upscaler_text("not xml",&ch)=="not xml"&&ch.empty());   // unknown file left alone
+    // End to end on a temporary LOCALAPPDATA: off when switched off or with rr=0, on by default, then the reset file is repaired with a backup.
+    wchar_t tmp[MAX_PATH];GetTempPathW(MAX_PATH,tmp);
+    std::wstring local=std::wstring(tmp)+L"bg3rtx_guard_test_"+std::to_wstring(GetCurrentProcessId());
+    std::wstring larian=local+L"\\Larian Studios",gdir=larian+L"\\Baldur's Gate 3",lsx=gdir+L"\\graphicSettings.lsx";
+    CreateDirectoryW(local.c_str(),nullptr);CreateDirectoryW(larian.c_str(),nullptr);CreateDirectoryW(gdir.c_str(),nullptr);
+    wchar_t old_local[MAX_PATH]={};DWORD had_local=GetEnvironmentVariableW(L"LOCALAPPDATA",old_local,MAX_PATH);
+    SetEnvironmentVariableW(L"LOCALAPPDATA",local.c_str());
+    check(write_file_atomic(lsx,reset,&error));
+    State g;g.base=bg3::settings::parse_ini("rr=1\ngame_dlss_guard=0\n");
+    check(guard_game_upscaler(g).empty());                                         // switched off
+    g.base=bg3::settings::parse_ini("rr=0\ngame_dlss_guard=1\n");
+    check(guard_game_upscaler(g).empty());                                         // RR off: nothing to protect
+    g.base=bg3::settings::parse_ini("rr=1\n");                                     // key absent: default on
+    check(read_file(lsx,text)&&text==reset);
+    check(guard_game_upscaler(g).find(L"set back to DLSS")!=std::wstring::npos);
+    check(read_file(lsx,text)&&text==fixed);
+    check(read_file(lsx+L".bg3rtx-bak",text)&&text==reset);
+    check(guard_game_upscaler(g).empty());                                         // already DLSS
+    DeleteFileW(lsx.c_str());DeleteFileW((lsx+L".bg3rtx-bak").c_str());
+    RemoveDirectoryW(gdir.c_str());RemoveDirectoryW(larian.c_str());RemoveDirectoryW(local.c_str());
+    SetEnvironmentVariableW(L"LOCALAPPDATA",had_local?old_local:nullptr);
+  }
   std::printf("launcher launch: %d checks, %d failures\n",checks,failed);
   return failed?1:0;
 }
