@@ -30,7 +30,7 @@ for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
             "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
             "rt_alpha_fine_lod", "rt_vt_alpha_masks", "rt_omm", "rt_omm_dyn"):
     TABLE[key] = list(GI_QUERY)
-for key in ("gi_far", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
+for key in ("gi_far", "gi_roof_reject", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
             "rt_hit_emission", "rt_emissive"):
     TABLE[key] = [GI_TRACE]
 WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"

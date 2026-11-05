@@ -425,6 +425,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_physical_origin": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_physical_origin": "1"}, "needs": {"rt_geometry": 2, "exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "gi_roof_reject", "label": "Skip blocked far bounce shading",
+     "description": "Experimental performance option. Skips lighting work whose far bounce is blocked by a cut-away roof. Emission is preserved. Cost is unqualified.",
+     "apply": "hitch", "apply_note": "First use builds a pipeline; then live A/B is available.", "advanced": false, "experimental": true, "developer": true,
+     "category": "Performance", "summary": "Experimental performance option. Skips lighting work whose far bounce is blocked by a cut-away roof. Emission is preserved. Cost is unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"gi_roof_reject": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "hitch", "caps": ["ray_query"], "keys": {"gi_roof_reject": "1"}, "needs": {"exp_hidden_surface": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "detailed_logging", "label": "Detailed logging",
      "description": "Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.",
      "apply": "restart", "apply_note": "Restart the game to apply", "advanced": false, "experimental": false, "developer": false,
