@@ -438,6 +438,17 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
   }
 }
 
+function Stop-QueueProcessTree($process) {
+  if ($process -and -not $process.HasExited) {
+    # Stop descendants while the owned parent still identifies the tree.
+    & taskkill.exe /PID $process.Id /T /F 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0 -and -not $process.HasExited) {
+      throw "Could not stop queue process tree $($process.Id)"
+    }
+    $process.WaitForExit()
+  }
+}
+
 # One run of its own: auto-run.ps1 (or the job's command) launches and closes the game.
 function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeout) {
   # The readiness median is an estimate, never the runtime safety bound.
@@ -492,19 +503,18 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
       if(-not $cancelled -and (Get-Date) -ge $deadline){$cancelled='Single-run deadline reached'}
     }
     if($cancelled) {
-      if($phase -and -not $phase.HasExited){$phase.Kill();$phase.WaitForExit()}
+      Stop-QueueProcessTree $phase
       [IO.File]::WriteAllText($quit,$cancelled)
       # Normal auto-run cleanup allows 20 s close +15 s owned-process exit.
-      # Never enumerate/kill a game here. A non-cooperative command wrapper alone
-      # may be stopped; the persistent quit request still guards nested auto-run.
-      if(-not $child.WaitForExit(40000)){$child.Kill();$child.WaitForExit()}
+      # After cooperative cleanup, stop the owned wrapper and all descendants.
+      if(-not $child.WaitForExit(40000)){Stop-QueueProcessTree $child}
     }
     $child.WaitForExit();$childExit=$child.ExitCode
   } finally {
-    if($phase -and -not $phase.HasExited){$phase.Kill();$phase.WaitForExit()}
+    Stop-QueueProcessTree $phase
     if($child -and -not $child.HasExited){
       [IO.File]::WriteAllText($quit,'Queue run interrupted')
-      if(-not $child.WaitForExit(40000)){$child.Kill();$child.WaitForExit()}
+      if(-not $child.WaitForExit(40000)){Stop-QueueProcessTree $child}
     }
     $env:BG3RTX_QUEUE_QUIT_FILE=$previousQuit
   }

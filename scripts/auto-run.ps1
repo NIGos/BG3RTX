@@ -569,6 +569,10 @@ if($SELightProbe){
 }
 try {
 Assert-QueueLaunchProcesses
+# Process-local overlay policy, inherited by launch-bg3 and the game alongside
+# clean mode's Steam/EOS/GOG disables. Never change the player's launcher policy.
+$env:DISABLE_VK_LAYER_reshade_1 = "1"
+Write-Host "Test overlay disabled: VK_LAYER_reshade (DISABLE_VK_LAYER_reshade_1=1)"
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
 # The game keeps Normal priority on purpose: offline builds (dxc, cl) run BelowNormal, and a

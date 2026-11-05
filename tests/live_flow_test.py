@@ -32,6 +32,36 @@ def fixture(name="one"):
     return job, plan
 
 
+class DeveloperSettingTests(unittest.TestCase):
+    def test_release_job_and_plan_reject_compact_hit_state(self):
+        job = dict(set="dev=0,rt_compact_hit_state=1")
+        self.assertIn("rt_compact_hit_state=1", f.developer_setting_problems(job, [])[0])
+        job["set"] = "dev=0"
+        problems = f.developer_setting_problems(job, [phase("on", values="rt_compact_hit_state=1")])
+        self.assertIn("on:", problems[0])
+        j, p = fixture()
+        j["set"] += ",dev=0,rt_compact_hit_state=1"
+        self.assertTrue(any(s.startswith("release policy:") for s in f.lint(j, p, [])["problems"]))
+
+    def test_allowed_modes_and_off_resets(self):
+        for values in ("dev=1,rt_compact_hit_state=1", "dev=0,experimental_options=1,rt_compact_hit_state=1",
+                       "dev=0,rt_compact_hit_state=0", "rt_compact_hit_state=1"):
+            self.assertFalse(f.developer_setting_problems(dict(set=values), []))
+
+    def test_cumulative_policy_toggle_and_list_settings(self):
+        job = dict(set=["dev=1", "rt_compact_hit_state=1"])
+        p = [phase("release", values="dev=0"), phase("restore", values="rt_compact_hit_state=0")]
+        problems = f.developer_setting_problems(job, p)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("release:", problems[0])
+
+    def test_metadata_maps_compound_and_inverted_keys(self):
+        problems = f.developer_setting_problems(dict(set="dev=0,rt_omm_dyn=1,rr_post=0"), [])
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(any("exp_omm" in s for s in problems))
+        self.assertTrue(any("reset it to 1" in s for s in problems))
+
+
 class PipelineReadinessTests(unittest.TestCase):
     def test_cpu_and_push_values_never_wait_for_pipeline_generations(self):
         j = dict(set='rt_scene_compact_holds=0,rt_build=auto,gi_rt=1,gi_rr_rays=2,gi_strength=1')

@@ -357,6 +357,34 @@ def producer_problems(job, plan):
     return errors
 
 
+def developer_setting_problems(job, plan):
+    """Reject explicit overrides which release policy silently neutralizes.
+
+    Use knob metadata and its zero choice, including compound/inverted keys.
+    Missing dev inherits the development INI; explicit dev=0 selects release.
+    """
+    schema = read(ROOT / "data/settings_schema.json")
+    disabled = {key: (knob["id"], str(value))
+                for knob in schema["knobs"] if knob.get("developer")
+                for key, value in knob["choices"][0]["keys"].items()}
+    state = {}
+    errors = []
+    for label, values in [("job", job.get("set", ""))] + [
+            (p.get("label", f"phase {i}"), p.get("set", "")) for i, p in enumerate(plan)]:
+        # Queue accepts a list of set strings as well as one comma-separated string.
+        for value in values if isinstance(values, list) else [values]:
+            _apply(state, value)
+        if state.get("dev", "1") == "1" or state.get("experimental_options") == "1":
+            continue
+        for key in sorted(state.keys() & disabled.keys()):
+            knob, off = disabled[key]
+            if state[key] != off:
+                errors.append(f"release policy: {label}: {key}={state[key]} belongs to "
+                              f"developer-only knob {knob}; dev=0 and experimental_options is not 1 "
+                              f"reset it to {off}; enable dev=1 or remove the override")
+    return errors
+
+
 def environment_problems(job):
     """Only paths/scalars cross the environment; the full job uses a context file.
 
@@ -935,7 +963,7 @@ def lint(job, plan, evidence, memo=None):
     timeout = []
     if "timeout" in job and float(job["timeout"]) < duration["seconds"] + duration["readiness_timeout_seconds"]:
         timeout.append("duration: timeout does not cover plan + readiness allowance")
-    return dict(problems=plan_field_problems(plan) + pipeline_readiness.problems(job, plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan) + timeout, regex_coverage=coverage, windows=budgets, duration=duration, replay=fps_windows.replay(job, plan, evidence))
+    return dict(problems=plan_field_problems(plan) + developer_setting_problems(job, plan) + pipeline_readiness.problems(job, plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan) + timeout, regex_coverage=coverage, windows=budgets, duration=duration, replay=fps_windows.replay(job, plan, evidence))
 
 
 def markdown_report(report):

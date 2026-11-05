@@ -1,4 +1,5 @@
 # Offline only. Every process is a scratch fake; no game or real queue is used.
+param([switch]$TreeOnly, [switch]$MockTreeKill)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
 . (Join-Path $repo 'scripts/queue-permission.ps1')
@@ -6,6 +7,51 @@ $checks=0
 function Check($ok,$label){if(-not $ok){throw "FAIL: $label"};$script:checks++}
 $base=Join-Path $env:TEMP ('bg3-queue-cancel-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $base | Out-Null
+$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'scripts/test-queue.ps1'),[ref]$tokens,[ref]$errors)
+Check ($errors.Count -eq 0) 'runner syntax valid'
+$stop=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Stop-QueueProcessTree'},$true)
+Invoke-Expression $stop.Extent.Text
+# A scratch parent, child and grandchild, all sleeping. No queue folders needed.
+@'
+param([int]$Depth)
+Set-Content (Join-Path $PSScriptRoot "tree-$Depth.pid") $PID
+if($Depth -gt 0){
+ Start-Process powershell -WindowStyle Hidden -ArgumentList ('-NoProfile -File "'+$PSCommandPath+'" -Depth '+($Depth-1)) | Out-Null
+}
+while($true){Start-Sleep -Milliseconds 100}
+'@ | Set-Content (Join-Path $base 'tree.ps1')
+$treeParent=Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList ('-NoProfile -File "'+(Join-Path $base 'tree.ps1')+'" -Depth 2')
+try {
+ $deadline=(Get-Date).AddSeconds(15)
+ while(-not(Test-Path (Join-Path $base 'tree-0.pid'))){
+  if((Get-Date)-ge $deadline){throw 'scratch tree failed to start'}
+  Start-Sleep -Milliseconds 50
+ }
+ $owned=@(0..2 | ForEach-Object {Get-Process -Id ([int](Get-Content (Join-Path $base "tree-$_.pid")))})
+ foreach($p in $owned){[void]$p.Handle}
+ if($MockTreeKill){
+  function taskkill.exe {
+   Check (($args -join ' ') -eq "/PID $($treeParent.Id) /T /F") 'taskkill targets owned root with tree and force switches'
+   $owned | Stop-Process -Force
+   $global:LASTEXITCODE=0
+  }
+ }
+ Stop-QueueProcessTree $treeParent
+ foreach($p in $owned){Check ($p.WaitForExit(3000)) 'owned descendant exits with wrapper'}
+ Stop-QueueProcessTree $treeParent # already exited is harmless
+} finally {
+ # On platforms where taskkill is denied, still clean up these exact scratch PIDs.
+ foreach($p in $owned){if(-not $p.HasExited){$p | Stop-Process -Force}}
+ if(-not $treeParent.HasExited){$treeParent | Stop-Process -Force}
+ if($MockTreeKill){Remove-Item Function:taskkill.exe}
+}
+# Both cancellation and exception cleanup must use the helper for both roots.
+$single=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-SingleRun'},$true)
+Check (-not($single.Extent.Text -match '\.Kill\(')) 'single-run cleanup never kills only the wrapper'
+Check (([regex]::Matches($single.Extent.Text,'Stop-QueueProcessTree \$child')).Count -eq 2) 'cancel and finally stop child trees'
+Check (([regex]::Matches($single.Extent.Text,'Stop-QueueProcessTree \$phase')).Count -eq 2) 'cancel and finally stop phase trees'
+if($TreeOnly){Write-Host "$checks process-tree checks passed; scratch $base";return}
 function Wait-File($path,$proc){
  $deadline=(Get-Date).AddSeconds(15)
  while(-not(Test-Path -LiteralPath $path)){
@@ -76,6 +122,7 @@ $fn=$ast.Find({param($node)$node -is [Management.Automation.Language.FunctionDef
  $q=$tree;$logs=$tree;$root=$tree;$DryRun=$true;$script:phaseKilled=$false;$script:starts=0
  function Assert-QueueRuntime {}
  function Assert-QueueActive {}
+ function Stop-QueueProcessTree($process){if($process -and -not $process.HasExited){$process.Kill();$process.WaitForExit()}}
  function Join-Args($a){$a -join ' '}
  function Start-Process {
   $script:starts++
