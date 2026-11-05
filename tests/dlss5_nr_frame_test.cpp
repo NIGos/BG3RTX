@@ -1,5 +1,6 @@
 #include "../common/dlss5_nr_frame.h"
 #include <cstdio>
+#include <initializer_list>
 #include <limits>
 using namespace bg3::dlss5_frame;
 #define CHECK(x) do{if(!(x)){std::fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#x);return 1;}}while(0)
@@ -39,5 +40,23 @@ int main(){
   in.motion_base[1]=UINT32_MAX;CHECK(!prepare(in,previous,true,g));in.motion_base[1]=8;
   in.scale[0]=std::numeric_limits<float>::quiet_NaN();CHECK(!prepare(in,previous,true,g));
   in.scale[0]=-1;in.render[1]=0;CHECK(!prepare(in,previous,true,g));
+  FeatureKey key{};key.guides=in;key.guides.render[1]=1067;
+  key.color_format=97;key.depth_format=100;key.motion_format=103;key.hdr=true;
+  CHECK(!recreate(key,key));
+  auto next=key;next.guides.jitter[0]=.25f;next.guides.reset=true;CHECK(!recreate(key,next));
+  for(auto member:{&Inputs::render,&Inputs::output,&Inputs::depth_extent,&Inputs::motion_extent,
+                   &Inputs::depth_base,&Inputs::motion_base,&Inputs::motion_size}) {
+    for(unsigned axis=0;axis<2;++axis){next=key;(next.guides.*member)[axis]++;CHECK(recreate(key,next));}
+  }
+  for(unsigned axis=0;axis<2;++axis){next=key;next.guides.scale[axis]*=2;CHECK(recreate(key,next));}
+  next=key;next.guides.jittered=!key.guides.jittered;CHECK(recreate(key,next));
+  for(auto member:{&FeatureKey::color_format,&FeatureKey::depth_format,&FeatureKey::motion_format}) {
+    next=key;next.*member+=1;CHECK(recreate(key,next));
+  }
+  next=key;next.hdr=false;CHECK(recreate(key,next));
+  next=key;next.inverted=true;CHECK(recreate(key,next));
+  const uint32_t sizes[][2]{{2560,1067},{2227,928},{1920,800},{2560,1067}};
+  for(const auto& size:sizes){next=key;next.guides.render[0]=size[0];next.guides.render[1]=size[1];
+    CHECK(recreate(key,next)==(size[0]!=key.guides.render[0]));key=next;}
   std::puts("PASS native NR full-frame guide/subrect/motion/jitter/reset contract");
 }

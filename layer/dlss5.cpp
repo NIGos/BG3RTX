@@ -126,13 +126,14 @@ bool get_pipelines() {
   pipelines=next;need_reset=true;history=false;log("[dlss5] native codec/guides pipelines ready (3 fixed entries)");return true;
 }
 struct Feature {
-  NVSDK_NGX_Handle* handle{};NVSDK_NGX_Parameter* parameters{};uint32_t w{},h{};bool inverted{};
+  NVSDK_NGX_Handle* handle{};NVSDK_NGX_Parameter* parameters{};dlss5_frame::FeatureKey key{};
   ~Feature(){if(handle&&ngx.release)ngx.release(handle);if(parameters&&ngx.destroy)ngx.destroy(parameters);}
 };
 auto& feature=*new std::shared_ptr<Feature>;
+uint32_t retired_render[2]{};bool recreating{},retiring{};
 struct Slot {
   VkCommandBuffer cmd{};uint64_t recording{},submitted_frame{},epoch{};VkQueue queue{};bool submitted{},measured{},query_valid{};dlss5_frame::LayoutState layout;
-  uint32_t w{},h{};Image original,proxy,neural,motion,depth;Uniform constants[3];VkDescriptorPool pool{};VkDescriptorSet sets[3]{};VkQueryPool query{};
+  uint32_t w{},h{};dlss5_frame::FeatureKey key{};Image original,proxy,neural,motion,depth;Uniform constants[3];VkDescriptorPool pool{};VkDescriptorSet sets[3]{};VkQueryPool query{};
   std::shared_ptr<Feature> feature;std::shared_ptr<Pipelines> pipelines;
 };
 auto& slots=*new std::array<Slot,kSlots>;
@@ -154,13 +155,13 @@ void harvest(Slot& s) {
   auto ms=[&](unsigned a,unsigned b){return double(values[b*2]-values[a*2])*p.limits.timestampPeriod/1e6;};
   sums[0]+=ms(2,3);sums[1]+=ms(0,1);sums[2]+=ms(4,5);sums[3]+=ms(0,5);++measurements;
 }
-Slot* reserve(VkCommandBuffer cmd,uint64_t recording,uint32_t w,uint32_t h) {
+Slot* reserve(VkCommandBuffer cmd,uint64_t recording,uint32_t w,uint32_t h,const dlss5_frame::FeatureKey& key) {
   for(auto& s:slots){harvest(s);if(s.cmd==cmd&&s.recording==recording){state("multiple RR evaluates in one recording");return nullptr;}}
   for(auto& s:slots){
     if(s.recording && (cmd_recording(s.cmd)==s.recording || (s.submitted&&!complete(s))))continue;
     auto old_pipelines=s.pipelines;s.feature.reset();s.cmd=cmd;s.recording=recording;s.submitted=false;s.measured=false;s.query_valid=false;s.layout.begin_recording();s.epoch=stats_epoch;
-    if(s.w!=w||s.h!=h){slot_destroy(s);s.cmd=cmd;s.recording=recording;s.epoch=stats_epoch;
-      s.w=w;s.h=h;
+    if(s.w!=w||s.h!=h||dlss5_frame::recreate(s.key,key)){slot_destroy(s);s.cmd=cmd;s.recording=recording;s.epoch=stats_epoch;
+      s.w=w;s.h=h;s.key=key;
       if(!image_create(s.original,w,h,VK_FORMAT_R16G16B16A16_SFLOAT)||!image_create(s.proxy,w,h,VK_FORMAT_R16G16B16A16_SFLOAT)||
          !image_create(s.neural,w,h,VK_FORMAT_R16G16B16A16_SFLOAT)||!image_create(s.motion,w,h,VK_FORMAT_R32G32_SFLOAT)||
          !image_create(s.depth,w,h,VK_FORMAT_R32_SFLOAT)){slot_destroy(s);fail("private images");return nullptr;}
@@ -213,14 +214,36 @@ void dispatch(VkCommandBuffer cmd,Slot& s,unsigned p){
   unsigned block=p==2?8:16;device->vk.CmdDispatch(cmd,(s.w+block-1)/block,(s.h+block-1)/block,1);
 }
 unsigned scaling(NVSDK_NGX_Parameter* p){p->Set("DLSSNR.ScalingRatio",1.0f);return 1;}
-bool create_feature(VkCommandBuffer cmd,Slot& slot,bool inverted) {
-  if(feature && feature->w==slot.w&&feature->h==slot.h&&feature->inverted==inverted){slot.feature=feature;return true;}
-  auto next=std::make_shared<Feature>();next->w=slot.w;next->h=slot.h;next->inverted=inverted;
+// Stop recording the old feature immediately. Retained executable command
+// buffers can still be resubmitted, so completion alone cannot release them.
+// Poll the existing per-submission lifetime helper; never stall the device.
+bool retire_feature(const dlss5_frame::FeatureKey& key) {
+  if(!feature || (!retiring && !dlss5_frame::recreate(feature->key,key)))return true;
+  retiring=true;
+  need_reset=true;history=false;
+  for(auto& s:slots)if(s.feature==feature) {
+    if(cmd_recording(s.cmd)==s.recording || (s.submitted&&!complete(s))) {
+      state("feature configuration changed; awaiting old recording retirement");return false;
+    }
+  }
+  for(unsigned i=0;i<2;++i)retired_render[i]=feature->key.guides.render[i];
+  recreating=true;
+  std::array<Slot*,kSlots> retired{};unsigned count=0;
+  for(auto& s:slots)if(s.feature==feature){harvest(s);s.feature.reset();retired[count++]=&s;}
+  feature.reset(); // ReleaseFeature precedes the replacement CreateFeature.
+  // Keep bound resources alive through ReleaseFeature as well as GPU completion.
+  for(unsigned i=0;i<count;++i)slot_destroy(*retired[i]);
+  retiring=false;
+  return true;
+}
+bool create_feature(VkCommandBuffer cmd,Slot& slot) {
+  if(feature){slot.feature=feature;return true;} // retire_feature checked the complete key.
+  auto next=std::make_shared<Feature>();next->key=slot.key;
   if(ngx.allocate(&next->parameters)!=NVSDK_NGX_Result_Success || !next->parameters){fail("AllocateParameters");return false;}
   auto* p=next->parameters;for(auto key:{"Width","OutWidth","DLSSNR.Width","DLSSNR.InputWidth","DLSSNR.OutputWidth","DLSSNR.Output.Width"})p->Set(key,slot.w);
   for(auto key:{"Height","OutHeight","DLSSNR.Height","DLSSNR.InputHeight","DLSSNR.OutputHeight","DLSSNR.Output.Height"})p->Set(key,slot.h);
   p->Set("DLSSNR.Enabled",1u);p->Set("DLSSNR.ScalingRatio",1.0f);p->Set("DLSSNR.Scale",1.0f);p->Set("DLSSNR.Upscaling",0u);
-  p->Set("PerfQualityValue",0u);p->Set("DLSS.Feature.Create.Flags",unsigned(NVSDK_NGX_DLSS_Feature_Flags_IsHDR)|(inverted?unsigned(NVSDK_NGX_DLSS_Feature_Flags_DepthInverted):0u));
+  p->Set("PerfQualityValue",0u);p->Set("DLSS.Feature.Create.Flags",(slot.key.hdr?unsigned(NVSDK_NGX_DLSS_Feature_Flags_IsHDR):0u)|(slot.key.inverted?unsigned(NVSDK_NGX_DLSS_Feature_Flags_DepthInverted):0u));
   p->Set("CreationNodeMask",1u);p->Set("VisibilityNodeMask",1u);p->Set("DLSSNR.Hint.Render.Preset",0u);p->Set("DLSSNR.Intensity",1.0f);
   p->Set("DLSSNR.LocalToneStrength",1.0f);p->Set("DLSSNR.LocalStructureStrength",1.0f);p->Set("DLSSNR.SkinStructureStrength",1.0f);
   p->Set("DLSSNR.ControlMask",static_cast<void*>(nullptr));p->Set("DLSSNR.UseAutoMask",0u);p->Set("DLSSNR.Style",0u);p->Set("DLSSNR.UICorrection",0u);
@@ -231,7 +254,9 @@ bool create_feature(VkCommandBuffer cmd,Slot& slot,bool inverted) {
   log("[dlss5] creating feature 18 on existing NGX owner, %ux%u",slot.w,slot.h);
   auto r=ngx.create(device->device,cmd,static_cast<NVSDK_NGX_Feature>(18),p,&next->handle);
   if(r!=NVSDK_NGX_Result_Success || !next->handle){fail("CreateFeature(18)",unsigned(r));return false;}
-  feature=next;need_reset=true;history=false;log("[dlss5] NR created: feature 18, %ux%u",slot.w,slot.h);return true;
+  feature=next;need_reset=true;history=false;log("[dlss5] NR created: feature 18, %ux%u",slot.w,slot.h);
+  if(recreating){log("[dlss5] NR recreated: render %ux%u -> %ux%u",retired_render[0],retired_render[1],slot.key.guides.render[0],slot.key.guides.render[1]);recreating=false;}
+  return true;
 }
 } // namespace
 
@@ -260,6 +285,7 @@ void dlss5_evaluate(DeviceData* dd,VkCommandBuffer cmd,const Dlss5Frame& frame) 
     if(result!=NVSDK_NGX_Result_Success || known!=NVSDK_NGX_Result_Success || !available){fail("NR unavailable on existing NGX owner",unsigned(init_result));return;}
   }
   dlss5_frame::Guides guide{};auto input=frame.guides;
+  if(input.output[0]!=frame.color.w || input.output[1]!=frame.color.h){state("guide output extent differs from RR colour");return;}
   uint64_t signature=1469598103934665603ull;
   auto append=[&](uint32_t v){signature^=v;signature*=1099511628211ull;};
   for(unsigned axis=0;axis<2;++axis){for(auto v:{input.render[axis],input.output[axis],input.depth_extent[axis],input.motion_extent[axis],input.depth_base[axis],input.motion_base[axis],input.motion_size[axis]})append(v);
@@ -267,9 +293,11 @@ void dlss5_evaluate(DeviceData* dd,VkCommandBuffer cmd,const Dlss5Frame& frame) 
   append(input.jittered?1u:0u);append(frame.depth_inverted?1u:0u);
   bool reset=input.reset||need_reset||!history||!history_submitted||guide_signature!=signature||last_recorded_frame+1<frame_index();input.reset=reset;
   if(!dlss5_frame::prepare(input,previous_jitter,history,guide)){state("invalid guide extent/subrect/scale/jitter");return;}
+  const dlss5_frame::FeatureKey key{input,uint32_t(frame.color.format),uint32_t(frame.depth.format),uint32_t(frame.motion.format),true,frame.depth_inverted};
+  if(!retire_feature(key))return;
   if(!get_pipelines()){state("codec/guides shaders unavailable");return;}
   if(need_reset && !reset){reset=true;input.reset=true;dlss5_frame::prepare(input,previous_jitter,history,guide);}
-  Slot* slot=reserve(cmd,cs->recording,frame.color.w,frame.color.h);if(!slot)return;auto& s=*slot;
+  Slot* slot=reserve(cmd,cs->recording,frame.color.w,frame.color.h,key);if(!slot)return;auto& s=*slot;
   const auto old_depth=frame.depth.layout,old_motion=frame.motion.layout;
   if(old_depth==VK_IMAGE_LAYOUT_UNDEFINED||old_motion==VK_IMAGE_LAYOUT_UNDEFINED){state("unknown source image layout");return;}
   // All allocations and descriptor writes happen before modifying the RR output.
@@ -281,7 +309,7 @@ void dlss5_evaluate(DeviceData* dd,VkCommandBuffer cmd,const Dlss5Frame& frame) 
   life_note(cmd,uint64_t(s.original.image)); // per-queue/submit-sequence completion marker, including failed creates
   life_note(cmd,uint64_t(frame.color.image));life_note(cmd,uint64_t(frame.color.view));
   for(const auto* b:{&frame.depth,&frame.motion}){life_note(cmd,uint64_t(b->image));life_note(cmd,uint64_t(b->view));}
-  if(!create_feature(cmd,s,frame.depth_inverted)){restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);cs->ours_since_event=true;return;}
+  if(!create_feature(cmd,s)){restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);cs->ours_since_event=true;return;}
   if(need_reset && !reset){reset=true;input.reset=true;dlss5_frame::prepare(input,previous_jitter,false,guide);std::memcpy(s.constants[2].map,&guide,sizeof guide);}
   for(auto* image:{&s.original,&s.proxy,&s.neural,&s.motion,&s.depth})barrier(cmd,image->image,s.layout.general?VK_IMAGE_LAYOUT_GENERAL:VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL);
   s.layout.record_transition();

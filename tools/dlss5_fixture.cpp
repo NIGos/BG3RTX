@@ -19,6 +19,7 @@
 #include <nvsdk_ngx.h>
 #include <nvsdk_ngx_vk.h>
 #include <mutex>
+#include <memory>
 #include <chrono>
 #include <algorithm>
 #include <array>
@@ -34,6 +35,7 @@
 #include <vector>
 #include "dlss5_fixture_logic.h"
 #include "dlss5_nr_codec.h"
+#include "../common/dlss5_nr_frame.h"
 
 using Microsoft::WRL::ComPtr;
 namespace fs = std::filesystem;
@@ -59,10 +61,14 @@ void no_game() {
   CloseHandle(h); need(!found, "BG3 is running: GPU step refused");
 }
 std::atomic<unsigned> validation_errors{};
+std::atomic<unsigned> known_nr_validation_errors{};
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
   VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT* data, void*) {
   if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-    ++validation_errors; std::fprintf(stderr, "VALIDATION %s\n", data->pMessage);
+    ++validation_errors;
+    if(data->pMessageIdName && !std::strcmp(data->pMessageIdName,"VUID-vkCmdDraw-None-09600") &&
+       std::strstr(data->pMessage,"nv.ngx.dlssnr.resource"))++known_nr_validation_errors;
+    std::fprintf(stderr, "VALIDATION %s\n", data->pMessage);
   }
   return VK_FALSE;
 }
@@ -579,19 +585,25 @@ void vk_image_barrier(Context& c, VkCommandBuffer cmd, VulkanImage& image, bool 
   vkCmdPipelineBarrier(cmd, initial ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &b);
 }
-int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, uint32_t h, uint32_t frames, bool validation, bool try_shutdown = false, uint32_t warmup=2, bool readonly_inputs=false) {
+int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, uint32_t h, uint32_t frames, bool validation, bool try_shutdown = false, uint32_t warmup=2, bool readonly_inputs=false, unsigned guide_switch=0, bool converted_guides=false) {
   Context c; CoreSession session;
   session.prepare(runtime, core, "vulkan");
   c.init(validation, &session.info, session.data.c_str()); no_game(); session.init(c, true);
   Neural::parameters(session.params, w, h);
   GpuTelemetry telemetry(c);
   auto milliseconds=[](){return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();};
-  VulkanImage color(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT), depth(c,w,h,VK_FORMAT_R32_SFLOAT), motion(c,w,h,VK_FORMAT_R32G32_SFLOAT);
+  VulkanImage color(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT);
+  std::unique_ptr<VulkanImage> depth,motion;
+  const uint32_t sizes[][2]{{2560,1067},{2227,928},{1920,800},{2560,1067}};
+  uint32_t guide_w=guide_switch&&!converted_guides?sizes[0][0]:w,guide_h=guide_switch&&!converted_guides?sizes[0][1]:h;
+  auto make_guides=[&](){depth=std::make_unique<VulkanImage>(c,guide_w,guide_h,VK_FORMAT_R32_SFLOAT);
+    motion=std::make_unique<VulkanImage>(c,guide_w,guide_h,VK_FORMAT_R32G32_SFLOAT);};
+  make_guides();
   VulkanImage original(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT), proxy(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT);
   VulkanImage neural(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT), output(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT);
   VulkanCodec codec(c);
   uint64_t pixels = uint64_t(w)*h, bytes = pixels*20;
-  std::printf("fixture images color=%p depth=%p motion=%p original=%p proxy=%p neural=%p output=%p\n",reinterpret_cast<void*>(color.image),reinterpret_cast<void*>(depth.image),reinterpret_cast<void*>(motion.image),reinterpret_cast<void*>(original.image),reinterpret_cast<void*>(proxy.image),reinterpret_cast<void*>(neural.image),reinterpret_cast<void*>(output.image));
+  std::printf("fixture images color=%p depth=%p motion=%p original=%p proxy=%p neural=%p output=%p\n",reinterpret_cast<void*>(color.image),reinterpret_cast<void*>(depth->image),reinterpret_cast<void*>(motion->image),reinterpret_cast<void*>(original.image),reinterpret_cast<void*>(proxy.image),reinterpret_cast<void*>(neural.image),reinterpret_cast<void*>(output.image));
   Buffer upload(c,bytes,VK_BUFFER_USAGE_TRANSFER_SRC_BIT), readback(c,pixels*8,VK_BUFFER_USAGE_TRANSFER_DST_BIT);
   struct Feature {
     NVSDK_NGX_Handle* handle{};
@@ -609,6 +621,16 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     vkcheck(vkResetFences(c.device,1,&c.produced),"Vulkan core reset fence");
   };
   submit_frame();
+  unsigned create_count=1;
+  auto config_key=[&](uint32_t rw,uint32_t rh){
+    bg3::dlss5_frame::FeatureKey key{};auto& in=key.guides;
+    in.render[0]=in.depth_extent[0]=in.motion_extent[0]=in.motion_size[0]=rw;
+    in.render[1]=in.depth_extent[1]=in.motion_extent[1]=in.motion_size[1]=rh;
+    in.output[0]=w;in.output[1]=h;in.scale[0]=in.scale[1]=1;
+    key.color_format=VK_FORMAT_R16G16B16A16_SFLOAT;key.depth_format=VK_FORMAT_R32_SFLOAT;key.motion_format=VK_FORMAT_R32G32_SFLOAT;key.hdr=true;
+    return key;
+  };
+  auto feature_key=config_key(guide_switch?sizes[0][0]:w,guide_switch?sizes[0][1]:h);
   if(result!=NVSDK_NGX_Result_Success || !feature.handle){
     std::printf("FEATURE_BLOCKED create=0x%08x; NR frames=0, median/p90 unavailable (not zero)\n",unsigned(result));
     if(feature.handle){CoreSession::log_result("Vulkan ReleaseFeature",NVSDK_NGX_VULKAN_ReleaseFeature(feature.handle));feature.handle=nullptr;}
@@ -627,6 +649,31 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
   std::printf("benchmark frames=%u warmup=%u measured=%u feature_create_count=1 fixture_resources_persistent=1 timing_csv=%ls readonly_inputs=%d\n",frames,warmup,frames-warmup,csv_path.c_str(),int(readonly_inputs));
   for(uint32_t frame=0;frame<frames;++frame){
     no_game();
+    const unsigned phase=guide_switch?(frame/(frames/4))%4:0;
+    const bool switched=guide_switch && frame && frame%(frames/4)==0;
+    const uint32_t render_w=guide_switch?sizes[phase][0]:w,render_h=guide_switch?sizes[phase][1]:h;
+    const auto key=config_key(render_w,render_h);
+    const bool needs_recreate=bg3::dlss5_frame::recreate(feature_key,key);
+    if(switched){
+      // submit_frame waited for the previous use. Drop the executable recording
+      // before releasing its feature/images, matching the host lifetime contract.
+      vkcheck(vkResetCommandBuffer(c.a,0),"discard old guide recording");
+      if(guide_switch==2 && needs_recreate){
+        ngxcheck(unsigned(NVSDK_NGX_VULKAN_ReleaseFeature(feature.handle)),"switch ReleaseFeature");feature.handle=nullptr;
+        ngxcheck(unsigned(NVSDK_NGX_VULKAN_DestroyParameters(session.params)),"switch DestroyParameters");session.params=nullptr;
+        ngxcheck(unsigned(NVSDK_NGX_VULKAN_AllocateParameters(&session.params)),"switch AllocateParameters");
+        Neural::parameters(session.params,w,h);
+      }
+      guide_w=converted_guides?w:render_w;guide_h=converted_guides?h:render_h;make_guides();
+      if(guide_switch==2 && needs_recreate){
+        vkcheck(vkBeginCommandBuffer(c.a,&begin),"begin switch create");
+        result=NVSDK_NGX_VULKAN_CreateFeature(c.a,static_cast<NVSDK_NGX_Feature>(18),session.params,&feature.handle);
+        CoreSession::log_result("switch CreateFeature(18)",result);
+        vkcheck(vkEndCommandBuffer(c.a),"end switch create");submit_frame();
+        ngxcheck(unsigned(result),"switch CreateFeature");need(feature.handle!=nullptr,"switch null feature");++create_count;feature_key=key;
+      }
+    }
+    if(guide_switch)std::printf("GUIDE_SWITCH frame=%u phase=%u render=%ux%u NGX_guides=%ux%u output=%ux%u recreate=%u creates=%u validation=%u known=%u\n",frame+1,phase,render_w,render_h,guide_w,guide_h,w,h,unsigned(switched&&guide_switch==2),create_count,validation_errors.load(),known_nr_validation_errors.load());
     double prep_start=milliseconds();
     auto* half=reinterpret_cast<uint16_t*>(cpu_input.data());
     auto* z=reinterpret_cast<float*>(cpu_input.data()+pixels*8);
@@ -635,17 +682,24 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
       uint64_t i=uint64_t(y)*w+x;
       half[i*4]=uint16_t(0x3000+((x+frame*7)%512)*4); half[i*4+1]=uint16_t(0x3000+(y%512)*4);
       half[i*4+2]=((x/32+y/32+frame)%2)?0x4400:0x3400; half[i*4+3]=0x3c00;
-      z[i]=.25f+.5f*float(y)/h; mv[i*2]=frame?0.000244140625f:0; mv[i*2+1]=0;
+    }
+    for(uint32_t y=0;y<guide_h;++y)for(uint32_t x=0;x<guide_w;++x){
+      const uint64_t i=uint64_t(y)*guide_w+x;
+      // CPU equivalent of GuidesMain's pixel-centre sampling for the converted
+      // case. NR sees fixed output extents in the layer, not raw render extents.
+      const uint32_t sy=uint32_t((uint64_t(2*y+1)*render_h)/(2*guide_h));
+      z[i]=.25f+.5f*float(sy)/render_h;
+      mv[i*2]=frame?1.0f/render_w:0;mv[i*2+1]=0;
     }
     std::memcpy(upload.mapped,cpu_input.data(),size_t(bytes));
     double prep_ms=milliseconds()-prep_start;
     vkcheck(vkResetCommandBuffer(c.a,0),"Vulkan core reset recording"); vkcheck(vkBeginCommandBuffer(c.a,&begin),"Vulkan core begin sequence");
     vkCmdResetQueryPool(c.a,c.queries,0,6);
-    VulkanImage* all[]{&color,&depth,&motion,&original,&proxy,&neural,&output};
-    for(auto* image:all)vk_image_barrier(c,c.a,*image,frame==0);
-    VulkanImage* inputs[]{&color,&depth,&motion}; uint64_t offsets[]{0,pixels*8,pixels*12};
+    VulkanImage* all[]{&color,depth.get(),motion.get(),&original,&proxy,&neural,&output};
+    for(auto* image:all)vk_image_barrier(c,c.a,*image,frame==0 || (switched && (image==depth.get()||image==motion.get())));
+    VulkanImage* inputs[]{&color,depth.get(),motion.get()}; uint64_t offsets[]{0,pixels*8,pixels*12};
     for(unsigned i=0;i<3;++i){
-      VkBufferImageCopy copy{}; copy.bufferOffset=offsets[i]; copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={w,h,1};
+      VkBufferImageCopy copy{}; copy.bufferOffset=offsets[i]; copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent=i?VkExtent3D{guide_w,guide_h,1}:VkExtent3D{w,h,1};
       vkCmdCopyBufferToImage(c.a,upload.buffer,inputs[i]->image,VK_IMAGE_LAYOUT_GENERAL,1,&copy); vk_image_barrier(c,c.a,*inputs[i]);
     }
     nr::CodecConstants constants{};
@@ -657,18 +711,19 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     codec.record(c.a,true,{color.view,color.view,color.view},{original.view,proxy.view},constants);
     vk_image_barrier(c,c.a,original);vk_image_barrier(c,c.a,proxy);
     vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,4);
-    if(readonly_inputs)for(auto* image:{&proxy,&depth,&motion}){
+    if(readonly_inputs)for(auto* image:{&proxy,depth.get(),motion.get()}){
       vk_image_barrier(c,c.a,*image,false,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);image->ngx.ReadWrite=false;
     }
     session.params->Set("DLSSNR.Color",static_cast<void*>(&proxy.ngx)); session.params->Set("DLSSNR.Output",static_cast<void*>(&neural.ngx));
-    session.params->Set("DLSSNR.Depth",static_cast<void*>(&depth.ngx));session.params->Set("DLSSNR.MVec",static_cast<void*>(&motion.ngx));
+    session.params->Set("DLSSNR.Depth",static_cast<void*>(&depth->ngx));session.params->Set("DLSSNR.MVec",static_cast<void*>(&motion->ngx));
     for(auto prefix:{"Color","Output","Depth","MVec"}){
       std::string base=std::string("DLSSNR.")+prefix+"Subrect";
       session.params->Set((base+"BaseX").c_str(),0u);session.params->Set((base+"BaseY").c_str(),0u);
-      session.params->Set((base+"Width").c_str(),w);session.params->Set((base+"Height").c_str(),h);
+      const bool is_guide=!std::strcmp(prefix,"Depth")||!std::strcmp(prefix,"MVec");
+      session.params->Set((base+"Width").c_str(),is_guide?guide_w:w);session.params->Set((base+"Height").c_str(),is_guide?guide_h:h);
     }
     session.params->Set("DLSSNR.MVecScaleX",float(w));session.params->Set("DLSSNR.MVecScaleY",float(h));
-    session.params->Set("DLSSNR.DepthInverted",0u);session.params->Set("DLSSNR.Reset",frame==0?1u:0u);
+    session.params->Set("DLSSNR.DepthInverted",0u);session.params->Set("DLSSNR.Reset",frame==0||switched?1u:0u);
     vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,0);
     double eval_start=milliseconds();
     result=NVSDK_NGX_VULKAN_EvaluateFeature(c.a,feature.handle,session.params,nullptr);
@@ -676,7 +731,7 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     CoreSession::log_result("NVSDK_NGX_VULKAN_EvaluateFeature(18)",result);
     vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,1);
     if(result==NVSDK_NGX_Result_Success){
-      if(readonly_inputs)for(auto* image:{&proxy,&depth,&motion})vk_image_barrier(c,c.a,*image,false,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
+      if(readonly_inputs)for(auto* image:{&proxy,depth.get(),motion.get()})vk_image_barrier(c,c.a,*image,false,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
       vk_image_barrier(c,c.a,neural);
       vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,5);
       codec.record(c.a,false,{original.view,proxy.view,neural.view},{output.view,proxy.view},constants);
@@ -705,7 +760,7 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     if(frame>=warmup){nr_times.push_back(nr_ms);total_times.push_back(total_ms);encode_times.push_back(encode_ms);decode_times.push_back(decode_ms);eval_cpu_times.push_back(eval_ms);wait_cpu_times.push_back(wait_ms);prep_cpu_times.push_back(prep_ms);}
     std::fprintf(csv,"%u,%u,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,%u,%u,%llu,%llu\n",frame+1,frame<warmup?1:0,nr_ms,encode_ms,decode_ms,total_ms,eval_ms,wait_ms,prep_ms,gpu.sm_mhz,gpu.mem_mhz,gpu.pstate,gpu.gpu_util,static_cast<unsigned long long>(gpu.budget_bytes),static_cast<unsigned long long>(gpu.usage_bytes));std::fflush(csv);
     std::printf("Vulkan frame %u/%u warmup=%u finite=1 changed=%zu nr=%.3f encode=%.3f decode=%.3f eval_cpu=%.3f submit_wait=%.3f prep_cpu=%.3f ms SM=%u MEM=%u P%u budget=%llu usage=%llu\n",frame+1,frames,frame<warmup?1:0,changed,nr_ms,encode_ms,decode_ms,eval_ms,wait_ms,prep_ms,gpu.sm_mhz,gpu.mem_mhz,gpu.pstate,static_cast<unsigned long long>(gpu.budget_bytes),static_cast<unsigned long long>(gpu.usage_bytes));
-    if(validation_errors){
+    if(validation_errors && (!guide_switch || validation_errors!=known_nr_validation_errors)){
       std::fclose(csv);
       std::fprintf(stderr,"VALIDATION_BLOCKED errors=%u; no validation messages filtered\n",validation_errors.load());
       CoreSession::log_result("Vulkan ReleaseFeature",NVSDK_NGX_VULKAN_ReleaseFeature(feature.handle));feature.handle=nullptr;
@@ -715,15 +770,16 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     }
   }
   std::fclose(csv);
+  if(guide_switch==2)need(create_count==4,"recreate decision did not replace each guide configuration");
   auto report=[](const char* label,const std::vector<double>&v){auto st=nr::summarize(v);need(st.has_value(),"no post-warmup samples");std::printf("SUMMARY %s count=%zu median=%.6f p90=%.6f min=%.6f max=%.6f ms\n",label,v.size(),st->median,st->p90,st->minimum,st->maximum);};
   report("NR",nr_times);report("encode",encode_times);report("decode",decode_times);report("codec+NR",total_times);report("eval_cpu",eval_cpu_times);report("submit_wait",wait_cpu_times);report("prepare_cpu",prep_cpu_times);
-  std::printf("SEQUENCE_PASS Vulkan core NR %ux%u frames=%u measured=%zu validation=%s errors=%u; feature_create_count=1 images=7 persistent; no D3D12/interop/split\n",w,h,frames,nr_times.size(),validation?"on":"off",validation_errors.load());
+  std::printf("SEQUENCE_COMPLETE Vulkan core NR %ux%u frames=%u measured=%zu validation=%s errors=%u known_NR_VUID=%u; feature_create_count=%u finite=1 guide_switch=%u converted=%u\n",w,h,frames,nr_times.size(),validation?"on":"off",validation_errors.load(),known_nr_validation_errors.load(),create_count,guide_switch,unsigned(converted_guides));
   CoreSession::log_result("Vulkan ReleaseFeature",NVSDK_NGX_VULKAN_ReleaseFeature(feature.handle));feature.handle=nullptr;
   bool clean=session.finish_vulkan(try_shutdown);
   std::printf("fixture finish clean_sdk_shutdown=%d shutdown_probe_stalled=%d idle_failed=%d exit_policy=%s\n",int(clean),int(session.shutdown_stalled),int(session.finish_failed),clean?"normal":"process-lifetime-no-op");
   std::fflush(nullptr);
-  if(!clean) ExitProcess(session.finish_failed?2:0);
-  return 0;
+  if(!clean) ExitProcess(session.finish_failed?2:validation_errors?1:0);
+  return validation_errors?1:0;
 }
 
 float half_to_float(uint16_t h) { // Same decoder as frame_replay.cpp.
@@ -878,7 +934,8 @@ int run(bool neural, const fs::path& runtime, const fs::path& core, uint32_t w, 
 int wmain(int argc, wchar_t** argv) {
   setvbuf(stdout, nullptr, _IONBF, 0); setvbuf(stderr, nullptr, _IONBF, 0);
   SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
-  bool neural = false, copy = false, verify = false, core_vk = false, core_d12 = false, validation = true, try_shutdown = false, readonly_inputs=false;
+  bool neural = false, copy = false, verify = false, core_vk = false, core_d12 = false, validation = true, try_shutdown = false, readonly_inputs=false,converted_guides=false;
+  unsigned guide_switch=0;
   fs::path runtime, core; uint32_t w = 3840, h = 1600, frames = 8, warmup=2;
   try {
     for (int i = 1; i < argc; ++i) {
@@ -887,19 +944,23 @@ int wmain(int argc, wchar_t** argv) {
       if (arg == L"--nr-core-vulkan") core_vk = true; else if (arg == L"--nr-core-d3d12") core_d12 = true;
       else if (arg == L"--copy") copy = true; else if (arg == L"--nr") neural = true;
       else if (arg == L"--readonly-inputs") readonly_inputs=true;
+      else if (arg == L"--converted-guides") converted_guides=true;
+      else if (arg == L"--guide-switch") {std::wstring mode=value();need(mode==L"reuse"||mode==L"recreate","guide switch must be reuse or recreate");guide_switch=mode==L"reuse"?1:2;}
       else if (arg == L"--warmup") warmup=std::stoul(value());
       else if (arg == L"--try-shutdown") try_shutdown = true;
       else if (arg == L"--verify-runtime") verify = true;
       else if (arg == L"--runtime") runtime = value(); else if (arg == L"--ngx-core") core = value();
       else if (arg == L"--width") w = std::stoul(value()); else if (arg == L"--height") h = std::stoul(value());
       else if (arg == L"--frames") frames = std::stoul(value()); else if (arg == L"--no-validation") validation = false;
-      else throw std::runtime_error("usage: dlss5_fixture --copy | --nr-core-vulkan | --nr-core-d3d12 | --nr --runtime PATH [--ngx-core PATH] [--width N --height N --frames N --warmup N] [--no-validation] [--readonly-inputs] [--try-shutdown]; --verify-runtime --runtime PATH is CPU-only");
+      else throw std::runtime_error("usage: dlss5_fixture --copy | --nr-core-vulkan | --nr-core-d3d12 | --nr --runtime PATH [--ngx-core PATH] [--width N --height N --frames N --warmup N] [--guide-switch reuse|recreate --converted-guides] [--no-validation] [--readonly-inputs] [--try-shutdown]; --verify-runtime --runtime PATH is CPU-only");
     }
     need(unsigned(copy)+unsigned(neural)+unsigned(verify)+unsigned(core_vk)+unsigned(core_d12) == 1, "select exactly one mode");
     need(w >= 32 && h >= 32 && w <= 8192 && h <= 8192 && frames >= 3 && frames <= 600 && warmup < frames, "dimensions/frames/warmup outside fixture bounds");
+    need(!guide_switch || (core_vk && w>=2560 && h>=1067 && frames>=12 && frames%4==0),"guide-switch requires Vulkan core, output >=2560x1067, >=12 frames divisible by 4");
+    need(!converted_guides||guide_switch,"converted-guides requires guide-switch");
     if (neural || verify || core_vk || core_d12) { need(!runtime.empty(), "--runtime required"); RuntimeFile checked; checked.verify(runtime, true); }
     if (verify) return 0;
-    if (core_vk) return run_vulkan_core(runtime, core, w, h, frames, validation, try_shutdown, warmup, readonly_inputs);
+    if (core_vk) return run_vulkan_core(runtime, core, w, h, frames, validation, try_shutdown, warmup, readonly_inputs,guide_switch,converted_guides);
 
     return run(neural || core_d12, runtime, core, w, h, frames, validation, core_d12);
   } catch (const std::exception& e) { std::fprintf(stderr, "FAIL/BLOCKED %s\n", e.what()); return 1; }
