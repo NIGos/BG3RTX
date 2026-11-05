@@ -1,6 +1,7 @@
 #include "../common/perf_hook_state.h"
 #include "../common/cpu_exact_cache.h"
 #include "../common/cpu_cascade_model.h"
+#include "../common/cpu_mapped_source.h"
 #include "../common/rt_capture_budget.h"
 #include "../common/vram_guard.h"
 #include "../common/omm_native_plain_recipes.h"
@@ -1164,17 +1165,37 @@ struct CcStats {
 CcStats g_cc_st;
 cascade::SetChanges g_cc_set_changes[kCcLayers]; // protected by g_cc_mu
 
+cpu_opt::BufferFacts capture_buffer_facts(VkBuffer buffer) {
+  return cpu_opt::buffer_facts(uint64_t(buffer),buffer_resource_epoch(),cfg_hot(CfgHot::cpu_opt4)!=0,[&]{
+    std::lock_guard lock(g_mu);cpu_opt::BufferFacts facts;
+    const auto usage=g_buffer_usage.find(buffer);const auto size=g_buffer_size.find(buffer);
+    facts.known=usage!=g_buffer_usage.end();
+    if(facts.known)facts.usage=usage->second;
+    facts.size_known=size!=g_buffer_size.end();
+    if(facts.size_known)facts.size=size->second;
+    return facts;
+  });
+}
+bool cascade_read(VkBuffer buffer,VkDeviceSize offset,void* dst,size_t bytes) {
+  if(!cfg_hot(CfgHot::cpu_opt4))return read_mapped(buffer,offset,dst,bytes);
+  return cpu_opt::mapped_read(uint64_t(buffer),offset,dst,bytes,buffer_resource_epoch(),cfg_hot(CfgHot::cpu_opt4)!=0,
+    [](uint64_t b,uint64_t off){return mapped_ptr(VkBuffer(b),off);});
+}
 bool cascade_static_candidate(const CmdState* s, const PipeInfo& pi) {
-  VkBufferUsageFlags usage = 0;
-  bool known = false;
-  if (pi.inst.ok && pi.inst.pos_binding < CmdState::kMaxVertexBindings) {
-    std::lock_guard<std::mutex> lock(g_mu);
-    const auto it = g_buffer_usage.find(s->vb[pi.inst.pos_binding].buffer);
-    known = it != g_buffer_usage.end();
-    if (known) usage = it->second;
+  if(!cfg_hot(CfgHot::cpu_opt4)) {
+    VkBufferUsageFlags usage=0;bool known=false;
+    if(pi.inst.ok && pi.inst.pos_binding<CmdState::kMaxVertexBindings){
+      std::lock_guard lock(g_mu);const auto it=g_buffer_usage.find(s->vb[pi.inst.pos_binding].buffer);
+      known=it!=g_buffer_usage.end();if(known)usage=it->second;
+    }
+    return cascade::static_candidate(pi.inst.ok,known && (usage&VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+      (usage&VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)!=0);
   }
-  return cascade::static_candidate(pi.inst.ok, known && (usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
-                                    (usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) != 0);
+  cpu_opt::BufferFacts facts;
+  if(pi.inst.ok && pi.inst.pos_binding<CmdState::kMaxVertexBindings)
+    facts=capture_buffer_facts(s->vb[pi.inst.pos_binding].buffer);
+  return cascade::static_candidate(pi.inst.ok,facts.known && (facts.usage&VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+    (facts.usage&VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)!=0);
 }
 
 // The cascade index (array layer) of a sun cascade pass, -1 for any other pass.
@@ -1215,11 +1236,11 @@ cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const Dr
       // Class A keeps exact stream/range identity; unknown layouts stay exact too.
       if(pull_at && geo_uniform_buffer_range(b.buffer,b.offset,pull_at+4) &&
          (b.range==VK_WHOLE_SIZE || b.range>=pull_at+4) &&
-         read_mapped(b.buffer,b.offset,model,sizeof model) &&
-         read_mapped(b.buffer,b.offset+pull_at,&pull_index,4) &&
+         cascade_read(b.buffer,b.offset,model,sizeof model) &&
+         cascade_read(b.buffer,b.offset+pull_at,&pull_index,4) &&
          query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera,cfg_hot(CfgHot::perf_hook_state)?s:nullptr) && camera.buffer &&
          (camera.range==VK_WHOLE_SIZE || camera.range>=224) && geo_uniform_buffer_range(camera.buffer,camera.offset,224) &&
-         read_mapped(camera.buffer,camera.offset+208,origin,sizeof origin) &&
+         cascade_read(camera.buffer,camera.offset+208,origin,sizeof origin) &&
          cpu_opt::model_position(d,model,origin,buffer_resource_epoch(),cfg_hot(CfgHot::cpu_opt3)!=0) &&
          (!pull_index || (query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,13,0,&pulled,cfg_hot(CfgHot::perf_hook_state)?s:nullptr) && pulled.buffer))) {
         d.instance=cascade::model_instance_key(model,pull_index,uint64_t(pulled.buffer),pulled.offset);
@@ -2843,10 +2864,9 @@ bool geo_native_hit_inputs(VkPipeline pipeline,native_hit::StaticInputs* out){
  *out=p->second.material_inputs;return out->valid;
 }
 bool geo_uniform_buffer_range(VkBuffer buffer,VkDeviceSize offset,VkDeviceSize bytes) {
-  std::lock_guard<std::mutex> lock(g_mu);
-  auto usage=g_buffer_usage.find(buffer);auto size=g_buffer_size.find(buffer);
-  return usage!=g_buffer_usage.end() && size!=g_buffer_size.end() && (usage->second&VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) &&
-    offset<=size->second && bytes<=size->second-offset;
+  const auto facts=capture_buffer_facts(buffer);
+  return facts.known && facts.size_known && (facts.usage&VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) &&
+    offset<=facts.size && bytes<=facts.size-offset;
 }
 
 void register_geo_hooks(HookMap& m) {

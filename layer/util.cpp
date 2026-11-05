@@ -452,7 +452,8 @@ static const CfgHotKey kCfgHot[] = {
   {"rt_hair_groom_primary", 0},
   {"cpu_opt1", 0},
   {"cpu_opt2", 1},
-  {"cpu_opt3", 0},
+  {"cpu_opt3", 1},
+  {"cpu_opt4", 0},
   {"rt_hair_pool_trim", 1},
   {"rt_dyn_hold", 4},
 };
