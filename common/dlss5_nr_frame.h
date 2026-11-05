@@ -32,6 +32,26 @@ struct Inputs {
   float scale[2]{}, jitter[2]{};
   bool jittered{}, reset{};
 };
+// Immutable feature/recording-image contract. Jitter and reset vary per frame;
+// geometry, source formats and motion convention require fresh NGX history.
+struct FeatureKey {
+  Inputs guides{};
+  uint32_t color_format{},depth_format{},motion_format{};
+  bool hdr{},inverted{};
+};
+inline bool recreate(const FeatureKey& a,const FeatureKey& b) {
+  if(a.color_format!=b.color_format || a.depth_format!=b.depth_format ||
+     a.motion_format!=b.motion_format || a.hdr!=b.hdr || a.inverted!=b.inverted ||
+     a.guides.jittered!=b.guides.jittered)return true;
+  for(unsigned i=0;i<2;++i) {
+    const auto& x=a.guides;const auto& y=b.guides;
+    if(x.render[i]!=y.render[i] || x.output[i]!=y.output[i] ||
+       x.depth_extent[i]!=y.depth_extent[i] || x.motion_extent[i]!=y.motion_extent[i] ||
+       x.depth_base[i]!=y.depth_base[i] || x.motion_base[i]!=y.motion_base[i] ||
+       x.motion_size[i]!=y.motion_size[i] || x.scale[i]!=y.scale[i])return true;
+  }
+  return false;
+}
 struct Guides {
   uint32_t output[2], region_base[2], region_size[2], processing[2];
   uint32_t motion_full[2], depth_full[2];
