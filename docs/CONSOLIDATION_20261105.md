@@ -21,13 +21,13 @@ Status values: open, fixing (branch), fixed (commit), removed, deferred (reason)
 | L8 | layer/hotreload.cpp:421; rrpost.cpp:244 | P0 | CreateImageView failure ignored, allocation reported OK | confirmed | cons-layer | fixed (bundle35) |
 | L9 | layer/ngx.cpp:516, bvhsplit.cpp:141, rtscene.cpp:284, rrpost.cpp:238, water.cpp:268, emissive.cpp:298 | P0 | Bind*Memory results unchecked | confirmed | cons-layer | fixed (bundle35) |
 | L10 | layer/water.cpp:1017,1063; emissive.cpp:1419,1455 | P0 | Begin/End command buffer failures ignored before QueueSubmit | confirmed | cons-layer | fixed (bundle35) |
-| L11 | layer/rrpost.cpp:458-472; layer/cmd.cpp:102-119 | P0 | RR descriptor ring (256) has no completion ownership | confirmed | layer-submit | fixed (layer-submit, uncommitted): executable recording lease plus existing queue-specific life_before_destroy completion poll; build + CTest PASS 184/184 |
-| L12 | layer/ngx.cpp:829-841,950,1262-1265,1732-1743 | P0 | NGX guides marked initialized at recording, not submission | confirmed | layer-submit | fixed (layer-submit, uncommitted): RecordingInit publishes initialization/content only on successful submit; unrelated pending producers refused; discard cancels; build + CTest PASS 184/184 |
+| L11 | layer/rrpost.cpp:428,490 | P0 | RR descriptor ring (256) has no completion ownership | suspected | cons-layer | deferred: needs submission-dependency tracking (record/submit/discard ownership); post-release |
+| L12 | layer/ngx.cpp:825,936 | P0 | NGX guides marked initialized at recording, not submission | suspected | cons-layer | deferred: needs submission-dependency tracking (record/submit/discard ownership); post-release |
 | L13 | layer/ngx.cpp:542,550; rrpost.cpp:901 | P0 | Guide view read without the mutex that guards resize | suspected | cons-layer | fixed (bundle35) |
 | L14 | layer/assetdb.cpp:247,281,286,301 | P0 | Asset DB bounds checks can overflow (corrupt file) | confirmed | cons-layer | fixed (bundle35) |
 | L15 | layer/alphatest.cpp:1211,1214,452 | P1 | Alpha mask init committed at recording time | confirmed | cons-layer | fixed (bundle35) |
 | L16 | layer/alphatest.cpp:682,1182 | P1 | Teardown leaves dummy init latched for the next device | confirmed | cons-layer | fixed (bundle35) |
-| L17 | layer/rrpost.cpp:1152-1154,1193-1194,1348-1359 | P1 | Temporal history accepts an unsubmitted producer | confirmed | layer-submit | fixed (layer-submit, uncommitted): local output remains usable in its recording; history validity publishes at submit, discard invalidates; build + CTest PASS 184/184 |
+| L17 | layer/rrpost.cpp:1147,1117 | P1 | Temporal history accepts an unsubmitted producer | suspected | cons-layer | deferred: needs submission-dependency tracking (record/submit/discard ownership); post-release |
 | L18 | layer/streamline.cpp:833; cmd.cpp:497 | P1 | Discarded FG recordings exhaust the 8 copy slots | confirmed | cons-layer | fixed (bundle35) |
 | L19 | layer/shaders.cpp:53,115,515 | P1 | thread_local DXC COM pointers leak | confirmed | cons-layer | fixed (bundle35) |
 | L20 | layer/util.cpp:85; shaders.cpp:400 | P2 | write_file ignores fwrite/fclose errors (shader manifest) | confirmed | cons-layer | fixed (bundle35) |
@@ -94,22 +94,3 @@ hidden until its update, user decision), restart notes on every card, plain help
 Performance order, preset review dialog, Help & support (tested only on an RTX 5090, GPU choice), first-run game
 folder notice, installer texts. No clipped text or wrapped buttons at 100/125/150/200%. Before/after screenshots:
 `.claude/worktrees/cons-ui/.scratch/ui-review/` (not in Git). 167/167 tests at the time.
-
-### Deferred layer submission findings (layer-submit, 2026-11-05)
-
-L11/L12/L17 are confirmed by the recording/reset/submit paths, without claiming
-that a discarded producer was observed in a live run. Before the fixes, `run()`
-wrapped after 256 dispatches regardless of recording or completion; guide barriers
-set `initialized` immediately and guide freshness used only a CPU frame tag;
-temporal dispatch immediately set history valid and advanced its metadata.
-The existing reset/free/pool reset hooks can discard these recordings without a
-successful queue submission. `QueueSubmit` and `QueueSubmit2` now publish post
-state alongside L15's alpha submission hook. Secondary recording IDs follow the
-primary's existing `CmdExecuteCommands` bookkeeping. No new submission framework.
-Descriptor slots remain immutable until recording release AND the existing
-queue-specific lifetime completion check passes; exhaustion returns failure.
-Pending guide/history producers cannot be consumed from unrelated recordings.
-`tests/recording_lifecycle_test.py`: PASS 7 tests. Added CPU cases to
-`fg_copy_lease_test` for 256 occupied slots, reset before/after completion, stale
-recording IDs and submit/discard publication. BelowNormal `scripts/build.ps1 -Test`
-PASS: build 74 s; CTest 184/184, 255.62 s. No game launch or queue writes.
