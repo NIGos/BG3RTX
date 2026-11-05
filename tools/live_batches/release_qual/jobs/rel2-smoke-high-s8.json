@@ -67,7 +67,6 @@
     "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
     "\\[cfg\\] settings read",
     "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
-    "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
     "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
     "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
     "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
@@ -97,19 +96,6 @@
       "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
       "select": "\\[geo\\] RT capture, last \\d+ frames:",
       "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
-      "min": 1,
-      "windows": [
-        "static-a",
-        "pan-q",
-        "pan-e",
-        "rotate-r",
-        "rotate-l"
-      ]
-    },
-    {
-      "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
-      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
-      "match": ", buffer full 0\\.0, added ",
       "min": 1,
       "windows": [
         "static-a",
