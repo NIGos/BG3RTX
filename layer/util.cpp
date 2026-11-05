@@ -3,6 +3,7 @@
 
 #include "../common/settings.h"
 #include "../common/experimental_ab.h"
+#include "../common/hotkeys.h"
 #include "../common/log_rotate.h"
 
 #include <atomic>
@@ -199,10 +200,13 @@ static void cfg_log_effective(const settings::Map& raw, bool derived) {
   log("[cfg] keys:%s%s", keys.c_str(), derived ? " (rt_build from auto)" : "");
 }
 
-// A/B hotkeys (ab_hotkey=1): Ctrl+Shift+F9 always switches all RT off/on;
+// A/B hotkeys (ab_hotkey=1): configurable master RT and DLSS 5 shortcuts;
 // Ctrl+Shift+F10 flips the last saved Experimental GUI choice, if eligible.
 // The master override leaves DLSS and frame generation untouched.
 static std::atomic<bool> g_ab_off{false};
+static std::atomic<int> g_nr_bypass{-1}; // -1: use the file value; 0/1: live override
+static bool g_nr_startup=false;
+static hotkeys::Key g_shortcuts[2]={hotkeys::parse(hotkeys::defaults[0]),hotkeys::parse(hotkeys::defaults[1])};
 // rt is a startup capability, not a live dispatch gate. Water has a separate forward-pass
 // route; geometry also gates its native shader/Fresnel replacement. Groom gates primary
 // strand swaps even when their startup capability remains enabled.
@@ -218,7 +222,7 @@ static bool ab_overridden(const char* key) {
 }
 
 static void ab_poll_hotkey() {
-  static bool was_master_down = false, was_target_down = false;
+  static bool was_master_down = false, was_target_down = false, was_nr_down = false;
   // The toggle's cost: the longest gap between presents in the 3 s after it (a shader fetched
   // or compiled on the render thread, a pipeline created) is logged once.
   static LARGE_INTEGER freq{}, last{}, since{};
@@ -251,7 +255,18 @@ static void ab_poll_hotkey() {
         (unsigned long long)toggle_frame, (unsigned long long)frame_index(), g_ab_off.load() ? "OFF" : "ON");
   }
   const bool modifiers = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
-  const bool master_down = modifiers && (GetAsyncKeyState(VK_F9) & 0x8000);
+  hotkeys::Key bindings[2]; bool nr_started;
+  { std::lock_guard<std::mutex> lock(g_cfg_mu); bindings[0]=g_shortcuts[0]; bindings[1]=g_shortcuts[1]; nr_started=g_nr_startup; }
+  const unsigned mods=((GetAsyncKeyState(VK_CONTROL)&0x8000)?1:0)|((GetAsyncKeyState(VK_SHIFT)&0x8000)?2:0)|((GetAsyncKeyState(VK_MENU)&0x8000)?4:0);
+  auto down=[&](hotkeys::Key k){return k.valid && k.key && mods==k.mods && (GetAsyncKeyState(k.key)&0x8000);};
+  const bool master_down = down(bindings[0]);
+  const bool nr_down=down(bindings[1]);
+  if(nr_down && !was_nr_down && nr_started && cfg_int("ab_hotkey",1)) {
+    const bool bypass=cfg_int("dlss5_nr_bypass",0)==0;
+    g_nr_bypass.store(bypass?1:0);
+    log("[dlss5] hotkey: NR %s",bypass?"off":"on");
+  }
+  was_nr_down=nr_down;
   const bool target_down = modifiers && (GetAsyncKeyState(VK_F10) & 0x8000);
   // ab_off (ini, default 0): the same toggle from the settings, for the queue (it cannot press the hotkey): a
   // change of the key toggles A/B to its value.
@@ -275,7 +290,7 @@ static void ab_poll_hotkey() {
     } else {
       bool off = !g_ab_off.load();
       g_ab_off.store(off);
-      log("[ab] %s: ray tracing %s (the game's own image %s)", cfg_edge ? "ab_off" : "Ctrl+Shift+F9", off ? "OFF" : "ON",
+      log("[ab] %s: ray tracing %s (the game's own image %s)", cfg_edge ? "ab_off" : hotkeys::format(bindings[0]).c_str(), off ? "OFF" : "ON",
           off ? "shown" : "replaced again");
       log("A/B: ab_off=%d",off ? 1 : 0);
     }
@@ -340,6 +355,15 @@ static void cfg_read_files() {
   next["detailed_logging"] = startup.at("detailed_logging");
   {
     std::lock_guard<std::mutex> lock(g_cfg_mu);
+    g_nr_startup = settings::map_int(startup,"dlss5_nr",0)!=0;
+    auto rt=settings::lookup(next,"hotkey_rt_toggle"), nr=settings::lookup(next,"hotkey_dlss5");
+    auto error=hotkeys::validate(rt,nr);
+    if(!error.empty()){log("[cfg] keyboard shortcuts disabled: %s",error.c_str());rt=nr="None";}
+    g_shortcuts[0]=hotkeys::parse(rt);g_shortcuts[1]=hotkeys::parse(nr);
+    static int last_bypass=settings::map_int(next,"dlss5_nr_bypass",0);
+    const int bypass=settings::map_int(next,"dlss5_nr_bypass",0);
+    if(bypass!=last_bypass)g_nr_bypass.store(-1);
+    last_bypass=bypass;
     g_cfg.swap(next);
   }
   for (const std::string& n : notes) log("[cfg] WARNING %s", n.c_str());
@@ -390,6 +414,10 @@ static void cfg_check_literal(const char* key, const CfgDefault& d, const std::s
 // The merged value of `key`, else its settings.h default (before the first cfg_poll, or a
 // key no layer has), else false (a key in no table: the caller's literal applies).
 static bool cfg_raw(const char* key, std::string& out, const CfgDefault** def) {
+  if (std::strcmp(key,"dlss5_nr_bypass")==0) {
+    const int bypass=g_nr_bypass.load();
+    if(bypass>=0){*def=nullptr;out=bypass?"1":"0";return true;}
+  }
   if (ab_overridden(key)) {   // the A/B hotkey: every ray-traced effect off
     *def = nullptr;
     out = "0";

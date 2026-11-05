@@ -31,7 +31,7 @@ These rules come from mistakes already made in this repo. They apply on every br
   shaders must compile to byte-identical SPIR-V (check it): that proves the default path is untouched.
 - `common/settings.h` = the one table of settings. New key: add it to `bg3rtx.ini`, run
   `python scripts/gen_settings_defaults.py`, and the settings test must pass. A user knob's category is
-  Lighting, Surfaces, Performance or Advanced: the launcher renders no knobs in any other page.
+  Lighting, Surfaces, Performance, Advanced or DLSS 5: the launcher renders no knobs in any other page.
 - `data/assetdb` = offline game data (lights, materials, roofs, probes); `tools/assets` builds it.
 - Offline work runs at BelowNormal priority (`scripts/low-priority.ps1`, dot-sourced by build and
   merge-green; children inherit it). The game stays Normal: below builds it starves its level load.

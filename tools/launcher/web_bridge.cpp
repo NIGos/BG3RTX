@@ -1,6 +1,7 @@
 ﻿#include "web_bridge.h"
 #include "version.h"
 #include "ui_state.h"
+#include "../../common/hotkeys.h"
 #include <charconv>
 #include <variant>
 #include <climits>
@@ -129,19 +130,21 @@ std::string change_line(int i,int from,int to){
 }
 }
 Bridge::Bridge(State& state,Hooks hooks):state_(state),hooks_(std::move(hooks)),saved_(state.values),saved_preset_(state.preset) {
-  auto m=effective();dev=st::same_value(st::lookup(m,"dev"),"1");
+  auto m=effective();for(int i=0;i<2;++i){auto v=st::lookup(m,bg3::hotkeys::ids[i]);if(!v.empty())state_.shortcuts[i]=state_.loaded_shortcuts[i]=v;}dev=st::same_value(st::lookup(m,"dev"),"1");
   experimental=saved_experimental_=!dev&&st::same_value(st::lookup(m,"experimental_options"),"1");
   for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k)||(k.kind==st::Kind::Choice&&!st::choice_visible(k,state_.values[i],dev,opt_in())))state_.values[i]=-1;}
   saved_=state_.values;
 }
 st::Map Bridge::effective() const {st::Map m;st::apply_layer(m,state_.base);st::apply_layer(m,state_.user);for(int i=0;i<st::kKnobCount;++i){st::KVList kv;st::knob_kvs(st::kKnobs[i],state_.values[i],kv);for(auto& v:kv)m[v.first]=v.second;}return m;}
-int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L"")+int(!dev&&experimental!=saved_experimental_)+int(state_.dlss5_runtime_path!=state_.loaded_dlss5_runtime_path));}
+int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L"")+int(!dev&&experimental!=saved_experimental_)+int(state_.dlss5_runtime_path!=state_.loaded_dlss5_runtime_path)+int(state_.shortcuts[0]!=state_.loaded_shortcuts[0])+int(state_.shortcuts[1]!=state_.loaded_shortcuts[1]));}
 bool Bridge::shown(const st::Knob& k) const {return st::knob_visible(k,dev,opt_in());}
 bool Bridge::is_collection_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="prepareReport";}
 bool Bridge::is_export_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="exportReport";}
 bool Bridge::is_cancel_collection_intent(const std::string& message){Object o;if(!Parser{message}.parse(o))return false;auto type=get<std::string>(o,"type");return type=="closeReport"||type=="cancelReport";}
 void Bridge::set_compatibility(GraphicsInspection p,int selected){pending_play_=false;preview_kind_.clear();inspection_=std::move(p);selected_=selected;if(selected_<0&&inspection_.adapters.size()==1)selected_=0;compatibility_=assess_compatibility(inspection_,selected_);state_.caps=compatibility_.caps;state_.suggested=compatibility_.model_preset;state_.have_gpu=selected_>=0&&size_t(selected_)<inspection_.adapters.size();if(state_.have_gpu)state_.gpu=inspection_.adapters[selected_].gpu;}
 bool Bridge::save_preview(bool enable_required){
+  auto shortcut_error=bg3::hotkeys::validate(state_.shortcuts[0],state_.shortcuts[1]);
+  if(!shortcut_error.empty()){blocked_={shortcut_error};preview_kind_="save";return false;}
   auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental,opt_in());
   preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;ab_selection_.append(preview_keys_);blocked_=p.blocked;changes_.clear();
   for(int i:p.changed)changes_.push_back(change_line(i,state_.values[i],p.values[i]));
@@ -167,7 +170,7 @@ std::string Bridge::handle(const std::string& message){
       State candidate=state_;candidate.values=preview_values_;std::string error;
       // The release opt-in travels with the settings it unlocks; Off removes the key.
       if(!dev)candidate.user_text=with_raw_key(candidate.user_text,"experimental_options",experimental?"1":"");
-      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);state_.loaded_dlss5_runtime_path=state_.dlss5_runtime_path;ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;saved_experimental_=experimental;preview_kind_.clear();status_="Saved.";}
+      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);state_.loaded_dlss5_runtime_path=state_.dlss5_runtime_path;for(int i=0;i<2;++i)state_.loaded_shortcuts[i]=state_.shortcuts[i];ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;saved_experimental_=experimental;preview_kind_.clear();status_="Saved.";}
       else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;}
     }
     if(pending_play_&&preview_kind_.empty()){
@@ -177,12 +180,21 @@ std::string Bridge::handle(const std::string& message){
     }return state_json();
   }
   // An edit invalidates the exact preview to prevent stale confirmations.
-  if(type=="set"||type=="preset"||type=="discard"||type=="experimental"||type=="browseDlss5Runtime"||type=="clearDlss5Runtime"){preview_kind_.clear();pending_play_=false;}
-  if(type=="set"){
+  if(type=="shortcut"||type=="resetShortcut"||type=="set"||type=="preset"||type=="discard"||type=="experimental"||type=="browseDlss5Runtime"||type=="clearDlss5Runtime"){preview_kind_.clear();pending_play_=false;}
+  if(type=="shortcut"||type=="resetShortcut"){
+    auto id=get<std::string>(o,"id");int index=id==bg3::hotkeys::ids[0]?0:id==bg3::hotkeys::ids[1]?1:-1;
+    if(index<0){status_="Unknown keyboard shortcut.";return state_json();}
+    auto value=type=="resetShortcut"?std::string(bg3::hotkeys::defaults[index]):get<std::string>(o,"value");
+    auto rt=index==0?value:state_.shortcuts[0],nr=index==1?value:state_.shortcuts[1];
+    auto error=bg3::hotkeys::validate(rt,nr);
+    if(!error.empty())status_=error;
+    else {state_.shortcuts[index]=bg3::hotkeys::format(bg3::hotkeys::parse(value));status_="Keyboard shortcut changed. Save to apply.";}
+  }
+  else if(type=="set"){
     int i=st::knob_index(get<std::string>(o,"id"));int value=get<int>(o,"value",INT_MIN);
     if(i<0||!shown(st::kKnobs[i])){status_="This option is unavailable. Check its requirements in Help & support.";return state_json();}
     auto& k=st::kKnobs[i];bool valid=k.kind==st::Kind::Choice?st::choice_available(k,value,dev,experimental,state_.caps,opt_in()):((k.slider.has_off&&value==0)||(value>=k.slider.min&&value<=k.slider.max&&(value-k.slider.min)%k.slider.step==0));
-    if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value,opt_in());state_.values[i]=value;status_.clear();}else status_="This option is unavailable. Check its requirements in Help & support.";
+    if(st::choice_requires_experimental(k,value)&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value,opt_in());state_.values[i]=value;status_.clear();}else status_="This option is unavailable. Check its requirements in Help & support.";
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Preset unavailable. Choose another preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
@@ -200,7 +212,7 @@ std::string Bridge::handle(const std::string& message){
       status_=on?"Experimental options shown. Save to keep them.":"Experimental options hidden and reset to Off.";
     }
   }
-  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;state_.dlss5_runtime_path=state_.loaded_dlss5_runtime_path;refresh_runtime();if(!dev)experimental=saved_experimental_;status_="Changes discarded.";}
+  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;for(int i=0;i<2;++i)state_.shortcuts[i]=state_.loaded_shortcuts[i];state_.dlss5_runtime_path=state_.loaded_dlss5_runtime_path;refresh_runtime();if(!dev)experimental=saved_experimental_;status_="Changes discarded.";}
   else if(type=="save"){pending_play_=false;save_preview(get<std::string>(o,"policy")=="enable");}
   else if(type=="play"){
     if(!can_play_)status_="Choose the game folder or close the running game to enable Play.";
@@ -260,6 +272,7 @@ std::string Bridge::state_json() const {
   for(size_t i=0;i<inspection_.adapters.size();++i){if(i)out+=",";out+="{\"value\":"+std::to_string(i)+",\"label\":"+q(inspection_.adapters[i].gpu.name)+"}";}out+="]}";
   out+=",\"presetDescriptions\":[";for(int p=0;p<st::kPresetCount;++p){if(p)out+=",";out+=q(st::kPresetDesc[p]);}out+="]";
   out+=",\"version\":"+q(BG3RTX_PRODUCT_VERSION)+",\"modStatus\":"+q(mod_status_);
+  out+=",\"shortcuts\":{\"hotkey_rt_toggle\":"+q(state_.shortcuts[0])+",\"hotkey_dlss5\":"+q(state_.shortcuts[1])+"}";
   out+=",\"dlss5RuntimePath\":"+q(state_.dlss5_runtime_path)+",\"dlss5RuntimeStatus\":"+q(state_.dlss5_runtime_status.empty()?"Runtime status is checked when the game folder or selected file changes. NVIDIA-signed runtimes are preferred.":state_.dlss5_runtime_status);
   out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Generated frames do not increase the rendered frame rate.\"";
   out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"presetLabel\":"+q(preview_preset_>=0?st::kPresetLabel[preview_preset_]:st::kPresetLabel[state_.preset])+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";

@@ -148,10 +148,14 @@ Detailed logging enables these reports; startup/state/failure logs are retained.
 
 ## 4. Settings, runtime staging and redistribution
 
-Experimental page: **DLSS 5 Neural Rendering**, `dlss5_nr=0|1`, Off in every preset.
+Dedicated **DLSS 5** page (visible without experimental opt-in): **DLSS 5 Neural Rendering**, `dlss5_nr=0|1`, Off in every preset.
 Requires RR and pre-post processing, cold enable/runtime changes require restart.
 The native and WebView launchers expose Browse... for `dlss5_nr_runtime` beside
-that option. Central settings/INI/defaults/schema and release opt-in policy agree.
+that option. Central settings/INI/defaults/schema agree. The experimental description remains.
+Ctrl+Shift+F8 (customisable on DLSS 5) toggles the live bypass only if NR was enabled at startup.
+The master RT shortcut is customisable on Advanced (default Ctrl+Shift+F9); F10 stays reserved.
+Bindings parse once per settings reload; invalid or conflicting INI bindings disable both shortcuts
+and log a configuration warning. No shader variants or ABI changes.
 `dlss5_nr_bypass=1` is a hidden live diagnostic bypass, default 0; it resets history
 on resume and permits an in-run A/B without pretending device enable is live.
 

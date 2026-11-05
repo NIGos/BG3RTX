@@ -72,7 +72,10 @@ inline std::string discovery_status(const State& state,const std::wstring& game)
   for(const auto& path:candidate_paths(game,widen(state.dlss5_runtime_path)))files.push_back(inspect(path));
   std::vector<CandidateStatus> states;for(const auto& file:files)states.push_back(file.status);
   auto chosen=select(states);
-  if(!chosen)return "No compatible DLSS 5 runtime found. Browse for nvngx_dlssnr.dll version 310.8 or 310.9 (x64).";
+  if(!chosen){
+    bool exists=false;for(const auto& file:files){std::error_code error;if(fs::is_regular_file(file.path,error))exists=true;}
+    return exists?"Runtime rejected: no compatible DLSS 5 runtime. Choose nvngx_dlssnr.dll version 310.8 or 310.9 (x64).":"No DLSS 5 runtime found. Browse for nvngx_dlssnr.dll version 310.8 or 310.9 (x64).";
+  }
   const auto& file=files[*chosen];
   if(file.status.signed_nvidia)return "NVIDIA-signed runtime found: "+file.version+". Prepared before Play.";
   return "Only custom/unsigned runtimes found: "+file.version+" ("+trust_status(file)+"). NVIDIA core may reject it (0xbad0000b). Prepared before Play.";
