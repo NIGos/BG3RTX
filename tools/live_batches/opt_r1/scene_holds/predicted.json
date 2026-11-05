@@ -12,8 +12,8 @@
   "device_startup": "Ultra stride 88; High target only after warmup",
   "limits": "No game launch or staging authorized. Reject below 0.05 ms. Three OFF repeats derive energy noise; missing cost, export, QA or readiness invalidates.",
   "offline_exactness": "CPU dyn_hold fixture passes: unchanged packing kernel copies position, validity w and UV bits; compact-layout gates retain native hair/tileset recipes and reject incompatible captures. Release shader equivalence is not applicable: no shader changes; shader request delta 0.",
-  "offline_validation": "Final build PASS 175/175; newly registered opt_scene_jobs_test PASS 1/1 (12 underlying analyzer cases). No measured saving or live quality pass claimed.",
   "energy": "Float pre-post scene RGB and luminance; ON versus adjacent OFF bracket, band derived from all OFF repeats.",
   "flicker": "Existing QA temporal test, ON versus every OFF; geometry motion excluded from both windows.",
-  "disk": "No raw images; K8 edge bursts plus dumps.json means. Retain summaries; batch target below 2 GB."
+  "disk": "No raw images; K8 edge bursts plus dumps.json means. Retain summaries; batch target below 2 GB.",
+  "offline_validation": "Final build PASS 175/175; newly registered opt_scene_jobs_test PASS 1/1 (12 underlying analyzer cases). No measured saving or live quality pass claimed."
 }

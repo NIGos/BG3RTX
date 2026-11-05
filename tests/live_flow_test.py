@@ -33,6 +33,27 @@ def fixture(name="one"):
 
 
 class PipelineReadinessTests(unittest.TestCase):
+    def test_cpu_and_push_values_never_wait_for_pipeline_generations(self):
+        j = dict(set='rt_scene_compact_holds=0,rt_build=auto,gi_rt=1,gi_rr_rays=2,gi_strength=1')
+        p = [phase('before', values=''), phase('after', values=
+             'rt_scene_compact_holds=1,rt_build=1,gi_rr_rays=1,gi_strength=0.5')]
+        f.pipeline_readiness.apply(j, p)
+        self.assertEqual(f.pipeline_readiness.requirements(j, p), [{}, {}])
+        self.assertFalse(any(row.get('wait_log') for row in p))
+
+    def test_resolved_auto_matches_renderer_consumers(self):
+        resolve = f.pipeline_readiness.resolved
+        self.assertEqual(resolve(dict(rt_build='auto'))['rt_build'], '0')
+        for consumer in ('gi_rt', 'rt_shadows', 'rt_local_shadows', 'rt_reflections', 'rt_debug'):
+            self.assertEqual(resolve(dict(rt_build='auto', **{consumer: '1'}))['rt_build'], '1')
+
+    def test_high_target_never_waits_for_disabled_box_or_exact_k(self):
+        j = dict(set='ls_box=1,ls_k=1,gi_far=1,gi_hit_direct=1,gi_hit_sun=1')
+        p = [phase('before', values=''), phase('high', values='ls_box=0,ls_k=0,gi_far=0,gi_hit_direct=0,gi_hit_sun=0')]
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(any('rt_local_shadows_box' in rx or '_k' in rx for rx in p[1]['wait_log']))
+        self.assertIn(f.pipeline_readiness.GI_TRACE, p[1]['wait_log'])
+
     def test_explicit_conservative_mapping_keeps_generic_completion_and_quiet(self):
         j = dict(set="rt_hair_fibre=0")
         p = [phase("before"), phase("on", values="rt_hair_fibre=1")]
@@ -61,6 +82,9 @@ class PipelineReadinessTests(unittest.TestCase):
         p = [phase("before"), phase("on", values="new_shading_key=1")]
         f.pipeline_readiness.apply(j, p)
         self.assertIn("unknown pipeline mapping", f.pipeline_readiness.problems(j, p)[0])
+        self.assertFalse(p[1].get('wait_log'))
+        p[1]['wait_log'] = [f.pipeline_readiness.QUIET]
+        self.assertTrue(f.pipeline_readiness.problems(j, p))
         p[1]["wait_log"].append("new_shading_key pipeline ready")
         self.assertFalse(f.pipeline_readiness.problems(j, p))
 
@@ -585,14 +609,14 @@ class FlowTests(unittest.TestCase):
         p.insert(3, phase("warm-too-late", values="rr=1"))
         self.assertTrue(f.warmup_problems(j, p))
 
-    def test_hair_cpu_routing_needs_readiness_but_not_pre_warming(self):
+    def test_hair_cpu_routing_needs_no_pipeline_readiness_or_pre_warming(self):
         j, p = fixture()
         p[2]["set"] += ",rt_hair_groom_primary_order=1,rt_hair_primary_passes=8"
         self.assertFalse(f.warmup_problems(j, p))
         p[2].pop("wait_log")
         problems = f.pipeline_readiness.problems(j, p)
-        self.assertTrue(any("rt_hair_groom_primary_order" in e for e in problems))
-        self.assertTrue(any("rt_hair_primary_passes" in e for e in problems))
+        self.assertFalse(any("rt_hair_groom_primary_order" in e for e in problems))
+        self.assertFalse(any("rt_hair_primary_passes" in e for e in problems))
         f.pipeline_readiness.apply(j, p)
         self.assertFalse(f.pipeline_readiness.problems(j, p))
 
@@ -972,6 +996,10 @@ class ReadinessBudgetTests(unittest.TestCase):
 
     def test_retime_bounds_pipeline_timeout_by_median_plus_margin(self):
         j, p = fixture()
+        # RR is a vendor switch, not a GI shader request. Exercise a real
+        # specialization transition for this pipeline-budget regression.
+        j['set'] += ',gi_far=0'
+        p[1]['set'] += ',gi_far=1'
         j['live_flow'] = dict(settings_latency_s=1, settling_margin_s=2)
         with patch.object(f.readiness_budget, 'estimate', return_value=dict(seconds=7, samples=3, source='VALID median')):
             f.retime(j, p)

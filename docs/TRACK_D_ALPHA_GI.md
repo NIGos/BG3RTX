@@ -664,3 +664,34 @@ same-run OFF/ON/OFF static identity and separate 300-sample cost windows.
 Production GPU replay also passes solid/clear native alpha fixtures (277 real candidates per case), independently and with the other candidates; GI/depth/statistics bytes match OFF. Full-scene coverage and GPU savings remain unmeasured.
 
 Key-off gate: 173 requests/194 entries match HEAD after specialization and unused-capability removal; validation passes. All keys remain off until live cost and combined Ultra qualification.
+
+## Origin normal load on demand (2026-11-05, opt-origin, READY_FOR_LIVE)
+
+`rt_origin_lazy_normal=1` (specialization 1027, default 0, developer Performance
+control) defers the shading-normal fetch/decode/lighting-space normalization until
+the final geometric normal is degenerate, the output is nonfinite, or statistics
+need the comparison. The original fallback order and orientation remain intact.
+The origin texture, physical hair texture, ray queries and counters are unchanged.
+
+At 3840 x 1600 the 8 x 8 pass launches 6,144,000 invocations / 96,000 groups.
+Positive depth requires four neighbouring depth reads, a geometric normal, an
+alpha-tested closest ray in a depth-tolerance window, and hit-normal reconstruction.
+Native hair can add procedural intersection work; physical hair origin can add a
+competing-receiver query. Cascade selects the instance mask, not another ray.
+The supplied inn profile averages 1.18 ms; no per-operation timings are available.
+All pixels can be read by later full-resolution or arbitrary hit-pixel consumers:
+skipping rays based on the GI sampling grid is unsafe. Background already exits.
+Aborted-hit normal lookup can update guard counters, so that skip is not exact.
+No occupancy change is claimed; group size remains 64. ON removes a normal fetch
+and its decode for finite nondegenerate output with statistics off, and shortens
+the lifetime of three normal components across traversal.
+
+OFF release equivalence against main passes all three origin requests, covering
+17 assignments, with 1027 fixed to 0; request delta 0. The decision fixture covers
+10 named cases and 16,384 edge states. Compiled ON has a conditional normal fetch
+after traversal in the actual native inn state; OFF fetches before traversal.
+Draft `tools/live_batches/opt_r2/origin/` uses one static inn run, OFF/ON/OFF/ON,
+detailed logging, separate origin GPU cost / float pre-post energy / rendered K8
+QA windows. Each ON must save more than OFF-repeat cost spread, preserve energy
+within OFF-derived noise, and pass the existing temporal detector versus both OFFs.
+GPU saving remains unmeasured; no game launch or queue staging occurred.

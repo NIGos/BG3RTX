@@ -1,0 +1,38 @@
+{
+  "status": "OFFLINE_CHECKS_PENDING",
+  "key": "gi_roof_reject",
+  "spec_id": 1027,
+  "default": 0,
+  "scene": "The Blushing Mermaid - 96h 39m",
+  "preset": "ultra",
+  "states": [
+    [
+      "off-a",
+      0
+    ],
+    [
+      "on-a",
+      1
+    ],
+    [
+      "off-b",
+      0
+    ],
+    [
+      "on-b",
+      1
+    ]
+  ],
+  "expected_trace_saving_ms": [
+    0.3,
+    1.5
+  ],
+  "measured_saving_ms": null,
+  "exactness": "After emission and successful screen/SHaRC paths; blocked hidden t > RB forces far_sun false, radiance false, fr.w0 zero. Original fallback retained. rt_stats bypasses optimization.",
+  "cost": "Both ON windows must reduce GI trace and enclosing GI beyond OFF-repeat spread. Report all six active per-pass timers independently; contact is absent with RT sun on. Do not add nested timers.",
+  "energy": "Each ON RGB/luminance delta against adjacent OFF baseline must be within absolute OFF-repeat difference, using float pre-post dumps.json means only.",
+  "qa": "Each ON rendered K8 burst versus both OFF bursts: existing temporal detector, animated albedo mask, subpixel camera registration; missing/inconclusive evidence fails.",
+  "smoke_ultra": "All measured windows use real Ultra, stock hair, two GI rays, far GI, hit emission, water, exact-k and RR temporal. rt_stats=0 so the optimization executes.",
+  "limits": "No launch/staging authorized. Static camera flicker qualification only; judge GPU ms, never occluded FG captures or frame time. No build/compile during the run.",
+  "disk": "No raw trace/float images; retain dumps.json means and rendered K8 bursts below 2 GB; no individual file above 20 MB."
+}

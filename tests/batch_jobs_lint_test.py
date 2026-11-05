@@ -12,6 +12,41 @@ from tools.live_batches import live_flow as flow
 
 
 class BatchJobsLintTests(unittest.TestCase):
+    def test_opt_attr_jobs_are_static_bounded_and_ready_offline(self):
+        from tools.live_batches import lint_snapshot
+        from tools.live_batches.opt_r2.gi_attr.make_job import FEATURES
+        snapshot = lint_snapshot.load()
+        self.addCleanup(flow.readiness_budget.configure, [])
+        for area in ('opt_r1/scene_holds', 'opt_r2/gi_attr'):
+            path = next((ROOT/'tools/live_batches'/area/'jobs').glob('*.json'))
+            job, plan, _ = flow.load_job(path)
+            self.assertEqual(flow.lint(job, plan, [], snapshot['matches'])['problems'], [])
+            self.assertLessEqual(job['timeout'], 300)
+            if area.endswith('gi_attr'):
+                self.assertTrue(all(p['kind'] == 'static' and not p.get('trace_at') for p in plan))
+                self.assertEqual(len(job['expect_every']), 18)
+                states = dict((p['label'], s) for p, s in zip(plan, flow.phase_states(job, plan)))
+                for name, key, off in FEATURES:
+                    a, on, b = [states[name+'--'+label] for label in ('off-a', 'on', 'off-b')]
+                    # stats_reset is observation policy; each rendering contrast
+                    # changes only the intended feature, including its dependencies.
+                    self.assertEqual({k for k in a if a[k] != on[k]}, {key})
+                    self.assertEqual(a, b)
+                    self.assertEqual(a[key], off)
+            else:
+                repeat = next(p for p in plan if p['label'] == 'warm-key-0')
+                self.assertFalse(repeat.get('wait_log'))
+
+    def test_readiness_snapshot_extension_is_strictly_additive(self):
+        from tools.live_batches import lint_snapshot
+        data = flow.read(lint_snapshot.PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)/'snapshot.json'
+            flow.write(target, data)
+            self.assertEqual(lint_snapshot.extend_readiness([], target), 0)
+            self.assertEqual(flow.read(target), data)
+        self.addCleanup(flow.readiness_budget.configure, [])
+
     def test_quiet_release_logging_keeps_active_and_final_job_statistics(self):
         from scripts.queue_gates import phase_states
         paths = flow.active_job_files() | set(flow.job_files(ROOT / 'tools/live_batches/release_qual/final'))

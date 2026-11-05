@@ -30,7 +30,7 @@ for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
             "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
             "rt_alpha_fine_lod", "rt_vt_alpha_masks", "rt_omm", "rt_omm_dyn"):
     TABLE[key] = list(GI_QUERY)
-for key in ("gi_far", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
+for key in ("gi_far", "gi_roof_reject", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
             "rt_hit_emission", "rt_emissive"):
     TABLE[key] = [GI_TRACE]
 WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"
@@ -77,15 +77,37 @@ for key in CONSERVATIVE:
 # its current-frame scene publication is checked by the job's scene-wait gates.
 CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_edge pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())
 
+# Explicit non-pipeline contracts, audited against core/gi.cpp refresh()/Push
+# and common/shader_variant.h. A cfg acknowledgement is sufficient: these
+# values change host policy, dispatch counts or push constants, not requests
+# or specialization constants. Keep them out of build reconciliation entirely.
+NO_PIPELINE = set("rt_scene_compact_holds rt_build fps_cap cpu_timing detailed_logging dev "
+    "gi_rr_rays gi_rays gi_ao gi_strength rf_max_rough ls_shadowed rr_cbt rr fg "
+    "rt_shadows rt_alpha rt_hair_groom_primary_order rt_hair_primary_passes "
+    "rt_hair_groom_crowd_ksegments rt_hair_groom_tips rt_water_geometry preset ab_off".split())
+for key in NO_PIPELINE:
+    TABLE[key] = []
+
+
+def resolved(state):
+    """Match common/settings.h resolve_derived before comparing target states."""
+    state = dict(state)
+    if str(state.get('rt_build', '')).lower() == 'auto':
+        state['rt_build'] = str(int(any(float(state.get(k, 0)) != 0 for k in
+            ('rt_shadows', 'gi_rt', 'rt_local_shadows', 'rt_reflections', 'rt_debug'))))
+    return state
+
 
 def requirements(job, plan):
-    states = phase_states(job, plan)
+    states = [resolved(s) for s in phase_states(job, plan)]
     out = []
     for i, state in enumerate(states):
         previous = states[i-1] if i else state
         changed = {k: v for k, v in state.items() if previous.get(k) != v and k not in CONTROL}
         wanted = {}
         for key, value in changed.items():
+            if key in NO_PIPELINE:
+                continue
             patterns = [p.format(value=value) for p in TABLE.get(key, [])]
             # Disabled post temporal bypasses its pass and needs no temporal pipeline.
             if key == "rr_post_temporal" and str(value) == "0":
@@ -99,19 +121,29 @@ def requirements(job, plan):
                 patterns = []
             if key == "rt_water_reflections" and str(value) == "0":
                 patterns = []
-            wanted[key] = patterns + [QUIET]
+            if patterns:
+                wanted[key] = patterns + [QUIET]
+            elif key in TABLE:
+                # Disabled family: nothing to build, only let in-flight work settle.
+                wanted[key] = [QUIET]
+            else:
+                # Unknown keys need an explicit contract, never an invented
+                # shader build/quiet interval (they may be layer-only too).
+                wanted[key] = []
         out.append(wanted)
     return out
 
 
 def apply(job, plan):
     for phase, wanted in zip(plan, requirements(job, plan)):
-        if not wanted:
+        if not any(wanted.values()):
             continue
         patterns = phase.get("wait_log", [])
         patterns = [patterns] if isinstance(patterns, str) else list(patterns)
         fresh = list(phase.get("wait_log_fresh", []))
         for key, required in wanted.items():
+            if not required:
+                continue
             patterns.extend(required)
             fresh.append(QUIET)
             if key == "rt_water_surface_fresnel":
@@ -136,7 +168,7 @@ def problems(job, plan):
                             key in p]
                 if not specific:
                     missing.append("unknown pipeline mapping; declare key-specific wait_log")
-            if QUIET not in fresh or key == "rt_water_surface_fresnel" and any(p not in fresh for p in patterns):
+            if patterns and (QUIET not in fresh or key == "rt_water_surface_fresnel" and any(p not in fresh for p in patterns)):
                 missing.append("fresh completion after settings write")
             if missing:
                 errors.append(f"readiness: {phase.get('label')}: changed {key} requires pipeline wait_log ({'; '.join(missing)})")

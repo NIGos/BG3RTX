@@ -1,0 +1,15 @@
+{
+  "description": "Origin finalization decision: only fallback and stats read the shading normal.",
+  "cases": [
+    {"name": "matched", "origin": [0, 0, 1, 0.001], "view": [0, 0, 1], "normal": [1, 0, 0], "stats": 0, "load": false, "output": [0, 0, 1, 0.001]},
+    {"name": "no_hit_depth_normal", "origin": [0, 0, 1, 1000], "view": [0, 0, 1], "normal": [1, 0, 0], "stats": 0, "load": false, "output": [0, 0, 1, 1000]},
+    {"name": "flip_geometric", "origin": [0, 0, -1, 0], "view": [0, 0, 1], "normal": [1, 0, 0], "stats": 0, "load": false, "output": [-0.0, -0.0, 1, 0]},
+    {"name": "degenerate_no_flip", "origin": [0, 0, 0, 1000], "view": [0, 0, 1], "normal": [0, 0, -1], "stats": 0, "load": true, "output": [0, 0, -1, 1000]},
+    {"name": "degenerate_keeps_offset", "origin": [0.25, 0, 0, 0.002], "view": [0, 0, 1], "normal": [1, 0, 0], "stats": 0, "load": true, "output": [1, 0, 0, 0.002]},
+    {"name": "stats_uses_normal", "origin": [0, 0, 1, 0], "view": [0, 0, 1], "normal": [1, 0, 0], "stats": 1, "load": true, "output": [0, 0, 1, 0]},
+    {"name": "nonfinite_normal_unused", "origin": [0, 0, 1, 0], "view": [0, 0, 1], "normal": ["nan", "inf", 0], "stats": 0, "load": false, "output": [0, 0, 1, 0]},
+    {"name": "nonfinite_offset", "origin": [0, 0, 1, "nan"], "view": [0, 0, 1], "normal": [1, 0, 0], "stats": 0, "load": true, "output": [1, 0, 0, 1000]},
+    {"name": "nonfinite_geometric", "origin": ["nan", 0, 1, 0], "view": [0, 0, 1], "normal": [1, 0, 0], "stats": 0, "load": true, "output": [1, 0, 0, 1000]},
+    {"name": "nonfinite_fallback", "origin": [0, 0, 0, 0], "view": [0, 0, 1], "normal": ["nan", 0, 1], "stats": 0, "load": true, "output": ["nan", 0, 1, 1000]}
+  ]
+}
