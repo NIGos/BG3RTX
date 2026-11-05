@@ -423,13 +423,6 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage",1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}, true, "Developer", {}},
 
-  {"rt_compact_hit_state", "Compact GI hit state",
-   "Reduces GI shader state while preserving the lighting result. Experimental; off by default.",
-   Kind::Choice, Apply::Hitch, "First use builds a pipeline in the background.", false,
-   {{"off", "Off", 0, {{"rt_compact_hit_state", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_compact_hit_state", "1"}}, {{"gi", 2}}, {}, false, false, false, Apply::Hitch}},
-   {}, {0, 0, 0, 0}, true, {{"rt", "1", "Ray-tracing support"}}, true, "Advanced", {}},
-
   {"detailed_logging", "Detailed logging",
    "Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.",
    Kind::Choice, Apply::Restart, "Restart the game to apply", false,
@@ -513,8 +506,10 @@ inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_
 // BLAS of the captured (skinned, wind, per-draw matrix) draws, staggered per draw;
 // static meshes are built once for trace speed and never refit.
 inline constexpr KV kPresetExtra[kPresetCount][3] = {
-  {{"rt_scene_compact_holds", "1"}}, {{"rt_scene_compact_holds", "1"}},
-  {{"rt_scene_compact_holds", "1"}}, {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}}};
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
+  {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}}};
 
 // ---- defaults: one source (docs/SETTINGS_DESIGN.md "Defaults: one source") ----
 // kDefaults is every key bg3rtx.ini sets, with its value; kReleaseDefaults the developer
@@ -706,7 +701,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_strips", "1"},
     {"gi_rt", "1"},
     {"gi_rt_radius", "1.0"},
-    {"rt_compact_hit_state", "0"},
+    {"rt_compact_hit_state", "1"},
     {"gi_rt_depth_k", "1.0"},
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
@@ -1189,6 +1184,7 @@ inline void enforce_release_policy(Map& m) {
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
   m["rr_post"] = "1";
   m["rt_scene_compact_holds"] = "1";
+  m["rt_compact_hit_state"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
        "sharc",
        "rt_hair_receiver_guard"}) m[key] = "0";

@@ -1,26 +1,26 @@
-## Compact GI hit state (branch gi-livestate, kept offline, 2026-11-05)
+## Compact GI hit state (branch gi-livestate, qualified always on, 2026-11-05)
 
 - Added frame_replay `--pipeline-stats`, pack-free non-SHaRC GI `--compile-only`,
   uint32 `--spec`, exact `--reference-out` output/counter gates and repeat median/range/spread.
-  The driver feature is optional; every executable statistic is printed verbatim.
-- `rt_compact_hit_state=0` by default, developer Advanced knob, specialization ID 1029.
+- `rt_compact_hit_state=1` by default and in every preset, specialization ID 1029.
+  No UI knob; release policy forces 1. `dev=1` preserves a raw 0 for A/B.
   ON retains the already evaluated triangle normal across local-light queries instead of
   retaining the complete hit for sun/AO normal reconstruction. Guard increments are replayed.
   Rays, samples, precision and accumulation order are unchanged. Request delta: 0; ABI unchanged.
 - RTX 5090 production `gi_trace_rt_hit_sun_em` request: RT_SPEC_NATIVE/HIT_INST/CASCADE/GI_FAR=1;
   specs 1000/1003/1007=1, 1008/1010=0, 1004 tested at both 0 and 1 (remaining defaults).
-  Registers baseline/OFF/ON: 255/255/243 for both wind values; shared bytes 816/816/44.
+  Registers baseline/OFF/ON: 255/255/243 for both wind values; spill bytes 816/816/44.
+  Occupancy unchanged at 8 warps; the gain is from spill reduction.
   Replay `gi_hit_direct` registers: 168/168; shared bytes 8192 -> 4608 (all three packs).
-- Final GPU replay results (ms; 24 dispatches per run, median [max-minus-min spread], first included):
-
-  | Pack | Baseline OFF | Current OFF repeat | Current ON |
-  | --- | --- | --- | --- |
-  | S8 20261101-142819-1 | 16.329 [6.654] | 9.956 [12.815] | 9.945 [7.291] |
-  | Camp 20261102-013545-2 | 50.149 [15.568] | 41.269 [24.617] | 44.663 [21.434] |
-  | Inn 20261102-013914-3 | 12.090 [10.689] | 11.988 [3.127] | 11.374 [11.399] |
-
-- No GPU-time saving is qualified: ON differences are within repeated OFF noise.
-  Kept on the production register reduction (12 registers, 4.7%), as the offline gate permits.
+- Offline replay (24 dispatches per run): ON differences are within repeated OFF noise.
+- Live inn Ultra: two VALID runs `opt-compact-hit-inn.1.105908` and
+  `opt-compact-hit-inn.1.110402`. GI trace OFF/ON/OFF/ON:
+  12.721/12.555/13.228/12.634 and 12.683/12.563/13.115/12.843 ms.
+  Every ON below preceding OFF (-0.17, -0.59, -0.12, -0.27 ms; mean about -0.29 ms).
+  GI total and other passes within OFF spread. Camp was confounded by scene drift:
+  all passes moved about 7 ms between pairs; not used.
+  Qualified as exact (100% bit-equal offline), with no regression. Gain about 0.3 ms
+  on inn GI trace, not separated from OFF repeat spread (0.43-0.51 ms).
 - Every final ON and current OFF output matches baseline: giRaw 10,926,080/10,926,080,
   giRawDepth 2,731,520/2,731,520 components; raw counters 32,768/32,768. All 100% bit-equal.
   Packs use their recorded defines: S8 none, camp/inn RT_CASCADE_MASKS=1.
@@ -30,8 +30,10 @@
 - OFF release equivalence against 79dc9c17: 214/214 unique requests (188 identical, 26 equivalent),
   2,120 specialization assignments, negative control PASS. Only 28 uncached entries compiled;
   132 entries reused preprocessed-text cache matches. Evidence: .scratch/gi-livestate/*final*.
-- scripts/build.ps1 -Test PASS: build 15 s, 183/183 CTests in 204 s, including settings,
-  frame replay and GPU fixtures; all BelowNormal. Game never launched; no queue access.
-  tasklist is denied here; Get-Process checked bg3 absent before each GPU command.
-- Check offline with tools/frame_replay.md (`--spec 1029=0/1`); no live GPU-time claim.
-  Commit currently blocked: linked-worktree Git metadata is outside writable sandbox roots.
+- Promotion: scripts/build.ps1 -Test PASS, 184/184 CTests in 189.60 s, BelowNormal; no game or queue.
+- Check offline with tools/frame_replay.md (`--spec 1029=0/1`); developer A/B at the inn
+  uses `dev=1` and raw `rt_compact_hit_state=0/1` in the same run.
+  Default-OFF requests retain release equivalence; default spec value is now 1.
+  Promotion changes no shader requests (delta 0). Merge-green selects full scope for
+  settings/native changes: build/CTest, runtime shader compilation and QA detectors;
+  no separate identity/release-equivalence job is registered. Heavy DXC deferred to it.
