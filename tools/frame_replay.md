@@ -11,7 +11,7 @@ the probes, the sky cubes, the DFG LUT and the sun set, which `--native-ambient`
 
 ```
 frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V]... [--repeat N] [--pipeline-stats] [--spec ID=UINT]... [--reference-out <dir>] [--no-validation]
-frame_replay --compile-only (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
+frame_replay --compile-only [--compile-pass gi|reflections|local-shadows] (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
 frame_replay --synthesize <dir> [--dark] [--box] [--lighting] [--casters]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
 frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
@@ -67,9 +67,15 @@ counts are a different measure. Capture is opt-in because it may affect pipeline
 to the measured pipeline. Unspecified IDs keep their shader defaults. It prints the chosen IDs.
 Use the same values as `core/gi.cpp` for a production comparison.
 
-`--compile-only` builds the production **non-SHaRC GI trace** pipeline without a pack, resources or dispatch.
-The fixed layout supports GI sets 0/1, the emission scene at set 2 and the sun at set 3, including
-sun trust and the native tileset sampler. This is not generic shader reflection: arbitrary passes
+`--compile-only` builds a production pipeline without a pack, resources or dispatch.
+`--compile-pass gi` (default) supports non-SHaRC GI sets 0/1, the emission scene at set 2
+and the sun at set 3, including sun trust and the native tileset sampler.
+`--compile-pass reflections` supports non-SHaRC hit-shade reflections: push/material/game/sun
+at sets 0/1/2/3, empty set 4, emission set 5 and hit-GI counters set 6.
+`--compile-pass local-shadows` supports box local shadows: push/material/sun/game/counters
+at sets 0/1/2/3/4. The layouts reuse the production binding tables; the game's runtime
+image array is represented with the replay's 4096-element capacity. Set 0 is an ordinary
+descriptor layout here (no push commands are submitted). This is not generic shader reflection: arbitrary passes
 with other descriptor contracts need their own layout. Give exactly one of `--hlsl` and `--spv`,
 no `--pack`. Default output: `.scratch/pipeline-stats`. Prefer `--spv` from
 `tools/shader_identity.py` for cached compilation and machine-wide DXC slot coordination.
@@ -88,6 +94,34 @@ compile its exact manifest `defines` (S8 has none; camp/inn have `RT_CASCADE_MAS
 `--spv` supplies the complete module and cannot apply the manifest's defines afterward.
 The compile-only layout does not support SHaRC's set 4. Driver statistics are printed
 verbatim, including unexpected values; do not interpret them as measured occupancy or spills.
+
+Production RF/LS (Ultra, non-OMM) requests in `shaders/variants.txt`:
+
+```text
+gi/rt_reflections_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1
+gi/rt_local_shadows_box_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1
+```
+
+Compile those exact requests through `tools/shader_identity.py` and pass the cached modules
+with `--spv`. Match `core/gi.cpp::refresh` specialization values; stock visible hair has
+1008/1009/1010/1020/1026 = 0, cascade 1000 = 1, instancing 1003 = 1 and wind RGB
+1004 = 1. Hit GI 1013 = 1 for the requested hit-GI reflection tier (use 0 for the current release Far choice). Example (after checking no `bg3.exe`):
+
+```powershell
+bin/frame_replay --compile-only --compile-pass reflections --spv .scratch/rf-ls-regs/rf.spv --pipeline-stats `
+  --spec 1000=1 --spec 1003=1 --spec 1004=1 --spec 1008=0 --spec 1009=0 --spec 1010=0 `
+  --spec 1013=1 --spec 1020=0 --spec 1026=0
+bin/frame_replay --compile-only --compile-pass local-shadows --spv .scratch/rf-ls-regs/ls.spv --pipeline-stats `
+  --spec 1000=1 --spec 1008=0 --spec 1009=0 --spec 1010=0 --spec 1020=0 --spec 1026=0
+```
+
+`rf_compact_probe_state=0` is a developer raw key, specialization 1031. With hit GI enabled,
+compare `--spec 1031=0` / `--spec 1031=1` on the same module. Core keeps it OFF when
+`rf_hit_gi=0`: that trial gained a register. No shader requests are added.
+
+These selectors only create pipelines and print driver statistics. They do not replay RF/LS
+outputs. A future shader reduction needs ON/OFF specialized SPIR-V review of stored-result logic
+and a live in-run energy/image A/B; compile-only statistics cannot establish image exactness.
 
 With `--repeat N`, the summary prints the median, min, max and max-minus-min spread of **all**
 dispatch GPU timestamps, including the first dispatch. Retain the individual run lines to diagnose

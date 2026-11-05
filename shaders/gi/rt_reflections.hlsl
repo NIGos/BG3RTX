@@ -39,6 +39,8 @@
 // b11 − local − Tp must be 0 where no projector light is listed.
 #include "gi_common.hlsli"
 #include "../rt/spec_rf_gi.hlsli"
+// Delay the independent receiver probe result until after hit traversal/shading.
+[[vk::constant_id(1031)]] const uint kRfCompactProbeState = 0u;
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_ambient.hlsli"
@@ -209,12 +211,15 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const float k = asfloat(lScale.Load(0)) * 100.0;
 
   // ---- the game's specular ambient term, exactly (EN4) ----
-  uint4 cl = bg3_cluster_raw(fp, d);
-  float3 E;
+  uint4 cl;
+  float3 E, Tp;
   uint n_local;
+  if (kRfCompactProbeState == 0u) {
+  cl = bg3_cluster_raw(fp, d);
   float3 S = bg3_spec_ambient(sf.P, sf.N, sf.V, sf.f0, sf.a, cl, E, n_local);
   float so = bg3_spec_occlusion(fp, sf.nov_raw, sf.a);
-  float3 Tp = S * (k * so);
+  Tp = S * (k * so);
+  }
 
   // ---- one reflection ray ----
   float rough_w = 1.0 - smoothstep(pc.rf_max_rough * 0.75, pc.rf_max_rough, sf.a);
@@ -428,6 +433,15 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
       }
     }
+  }
+
+  // These read-only inputs are not modified by traversal or native hit shading.
+  // Keep every probe expression and its accumulation order identical to the OFF block.
+  if (kRfCompactProbeState != 0u) {
+  cl = bg3_cluster_raw(fp, d);
+  float3 S = bg3_spec_ambient(sf.P, sf.N, sf.V, sf.f0, sf.a, cl, E, n_local);
+  float so = bg3_spec_occlusion(fp, sf.nov_raw, sf.a);
+  Tp = S * (k * so);
   }
 
   float3 gs = gSpecular[fp];

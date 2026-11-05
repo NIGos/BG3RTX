@@ -981,3 +981,21 @@ The user's RF bias threshold is unchanged (S8 0.925, S6 1.089, camp 1.097 failed
 remaining instanced-row AO gap needs a pack containing those rows; non-instanced replay agreement
 cannot close it. Keep `rf_hit_shade`, `rf_hit_gi` and the water candidate Experimental/off until
 their energy gates pass. Ultra is the first possible preset after combined smoke qualification.
+
+## Receiver probe live state (rf-ls-regs, offline candidate, 2026-11-05)
+
+`rf_compact_probe_state=0` is a developer raw key, Vulkan specialization 1031, no knob or preset.
+With `rf_hit_gi>0`, ON evaluates the same receiver probe/DFG/occlusion block after hit shading.
+Only its position changes: all inputs are read-only during the intervening traversal/shading;
+guard increments are integer additions with the same multiplicity. No ray, precision or accumulation changes.
+Core keeps it OFF without hit GI (that trial was 229 -> 230 registers, shared bytes 32 -> 32).
+The production native/hair-origin/instanced/cascade/emission/hit-GI request uses 255 -> 245 registers,
+driver Shared Memory Size 800 -> 32 bytes (baseline and candidate OFF: 255 / 800).
+The driver Local Memory Size is anomalous, 68719476752 in every run: no reliable spill-byte claim.
+At 245 registers this does not cross the next occupancy step. GPU time is unmeasured.
+ON/OFF specialized SPIR-V retains the stored-result logic and identical operation counts
+(4 image writes, 8 ray-query sites, 378 integer atomic adds; float add/multiply/ext-inst counts match).
+No RF replay pass exists: construction/SPIR-V review is the offline evidence, not a rendered exactness test.
+Pending: a separately authorized live in-run OFF/ON/OFF energy/image/cost A/B at the inn with hit GI on,
+and the combined Ultra smoke. No qualification or default promotion from register statistics alone.
+See docs/progress/rf-ls-regs.md for gates and tools/frame_replay.md for reproduction.

@@ -707,6 +707,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt", "1"},
     {"gi_rt_radius", "1.0"},
     {"rt_compact_hit_state", "0"},
+    {"rf_compact_probe_state", "0"},
     {"gi_rt_depth_k", "1.0"},
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},

@@ -32,6 +32,7 @@
 #include "../common/replay_pack.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_gi_bindings.h"
+#include "../common/native_hit_rf_bindings.h"
 #pragma comment(lib, "vulkan-1.lib")
 
 namespace fs = std::filesystem;
@@ -524,16 +525,37 @@ VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout la
   return pipeline;
 }
 
-// Pack-free compiler for the production GI layout. Uses the replay contract for sets 0/1/3;
-// set 2 is the production emission scene, not the replay's deferred-lighting inputs.
-void compile_gi_pipeline(const std::vector<uint32_t>& spirv) {
-  std::vector<VkDescriptorSetLayout> sets(4);
-  for (uint32_t set = 0; set < 4; ++set) {
+// Pack-free compiler for three explicit production contracts; this does not add replay passes.
+// GI: material 1, emission 2, sun 3. RF: material 1, game 2, sun 3, empty 4,
+// emission 5, hit-GI counters 6. LS box: material 1, sun 2, game 3, counters 4.
+void compile_production_pipeline(const std::vector<uint32_t>& spirv, const std::string& pass) {
+  const bool rf = pass == "reflections", ls = pass == "local-shadows";
+  std::vector<VkDescriptorSetLayout> sets(rf ? 7 : ls ? 5 : 4);
+  for (uint32_t set = 0; set < sets.size(); ++set) {
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     auto add = [&](uint32_t binding, VkDescriptorType type, uint32_t count = 1) {
       bindings.push_back({binding, type, count, VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
     };
-    if (set == 0) for (const auto& binding : bg3::native_hit_gi::bindings) add(binding.binding, binding.type, binding.count);
+    auto table = [&](const auto& bindings) {
+      // The game contract marks its bindless b45 with count 0; use the replay's
+      // 4096-element capacity (no resources are allocated in compile-only mode).
+      for (const auto& b : bindings) add(b.binding, b.type, b.count ? b.count : 4096);
+    };
+    if (set == 0) {
+      if (rf) {
+        for (const auto& b : bg3::native_hit_rf::push)
+          if (bg3::native_hit_rf::push_enabled(b, false)) add(b.binding, b.type, b.count);
+      } else if (ls) {
+        // core/gi.cpp make_layout(kLsBindings), ls_uses and kExtras (mask 4).
+        for (const auto& b : bg3::native_hit_rf::push)
+          if (b.binding < 30 && (b.binding <= 7 || b.binding == 12 || b.binding == 16 || b.binding == 18 || b.binding >= 20))
+            add(b.binding, b.type, b.count);
+        add(40, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE); add(41, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
+        add(42, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER); add(43, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        add(44, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE); add(45, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+        add(46, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE); add(50, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+      } else table(bg3::native_hit_gi::bindings);
+    }
     if (set == 1) {
       for (const auto& slot : rp::kGiHitDirect) if (slot.set == set) {
         const auto type = slot.kind == rp::kSsbo ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER :
@@ -543,23 +565,31 @@ void compile_gi_pipeline(const std::vector<uint32_t>& spirv) {
       add(10, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR); add(11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER); // OMM contract
       add(19, VK_DESCRIPTOR_TYPE_SAMPLER, 16); // native tileset
     }
-    if (set == 2) for (const auto& binding : bg3::hit_emission::emissive) add(binding.binding, binding.type, binding.count);
-    if (set == 3) {
-      for (const auto& binding : bg3::native_hit_gi::sun) add(binding.binding, binding.type, binding.count);
-      add(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE); // live sun layout's per-light data, unused by GI
+    if (rf || ls) {
+      if (set == (rf ? 2u : 3u)) table(bg3::native_hit_rf::game);
+      if (set == (rf ? 3u : 2u)) table(bg3::native_hit_rf::sun);
+      if (rf && set == 5) table(bg3::hit_emission::emissive);
+      if (set == (rf ? 6u : 4u)) add(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+      if (ls && set == 4) add(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER); // occluder stats
+    } else {
+      if (set == 2) table(bg3::hit_emission::emissive);
+      if (set == 3) {
+        table(bg3::native_hit_gi::sun);
+        add(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+      }
     }
     VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     ci.bindingCount = uint32_t(bindings.size()); ci.pBindings = bindings.data();
-    vkcheck(vkCreateDescriptorSetLayout(g.dev, &ci, nullptr, &sets[set]), "compile-only GI set layout");
+    vkcheck(vkCreateDescriptorSetLayout(g.dev, &ci, nullptr, &sets[set]), "compile-only production set layout");
   }
   VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT, 0, 256};
   VkPipelineLayoutCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   ci.setLayoutCount = uint32_t(sets.size()); ci.pSetLayouts = sets.data(); ci.pushConstantRangeCount = 1; ci.pPushConstantRanges = &range;
-  VkPipelineLayout layout; vkcheck(vkCreatePipelineLayout(g.dev, &ci, nullptr, &layout), "compile-only GI layout");
+  VkPipelineLayout layout; vkcheck(vkCreatePipelineLayout(g.dev, &ci, nullptr, &layout), "compile-only production layout");
   VkPipeline pipeline = make_pipeline(spirv, layout);
   vkDestroyPipeline(g.dev, pipeline, nullptr); vkDestroyPipelineLayout(g.dev, layout, nullptr);
   for (auto set : sets) vkDestroyDescriptorSetLayout(g.dev, set, nullptr);
-  std::puts("[pipeline] compile-only GI pipeline built; no resources loaded or dispatch submitted");
+  std::printf("[pipeline] compile-only %s pipeline built; no resources loaded or dispatch submitted\n", pass.c_str());
 }
 
 // ---------------------------------------------------------------- statistics (core/gi.cpp wording, 1 frame)
@@ -2160,6 +2190,7 @@ int main(int argc, char** argv) {
   fs::path pack, out, hlsl, spv, synth, test;
   std::vector<std::string> defines;
   uint32_t repeat = 1;
+  std::string compile_pass = "gi";
   bool synth_box = false, synth_lighting = false, synth_casters = false, compile_only = false;
   bool validation = true, dark = false, pt = false, pt_cost_only = false, pt_skip_cost = false, native = false;
   uint32_t pt_iters = 32;
@@ -2175,6 +2206,7 @@ int main(int argc, char** argv) {
     else if (args[i] == "--no-validation") validation = false;
     else if (args[i] == "--pipeline-stats") g_pipeline_stats = true;
     else if (args[i] == "--compile-only") compile_only = true;
+    else if (args[i] == "--compile-pass") compile_pass = next();
     else if (args[i] == "--reference-out") g_reference_out = next();
     else if (args[i] == "--spec") {
       const std::string kv = next(); const size_t eq = kv.find('=');
@@ -2211,14 +2243,15 @@ int main(int argc, char** argv) {
   if (!pt_test.empty()) return pt_self_test(pt_test);
   if (!synth.empty()) { synthesize(synth, dark, synth_box || synth_casters, synth_lighting, synth_casters); std::printf("synthetic pack written to %s\n", synth.string().c_str()); return 0; }
   if (compile_only) {
-    check(pack.empty() && (!hlsl.empty() != !spv.empty()), "--compile-only requires exactly one of --hlsl or --spv, no --pack (GI layout only)");
+    check(pack.empty() && (!hlsl.empty() != !spv.empty()), "--compile-only requires exactly one of --hlsl or --spv, no --pack (production layout)");
+    check(compile_pass == "gi" || compile_pass == "reflections" || compile_pass == "local-shadows", "--compile-pass gi|reflections|local-shadows");
     if (int r = init_gpu(validation, false)) return r;
     if (out.empty()) out = fs::path(source_root()) / ".scratch" / "pipeline-stats";
     fs::create_directories(out);
     std::vector<uint32_t> code;
     if (!spv.empty()) { auto b = read_file(spv); check(!b.empty() && b.size() % 4 == 0, "SPIR-V size"); code.resize(b.size() / 4); std::memcpy(code.data(), b.data(), b.size()); }
     else code = compile(hlsl, defines, out / "pass.spv");
-    compile_gi_pipeline(code);
+    compile_production_pipeline(code, compile_pass);
     return g_validation_errors.load() ? 1 : 0;
   }
   check(!pack.empty(), "usage: frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V] [--repeat N]");
