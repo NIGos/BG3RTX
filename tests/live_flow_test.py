@@ -33,6 +33,22 @@ def fixture(name="one"):
 
 
 class PipelineReadinessTests(unittest.TestCase):
+    def test_cached_gi_variants_table_requires_only_fresh_quiet(self):
+        keys = ('gi_hit_sun', 'gi_hit_direct', 'gi_far', 'rt_hit_emission', 'rt_emissive',
+                'rt_hair_groom', 'rt_hair_physical_origin', 'rt_hit_material',
+                'rt_hit_material_instanced', 'rt_hit_material_wind_rgb',
+                'rt_alpha_fine_lod', 'rt_vt_alpha_masks', 'rt_omm', 'rt_omm_dyn')
+        for key in keys:
+            with self.subTest(key=key):
+                quiet = f.pipeline_readiness.QUIET
+                self.assertEqual(f.pipeline_readiness.TABLE[key], [quiet])
+                job = dict(set=f'{key}=1')
+                plan = [phase('before', values=''), phase('cached', values=f'{key}=0')]
+                f.pipeline_readiness.apply(job, plan)
+                self.assertEqual(plan[1]['wait_log'], [quiet])
+                self.assertEqual(plan[1]['wait_log_fresh'], [quiet])
+                self.assertFalse(f.pipeline_readiness.problems(job, plan))
+
     def test_cpu_and_push_values_never_wait_for_pipeline_generations(self):
         j = dict(set='rt_scene_compact_holds=0,rt_build=auto,gi_rt=1,gi_rr_rays=2,gi_strength=1')
         p = [phase('before', values=''), phase('after', values=
@@ -902,6 +918,23 @@ class WindowFpsTests(unittest.TestCase):
 
 
 class ReadinessBudgetTests(unittest.TestCase):
+    def test_cached_gi_quiet_only_ignores_abandoned_builds(self):
+        quiet = f.pipeline_readiness.QUIET
+        runner = ('12:00:00.000 [pan-plan] window 0 set=gi_hit_sun=1\n'
+                  '12:00:10.000 [pan-plan] window 1 set=gi_hit_sun=0\n'
+                  '12:00:30.000 [motion-plan] complete')
+        lines = ['12:00:09.000 [watch] ready | pipelines 0 (0 ms in driver)',
+                 '12:00:10.000 [cfg] settings read',
+                 '12:00:10.100 [cfg] keys: gi_hit_sun=0',
+                 '12:00:10.150 gi: gi/gi_trace_rt_hit_direct.hlsl building in the background']
+        step = dict(wait_log=[quiet], wait_log_fresh=[quiet])
+        def estimate(extra):
+            f.readiness_budget.configure([dict(save='same', runner=runner, lines=lines+extra)])
+            return f.readiness_budget.estimate(dict(save='same'), step, {'gi_hit_sun': '0'})
+        self.assertEqual(estimate([])['samples'], 0)
+        result = estimate(['12:00:12.000 [watch] ready | pipelines 0 (0 ms in driver)'])
+        self.assertEqual((result['samples'], result['seconds']), (1, 2))
+
     def tearDown(self):
         f.readiness_budget.configure([])
 
