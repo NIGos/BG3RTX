@@ -55,5 +55,29 @@ int main() {
   if (!check(init.ready && init.available(3) && !init.needed(3))) return 1;
   init = {};
   if (!check(!init.ready && init.needed(3))) return 1;
+  // Ring wrap cannot overwrite an executable recording, even after completion.
+  DescriptorRecordingLease descriptors[256];
+  for (auto& descriptor : descriptors) descriptor.record(100);
+  for (auto& descriptor : descriptors)
+    if (!check(!descriptor.reusable(true))) return 1;
+  descriptors[0].discard(99); // wrong generation/handle reuse
+  if (!check(!descriptors[0].reusable(true))) return 1;
+  descriptors[0].discard(100);
+  // Reset releases the CPU recording, not the pending GPU consumer.
+  if (!check(!descriptors[0].reusable(false) && descriptors[0].reusable(true))) return 1;
+  descriptors[0].record(101);
+  descriptors[0].discard(100);
+  if (!check(!descriptors[0].reusable(true))) return 1;
+  descriptors[0].discard(101); // discarded before submit, no GPU use
+  if (!check(descriptors[0].reusable(true))) return 1;
+  // Guide/history publication: a failed submit never calls submitted().
+  init = {}; init.record(200);
+  if (!check(!init.ready && !init.available(201))) return 1;
+  init.discard(200); init.submitted(200); // reset then stale submit notification
+  if (!check(!init.ready)) return 1;
+  init.record(201); init.submitted(200);
+  if (!check(!init.ready)) return 1;
+  init.submitted(201); init.discard(201);
+  if (!check(init.ready)) return 1;
   return 0;
 }
