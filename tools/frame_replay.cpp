@@ -178,6 +178,7 @@ int init_gpu(bool want_validation, bool require_validation) {
   useAS.accelerationStructure = VK_TRUE;
   VkPhysicalDeviceFeatures core{}; core.shaderStorageImageExtendedFormats = VK_TRUE; core.samplerAnisotropy = features.features.samplerAnisotropy;
   core.shaderSampledImageArrayDynamicIndexing = features.features.shaderSampledImageArrayDynamicIndexing;
+  core.textureCompressionBC = features.features.textureCompressionBC;
   core.shaderInt64 = features.features.shaderInt64; core.shaderInt16 = features.features.shaderInt16;
   float priority = 0.0f;
   VkDeviceQueueCreateInfo qci{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO}; qci.queueFamilyIndex = g.family; qci.queueCount = 1; qci.pQueuePriorities = &priority;
@@ -267,7 +268,7 @@ std::vector<uint8_t> download(const Buf& src, VkDeviceSize bytes) {
   return out;
 }
 struct Img { VkImage image{}; VkDeviceMemory mem{}; VkImageView view{}; uint32_t format = 0, w = 1, h = 1, layers = 1, mips = 1; bool storage = false; };
-Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_t mips, bool storage, bool array, bool cube = false) {
+Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_t mips, bool storage, bool array, bool cube = false, const std::array<uint32_t,4>& components = {}) {
   Img im; im.format = format; im.w = w; im.h = h; im.layers = layers; im.mips = mips; im.storage = storage;
   check(w <= g.max_image_2d && h <= g.max_image_2d && layers <= g.max_layers,
         "image " + std::to_string(w) + "x" + std::to_string(h) + "x" + std::to_string(layers) + " over the device limits " +
@@ -284,6 +285,7 @@ Img make_image(uint32_t format, uint32_t w, uint32_t h, uint32_t layers, uint32_
   vkcheck(vkAllocateMemory(g.dev, &ai, nullptr, &im.mem), "image memory"); g.device_bytes += req.size; vkcheck(vkBindImageMemory(g.dev, im.image, im.mem, 0), "image bind");
   VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
   vi.image = im.image; vi.viewType = cube ? VK_IMAGE_VIEW_TYPE_CUBE : array ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D; vi.format = VkFormat(format);
+  vi.components = {VkComponentSwizzle(components[0]),VkComponentSwizzle(components[1]),VkComponentSwizzle(components[2]),VkComponentSwizzle(components[3])};
   vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mips, 0, layers};
   vkcheck(vkCreateImageView(g.dev, &vi, nullptr, &im.view), "image view");
   return im;
@@ -355,21 +357,24 @@ void fill_image_file(const Img& im, const fs::path& p, uint64_t stage_max = kSta
   },stage_max);
 }
 // Every mip and layer back, packed (the self-test's round trip).
-std::vector<uint8_t> read_image_all(const Img& im) {
-  const uint64_t bytes = rp::image_bytes(im.format, im.w, im.h, im.layers, im.mips);
+std::vector<uint8_t> read_image_all(const Img& im, uint32_t base_mip = 0, uint32_t base_layer = 0, uint32_t mips = 0, uint32_t layers = 0) {
+  if (!mips) mips=im.mips-base_mip;
+  if (!layers) layers=im.layers-base_layer;
+  const uint32_t w=std::max(im.w>>base_mip,1u), h=std::max(im.h>>base_mip,1u);
+  const uint64_t bytes = rp::image_bytes(im.format,w,h,layers,mips);
   Buf staging = make_buffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true);
   submit([&](VkCommandBuffer c) {
     VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
     ib.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; ib.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     ib.oldLayout = layout_of(im); ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    ib.image = im.image; ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, im.mips, 0, im.layers};
+    ib.image = im.image; ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,base_mip,mips,base_layer,layers};
     vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
-    VkDeviceSize at = 0;
-    for (uint32_t m = 0; m < im.mips; ++m) {
-      const uint32_t mw = std::max(im.w >> m, 1u), mh = std::max(im.h >> m, 1u);
-      VkBufferImageCopy r{}; r.bufferOffset = at; r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, m, 0, im.layers}; r.imageExtent = {mw, mh, 1};
-      vkCmdCopyImageToBuffer(c, im.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.b, 1, &r);
-      at += rp::image_bytes(im.format, mw, mh, im.layers, 1);
+    // Same block-row plan as live capture; exercise nonzero descriptor ranges.
+    for (const auto& p : rp::transfer_pieces(im.format,w,h,layers,mips,std::max(uint64_t(160),rp::image_bytes(im.format,w,1,1,1)))) {
+      VkBufferImageCopy r{}; r.bufferOffset=p.file_offset;
+      r.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,base_mip+p.mip,base_layer+p.layer,p.layers};
+      r.imageOffset={0,int32_t(p.row),0}; r.imageExtent={std::max(w>>p.mip,1u),p.rows,1};
+      vkCmdCopyImageToBuffer(c,im.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,staging.b,1,&r);
     }
     ib.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT; ib.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     std::swap(ib.oldLayout, ib.newLayout);
@@ -929,11 +934,12 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     if (slot->kind == rp::kSampledCube) check(i.layers == 6 && i.w == i.h, std::string("cube image of ") + slot->name + " (6 square layers)");
     if (slot->kind == rp::kStorage) check(i.format == slot->storage_format, std::string("storage format of ") + slot->name);
     const bool array = slot->kind == rp::kSampled2DArray, storage = slot->kind == rp::kStorage, cube = slot->kind == rp::kSampledCube;
-    const std::string k = i.file + "|" + std::to_string(i.format) + "|" + std::to_string(i.w) + "x" + std::to_string(i.h) + "x" +
+    std::string k = i.file + "|" + std::to_string(i.format) + "|" + std::to_string(i.w) + "x" + std::to_string(i.h) + "x" +
                           std::to_string(i.layers) + "x" + std::to_string(i.mips) + (array ? "|a" : "") + (storage ? "|s" : "") + (cube ? "|c" : "");
+    for (uint32_t c : i.components) k += "|" + std::to_string(c);
     auto known = by_file.find(k);
     if (known == by_file.end()) {
-      Img im = make_image(i.format, i.w, i.h, i.layers, i.mips, storage, array, cube);
+      Img im = make_image(i.format, i.w, i.h, i.layers, i.mips, storage, array, cube, i.components);
       fill_image_file(im, pack / i.file);   // streamed: a VT cache is ~2 GB
       known = by_file.emplace(k, im).first;
       if (i.source_format) { ++decoded; decoded_bc += rp::block_compressed(i.source_format); }
@@ -2362,7 +2368,8 @@ int ls_self_test(const fs::path& dir) {
   image(16,9,"ls-mask.bin",std::vector<uint8_t>(size_t(W)*H,255));
   float shadow[24]{};shadow[11]=0.5f;shadow[15]=1;shadow[18]=1;shadow[21]=1;shadow[23]=1;
   write_file(pack / "shadow.bin",shadow,sizeof shadow); m.buffers.push_back({0,27,sizeof shadow,"shadow.bin"});
-  const std::vector<float> atlas(16,1);write_vec(pack / "atlas.bin",atlas); m.images.push_back({0,28,0,100,4,4,1,1,"atlas.bin"});
+  const std::vector<uint8_t> atlas{255,255,0,0,0,0,0,0}; // one raw BC4 block, depth 1
+  write_vec(pack / "atlas.bin",atlas); m.images.push_back({0,28,0,139,4,4,1,1,"atlas.bin"});
   std::vector<uint8_t> projector(128,0);
   auto pf=[&](size_t offset,float value){std::memcpy(projector.data()+offset,&value,4);};
   auto pu=[&](size_t offset,uint32_t value){std::memcpy(projector.data()+offset,&value,4);};
@@ -2371,8 +2378,9 @@ int ls_self_test(const fs::path& dir) {
   pf(48,0.05f);pf(60,0.5f);pf(68,0.05f);pf(76,0.25f);pf(88,0.05f);pf(92,0.5f);
   pu(108,1);pf(112,0.6f);pf(116,-0.8f); // oblique light: the visible slab shadows adjacent back-plane pixels
   write_vec(pack / "projector.bin",projector); m.buffers.push_back({3,29,128,"projector.bin"});
-  const float cookie[4]={0.5f,0.75f,1,1};write_file(pack / "cookie.bin",cookie,sizeof cookie);
-  m.images.push_back({3,45,7,109,1,1,1,1,"cookie.bin"});
+  const uint8_t cookie[16]={128,128,0,0,0,0,0,0,192,192,0,0,0,0,0,0}; // raw BC5
+  write_file(pack / "cookie.bin",cookie,sizeof cookie);
+  m.images.push_back({3,45,7,141,4,4,1,1,"cookie.bin"});
   m.samplers.push_back({3,16,0,1,1,1,2,2,2,0,1000});
   std::vector<uint8_t> counters(kCounters*64*4,0); counters.back()=17;
   write_vec(pack / "initial-counters.bin",counters); m.counter_initial="initial-counters.bin";
@@ -2381,7 +2389,8 @@ int ls_self_test(const fs::path& dir) {
     std::ofstream output(pack / name,std::ios::binary);rp::codec::Writer writer(output,bytes.size());
     check(writer.write(bytes.data(),bytes.size()) && writer.finish(),"LS fixture compressed file");
   };
-  encoded_file("colour.bin",raw(initial));encoded_file("initial-counters.bin",counters);encoded_file("atlas.bin",raw(atlas));
+  encoded_file("colour.bin",raw(initial));encoded_file("initial-counters.bin",counters);encoded_file("atlas.bin",atlas);
+  encoded_file("cookie.bin",std::vector<uint8_t>(cookie,cookie+sizeof cookie));
   auto save = [&]{ const auto text=rp::serialize(m);write_file(pack / "manifest.txt",text.data(),text.size()); };
   save();
   rp::Manifest roundtrip; check(rp::parse(rp::serialize(m),roundtrip,error),error);
@@ -2400,11 +2409,11 @@ int ls_self_test(const fs::path& dir) {
   check(changed,"LS fixture exercises colour modification");
   const auto spv_bytes=read_file(dir / "first" / "pass.spv");std::vector<uint32_t> code(spv_bytes.size()/4);
   std::memcpy(code.data(),spv_bytes.data(),spv_bytes.size());
-  const float black[4]={0,0,0,1};write_file(pack / "cookie.bin",black,sizeof black);
+  const uint8_t black[16]={};write_file(pack / "cookie.bin",black,sizeof black);
   const auto no_cookie=replay(pack,&code,{}, {},dir / "black-cookie",1,true);
   write_file(pack / "cookie.bin",cookie,sizeof cookie);
   check(no_cookie.runs[0].outputs[0].raw != a.runs[0].outputs[0].raw,"LS reads projector cookie element 7");
-  write_vec(pack / "atlas.bin",std::vector<float>(16,0));
+  write_vec(pack / "atlas.bin",std::vector<uint8_t>(8,0));
   const auto no_atlas=replay(pack,&code,{}, {},dir / "dark-atlas",1,true);
   write_vec(pack / "atlas.bin",atlas);
   check(no_atlas.runs[0].outputs[0].raw != a.runs[0].outputs[0].raw,"LS reads shadow-view and atlas PCF");
@@ -2413,7 +2422,11 @@ int ls_self_test(const fs::path& dir) {
   replay(pack,&code,{}, {},dir / "paired",2,true);
   check(!g_reference_mismatch,"LS paired restoration bit-equal");
   g_ab_specs.clear();g_ab_require_equal=false;
-  std::puts("LS synthetic pack: production Ultra shader, packed colour restoration, auxiliary, atlas/projector/cookie, specs and counters PASS");
+  uint64_t disk_bytes=0;
+  for(const auto& f:fs::directory_iterator(pack)) if(f.is_regular_file()) disk_bytes+=f.file_size();
+  check(disk_bytes<=rp::kPackHardCapBytes,"LS synthetic pack fits 2048 MiB disk cap");
+  std::printf("LS synthetic pack disk: %llu bytes (cap %llu)\n",(unsigned long long)disk_bytes,(unsigned long long)rp::kPackHardCapBytes);
+  std::puts("LS synthetic pack: production Ultra shader, packed colour restoration, auxiliary, raw BC4 atlas/BC5 cookie, specs and counters PASS");
   return g_validation_errors.load() ? 1 : 0;
 }
 
@@ -2484,8 +2497,11 @@ int self_test(const fs::path& dir) {
       // block rows of one layer, layer groups and whole mips; from memory and streamed from a file,
       // every mip and layer reads back bit-equal.
     struct Case { uint32_t f, w, h, layers, mips; uint64_t stage; };
-    const Case cases[] = {{138, 37, 29, 3, 3, 160}, {9, 13, 9, 3, 3, 40}, {97, 13, 9, 2, 2, 300}, {146, 64, 64, 2, 4, 1u << 20}};
-    uint32_t bad = 0; size_t pieces = 0;
+    const Case cases[] = {{138, 37, 29, 3, 3, 160}, {9, 13, 9, 3, 3, 40}, {97, 13, 9, 2, 2, 300}, {146, 64, 64, 2, 4, 1u << 20}, {139, 13, 9, 3, 3, 40}, {141, 13, 9, 3, 3, 80},
+                          {140, 13, 9, 3, 3, 40}, {142, 13, 9, 3, 3, 80}};
+    const ReadPipe raw_pipe = make_read_pipe(compile(fs::path(source_root()) / "shaders" / "replay_image.hlsl", {}, dir / "raw_read.spv"));
+    const rp::ShaderRead as_float{rp::kRgba32Sfloat,rp::kEncFloat,4};
+    uint32_t bad = 0, sample_bad = 0; size_t pieces = 0;
     uint64_t seed = 0xD1B54A32D192ED03ull;
     for (const Case& c : cases) {
       std::vector<uint8_t> src(size_t(rp::image_bytes(c.f, c.w, c.h, c.layers, c.mips)));
@@ -2494,14 +2510,41 @@ int self_test(const fs::path& dir) {
       pieces += rp::transfer_pieces(c.f, c.w, c.h, c.layers, c.mips, c.stage).size();
       Img a = make_image(c.f, c.w, c.h, c.layers, c.mips, false, true);
       fill_image(a, src, c.stage);
-      bad += read_image_all(a) != src;
+      const std::array<uint32_t,4> components = c.f==139 ? std::array<uint32_t,4>{3,3,3,2} : std::array<uint32_t,4>{};
+      auto captured=read_image_all(a);
+      bad += captured != src;
+      if (rp::block_compressed(c.f)) {
+        Img full=make_image(c.f,c.w*2,c.h*2,c.layers+2,c.mips+1,false,true);
+        std::vector<uint8_t> all(size_t(rp::image_bytes(c.f,full.w,full.h,full.layers,full.mips)));
+        for (size_t j=0;j<all.size();++j) all[j]=uint8_t(j*37+j/19);
+        fill_image(full,all);
+        captured=read_image_all(full,1,1,c.mips,c.layers);
+        // Independently slice mip-major bytes to check the selected block ranges.
+        std::vector<uint8_t> expected; uint64_t offset=rp::image_bytes(c.f,full.w,full.h,full.layers,1);
+        for(uint32_t mip=0;mip<c.mips;++mip) {
+          const uint64_t plane=rp::image_bytes(c.f,std::max(c.w>>mip,1u),std::max(c.h>>mip,1u),1,1);
+          expected.insert(expected.end(),all.begin()+size_t(offset+plane),all.begin()+size_t(offset+plane*(1+c.layers)));
+          offset+=plane*full.layers;
+        }
+        bad += captured!=expected;
+        VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        vi.image=full.image;vi.viewType=VK_IMAGE_VIEW_TYPE_2D_ARRAY;vi.format=VkFormat(c.f);
+        vi.components={VkComponentSwizzle(components[0]),VkComponentSwizzle(components[1]),VkComponentSwizzle(components[2]),VkComponentSwizzle(components[3])};
+        vi.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,1,c.mips,1,c.layers};
+        vkcheck(vkCreateImageView(g.dev,&vi,nullptr,&full.view),"raw BCn subrange view");
+        a=full;a.w=c.w;a.h=c.h;a.mips=c.mips;a.layers=c.layers;
+      }
       const fs::path p = dir / ("stage-" + std::to_string(c.f) + ".bin");
-      write_vec(p, src);
-      Img b = make_image(c.f, c.w, c.h, c.layers, c.mips, false, true);
+      { std::ofstream out(p,std::ios::binary); rp::codec::Writer writer(out,captured.size());
+        check(writer.write(captured.data(),captured.size()) && writer.finish(),"raw blocks lossless codec"); }
+      Img b = make_image(c.f, c.w, c.h, c.layers, c.mips, false, true, false, components);
       fill_image_file(b, p, c.stage);
-      bad += read_image_all(b) != src;
+      bad += read_image_all(b) != captured;
+      if (rp::block_compressed(c.f))
+        sample_bad += shader_read(raw_pipe,a,as_float,200) != shader_read(raw_pipe,b,as_float,200);
     }
-    line("12 staged image upload: pieces read back bit-equal", bad == 0, std::to_string(bad) + " of 8 differ, " + std::to_string(pieces) + " pieces");
+    line("12 staged image upload: pieces read back bit-equal", bad == 0, std::to_string(bad) + " byte/range checks differ, " + std::to_string(pieces) + " pieces");
+    line("12b raw BCn sampling: codec round trip identical",sample_bad == 0,std::to_string(sample_bad) + " formats differ");
   }
   {   // 13-16: the lighting inputs (sets 2-3: cubes, LUTs, probe records, samplers) load and replay in closed
       // form (synthesize kSynthAmbient; tools/native_ambient.hlsl, pt_reference PT_ENV / PT_SUN_LUT). The

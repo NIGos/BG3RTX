@@ -14,11 +14,12 @@
 //   buffer S B BYTES [FILE]                 descriptor range of BYTES; FILE fills it from 0 (rest zero)
 //   range S B OFFSET FILE [FOFF BYTES]      a further slice at OFFSET (sparse: only what instances use):
 //                                           FILE whole, or BYTES of it from byte FOFF (many slices, one file)
-//   image S B E FORMAT W H LAYERS MIPS FILE [SOURCE]   VkFormat number; mip-major, each mip all layers
+//   image S B E FORMAT W H LAYERS MIPS FILE [SOURCE [R G B A]]   VkFormat number; mip-major, each mip all layers
 //                                           (a kSampledCube slot: 6 layers, the cube faces in order),
 //                                           packed. SOURCE: the game view's VkFormat when the writer read
 //                                           the image through a shader (no TRANSFER_SRC usage) and stored
 //                                           it decoded in FORMAT (BCn -> R8/RG8/RGBA8/RGBA16F, shader_read_format)
+//                                           R G B A: optional VkComponentSwizzle values (default identity).
 //   omitted S B E                           an image left out (budget, format): bound NaN, so a
 //                                           material lookup that needs it fails as "sampling" (6)
 //   sampler S B E MAG MIN MIPMODE AU AV AW ANISO MAXLOD   (Vk enums as numbers; ANISO 0 = off)
@@ -249,7 +250,8 @@ inline uint64_t image_bytes(uint32_t f, uint32_t w, uint32_t h, uint32_t layers,
 // ---- shader read (layer/replay.cpp, shaders/replay_image.hlsl) ----
 // A game image without TRANSFER_SRC usage cannot be copied, but it is SAMPLED: the writer reads every
 // texel through a 2D-array view of the game view's format (Load: no filtering, the decoded value the
-// pass's shader would fetch) and stores it in `pack_format`. BCn cannot be read back as raw blocks,
+// pass's shader would fetch) and stores it in `pack_format`. Exact LS packs use raw BCn
+// transfer copies instead. The approximate fallback for other packs keeps BCn decoded,
 // so it is stored decoded at the precision the decoder delivers to the filter: 8 bits per channel for
 // BC1/2/3/7 (sRGB kept as sRGB, so the replay's sampler linearizes and filters as the game's does),
 // BC4/BC5 as R8/RG8 (UNORM or SNORM: the values the hardware rounds to 8 bits before the filter, at
@@ -355,7 +357,7 @@ inline std::vector<CopyPiece> transfer_pieces(uint32_t f, uint32_t w, uint32_t h
 
 struct Buffer { uint32_t set, binding; uint64_t bytes; std::string file; };
 struct Range { uint32_t set, binding; uint64_t offset; std::string file; uint64_t file_offset = 0, bytes = 0; };   // bytes 0: whole file
-struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; uint32_t source_format = 0; };   // 0: copied as is
+struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; uint32_t source_format = 0; std::array<uint32_t,4> components{}; };   // 0: copied as is
 struct Omitted { uint32_t set, binding, element; };
 struct Sampler { uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod; };
 struct Output { uint32_t set, binding, format, w, h; std::string reference, initial; };
@@ -484,6 +486,10 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
     else if (k == "image") {
       Image i{}; ok = bool(t >> i.set >> i.binding >> i.element >> i.format >> i.w >> i.h >> i.layers >> i.mips >> i.file);
       if (ok && !(t >> i.source_format)) i.source_format = 0;
+      else if (ok && (t >> i.components[0])) {
+        ok = bool(t >> i.components[1] >> i.components[2] >> i.components[3]);
+        for (uint32_t c : i.components) ok = ok && c <= 6; // VkComponentSwizzle
+      }
       ok = ok && i.w && i.h && i.layers && i.mips && image_bytes(i.format, i.w, i.h, i.layers, i.mips);
       m.images.push_back(i);
     } else if (k == "omitted") { Omitted o{}; ok = bool(t >> o.set >> o.binding >> o.element); m.omitted.push_back(o); }
@@ -523,9 +529,14 @@ inline std::string serialize(const Manifest& m) {
     if (r.bytes) o << " " << r.file_offset << " " << r.bytes;
     o << "\n";
   }
-  for (const auto& i : m.images)
+  for (const auto& i : m.images) {
     o << "image " << i.set << " " << i.binding << " " << i.element << " " << i.format << " " << i.w << " " << i.h << " " << i.layers << " "
-      << i.mips << " " << i.file << (i.source_format ? " " + std::to_string(i.source_format) : "") << "\n";
+      << i.mips << " " << i.file;
+    const bool mapped = i.components != std::array<uint32_t,4>{};
+    if (i.source_format || mapped) o << " " << i.source_format;
+    if (mapped) for (uint32_t c : i.components) o << " " << c;
+    o << "\n";
+  }
   for (const auto& x : m.omitted) o << "omitted " << x.set << " " << x.binding << " " << x.element << "\n";
   for (const auto& s : m.samplers)
     o << "sampler " << s.set << " " << s.binding << " " << s.element << " " << s.mag << " " << s.min << " " << s.mip << " " << s.au << " "

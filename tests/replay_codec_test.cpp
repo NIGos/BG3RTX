@@ -59,5 +59,14 @@ int main(){
     check(!writer.write(b,4),"writer rejects excess bytes");
     std::ostringstream short_out(std::ios::binary);codec::Writer short_writer(short_out,3);check(!short_writer.finish(),"writer rejects incomplete file");
   }
+  {
+    std::ostringstream out(std::ios::binary);codec::Writer writer(out,noise.size(),24);
+    check(writer.write(noise.data(),noise.size()) && !writer.finish() && writer.limit_exceeded() && out.str().size()==24,
+          "disk cap rejects a block before writing it");
+    std::ostringstream tiny(std::ios::binary);codec::Writer header(tiny,0,23);
+    check(!header.good() && header.limit_exceeded() && tiny.str().empty(),"disk cap includes file header");
+    std::ostringstream exact(std::ios::binary);codec::Writer fit(exact,noise.size(),raw_blocks.size());
+    check(fit.write(noise.data(),noise.size()) && fit.finish() && exact.str().size()==raw_blocks.size(),"disk cap accepts exact fit including overhead");
+  }
   return failures?1:0;
 }

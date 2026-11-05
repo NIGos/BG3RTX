@@ -550,3 +550,18 @@ black-cookie/dark-atlas controls, repeat identity, captured specs/counter round 
 and exact paired restoration under Vulkan validation. `replay_pack_test` also checks
 legacy manifest round trips and malformed new directives. `replay_codec_test` checks
 lossless framing, random reads, corruption and legacy raw input without a GPU.
+
+Raw compressed LS images (ls-pack2): diagnostic image creation adds TRANSFER_SRC
+for sampled BC1-BC7 images, including BC4/BC5 UNORM and SNORM. Capture uses
+`vkCmdCopyImageToBuffer` on the descriptor's base mip/layer and bound range;
+rows are tightly packed block rows, with partial blocks only at mip edges.
+The manifest keeps the view VkFormat and optional `SOURCE R G B A` component
+mapping (SOURCE 0 for raw data). Replay recreates that format and view mapping,
+and uploads the lossless raw blocks. LS rejects any decoded BCn fallback;
+other passes retain the decoded compatibility path. A new diagnostic host build
+must create the images before capture; no additional ABI change is needed.
+The compressed LS disk cap remains 2048 MiB, including manifest and codec
+headers. Each codec block is checked before writing, so even a failed pack
+cannot overrun the cap. Synthetic tests cover raw BC4/BC5 atlas/cookie controls,
+odd block extents, nonzero mip/layer bases, multiple mips/layers, codec byte
+identity and sampled-value identity; no real inn size is inferred from fixtures.
