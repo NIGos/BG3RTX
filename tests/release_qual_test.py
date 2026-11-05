@@ -30,7 +30,8 @@ class FinalReleaseTests(unittest.TestCase):
         wanted = pipeline_readiness.requirements(job, plan)[plan.index(reset)]
         for key in ('ls_box', 'ls_k', 'rr_post_temporal', 'rt_water_compose', 'rt_water_reflections'):
             self.assertEqual(wanted[key], [pipeline_readiness.QUIET], key)
-        self.assertTrue(any('rt_local_shadows' in rx for rx in reset['wait_log']))
+        self.assertIn(pipeline_readiness.QUIET, reset['wait_log'])
+        self.assertFalse(any('generation ' in rx or 'pipeline built' in rx for rx in reset['wait_log']))
 
     def test_frozen_cli_never_reads_or_writes_raw_corpus(self):
         self.addCleanup(flow.readiness_budget.configure, [])
