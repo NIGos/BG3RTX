@@ -1,0 +1,13 @@
+{
+  "status": "READY_FOR_LIVE",
+  "key": "cpu_opt1",
+  "default": 0,
+  "shader_request_delta": 0,
+  "launches": 1,
+  "frames_per_window": 600,
+  "prediction": "Lower bvh decide/per-draw/TLAS recording CPU; no driver/GPU/energy change expected. Synthetic 5000-key benchmark is not a measured game saving.",
+  "decision": "Compare ON medians to both OFF windows and OFF repeat spread; keep no positive saving claim if delta is inside OFF spread. Inspect every ON window and lifecycle forbids.",
+  "timers": "Watch totals / actual rendered presents; never displayed FG presents. Scene/matrix 300-build producers drop first receipt; life is minute-wide context only.",
+  "readiness": "Scene-ready, cfg witness and fresh zero-pipeline watch only. No shader/pipeline generation waits.",
+  "pending": "Coordinator commit and authorized live run. No launch or queue staging by this lane."
+}

@@ -1225,3 +1225,22 @@ the initial failed attempt is discarded. Live-flow lint reports 0 issues and
 shader or ABI changes. READY_FOR_LIVE awaits measured cost, float energy and
 flicker gates; no quality or saving pass is claimed. No game, queue staging
 or commit occurred.
+
+### CPU scene scratch candidate (2026-11-05, opt-cpu)
+
+`cpu_opt1=0` by default. Reuse four CPU vectors and two membership-only tables
+under the existing scene mutex; clear membership before every build, preserve
+draw order and first duplicate winners. Use the present-refreshed pool-trim
+setting instead of its per-draw locked/string lookup (whose fallback was stale).
+No geometry, Vulkan recording, retirement, shader request or ABI change.
+Exact membership fixtures pass; 5000-key synthetic lifecycle 0.3183 -> 0.0517
+ms/build, not a game saving. Existing inn Ultra per-draw/TLAS CPU phases are
+0.497/0.638 ms/build static and 0.709/0.844 moving; enclosing capture hooks
+12.623/15.395 ms/frame include nested scene work and driver draw calls.
+One Ultra inn OFF/ON/OFF/ON job, 600 frames/window, is prepared under
+`tools/live_batches/opt_r3/cpu/`. Quiet readiness only; no pipeline waits.
+Check CPU phase deltas beyond OFF repeat spread in every ON window and no
+lifecycle faults. READY_FOR_LIVE; no live saving or quality pass. Full units,
+normalization and scope limitations are in that directory's README.
+Offline build/test: `scripts/build.ps1 -Test` PASS 180/180, 273.19 s CTest,
+using the checkout-local shader cache. Final analyzer fixtures pass separately.
