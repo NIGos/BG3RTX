@@ -1695,7 +1695,12 @@ float3 rt_tri_normal(uint geom, uint prim) {
 
 // Unnormalised geometric normal of the hit triangle in the lighting space
 // (camera-relative world), for any instance.
+#ifdef RT_COMPACT_HIT_STATE
+float3 rt_hit_normal(RtHit h, out bool range_guard) {
+  range_guard = false;
+#else
 float3 rt_hit_normal(RtHit h) {
+#endif
   InstInfo ii = inst_info(h.inst);
   if ((ii.meta & kInfoLegacy) != 0u) return rt_tri_normal(h.geom, h.prim);
   uint stride = ii.meta & 0xffu, bytes;
@@ -1703,6 +1708,9 @@ float3 rt_hit_normal(RtHit h) {
   else gOpaqueSoup.GetDimensions(bytes);
   if (stride < 16u || h.prim >= ii.tris) return 0.0.xxx;
   if (!tri_in_range(ii.base, h.prim, stride, bytes)) {
+#ifdef RT_COMPACT_HIT_STATE
+    range_guard = true;
+#endif
     guard_count(kGuardSet1);
     return 0.0.xxx;
   }
@@ -1732,6 +1740,13 @@ float3 rt_hit_normal(RtHit h) {
   float3 n = cross(p1 - p0, p2 - p0);
   return all(isfinite(n)) ? n : 0.0.xxx;
 }
+
+#ifdef RT_COMPACT_HIT_STATE
+float3 rt_hit_normal(RtHit h) {
+  bool ignored;
+  return rt_hit_normal(h, ignored);
+}
+#endif
 
 // Wachter & Binder, "A Fast and Robust Method for Avoiding Self-Intersection"
 // (Ray Tracing Gems, ch. 6): moves p off its surface along n (facing the side the

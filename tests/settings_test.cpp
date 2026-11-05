@@ -1171,7 +1171,12 @@ static void test_release_migration() {
     CHECK_EQ(get(m, "rt_water_surface_fresnel"), "0"); CHECK_EQ(get(m, "rt_hair_groom"), "0");
     opt["experimental_options"] = "1"; m = code_defaults(); apply_layer(m, opt);
     CHECK_EQ(get(m, "rt_water_surface_fresnel"), "1"); CHECK_EQ(get(m, "rt_hair_groom"), "0"); // post-release
-    CHECK_EQ(get(m, "rt_compact_hit_state"), "1"); CHECK(!code_defaults().count("rt_compact_hit_state")); CHECK(!find_knob("exp_compact_hit_state")); CHECK_EQ(get(m, "perf_submit_batch"), "0");
+    CHECK_EQ(get(m, "rt_compact_hit_state"), "0"); CHECK_EQ(get(code_defaults(), "rt_compact_hit_state"), "0");
+    const Knob* compact = find_knob("rt_compact_hit_state");
+    CHECK(compact && std::string(compact->category) == "Advanced" && compact->dev_only);
+    Map dev = code_defaults(); apply_layer(dev, parse_ini("dev=1\npreset=ultra\nrt_compact_hit_state=1\n"));
+    CHECK_EQ(get(dev, "rt_compact_hit_state"), "1");
+    CHECK_EQ(get(m, "perf_submit_batch"), "0");
     Map again = m; enforce_release_policy(again); CHECK(again == m);
   }
   Map stale;

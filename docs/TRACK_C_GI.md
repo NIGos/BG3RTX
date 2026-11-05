@@ -533,3 +533,21 @@ The `tools/live_batches/opt_r2/gi_attr` attribution job was abandoned and remove
 its readiness cannot observe cached pipelines. No attribution result is claimed.
 Release-path equivalence is checked against main with both retired IDs at their
 baseline release value 0; retained specialization domains remain exhaustive.
+
+
+## Compact hit state offline result (gi-livestate, 2026-11-05)
+
+`rt_compact_hit_state` (developer Advanced, default 0, spec 1029) keeps the already
+computed geometric normal across direct-light queries, allowing the full hit state
+to expire earlier. Repeated range-guard counters are preserved. Ray sets, samples,
+float precision and accumulation order are unchanged; shader request delta is 0.
+RTX 5090 production gi_trace_rt_hit_sun_em with native, hit-instancing, cascade and
+far specialization: registers 255 -> 243, shared memory 816 -> 44 bytes, with wind
+RGB both off and on. The replayable direct-only request stays at 168 registers.
+S8/camp/inn ON vs baseline: 100% bit-equal outputs and raw counters, 24 dispatches
+per run. Timings overlap OFF-repeat noise; no GPU-time saving is qualified.
+Key-OFF release equivalence: all 214 unique requests pass, 2,120 assignments.
+Full build and all 183 CTests pass, including settings and the replay fixture.
+Projection-matrix reload was rejected for changing 50 S8 output components.
+See [branch evidence](progress/gi-livestate.md) for timings/spreads and
+[offline commands](../tools/frame_replay.md) for statistics and exact comparisons.

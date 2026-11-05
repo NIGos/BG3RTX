@@ -31,6 +31,7 @@
 #include <vector>
 #include "../common/replay_pack.h"
 #include "../common/native_hit_records.h"
+#include "../common/native_hit_gi_bindings.h"
 #pragma comment(lib, "vulkan-1.lib")
 
 namespace fs = std::filesystem;
@@ -60,12 +61,18 @@ struct Gpu {
   PFN_vkGetAccelerationStructureBuildSizesKHR sizesAS{};
   PFN_vkCmdBuildAccelerationStructuresKHR buildAS{};
   PFN_vkGetAccelerationStructureDeviceAddressKHR addressAS{};
-  bool validation = false;
+  bool validation = false, pipeline_stats = false;
+  PFN_vkGetPipelineExecutablePropertiesKHR executableProperties{};
+  PFN_vkGetPipelineExecutableStatisticsKHR executableStatistics{};
   std::string name;
   uint32_t max_image_2d = 0, max_layers = 0;
   uint64_t device_bytes = 0;   // device-local memory allocated (never freed before exit)
 };
 Gpu g;
+bool g_pipeline_stats = false;
+fs::path g_reference_out;
+std::map<uint32_t, uint32_t> g_specs;
+bool g_reference_mismatch = false;
 std::atomic<unsigned> g_validation_errors{};
 [[noreturn]] void die(const std::string& what) { std::fprintf(stderr, "FAIL %s\n", what.c_str()); std::exit(1); }
 void check(bool yes, const std::string& what) { if (!yes) die(what); }
@@ -138,11 +145,27 @@ int init_gpu(bool want_validation, bool require_validation) {
   g.family = UINT32_MAX;
   for (uint32_t i = 0; i < nq; ++i) if ((families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) && families[i].timestampValidBits) { g.family = i; break; }
   check(g.family != UINT32_MAX, "compute queue with timestamps");
-  const char* extensions[] = {VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME,
+  std::vector<const char*> extensions = {VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME,
                               VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME};
+  VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR executable{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR};
+  if (g_pipeline_stats) {
+    uint32_t count = 0;
+    vkcheck(vkEnumerateDeviceExtensionProperties(g.physical, nullptr, &count, nullptr), "device extension count");
+    std::vector<VkExtensionProperties> available(count);
+    vkcheck(vkEnumerateDeviceExtensionProperties(g.physical, nullptr, &count, available.data()), "device extensions");
+    for (const auto& x : available) if (!std::strcmp(x.extensionName, VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME)) {
+      VkPhysicalDeviceFeatures2 query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &executable};
+      vkGetPhysicalDeviceFeatures2(g.physical, &query);
+      g.pipeline_stats = executable.pipelineExecutableInfo != VK_FALSE;
+      break;
+    }
+    if (g.pipeline_stats) extensions.push_back(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME);
+    else std::puts("[pipeline-stats] unavailable: VK_KHR_pipeline_executable_properties feature not supported");
+  }
   VkPhysicalDeviceVulkan12Features use12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
   use12.bufferDeviceAddress = VK_TRUE; use12.runtimeDescriptorArray = VK_TRUE; use12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
   use12.hostQueryReset = VK_TRUE;
+  if (g.pipeline_stats) use12.pNext = &executable;
   VkPhysicalDeviceRayQueryFeaturesKHR useRQ{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, &use12}; useRQ.rayQuery = VK_TRUE;
   VkPhysicalDeviceAccelerationStructureFeaturesKHR useAS{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, &useRQ};
   useAS.accelerationStructure = VK_TRUE;
@@ -152,13 +175,17 @@ int init_gpu(bool want_validation, bool require_validation) {
   float priority = 0.0f;
   VkDeviceQueueCreateInfo qci{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO}; qci.queueFamilyIndex = g.family; qci.queueCount = 1; qci.pQueuePriorities = &priority;
   VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &useAS};
-  dci.queueCreateInfoCount = 1; dci.pQueueCreateInfos = &qci; dci.enabledExtensionCount = 3; dci.ppEnabledExtensionNames = extensions; dci.pEnabledFeatures = &core;
+  dci.queueCreateInfoCount = 1; dci.pQueueCreateInfos = &qci; dci.enabledExtensionCount = uint32_t(extensions.size()); dci.ppEnabledExtensionNames = extensions.data(); dci.pEnabledFeatures = &core;
   vkcheck(vkCreateDevice(g.physical, &dci, nullptr, &g.dev), "device");
   vkGetDeviceQueue(g.dev, g.family, 0, &g.queue);
 #define PROC(type, field) g.field = reinterpret_cast<PFN_##type>(vkGetDeviceProcAddr(g.dev, #type)); check(g.field != nullptr, #type)
   PROC(vkCreateAccelerationStructureKHR, createAS); PROC(vkDestroyAccelerationStructureKHR, destroyAS);
   PROC(vkGetAccelerationStructureBuildSizesKHR, sizesAS); PROC(vkCmdBuildAccelerationStructuresKHR, buildAS);
   PROC(vkGetAccelerationStructureDeviceAddressKHR, addressAS);
+  if (g.pipeline_stats) {
+    PROC(vkGetPipelineExecutablePropertiesKHR, executableProperties);
+    PROC(vkGetPipelineExecutableStatisticsKHR, executableStatistics);
+  }
 #undef PROC
   VkCommandPoolCreateInfo cp{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO}; cp.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; cp.queueFamilyIndex = g.family;
   vkcheck(vkCreateCommandPool(g.dev, &cp, nullptr, &g.pool), "command pool");
@@ -393,6 +420,20 @@ float half_to_float(uint16_t h) {
 }
 uint64_t fnv1a(const std::vector<uint8_t>& d) { uint64_t h = 1469598103934665603ull; for (uint8_t b : d) { h ^= b; h *= 1099511628211ull; } return h; }
 
+// Read a previous replay's raw file; preserve every bit, including signed zero and NaN payloads.
+bool reference_equal(const fs::path& file, const std::vector<uint8_t>& raw, size_t component, const std::string& label, bool print = true) {
+  const auto reference = read_file(file);
+  if (reference.size() != raw.size() || raw.empty() || raw.size() % component != 0) {
+    if (print) std::printf("  vs replay %s: bit-equal FAILED (size mismatch)\n", label.c_str());
+    return false;
+  }
+  uint64_t equal = 0, n = raw.size() / component;
+  for (size_t j = 0; j < raw.size(); j += component) equal += std::memcmp(raw.data() + j, reference.data() + j, component) == 0;
+  if (print) std::printf("  vs replay %s: bit-equal %.4f%% of components (%llu/%llu)\n", label.c_str(), 100.0 * equal / double(n),
+                         (unsigned long long)equal, (unsigned long long)n);
+  return equal == n;
+}
+
 // ---------------------------------------------------------------- shader
 std::string source_root() { return BG3RTX_SOURCE_DIR; }
 std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::string>& defines, const fs::path& out_spv) {
@@ -420,6 +461,105 @@ std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::strin
   check(bytes.size() % 4 == 0 && !bytes.empty(), "SPIR-V size");
   std::vector<uint32_t> code32(bytes.size() / 4); std::memcpy(code32.data(), bytes.data(), bytes.size());
   return code32;
+}
+
+// Pipeline creation is shared by replay and the pack-free GI compiler. Statistics describe
+// the specialized driver executable, rather than the unspecialized SPIR-V module.
+VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout layout) {
+  VkShaderModuleCreateInfo smi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO}; smi.codeSize = spirv.size() * 4; smi.pCode = spirv.data();
+  VkShaderModule module; vkcheck(vkCreateShaderModule(g.dev, &smi, nullptr, &module), "shader module");
+  std::vector<VkSpecializationMapEntry> entries;
+  std::vector<uint32_t> values;
+  for (const auto& [id, value] : g_specs) {
+    entries.push_back({id, uint32_t(values.size() * sizeof(uint32_t)), sizeof(uint32_t)}); values.push_back(value);
+    std::printf("[pipeline] spec %u=%u\n", id, value);
+  }
+  VkSpecializationInfo specs{uint32_t(entries.size()), entries.data(), values.size() * sizeof(uint32_t), values.data()};
+  VkComputePipelineCreateInfo cpi{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  cpi.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, "main"};
+  if (!entries.empty()) cpi.stage.pSpecializationInfo = &specs;
+  cpi.layout = layout;
+  if (g.pipeline_stats) cpi.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
+  VkPipeline pipeline; vkcheck(vkCreateComputePipelines(g.dev, VK_NULL_HANDLE, 1, &cpi, nullptr, &pipeline), "compute pipeline");
+  vkDestroyShaderModule(g.dev, module, nullptr);
+  if (!g.pipeline_stats) return pipeline;
+  VkPipelineInfoKHR info{VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR}; info.pipeline = pipeline;
+  uint32_t count = 0;
+  vkcheck(g.executableProperties(g.dev, &info, &count, nullptr), "pipeline executable count");
+  std::vector<VkPipelineExecutablePropertiesKHR> properties;
+  VkResult status;
+  do {
+    properties.assign(count, {VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_PROPERTIES_KHR});
+    status = g.executableProperties(g.dev, &info, &count, properties.data());
+    if (status == VK_INCOMPLETE) vkcheck(g.executableProperties(g.dev, &info, &count, nullptr), "pipeline executable recount");
+  } while (status == VK_INCOMPLETE);
+  vkcheck(status, "pipeline executables");
+  for (uint32_t i = 0; i < count; ++i) {
+    const auto& p = properties[i];
+    std::printf("[pipeline-stats] executable %u: %s; %s; stages=0x%x subgroup=%u\n", i, p.name, p.description, p.stages, p.subgroupSize);
+    VkPipelineExecutableInfoKHR ei{VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INFO_KHR}; ei.pipeline = pipeline; ei.executableIndex = i;
+    uint32_t n = 0;
+    vkcheck(g.executableStatistics(g.dev, &ei, &n, nullptr), "pipeline statistic count");
+    std::vector<VkPipelineExecutableStatisticKHR> stats;
+    do {
+      stats.assign(n, {VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR});
+      status = g.executableStatistics(g.dev, &ei, &n, stats.data());
+      if (status == VK_INCOMPLETE) vkcheck(g.executableStatistics(g.dev, &ei, &n, nullptr), "pipeline statistic recount");
+    } while (status == VK_INCOMPLETE);
+    vkcheck(status, "pipeline statistics");
+    for (uint32_t j = 0; j < n; ++j) {
+      const auto& st = stats[j];
+      std::printf("[pipeline-stats] %u %s = ", i, st.name);
+      switch (st.format) {
+        case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_BOOL32_KHR: std::printf("%s", st.value.b32 ? "true" : "false"); break;
+        case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_INT64_KHR: std::printf("%lld", (long long)st.value.i64); break;
+        case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR: std::printf("%llu", (unsigned long long)st.value.u64); break;
+        case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_FLOAT64_KHR: std::printf("%.17g", st.value.f64); break;
+        default: die("unknown pipeline statistic format");
+      }
+      std::printf("; %s\n", st.description);
+    }
+  }
+  std::fflush(stdout);
+  return pipeline;
+}
+
+// Pack-free compiler for the production GI layout. Uses the replay contract for sets 0/1/3;
+// set 2 is the production emission scene, not the replay's deferred-lighting inputs.
+void compile_gi_pipeline(const std::vector<uint32_t>& spirv) {
+  std::vector<VkDescriptorSetLayout> sets(4);
+  for (uint32_t set = 0; set < 4; ++set) {
+    std::vector<VkDescriptorSetLayoutBinding> bindings;
+    auto add = [&](uint32_t binding, VkDescriptorType type, uint32_t count = 1) {
+      bindings.push_back({binding, type, count, VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
+    };
+    if (set == 0) for (const auto& binding : bg3::native_hit_gi::bindings) add(binding.binding, binding.type, binding.count);
+    if (set == 1) {
+      for (const auto& slot : rp::kGiHitDirect) if (slot.set == set) {
+        const auto type = slot.kind == rp::kSsbo ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER :
+            slot.kind == rp::kSampler ? VK_DESCRIPTOR_TYPE_SAMPLER : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        add(slot.binding, type, slot.count);
+      }
+      add(10, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR); add(11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER); // OMM contract
+      add(19, VK_DESCRIPTOR_TYPE_SAMPLER, 16); // native tileset
+    }
+    if (set == 2) for (const auto& binding : bg3::hit_emission::emissive) add(binding.binding, binding.type, binding.count);
+    if (set == 3) {
+      for (const auto& binding : bg3::native_hit_gi::sun) add(binding.binding, binding.type, binding.count);
+      add(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE); // live sun layout's per-light data, unused by GI
+    }
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.bindingCount = uint32_t(bindings.size()); ci.pBindings = bindings.data();
+    vkcheck(vkCreateDescriptorSetLayout(g.dev, &ci, nullptr, &sets[set]), "compile-only GI set layout");
+  }
+  VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT, 0, 256};
+  VkPipelineLayoutCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  ci.setLayoutCount = uint32_t(sets.size()); ci.pSetLayouts = sets.data(); ci.pushConstantRangeCount = 1; ci.pPushConstantRanges = &range;
+  VkPipelineLayout layout; vkcheck(vkCreatePipelineLayout(g.dev, &ci, nullptr, &layout), "compile-only GI layout");
+  VkPipeline pipeline = make_pipeline(spirv, layout);
+  vkDestroyPipeline(g.dev, pipeline, nullptr); vkDestroyPipelineLayout(g.dev, layout, nullptr);
+  for (auto set : sets) vkDestroyDescriptorSetLayout(g.dev, set, nullptr);
+  std::puts("[pipeline] compile-only GI pipeline built; no resources loaded or dispatch submitted");
 }
 
 // ---------------------------------------------------------------- statistics (core/gi.cpp wording, 1 frame)
@@ -583,6 +723,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     pass.slots = trust_slots.data(); pass.slot_count = uint32_t(trust_slots.size());
   }
   fs::create_directories(out);
+  check(g_reference_out.empty() || fs::weakly_canonical(out) != fs::weakly_canonical(g_reference_out), "--reference-out must differ from --out");
   // Shader: the production file from this checkout (or an override), the pack's variant defines.
   std::vector<std::string> defines = extra_defines;
   for (size_t a = 0; a < m.defines.size();) { size_t e = m.defines.find(';', a); defines.push_back(m.defines.substr(a, e - a)); if (e == std::string::npos) break; a = e + 1; }
@@ -907,11 +1048,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   pl.setLayoutCount = pass.set_count; pl.pSetLayouts = setLayouts.data(); pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &pushRange;
   VkPipelineLayout layout; vkcheck(vkCreatePipelineLayout(g.dev, &pl, nullptr, &layout), "pipeline layout");
-  VkShaderModuleCreateInfo smi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO}; smi.codeSize = spirv.size() * 4; smi.pCode = spirv.data();
-  VkShaderModule module; vkcheck(vkCreateShaderModule(g.dev, &smi, nullptr, &module), "shader module");
-  VkComputePipelineCreateInfo cpi{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-  cpi.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, "main"}; cpi.layout = layout;
-  VkPipeline pipeline; vkcheck(vkCreateComputePipelines(g.dev, VK_NULL_HANDLE, 1, &cpi, nullptr, &pipeline), "compute pipeline");
+  VkPipeline pipeline = make_pipeline(spirv, layout);
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; qi.queryType = VK_QUERY_TYPE_TIMESTAMP; qi.queryCount = 2;
   VkQueryPool queries; vkcheck(vkCreateQueryPool(g.dev, &qi, nullptr, &queries), "query pool");
   if (!quiet) {   // what the pack costs the GPU (a 2 GB VT cache included; host staging is kStageBytes)
@@ -924,6 +1061,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                 largest / 1048576.0, g.device_bytes / 1048576.0, heap / 1048576.0, kStageBytes / 1048576.0);
   }
   ReplayProgress progress;
+  std::vector<double> timings;
   for (uint32_t run = 0; run < repeat; ++run) {
     if (run) progress.tick(run, repeat, hooks && hooks->note ? hooks->note(run) : std::string());
     std::memset(stats.map, 0, size_t(stats.size));
@@ -954,6 +1092,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     vkcheck(vkGetQueryPoolResults(g.dev, queries, 0, 2, sizeof ticks, ticks, 8, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT), "timestamps");
     RunResult rr;
     rr.gpu_ms = double(ticks[1] - ticks[0]) * g.tick_ns * 1e-6;
+    timings.push_back(rr.gpu_ms);
     std::vector<uint8_t> raw(static_cast<size_t>(stats.size)); std::memcpy(raw.data(), stats.map, raw.size());
     rr.stats = fold(raw);
     rr.raw_stats = std::move(raw);
@@ -970,11 +1109,20 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     result.runs.push_back(std::move(rr));
   }
   if (progress.printed) progress.tick(repeat, repeat, hooks && hooks->note ? hooks->note(repeat) : std::string());
+  std::sort(timings.begin(), timings.end());
+  const size_t mid = timings.size() / 2;
+  const double median_ms = timings.size() % 2 ? timings[mid] : (timings[mid - 1] + timings[mid]) * 0.5;
+  std::printf("[replay] GPU repeats %zu: median %.6f ms, min %.6f ms, max %.6f ms, spread %.6f ms (all dispatches)\n",
+              timings.size(), median_ms, timings.front(), timings.back(), timings.back() - timings.front());
   // Outputs (the last run), and the live reference comparison when the pack has one.
   for (size_t i = 0; i < outputs.size() && !hooks; ++i) {
     const auto& r = result.runs.back().outputs[i];
     write_vec(out / (r.name + ".raw"), r.raw);
     write_pfm(out / (r.name + ".pfm"), r);
+    if (!g_reference_out.empty()) {
+      const size_t component = r.format == VK_FORMAT_R16G16B16A16_SFLOAT ? 2 : 4;
+      g_reference_mismatch |= !reference_equal(g_reference_out / (r.name + ".raw"), r.raw, component, r.name);
+    }
     if (!hooks && !outputs[i].reference.empty() && r.format == VK_FORMAT_R16G16B16A16_SFLOAT) {
       auto live = file(outputs[i].reference);
       if (live.size() != r.raw.size()) { result.warnings.push_back("reference " + outputs[i].reference + " has another size"); continue; }
@@ -989,6 +1137,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   // The raw counters (kCounters x 64 bins of uint32): per-slot diagnostics such as HM_BLOCKERS
   // (native_hit_material.hlsli, tools/hit_material_blockers.py) read their slots from it.
   if (!hooks) write_vec(out / "rtstats.bin", result.runs.back().raw_stats);
+  if (!hooks && !g_reference_out.empty()) {
+    g_reference_mismatch |= !reference_equal(g_reference_out / "rtstats.bin", result.runs.back().raw_stats, 4, "counters");
+  }
   if (!hooks && m.pass == "water_compose_fixture") {
     // Exact integer side effects of the real production compose entry, read only
     // after dispatch completion. This opt-in fixture leaves ordinary replay intact.
@@ -1908,6 +2059,20 @@ int self_test(const fs::path& dir) {
   same = same && std::memcmp(a.stats.t, b.stats.t, sizeof a.stats.t) == 0;
   line("4 deterministic: two dispatches bit-identical (images, counters)", same, "giRaw fnv1a " + [&] { char s[32]; std::snprintf(s, sizeof s, "%016llx", (unsigned long long)a.outputs[0].hash); return std::string(s); }());
   bool finite = a.outputs[0].nonfinite == 0 && a.outputs[1].nonfinite == 0;
+  { // Reference-output gate uses the same disk files and helper as --reference-out, no extra dispatch.
+    const auto ref = dir / "lit-out";
+    bool positive = reference_equal(ref / "rtstats.bin", b.raw_stats, 4, "counters", false);
+    for (const auto& output : b.outputs) positive &= reference_equal(ref / (output.name + ".raw"), output.raw,
+        output.format == VK_FORMAT_R16G16B16A16_SFLOAT ? 2 : 4, output.name, false);
+    auto changed = b.outputs[0].raw; changed[0] ^= 1; // one bit must fail even if the rounded percentage is 100%.
+    auto counters = b.raw_stats; counters.back() ^= 1;
+    auto truncated = b.outputs[0].raw; truncated.pop_back();
+    const bool negative = !reference_equal(ref / "giRaw.raw", d.outputs[0].raw, 2, "dark control", false) &&
+        !reference_equal(ref / "giRaw.raw", changed, 2, "one bit", false) &&
+        !reference_equal(ref / "rtstats.bin", counters, 4, "counter bit", false) &&
+        !reference_equal(ref / "giRaw.raw", truncated, 2, "size", false);
+    line("4b replay reference: exact match and negative controls", positive && negative, "outputs, dark control, one output/counter bit and size");
+  }
   line("5 outputs finite, bounce positive where lit", finite && a.outputs[0].mean[0] > 0, "mean giRaw.r " + std::to_string(a.outputs[0].mean[0]));
   // Dark: the same rays and hits, the light of colour 0: the bounce is exactly 0, the occlusion identical.
   const auto* la = reinterpret_cast<const uint16_t*>(a.outputs[0].raw.data()), * ld = reinterpret_cast<const uint16_t*>(d.outputs[0].raw.data());
@@ -1995,7 +2160,7 @@ int main(int argc, char** argv) {
   fs::path pack, out, hlsl, spv, synth, test;
   std::vector<std::string> defines;
   uint32_t repeat = 1;
-  bool synth_box = false, synth_lighting = false, synth_casters = false;
+  bool synth_box = false, synth_lighting = false, synth_casters = false, compile_only = false;
   bool validation = true, dark = false, pt = false, pt_cost_only = false, pt_skip_cost = false, native = false;
   uint32_t pt_iters = 32;
   fs::path pt_test;
@@ -2008,6 +2173,18 @@ int main(int argc, char** argv) {
     else if (args[i] == "--define") defines.push_back(next());
     else if (args[i] == "--repeat") repeat = uint32_t(std::max(1, std::atoi(next().c_str())));
     else if (args[i] == "--no-validation") validation = false;
+    else if (args[i] == "--pipeline-stats") g_pipeline_stats = true;
+    else if (args[i] == "--compile-only") compile_only = true;
+    else if (args[i] == "--reference-out") g_reference_out = next();
+    else if (args[i] == "--spec") {
+      const std::string kv = next(); const size_t eq = kv.find('=');
+      check(eq != std::string::npos, "--spec ID=UINT");
+      size_t a = 0, b = 0;
+      const auto id = std::stoull(kv.substr(0, eq), &a, 0), value = std::stoull(kv.substr(eq + 1), &b, 0);
+      check(a == eq && b == kv.size() - eq - 1 && id <= UINT32_MAX && value <= UINT32_MAX && kv.find('-') == std::string::npos,
+            "--spec requires uint32 ID=UINT");
+      g_specs[uint32_t(id)] = uint32_t(value);
+    }
     else if (args[i] == "--synthesize") synth = next();
     else if (args[i] == "--dark") dark = true;
     else if (args[i] == "--box") synth_box = true;            // --synthesize: the closed box (PT furnace)
@@ -2033,6 +2210,17 @@ int main(int argc, char** argv) {
   if (!test.empty()) return self_test(test);
   if (!pt_test.empty()) return pt_self_test(pt_test);
   if (!synth.empty()) { synthesize(synth, dark, synth_box || synth_casters, synth_lighting, synth_casters); std::printf("synthetic pack written to %s\n", synth.string().c_str()); return 0; }
+  if (compile_only) {
+    check(pack.empty() && (!hlsl.empty() != !spv.empty()), "--compile-only requires exactly one of --hlsl or --spv, no --pack (GI layout only)");
+    if (int r = init_gpu(validation, false)) return r;
+    if (out.empty()) out = fs::path(source_root()) / ".scratch" / "pipeline-stats";
+    fs::create_directories(out);
+    std::vector<uint32_t> code;
+    if (!spv.empty()) { auto b = read_file(spv); check(!b.empty() && b.size() % 4 == 0, "SPIR-V size"); code.resize(b.size() / 4); std::memcpy(code.data(), b.data(), b.size()); }
+    else code = compile(hlsl, defines, out / "pass.spv");
+    compile_gi_pipeline(code);
+    return g_validation_errors.load() ? 1 : 0;
+  }
   check(!pack.empty(), "usage: frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V] [--repeat N]");
   if (int r = init_gpu(validation, false)) return r;
   if (out.empty()) out = pack / (native ? "native-ambient" : pt || pt_cost_only ? "pt-reference" : "replay");
@@ -2106,5 +2294,5 @@ int main(int argc, char** argv) {
   replay(pack, spv.empty() ? nullptr : &code, hlsl, defines, out, repeat, false);
   if (g_validation_errors.load()) { std::printf("FAIL %u validation errors\n", g_validation_errors.load()); return 1; }
   std::printf("written to %s\n", out.string().c_str());
-  return 0;
+  return g_reference_mismatch ? 1 : 0;
 }

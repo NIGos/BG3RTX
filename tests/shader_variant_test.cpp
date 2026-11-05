@@ -68,6 +68,7 @@ int main(int argc, char** argv) {
   // rt_hair_groom (constant 1020): its own slot bit above every other, on every gi/ file only.
   CHECK(kSpecIdHairGroom == 1020);
   CHECK(kSpecIdHairGroomShadowT == 1026);
+  CHECK(kSpecIdCompactHitState == 1029);
   for (unsigned base = 0; base < kHairGroomSlot; ++base) {
     const auto on = base | hair_groom_slot("gi/rt_shadow.hlsl", true);
     CHECK((base | hair_groom_slot("gi/rt_shadow.hlsl", false)) == base && on != base && on < kPipelineSlots);
