@@ -123,7 +123,10 @@ def requirements(job, plan):
                 patterns = []
             if patterns:
                 wanted[key] = patterns + [QUIET]
-            elif key not in TABLE:
+            elif key in TABLE:
+                # Disabled family: nothing to build, only let in-flight work settle.
+                wanted[key] = [QUIET]
+            else:
                 # Unknown keys need an explicit contract, never an invented
                 # shader build/quiet interval (they may be layer-only too).
                 wanted[key] = []
