@@ -25,9 +25,6 @@ using HookMap = std::unordered_map<std::string, PFN_vkVoidFunction>;
 static std::atomic<uint64_t> g_buffer_resource_epoch{1};
 uint64_t buffer_resource_epoch() noexcept { return g_buffer_resource_epoch.load(std::memory_order_acquire); }
 void buffer_resource_changed() noexcept { g_buffer_resource_epoch.fetch_add(1,std::memory_order_release); }
-static std::atomic<uint64_t> g_material_resource_epoch{1};
-uint64_t material_resource_epoch() noexcept { return g_material_resource_epoch.load(std::memory_order_acquire); }
-void material_resource_changed() noexcept { g_material_resource_epoch.fetch_add(1,std::memory_order_release); }
 
 Tracker& tracker() {
   static Tracker t;
@@ -700,7 +697,6 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
     rec.ci.pQueueFamilyIndices = nullptr;
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().images[*out] = rec;
-    material_resource_changed();
   }
   return r;
 }
@@ -755,7 +751,6 @@ static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, con
   ngx_forget_image(img);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().images.erase(img);
-  material_resource_changed();
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkImageViewCreateInfo* ci,
@@ -767,7 +762,6 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkI
     auto& t=tracker();const auto image=t.images.find(ci->image);
     const auto creation=trace_view::capture(*ci,trace_view::allocate_id(t.next_view_id),image==t.images.end()?0:image->second.id);
     t.views[*out] = ViewRec{ci->image, ci->format, ci->subresourceRange,creation};
-    material_resource_changed();
   }
   return r;
 }
@@ -781,7 +775,6 @@ static VKAPI_ATTR void VKAPI_CALL DestroyImageView(VkDevice device, VkImageView 
   device_of(device)->vk.DestroyImageView(device, v, a);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().views.erase(v);
-  material_resource_changed();
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo* ci,
@@ -985,7 +978,6 @@ static VKAPI_ATTR VkResult VKAPI_CALL GetSwapchainImagesKHR(VkDevice device, VkS
       rec.ci.samples = VK_SAMPLE_COUNT_1_BIT;
       rec.ci.usage = sci.imageUsage;
       tracker().images[images[i]] = rec;
-      material_resource_changed();
     }
   }
   return r;

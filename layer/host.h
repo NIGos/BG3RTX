@@ -82,7 +82,7 @@ enum class CfgHot : int {
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_cascade_index, rt_alpha_cut,
   rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   rt_water_shadows, rt_water_ls_shadows, rt_water_refraction, rt_hit_material_recycle, rt_hit_material_capture_unlocked, rt_hit_material_lean_hooks,
-  perf_hitmat_lists, perf_hook_state, rt_hair_groom, rt_hair_groom_primary, cpu_opt1, cpu_opt2, cpu_opt3, cpu_opt4, rt_hair_pool_trim, rt_dyn_hold, Count
+  perf_hitmat_lists, perf_hook_state, rt_hair_groom, rt_hair_groom_primary, cpu_opt1, cpu_opt2, cpu_opt3, rt_hair_pool_trim, rt_dyn_hold, Count
 };
 int cfg_hot(CfgHot key);
 
@@ -192,9 +192,6 @@ Tracker& tracker();
 // Global buffer lifetime/binding/mapping generation; mapped contents stay live.
 uint64_t buffer_resource_epoch() noexcept;
 void buffer_resource_changed() noexcept;
-// Image/view/sampler incarnations used by cross-frame descriptor receipts.
-uint64_t material_resource_epoch() noexcept;
-void material_resource_changed() noexcept;
 // Caller holds tracker().mu. Number of dynamic offsets a set consumes, and the
 // index of (binding, element) among them (UINT32_MAX if not dynamic/unknown).
 uint32_t set_dynamic_count_locked(VkDescriptorSet set);

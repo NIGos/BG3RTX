@@ -1,6 +1,34 @@
 # Optimization profiling, 2026-11-05
 
-Status: Round 1 outcomes applied; historical profiling and candidate notes follow.
+## Outcomes
+
+| Candidate | Verdict | Measured result / reason |
+| --- | --- | --- |
+| `rt_scene_compact_holds` | Qualified, default 1 | High inn scene build: -0.87 ms GPU; OFF spread 0.075 ms; float energy within OFF spread. |
+| `cpu_opt1` | Qualified, default 1 | Ultra inn hook bodies: -0.13 ms/frame CPU; OFF spread 0.016 ms. |
+| `cpu_opt2` | Qualified, default 1 | Ultra inn hook bodies: -0.30 ms/frame CPU; OFF spread 0.088 ms. |
+| `cpu_opt3` | Qualified, default 1 | Ultra inn capture total: -0.24 ms/frame CPU; OFF spread 0.054 ms. |
+| `cpu_opt4` | Rejected, removed | Ultra inn capture hook bodies: +0.47 / +0.54 ms/frame CPU; OFF spread 0.104 ms. |
+| `gi_roof_reject` | Rejected, removed | Inn GI total: 21.75 / 21.58 ms OFF vs 21.87 / 21.95 ms ON. |
+| `rt_origin_lazy_normal` | Rejected, removed | Origin pass no saving: 1.514 / 1.495 ms OFF vs 1.634 / 1.520 ms ON. |
+| GI temporal current-sample shortcut | Dropped offline | No exact proof of stored-output equivalence. |
+| Reflection / local-shadow early-outs | Dropped offline | No exact proof / estimated saving <0.05 ms. |
+| Ray flags audit | Closed, already implemented | Binary visibility rays already use first-hit termination. |
+| GI attribution job | Abandoned | Readiness cannot observe cached pipelines. |
+
+Totals: about -0.67 ms/frame CPU at the inn on Ultra (hook bodies 12.4 ->
+about 11.7 ms/frame), summing the separately qualified CPU receipts; -0.87 ms GPU
+on High scene build at the inn. Other scenes were not A/B measured per candidate;
+these totals are not a multi-scene or combined-preset measurement.
+
+Tooling fixed tonight: quiet-only readiness, layer-only keys excluded from pipeline
+waits, shared A/B analysis, and candidate prewarm. Rejected GPU candidate prewarm
+registrations were subsequently removed; the historical notes below retain context.
+
+CPU4 evidence: `captures/queue/logs/opt-cpu4-inn.*.log` and its `.cpu.md` report;
+the rejection evidence is retained in `TRACK_D_SCENE_BUILD.md`.
+
+Status: final outcomes applied; historical profiling and candidate notes follow.
 
 Batch: `tools/live_batches/opt_profile/jobs/opt-profile-*.json` (four launches).
 Expected total 17.1 minutes including 120 s load per scene; 20 minutes total hard caps.
