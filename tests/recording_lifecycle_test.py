@@ -33,6 +33,7 @@ class RecordingLifecycle(unittest.TestCase):
             code = body("layer/cmd.cpp", function)
             self.assertIn("alpha_discard_recording", code)
             self.assertIn("sl_discard_recording", code)
+            self.assertIn("post_discard_recording", code)
 
     def test_only_successful_submissions_publish_uploads(self):
         source = (ROOT / "layer/layer.cpp").read_text()
@@ -42,6 +43,36 @@ class RecordingLifecycle(unittest.TestCase):
             self.assertGreater(code.index("alpha_submit_recordings(cmds)"), code.index("VkResult r ="))
             self.assertGreater(code.index("sl_note_submit(cmds)"), code.index("VkResult r ="))
         self.assertEqual(source.count("alpha_submit_recordings(cmds)"), 2)
+        for function in ("QueueSubmit", "QueueSubmit2"):
+            code = body("layer/layer.cpp", function)
+            self.assertRegex(code, r"if \(r == VK_SUCCESS\) \{[^}]*post_submit_recordings\(cmds\)")
+
+    def test_post_secondaries_follow_primary_submission(self):
+        code = body("layer/cmd.cpp", "CmdExecuteCommands")
+        self.assertIn("post_secondaries.push_back(sec->recording)", code)
+        code = body("layer/cmd.cpp", "post_submit_recordings")
+        self.assertIn("state->post_secondaries", code)
+        self.assertIn("rrpost_submit_recording(recording)", code)
+        self.assertIn("ngx_submit_recording(recording)", code)
+        self.assertIn("post_secondaries.clear()", body("layer/cmd.cpp", "BeginCommandBuffer"))
+
+    def test_ring_requires_recording_release_and_gpu_completion(self):
+        code = body("layer/rrpost.cpp", "run")
+        self.assertIn('life_before_destroy(uint64_t(g_sets[index]), "RR descriptor", false)', code)
+        self.assertIn("owner.recording || !owner.reusable(", code)
+        self.assertIn("life_note(cmd, uint64_t(set))", code)
+        self.assertLess(code.index("if (!set) return false"), code.index("UpdateDescriptorSets"))
+
+    def test_history_and_guide_publication_requires_submission(self):
+        code = body("layer/rrpost.cpp", "rrpost_temporal")
+        self.assertIn("if (!g_hist_producer.ready) g_hist_valid = false", code)
+        self.assertIn("g_hist_valid = false; g_temporal_active = true", code)
+        self.assertIn("g_hist_producer.submitted(recording)", body("layer/rrpost.cpp", "rrpost_submit_recording"))
+        code = body("layer/ngx.cpp", "guides_init_barrier")
+        self.assertIn("g.initialized.record(cmd_recording(cmd))", code)
+        self.assertNotIn("initialized = true", code)
+        self.assertIn("guide.initialized.submitted(recording)", body("layer/ngx.cpp", "ngx_submit_recording"))
+        self.assertIn("g_guides_producer.ready ||", body("layer/ngx.cpp", "rr_evaluate"))
 
     def test_device_teardown_resets_upload_state(self):
         code = body("layer/alphatest.cpp", "alpha_device_destroyed")

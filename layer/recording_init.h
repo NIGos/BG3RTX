@@ -21,3 +21,13 @@ bool cancel_recorded_copy(bool unsubmitted, Lease& current, const Lease& previou
   current = previous;
   return true;
 }
+
+// A descriptor remains immutable while its executable recording exists, even
+// after GPU completion (the application may resubmit it). Reset releases the
+// recording, but never substitutes for the lifetime tracker's completion proof.
+struct DescriptorRecordingLease {
+  uint64_t recording = 0;
+  bool reusable(bool gpu_complete) const { return !recording && gpu_complete; }
+  void record(uint64_t owner) { recording = owner; }
+  void discard(uint64_t owner) { if (recording == owner) recording = 0; }
+};

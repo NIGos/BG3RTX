@@ -26,6 +26,7 @@
 // Anything out of order breaks the chain for that frame and the evaluate falls
 // back to RR on the game's graded colour (logged).
 #include "host.h"
+#include "recording_init.h"
 #include "../common/pipeline_async.h"
 
 #include <cmath>
@@ -123,6 +124,7 @@ Img g_xs, g_xr, g_ac, g_eb, g_check, g_cbt, g_z, g_sss_before, g_sss;
 Img g_dummy2d, g_dummy3d;
 Img g_hist_ac[2], g_hist_eb[2], g_hist_meta[2];
 bool g_hist_valid = false, g_temporal_active = false;
+RecordingInit g_hist_producer;
 uint32_t g_hist_index = 0, g_hist_ow = 0, g_hist_oh = 0;
 uint64_t g_hist_frame = 0;
 float g_hist_jitter[2] = {}, g_final_jitter[2] = {};
@@ -137,6 +139,7 @@ VkDescriptorPool g_pool = VK_NULL_HANDLE;
 constexpr uint32_t kRing = 256;
 VkDescriptorSet g_sets[kRing] = {};
 uint32_t g_next_set = 0;
+DescriptorRecordingLease g_set_owners[kRing];
 VkSampler g_sampler = VK_NULL_HANDLE;
 struct Pipe {
   const char* entry;
@@ -452,7 +455,19 @@ void ts_harvest(DeviceData* dd, uint32_t slot) {
 bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const Push& pc, uint32_t gx, uint32_t gy) {
   VkPipeline pipe = pipeline(dd, g_pipes[which]);
   if (!pipe) return false;
-  VkDescriptorSet set = g_sets[g_next_set++ % kRing];
+  const auto recording = cmd_recording(cmd);
+  if (!recording) return false;
+  VkDescriptorSet set = VK_NULL_HANDLE;
+  for (uint32_t i = 0; i < kRing; ++i) {
+    const uint32_t index = (g_next_set + i) % kRing;
+    auto& owner = g_set_owners[index];
+    if (owner.recording || !owner.reusable(life_before_destroy(uint64_t(g_sets[index]), "RR descriptor", false))) continue;
+    owner.record(recording);
+    set = g_sets[index]; g_next_set = (index + 1) % kRing;
+    life_note(cmd, uint64_t(set));
+    break;
+  }
+  if (!set) return false; // fail closed; never overwrite an executable/pending set
   VkDescriptorImageInfo ii[18] = {};
   VkWriteDescriptorSet w[20] = {};
   uint32_t n = 0, k = 0;
@@ -1133,6 +1148,10 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
   g_temporal_active = false;
   DeviceData* dd = device_of(cmd);
   if (!cfg_int("rr_post_temporal", 0)) { g_hist_valid = false; return; }
+  const auto recording = cmd_recording(cmd);
+  if (!recording || (g_hist_producer.pending && g_hist_producer.pending != recording)) return;
+  // Metadata may describe a local write; only successful submission publishes it.
+  if (!g_hist_producer.ready) g_hist_valid = false;
   const uint32_t w = g_ch.w, h = g_ch.h;
   if (!dd || !depth.view || !mv.view || depth.width != w || depth.height != h ||
       mv.width != w || mv.height != h || !std::isfinite(jitter[0]) || !std::isfinite(jitter[1]) ||
@@ -1171,7 +1190,8 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
   if (!run(dd, cmd, P_TEMPORAL, b, pc, (w + 7) / 8, (h + 7) / 8)) {
     g_hist_valid = false; log("[rrpost] temporal REFUSED: dispatch"); return;
   }
-  g_hist_index = next; g_hist_valid = g_temporal_active = true; g_hist_frame = frame_index();
+  g_hist_producer = {}; g_hist_producer.record(recording);
+  g_hist_index = next; g_hist_valid = false; g_temporal_active = true; g_hist_frame = frame_index();
   g_hist_ow = ow; g_hist_oh = oh;
   memcpy(g_hist_jitter, jitter, sizeof g_hist_jitter);
   memcpy(g_final_jitter, jitter, sizeof g_final_jitter);
@@ -1323,3 +1343,18 @@ void rrpost_on_present() {
 }
 
 }  // namespace bg3
+
+namespace bg3 {
+void rrpost_discard_recording(uint64_t recording) {
+  std::lock_guard lock(g_mu);
+  for (auto& owner : g_set_owners) owner.discard(recording);
+  if (recording && g_hist_producer.pending == recording) {
+    g_hist_producer.discard(recording); g_hist_valid = false; g_temporal_active = false;
+  }
+}
+void rrpost_submit_recording(uint64_t recording) {
+  std::lock_guard lock(g_mu);
+  if (recording && g_hist_producer.pending == recording) g_hist_valid = true;
+  g_hist_producer.submitted(recording);
+}
+} // namespace bg3
