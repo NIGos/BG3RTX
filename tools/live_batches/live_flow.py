@@ -360,11 +360,12 @@ def producer_problems(job, plan):
 def developer_setting_problems(job, plan):
     """Reject explicit overrides which release policy silently neutralizes.
 
-    Use knob metadata and its zero choice, including compound/inverted keys.
+    Use knob metadata, its zero choice and qualified preset values, including
+    compound/inverted keys. A qualified preset value is not a dev-only override.
     Missing dev inherits the development INI; explicit dev=0 selects release.
     """
     schema = read(ROOT / "data/settings_schema.json")
-    disabled = {key: (knob["id"], str(value))
+    disabled = {key: (knob, str(value))
                 for knob in schema["knobs"] if knob.get("developer")
                 for key, value in knob["choices"][0]["keys"].items()}
     state = {}
@@ -378,9 +379,11 @@ def developer_setting_problems(job, plan):
             continue
         for key in sorted(state.keys() & disabled.keys()):
             knob, off = disabled[key]
-            if state[key] != off:
+            preset_choice = knob.get("preset_values", {}).get(state.get("preset"), 0)
+            qualified = knob["choices"][preset_choice]["keys"].get(key, off)
+            if state[key] not in (off, str(qualified)):
                 errors.append(f"release policy: {label}: {key}={state[key]} belongs to "
-                              f"developer-only knob {knob}; dev=0 and experimental_options is not 1 "
+                              f"developer-only knob {knob['id']}; dev=0 and experimental_options is not 1 "
                               f"reset it to {off}; enable dev=1 or remove the override")
     return errors
 
@@ -391,6 +394,8 @@ def environment_problems(job):
     Mirror auto-run's job-derived values, counting UTF-16 code units on Windows.
     The terminator takes one of the 32767 units available for a value.
     """
+    if "keep_reshade" in job and type(job["keep_reshade"]) is not bool:
+        return ["job: keep_reshade must be a boolean"]
     args = job.get("args", [])
     options = {str(k).lower(): str(v) for k, v in zip(args, args[1:])
                if str(k).startswith("-")}

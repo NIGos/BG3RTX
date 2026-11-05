@@ -33,24 +33,42 @@ def fixture(name="one"):
 
 
 class DeveloperSettingTests(unittest.TestCase):
-    def test_release_job_and_plan_reject_compact_hit_state(self):
-        job = dict(set="dev=0,rt_compact_hit_state=1")
-        self.assertIn("rt_compact_hit_state=1", f.developer_setting_problems(job, [])[0])
+    def test_qualified_presets_and_unqualified_overrides(self):
+        self.assertFalse(f.developer_setting_problems(dict(set="dev=0,preset=ultra,ls_k=1,rt_omm_dyn=1,rt_vt_alpha_masks=1,rt_water_compose_shift=1"), []))
+        self.assertTrue(f.developer_setting_problems(dict(set="dev=0,preset=high,ls_k=1"), []))
+        self.assertTrue(f.developer_setting_problems(dict(set="dev=0,preset=ultra,ls_k=2"), []))
+        job = dict(set="dev=0,preset=ultra,ls_k=1")
+        problems = f.developer_setting_problems(job, [phase("high", values="preset=high"), phase("reset", values="ls_k=0")])
+        self.assertEqual(len(problems), 1)
+        self.assertIn("high:", problems[0])
+
+    def test_removed_compact_knob_is_not_developer_only(self):
+        self.assertFalse(f.developer_setting_problems(dict(set="dev=0,rt_compact_hit_state=1"), []))
+
+    def test_keep_reshade_boolean_field(self):
+        for value in (True, False):
+            self.assertFalse(f.environment_problems(dict(keep_reshade=value)))
+        for value in (None, 0, 1, "false", "true"):
+            self.assertIn("keep_reshade must be a boolean", f.environment_problems(dict(keep_reshade=value))[0])
+
+    def test_release_job_and_plan_reject_water_surface_fresnel(self):
+        job = dict(set="dev=0,rt_water_surface_fresnel=1")
+        self.assertIn("rt_water_surface_fresnel=1", f.developer_setting_problems(job, [])[0])
         job["set"] = "dev=0"
-        problems = f.developer_setting_problems(job, [phase("on", values="rt_compact_hit_state=1")])
+        problems = f.developer_setting_problems(job, [phase("on", values="rt_water_surface_fresnel=1")])
         self.assertIn("on:", problems[0])
         j, p = fixture()
-        j["set"] += ",dev=0,rt_compact_hit_state=1"
+        j["set"] += ",dev=0,rt_water_surface_fresnel=1"
         self.assertTrue(any(s.startswith("release policy:") for s in f.lint(j, p, [])["problems"]))
 
     def test_allowed_modes_and_off_resets(self):
-        for values in ("dev=1,rt_compact_hit_state=1", "dev=0,experimental_options=1,rt_compact_hit_state=1",
-                       "dev=0,rt_compact_hit_state=0", "rt_compact_hit_state=1"):
+        for values in ("dev=1,rt_water_surface_fresnel=1", "dev=0,experimental_options=1,rt_water_surface_fresnel=1",
+                       "dev=0,rt_water_surface_fresnel=0", "rt_water_surface_fresnel=1"):
             self.assertFalse(f.developer_setting_problems(dict(set=values), []))
 
     def test_cumulative_policy_toggle_and_list_settings(self):
-        job = dict(set=["dev=1", "rt_compact_hit_state=1"])
-        p = [phase("release", values="dev=0"), phase("restore", values="rt_compact_hit_state=0")]
+        job = dict(set=["dev=1", "rt_water_surface_fresnel=1"])
+        p = [phase("release", values="dev=0"), phase("restore", values="rt_water_surface_fresnel=0")]
         problems = f.developer_setting_problems(job, p)
         self.assertEqual(len(problems), 1)
         self.assertIn("release:", problems[0])

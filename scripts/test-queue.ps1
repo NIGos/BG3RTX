@@ -14,6 +14,7 @@
 #     "set": "rt_bvh_split=1,fg=0",          # auto-run -Set (a session job: applied live)
 #     "traces": 2, "timeout": 300, "repeat": 8,
 #     "args": ["-Validation", "-VSet", "validate_sync=true"],   # extra auto-run arguments
+#     "keep_reshade": false,             # true allows ReShade for compatibility tests
 #     "phases": "captures/em_phases.json",   # optional live_phases spec (relative to tree)
 #     "patterns": ["\\[core\\] guard:", "\\[em\\] per build"],  # log lines to keep (last match each)
 #     "stop_on_dump": true,                  # stop repeating once an Aftermath dump appears
@@ -179,7 +180,7 @@ function Get-JobTree($job) {
 # Jobs that may share a running game: same tree, save and launch arguments.
 function Get-SessionKey($job) {
   if (-not $job.session -or $job.command) { return "" }
-  "$(Get-JobTree $job)|$($job.save)|$(@($job.args) -join ' ')".ToLowerInvariant()
+  "$(Get-JobTree $job)|$($job.save)|$(@($job.args) -join ' ')|reshade=$($job.keep_reshade -eq $true)".ToLowerInvariant()
 }
 
 # Start-Process takes one command line: quote what has spaces.

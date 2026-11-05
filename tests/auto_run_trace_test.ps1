@@ -15,16 +15,37 @@ try {
 $tokens=$null;$errors=$null
 $runnerAst=[Management.Automation.Language.Parser]::ParseInput($runner,[ref]$tokens,[ref]$errors)
 Check (-not $errors.Count) 'runner parses'
-$overlay=$runnerAst.Find({param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$env:DISABLE_VK_LAYER_reshade_1'},$true)
+$overlay=$runnerAst.Find({param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Extent.Text.StartsWith('if ($guardContext.job.keep_reshade -eq $true)')},$true)
 $launch=$runnerAst.Find({param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$game' -and $n.Right.Extent.Text -match 'launch-bg3.ps1'},$true)
 Check ($overlay -and $overlay.Extent.StartOffset -lt $launch.Extent.StartOffset) 'ReShade disabled before game launch'
 $previousOverlay=$env:DISABLE_VK_LAYER_reshade_1
 try {
- $env:DISABLE_VK_LAYER_reshade_1='0'
- Invoke-Expression $overlay.Extent.Text
- Check ($env:DISABLE_VK_LAYER_reshade_1 -eq '1') 'test process overrides inherited ReShade enable'
+ foreach($job in @([pscustomobject]@{},[pscustomobject]@{keep_reshade=$false},[pscustomobject]@{keep_reshade=$true})) {
+  $guardContext=[pscustomobject]@{job=$job}
+  foreach($inherited in @($null,'0','1')) {
+   $env:DISABLE_VK_LAYER_reshade_1=$inherited
+   Invoke-Expression $overlay.Extent.Text
+   if($job.keep_reshade -eq $true) {
+    Check (-not $env:DISABLE_VK_LAYER_reshade_1) 'compatibility job clears even an inherited ReShade disable'
+   } else {
+    Check ($env:DISABLE_VK_LAYER_reshade_1 -eq '1') 'ordinary job disables ReShade regardless of inheritance'
+   }
+  }
+ }
 } finally {$env:DISABLE_VK_LAYER_reshade_1=$previousOverlay}
 Check ($runner -match 'Write-Host "Test overlay disabled: VK_LAYER_reshade') 'runner logs disabled overlay'
+Check ($runner -match 'Write-Host "Test overlay allowed: VK_LAYER_reshade') 'runner logs compatibility overlay'
+$queueAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'scripts/test-queue.ps1'),[ref]$tokens,[ref]$errors)
+Check (-not $errors.Count) 'queue parses'
+$key=$queueAst.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-SessionKey'},$true)
+Invoke-Expression $key.Extent.Text
+function Get-JobTree($job) { 'scratch-tree' }
+$job=[pscustomobject]@{session=$true;save='same';args=@()}
+$defaultKey=Get-SessionKey $job
+$job | Add-Member keep_reshade $false
+Check ((Get-SessionKey $job) -eq $defaultKey) 'missing and false share a session'
+$job.keep_reshade=$true
+Check ((Get-SessionKey $job) -ne $defaultKey) 'ReShade compatibility requires a separate session'
 $advance=$runnerAst.Find({param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Extent.Text.StartsWith('if ($panCaptureSent -and $phaseFinished')},$true)
 $advanceCondition=$advance.Clauses[0].Item1.Extent.Text
 function Test-Advance {
