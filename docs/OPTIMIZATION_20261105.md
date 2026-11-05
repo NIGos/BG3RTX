@@ -1258,3 +1258,4 @@ Round 1 supersedes that prewarm/readiness plan: both candidate registrations and
 Kept tools: frame_replay paired A/B (`--ab-spec`), origin replay, pipeline statistics for GI/RF/LS.
 Far GI cost (paired, ms, S8/camp/inn): traversal 0.33/3.79/2.07, extra hidden shading 1.56/2.04/0.93, roof loop 0.47/0.33/0.37.
 | SER (hardware reordering) | Out of scope for this round | Driver supports it only in RT pipelines; needs raygen/SBT port, 1-2 weeks, 0-10% expected (docs/SER_FEASIBILITY_20261105.md). |
+| BLAS FAST_TRACE for dynamic/cascade | Rejected (offline) | Trace gain 0.05/0.38/0.08 ms but extra build+refit; net per frame -0.13 / -0.12 / -0.62 ms (S8/camp/inn). |
