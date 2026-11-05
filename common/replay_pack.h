@@ -179,7 +179,32 @@ inline constexpr auto kWaterComposeFixture = [] {
   for (size_t i = 0; i < std::size(extra); ++i) slots[std::size(kGiHitDirect) + i] = extra[i];
   return slots;
 }();
+// Production Ultra LS: stock hair, box exact-k, non-OMM. All mutable storage
+// inputs are restored from Output::initial before each timed dispatch.
+inline constexpr auto kLocalShadows = [] {
+  std::array<Slot,52> v{}; size_t n=0;
+  for (const auto& s : kGiHitDirect) {
+    if ((s.set == 1 && s.binding <= 9) || (s.set == 0 && (s.binding <= 5 || s.binding == 18 || s.binding >= 20))) v[n++]=s;
+    if (s.set == 3) { auto sun = s; sun.set = 2; v[n++]=sun; }
+  }
+  const Slot extra[] = {
+    {0,3,kSampled2D,1,0,"gAlbedo"}, {0,4,kSampled2D,1,0,"gMaterial"},
+    {0,6,kStorage,1,122,"diffuse"}, {0,7,kStorage,1,122,"specular"},
+    {0,12,kStorage,1,64,"gAO"}, {0,16,kStorage,1,9,"gSunShadow"},
+    {0,27,kSsbo,1,0,"lShadows"}, {0,28,kSampled2D,1,0,"lAtlas"},
+    {0,41,kSampled2D,1,0,"gRT3"}, {0,42,kSsbo,1,0,"lSssProfiles"},
+    {0,43,kUbo,1,0,"gFrame"}, {0,44,kStorage,1,kRgba16Sfloat,"gAux"},
+    {0,45,kSsbo,1,0,"lsLights"}, {0,50,kStorage,1,kRgba32Sfloat,"rtHairOrigin"},
+    {1,19,kSampler,16,0,"gNativeTilesetSampler"},
+    {3,16,kSampler,1,0,"lBoxCookieSmp"}, {3,29,kSsbo,1,0,"lBoxes"},
+    {3,45,kSampled2D,4096,0,"lBoxCookies"},
+    {4,0,kSsbo,1,0,"lsBoxStats"}, {4,1,kSsbo,1,0,"lsOccStats"}};
+  for (const auto& slot:extra) v[n++]=slot;
+  if (n!=v.size()) throw "local-shadow replay contract size";
+  return v;
+}();
 inline constexpr Pass kPasses[] = {
+    {"local_shadows", "gi/rt_local_shadows_box_k.hlsl", kLocalShadows.data(), uint32_t(kLocalShadows.size()), 5, 256},
     {"gi_hit_direct", "gi/gi_trace_rt_hit_direct.hlsl", kGiHitDirect, uint32_t(std::size(kGiHitDirect)), 4, 256},
     {"water_compose_fixture", "rt/water_compose_fixture.hlsl", kWaterComposeFixture.data(), uint32_t(kWaterComposeFixture.size()), 4, 256},
 };
@@ -333,11 +358,13 @@ struct Range { uint32_t set, binding; uint64_t offset; std::string file; uint64_
 struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; uint32_t source_format = 0; };   // 0: copied as is
 struct Omitted { uint32_t set, binding, element; };
 struct Sampler { uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod; };
-struct Output { uint32_t set, binding, format, w, h; std::string reference; };
+struct Output { uint32_t set, binding, format, w, h; std::string reference, initial; };
 struct Casters { std::string file; uint32_t instance = 0, tris = 0, stride = 0; };   // file empty: none
+struct Spec { uint32_t id, value; };
 struct Manifest {
   int version = 0;
-  std::string pass, defines, push, instances;
+  std::string pass, defines, push, instances, counter_initial, counters;
+  std::vector<Spec> specs;
   uint64_t frame = 0;
   uint32_t groups[3] = {0, 0, 0}, instance_count = 0;
   std::vector<Buffer> buffers;
@@ -441,6 +468,9 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
     if (k == "bg3rtx_replay_pack") ok = bool(t >> m.version);
     else if (k == "pass") ok = bool(t >> m.pass);
     else if (k == "defines") { ok = bool(t >> m.defines); if (m.defines == "-") m.defines.clear(); }
+    else if (k == "spec") { Spec s{}; ok = bool(t >> s.id >> s.value); for (const auto& old : m.specs) if (old.id == s.id) ok = false; m.specs.push_back(s); }
+    else if (k == "counter_initial") ok = bool(t >> m.counter_initial);
+    else if (k == "counters") ok = bool(t >> m.counters);
     else if (k == "frame") ok = bool(t >> m.frame);
     else if (k == "dispatch") ok = bool(t >> m.groups[0] >> m.groups[1] >> m.groups[2]);
     else if (k == "push") ok = bool(t >> m.push);
@@ -460,7 +490,7 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
     else if (k == "sampler") {
       Sampler s{}; ok = bool(t >> s.set >> s.binding >> s.element >> s.mag >> s.min >> s.mip >> s.au >> s.av >> s.aw >> s.aniso >> s.max_lod);
       m.samplers.push_back(s);
-    } else if (k == "output") { Output o{}; ok = bool(t >> o.set >> o.binding >> o.format >> o.w >> o.h); t >> o.reference; m.outputs.push_back(o); }
+    } else if (k == "output") { Output o{}; ok = bool(t >> o.set >> o.binding >> o.format >> o.w >> o.h); t >> o.reference; t >> o.initial; if (o.reference == "-") o.reference.clear(); m.outputs.push_back(o); }
     else if (k == "casters") ok = m.casters.file.empty() && bool(t >> m.casters.file >> m.casters.instance >> m.casters.tris >> m.casters.stride) && m.casters.tris;
     else if (k == "note") { std::string rest; std::getline(t, rest); m.notes.push_back(rest); }
     else ok = false;
@@ -480,6 +510,9 @@ inline std::string serialize(const Manifest& m) {
   o << "bg3rtx_replay_pack " << (m.version ? m.version : kVersion) << "\n";
   o << "pass " << m.pass << "\n";
   o << "defines " << (m.defines.empty() ? "-" : m.defines) << "\n";
+  for (const auto& s : m.specs) o << "spec " << s.id << " " << s.value << "\n";
+  if (!m.counter_initial.empty()) o << "counter_initial " << m.counter_initial << "\n";
+  if (!m.counters.empty()) o << "counters " << m.counters << "\n";
   o << "frame " << m.frame << "\n";
   for (const auto& n : m.notes) o << "note" << (n.empty() || n[0] == ' ' ? "" : " ") << n << "\n";
   o << "dispatch " << m.groups[0] << " " << m.groups[1] << " " << m.groups[2] << "\n";
@@ -501,7 +534,7 @@ inline std::string serialize(const Manifest& m) {
   if (!m.casters.file.empty())
     o << "casters " << m.casters.file << " " << m.casters.instance << " " << m.casters.tris << " " << m.casters.stride << "\n";
   for (const auto& x : m.outputs)
-    o << "output " << x.set << " " << x.binding << " " << x.format << " " << x.w << " " << x.h << (x.reference.empty() ? "" : " " + x.reference) << "\n";
+    o << "output " << x.set << " " << x.binding << " " << x.format << " " << x.w << " " << x.h << (x.reference.empty() ? (x.initial.empty() ? "" : " -") : " " + x.reference) << (x.initial.empty() ? "" : " " + x.initial) << "\n";
   return o.str();
 }
 

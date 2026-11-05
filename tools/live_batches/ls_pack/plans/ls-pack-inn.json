@@ -1,0 +1,56 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 20,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 20,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "replay_pack=0",
+    "wait_log": [
+      "\\[auto\\] scene ready",
+      "\\[cfg\\] settings read",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 120
+  },
+  {
+    "label": "diag-ls-pack",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 20,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 20,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "replay_pack=1"
+  },
+  {
+    "label": "restore",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 5,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 5,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "replay_pack=0"
+  }
+]

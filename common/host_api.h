@@ -24,7 +24,8 @@
 // 25: Bg3HostApi::replay_pack (appended; diagnostics, tools/frame_replay.md "Live writer").
 // 26: Bg3HostApi::set_rr_motion_vectors (appended; rt_water_rr_mv, RR's motion vectors on water).
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
-#define BG3RTX_ABI_VERSION 26
+// 27: two-phase LS replay snapshots, additional descriptor sets and exact specialization payload.
+#define BG3RTX_ABI_VERSION 27
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -188,6 +189,8 @@ struct Bg3SunSceneInfo {
 
 // ABI 25 (diagnostics only, tools/frame_replay.md "Live writer"): one compute dispatch the core
 // just recorded, as the offline replay pack needs it. Everything is only read during the call.
+struct Bg3ReplayWrite { uint32_t set; VkWriteDescriptorSet write; };
+struct Bg3ReplaySpec { uint32_t id, value; };
 struct Bg3ReplayDispatch {
   int32_t serial;               // replay_pack serial (> 0), or 0: take the pack only while a trace records
   const char* pass;             // a common/replay_pack.h kPasses name ("gi_hit_direct")
@@ -202,6 +205,13 @@ struct Bg3ReplayDispatch {
   uint32_t output_count;
   VkDescriptorSet set1;         // the host's material set bound as set 1 (rt_hit_material_use)
   VkAccelerationStructureKHR tlas;
+  // phase 0: legacy post-dispatch GI. 1: LS inputs before dispatch. 2: LS outputs after dispatch.
+  uint32_t phase;
+  const Bg3ReplayWrite* extra_writes;
+  uint32_t extra_count;
+  VkDescriptorSet game_set; // LS set 3; game's recorded native lighting set 1
+  const Bg3ReplaySpec* specs;
+  uint32_t spec_count;
 };
 
 struct Bg3HostApi {
