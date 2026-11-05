@@ -82,7 +82,7 @@ CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pa
 # and common/shader_variant.h. A cfg acknowledgement is sufficient: these
 # values change host policy, dispatch counts or push constants, not requests
 # or specialization constants. Keep them out of build reconciliation entirely.
-NO_PIPELINE = set("rt_scene_compact_holds cpu_opt1 rt_build fps_cap cpu_timing detailed_logging dev "
+NO_PIPELINE = set("rt_scene_compact_holds cpu_opt1 cpu_opt2 rt_build fps_cap cpu_timing detailed_logging dev "
     "gi_rr_rays gi_rays gi_ao gi_strength rf_max_rough ls_shadowed rr_cbt rr fg "
     "rt_shadows rt_alpha rt_hair_groom_primary_order rt_hair_primary_passes "
     "rt_hair_groom_crowd_ksegments rt_hair_groom_tips rt_water_geometry preset ab_off".split())

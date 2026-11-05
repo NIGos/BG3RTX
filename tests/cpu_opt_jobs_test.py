@@ -6,10 +6,32 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.live_batches.opt_r3.cpu import analyze, make_job
+from tools.live_batches.opt_r3.cpu2 import analyze as cpu2_analyze, make_job as cpu2_job
 from tools.live_batches import live_flow as flow
 
 
 class CpuJobsTests(unittest.TestCase):
+    def test_cpu2_contract_and_missing_scopes(self):
+        job, plan, _ = flow.load_job(cpu2_job.HERE/'jobs/opt-cpu2-inn.json')
+        labels = []
+        for p in plan:
+            if p['label'].startswith('ready-'):
+                self.assertEqual(p['wait_log'], [r'\[watch\].*\| pipelines 0 \(0 ms in driver\)'])
+                self.assertEqual(p['wait_log_fresh'], p['wait_log'])
+            if p.get('frames'):
+                self.assertEqual(p['frames'], 600)
+                self.assertTrue(p['stats_reset'])
+                labels.append(p['label'])
+        self.assertEqual([flow.settings(p['set'])['cpu_opt2'] for p in plan if p.get('frames')], ['0','1','0','1'])
+        self.assertEqual(flow.settings(job['set'])['cpu_opt1'], '0')
+        self.assertTrue(cpu2_analyze.missing_required({}))
+        names = list(cpu2_analyze.EXTRA) + ['capture pre-draw', 'capture pass after (includes scene recording)',
+                                           'bvh per-draw BLAS keys', 'bvh TLAS instances']
+        rows = {label: {name: {'n': 2} for name in names} for label in labels}
+        self.assertFalse(cpu2_analyze.missing_required(rows))
+        rows['on-b--static-a']['capture alpha records (nested)']['n'] = 1
+        self.assertTrue(cpu2_analyze.missing_required(rows))
+
     def test_rendered_denominator_and_transition_rejection(self):
         plan = [dict(label='off-a--static-a', frames=600, stats_reset=True)]
         runner = ('10:00:00.000 [pan-plan] window 0\n'
@@ -23,6 +45,7 @@ class CpuJobsTests(unittest.TestCase):
             log += stamp+f'[watch] presents {presents} (displayed {2*presents}) | submit CPU {presents/2} ms | descriptor tracker CPU {presents/4} ms | alpha descriptors 0 ms / 0 calls\n'
             log += stamp+f'[cpu] bvh_build phases, ms/build over 120: decide {999 if n == 0 else 1}, per-draw BLAS keys 2, TLAS instances 3\n'
             log += stamp+'[cpu] capture hooks over 120 frames, ms/frame (all threads): total 8.000; driver draw (XFB) 0.250\n'
+            log += stamp+'[cpu] capture detail over 120 frames, ms/frame (nested): pipeline lookup 0.001, cascade identity 0.002, bvh classify 0.003, alpha records 0.004, material hooks 0.005; dispatch tracking pre 0.006, post 0.007 (driver excluded)\n'
         with tempfile.TemporaryDirectory() as d:
             p = Path(d)
             (p/'log').write_text(log)
@@ -33,6 +56,9 @@ class CpuJobsTests(unittest.TestCase):
         self.assertEqual(row['alpha clone driver updates']['median'], 0)
         self.assertEqual(row['bvh decide'], dict(median=1, min=1, max=1, n=2))
         self.assertEqual(row['capture hook bodies (driver draw excluded)']['median'], 7.75)
+        self.assertEqual(row['capture alpha records (nested)']['median'], .004)
+        self.assertEqual(row['dispatch tracking pre (driver excluded)']['median'], .006)
+        self.assertEqual(row['dispatch tracking post (driver excluded)']['median'], .007)
 
     def test_only_cpu_toggle_and_quiet_readiness(self):
         job, plan, _ = flow.load_job(make_job.HERE/'jobs/opt-cpu1-inn.json')
