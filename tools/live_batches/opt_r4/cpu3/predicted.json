@@ -1,0 +1,13 @@
+{
+  "status": "READY_FOR_LIVE",
+  "key": "cpu_opt3",
+  "default": 0,
+  "shader_request_delta": 0,
+  "launches": 1,
+  "frames_per_window": 600,
+  "prediction": "Lower capture pre-draw CPU through exact cached cascade identity, BVH classification and alpha records; reduce hit material mutex work. The prediction is directional; compare both ON windows with OFF-repeat spread. No measured CPU3 live saving is claimed.",
+  "decision": "Compare ON medians to both OFF windows and OFF repeat spread; keep no positive saving claim if delta is inside OFF spread. Inspect every ON window and lifecycle forbids.",
+  "timers": "Watch totals / actual rendered presents; never displayed FG presents. Scene/matrix 300-build producers drop first receipt; life is minute-wide context only.",
+  "readiness": "Warmup scene-ready; ready phases wait only for a fresh zero-pipeline watch. Settings acknowledgement is handled by the runner without a custom cfg witness. No shader/pipeline generation waits.",
+  "pending": "Awaiting user authorization for a live run. No launch or queue staging by this lane."
+}

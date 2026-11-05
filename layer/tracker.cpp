@@ -19,6 +19,13 @@ namespace bg3 {
 
 using HookMap = std::unordered_map<std::string, PFN_vkVoidFunction>;
 
+// Immutable draw receipts may outlive a frame, but never a buffer lifetime,
+// binding or CPU mapping. This epoch is deliberately global and monotonic:
+// destruction/recreation at the same handle cannot resurrect a prior receipt.
+static std::atomic<uint64_t> g_buffer_resource_epoch{1};
+uint64_t buffer_resource_epoch() noexcept { return g_buffer_resource_epoch.load(std::memory_order_acquire); }
+void buffer_resource_changed() noexcept { g_buffer_resource_epoch.fetch_add(1,std::memory_order_release); }
+
 Tracker& tracker() {
   static Tracker t;
   return t;
@@ -1004,6 +1011,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BindBufferMemory(VkDevice device, VkBuffer
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().buffer_mem[b] = {m, o};
+    buffer_resource_changed();
   }
   return r;
 }
@@ -1013,6 +1021,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL BindBufferMemory2(VkDevice device, uint32_
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     for (uint32_t i = 0; i < n; ++i) tracker().buffer_mem[infos[i].buffer] = {infos[i].memory, infos[i].memoryOffset};
+    if(n)buffer_resource_changed();
   }
   return r;
 }
@@ -1022,6 +1031,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyBuffer(VkDevice device, VkBuffer b, con
     pending_destroy(PendingKind::Buffer, device, uint64_t(b), a);
     return;
   }
+  buffer_resource_changed();
   // Our caches keyed by the buffer go first: the handle may be reused at once.
   bvh_forget_buffer(b);
   geo_forget_buffer(b);
@@ -1038,6 +1048,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL MapMemory(VkDevice device, VkDeviceMemory 
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped[m] = static_cast<uint8_t*>(*data) - o;
     tracker().mapped_ranges[m] = {o, size == VK_WHOLE_SIZE ? UINT64_MAX : o + size};
+    buffer_resource_changed();
     }
   }
   return r;
@@ -1048,6 +1059,7 @@ static VKAPI_ATTR void VKAPI_CALL UnmapMemory(VkDevice device, VkDeviceMemory m)
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped.erase(m);
     tracker().mapped_ranges.erase(m);
+    buffer_resource_changed();
   }
   device_of(device)->vk.UnmapMemory(device, m);
 }
@@ -1064,6 +1076,7 @@ static VKAPI_ATTR void VKAPI_CALL FreeMemory(VkDevice device, VkDeviceMemory m, 
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped.erase(m);
     tracker().mapped_ranges.erase(m);
+    buffer_resource_changed();
   }
   device_of(device)->vk.FreeMemory(device, m, a);
 }

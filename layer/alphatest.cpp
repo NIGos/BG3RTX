@@ -1,4 +1,6 @@
 #include "../common/native_hit_records.h"
+#include "../common/cpu_exact_cache.h"
+#include "../common/cpu_alpha_record.h"
 // Track D phase 3: what the ray queries need to alpha-test BG3's cutout
 // geometry (chains, grates, foliage), per captured draw (docs/TRACK_D_RT.md).
 //
@@ -107,6 +109,7 @@ uint32_t native_sampler_slot(std::vector<std::shared_ptr<NativeTilesetSampler>>&
 std::atomic<uint32_t> g_stale_views{0};   // held alpha records dropped: a view was destroyed/reused
 std::mutex g_mu;
 std::unordered_map<uint64_t, AlphaFs> g_table;
+std::atomic<uint64_t> g_table_generation{1};
 uint64_t g_table_mtime = 0;
 
 // rt_primary_fade_class (diagnostics only): BG3's camera-occlusion capsule fade
@@ -522,6 +525,7 @@ void load_table() {
     t[a.hash] = a;
   }
   g_table.swap(t);
+  g_table_generation.fetch_add(1,std::memory_order_release);
   log("[alpha] %zu alpha-tested fragment shaders in %s", g_table.size(), path.c_str());
 }
 
@@ -799,11 +803,17 @@ bool alpha_lookup(uint64_t fs, AlphaFs* out) {
       return true;
     }
   }
-  std::lock_guard<std::mutex> lock(g_mu);
-  auto it = g_table.find(fs);
-  if (it == g_table.end()) return false;
-  *out = it->second;
-  return true;
+  auto lookup=[&]{
+    std::lock_guard<std::mutex> lock(g_mu);
+    auto it=g_table.find(fs);
+    return it==g_table.end()?std::pair{false,AlphaFs{}}:std::pair{true,it->second};
+  };
+  if(cfg_hot(CfgHot::cpu_opt3)){
+    thread_local cpu_opt::ExactCache<2,std::pair<bool,AlphaFs>> cache;
+    const auto& value=cache.get({fs,g_table_generation.load(std::memory_order_acquire)},lookup);
+    if(value.first)*out=value.second;return value.first;
+  }
+  const auto value=lookup();if(value.first)*out=value.second;return value.first;
 }
 
 void alpha_tileset_incomplete(){std::lock_guard lock(g_mu);g_tileset_incomplete=true;}
@@ -900,11 +910,12 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
     // UV transform (two vec4) and the tile-set index from the material UBO,
     // the tile-set constants (two row-major mat4) from the SSBO entry.
     uint32_t idx = 0;
-    if (!read_bound(cmd, a.ubo_set, a.ubo_bind, a.p0, r.p0, 32) || !read_bound(cmd, a.ubo_set, a.ubo_bind, a.idx, &idx, 4)) {
+    cpu_opt::VtMaterialPacket packet;
+    if (!read_bound(cmd, a.ubo_set, a.ubo_bind, a.p0, packet.uv.data(), 32) || !read_bound(cmd, a.ubo_set, a.ubo_bind, a.idx, &idx, 4)) {
       ++g_fail[1];
       return false;
     }
-    if (idx > (1u << 20) || !read_bound(cmd, a.ssbo_set, a.ssbo_bind, VkDeviceSize(idx) * 128, r.t, 128)) {
+    if (idx > (1u << 20) || !read_bound(cmd, a.ssbo_set, a.ssbo_bind, VkDeviceSize(idx) * 128, packet.tiles.data(), 128)) {
       ++g_fail[2];
       return false;
     }
@@ -912,6 +923,10 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
       ++g_fail[0];
       return false;
     }
+    const auto prepared=cpu_opt::vt_material_record<AlphaRec>(a,packet,buffer_resource_epoch(),cfg_hot(CfgHot::cpu_opt3)!=0);
+    if(!prepared.valid){++g_fail[3];return false;}
+    r=prepared.record;r.first_tri=first_tri;r.tris=tris;
+    return true;
   } else if (a.kind == 3) {
     native_scalp::Captured captured;
     if (!native_scalp::capture(a.hash, [&](unsigned set, unsigned binding, unsigned off, void* dst, size_t bytes) {

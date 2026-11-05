@@ -1,4 +1,6 @@
 #include "../common/perf_hook_state.h"
+#include "../common/cpu_exact_cache.h"
+#include "../common/cpu_cascade_model.h"
 #include "../common/rt_capture_budget.h"
 #include "../common/vram_guard.h"
 #include "../common/omm_native_plain_recipes.h"
@@ -175,6 +177,13 @@ static bool draw_pipe(VkPipeline pipe, PipeInfo& out, uint64_t* generation = nul
     auto it = g_pipes.find(pipe);
     return it == g_pipes.end() ? std::pair{false, PipeInfo{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM}} : std::pair{true, it->second};
   };
+  if(cfg_hot(CfgHot::cpu_opt3)) {
+    thread_local cpu_opt::ExactCache<2,std::pair<bool,PipeInfo>> cache;
+    const uint64_t current_generation=g_pipe_generation.load(std::memory_order_acquire);
+    const auto& value=cache.get({uint64_t(pipe),current_generation},load);
+    if(generation)*generation=current_generation;
+    if(value.first)out=value.second;return value.first;
+  }
   if (!cfg_hot(CfgHot::perf_hook_state)) {
     auto value = load();
     if(value.first) out = value.second;
@@ -424,6 +433,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateBuffer(VkDevice device, const VkBufferCreat
                                             const VkAllocationCallbacks* alloc, VkBuffer* out) {
   VkResult r = device_of(device)->vk.CreateBuffer(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
+    buffer_resource_changed();
     std::lock_guard<std::mutex> lock(g_mu);
     g_buffer_usage[*out] = ci->usage;
     g_buffer_size[*out] = ci->size;
@@ -1209,7 +1219,8 @@ cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const Dr
          read_mapped(b.buffer,b.offset+pull_at,&pull_index,4) &&
          query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera,cfg_hot(CfgHot::perf_hook_state)?s:nullptr) && camera.buffer &&
          (camera.range==VK_WHOLE_SIZE || camera.range>=224) && geo_uniform_buffer_range(camera.buffer,camera.offset,224) &&
-         read_mapped(camera.buffer,camera.offset+208,origin,sizeof origin) && cascade::model_position(d,model,origin) &&
+         read_mapped(camera.buffer,camera.offset+208,origin,sizeof origin) &&
+         cpu_opt::model_position(d,model,origin,buffer_resource_epoch(),cfg_hot(CfgHot::cpu_opt3)!=0) &&
          (!pull_index || (query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,13,0,&pulled,cfg_hot(CfgHot::perf_hook_state)?s:nullptr) && pulled.buffer))) {
         d.instance=cascade::model_instance_key(model,pull_index,uint64_t(pulled.buffer),pulled.offset);
       }
@@ -2299,7 +2310,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
         return value;
       };
       Eligibility value;
-      if(cfg_hot(CfgHot::perf_hook_state)) {
+      if(cfg_hot(CfgHot::perf_hook_state) || cfg_hot(CfgHot::cpu_opt3)) {
         thread_local perf::GenerationCache<std::array<uint64_t,5>, Eligibility> cache;
         value = cache.get({uint64_t(s->pipe[0]), s->vs, s->fs, g_stride, uint64_t(g_tileset_capture)},
                           generation, classify);
@@ -2327,11 +2338,11 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;
     }return;
   }
-  if (geo_is(s, GeoKind::Em)) return em_pre_draw(cmd, s, args);
+  if (geo_is(s, GeoKind::Em)) {CpuDetailTimer timer(CpuDetailEmDraw);return em_pre_draw(cmd, s, args);}
   auto* c = geo_capture(s);
   if (!c) return;
   const uint32_t kind = args.kind, count = args.count, instances = args.instances;
-  if(c->rt)native_hit::prepass_observe(cmd,s,args);
+  if(c->rt){CpuDetailTimer timer(CpuDetailPrepassObserve);native_hit::prepass_observe(cmd,s,args);}
   DrawRec d{kind, s->pipe_id[0], s->vs, s->fs, count, instances, -1, 0, VK_NULL_HANDLE, 0, 0, 0};
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
   draw_pipe(s->pipe[0], pi);
@@ -2340,16 +2351,19 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     return;
   }
   if (c->cascade) {
+    CpuDetailTimer timer(CpuDetailCascadeDraw);
     cascade_pre_draw(cmd, s, c, args, pi);
     return;
   }
   if (c->cc_keys) {   // every draw of the camera source pass, captured or not (rt_cascade_casters dedupe)
     const cascade::DrawId id = cascade_draw_id(cmd, s, args, pi);
+    CpuDetailTimer timer(CpuDetailCascadeSets);
     std::lock_guard<std::mutex> lock(g_cc_mu);
     g_cc_mesh_keys.insert(c->record_frame, cascade::mesh_key(id));
     if (id.place) g_cc_keys.insert(c->record_frame, cascade::draw_key(id));
     g_cc_instance_keys.insert(c->record_frame,id);
   }
+  CpuDetailTimer plan_timer(CpuDetailDrawPlan);
   if (c->rt && !c->rt_ubo) {
     Bg3Binding b;
     if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) &&
@@ -2412,11 +2426,14 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // table, the VS captured the UV it samples with).
   const bool capturable = c->rt && d.skip != 1 && d.skip != 2 && d.skip != 4 && d.reserved > 0;
   AlphaFs a{};
+  plan_timer.stop();
+  CpuDetailTimer lookup_timer(CpuDetailAlphaLookup);
   bool alpha_fs = capturable && g_alpha_mode && alpha_lookup(s->fs, &a) && (a.kind==5 || (a.uv == pi.uv && pi.uv >= 0)) &&
                         (a.kind != 4 || (pi.hair_outputs & (a.channel ? 3u : 1u)) == (a.channel ? 3u : 1u)) &&
                         cfg_hot(CfgHot::rt_alpha_capture);
   if(a.kind==4 && (pi.hair_outputs & (a.channel?3u:1u)) != (a.channel?3u:1u))
     alpha_native_hair_missing_attributes(s->fs,s->vs,pi.hair_outputs);
+  lookup_timer.stop();
   // Track D BVH split: a draw of a cached instanced mesh is not captured; its
   // instances go into the TLAS with the matrices of the game's instance stream.
   uint32_t token = UINT32_MAX;
@@ -2439,7 +2456,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     if (v != BVH_CAPTURE) {
       uint32_t rec = UINT32_MAX;
       if (alpha_fs) {CpuDetailTimer timer(CpuDetailAlpha);if(!alpha_add_draw(cmd, a, 0, mesh_tris, &rec)) rec = UINT32_MAX;}
-      bvh_set_record(token, rec);
+      {CpuDetailTimer timer(CpuDetailBvhRecord);bvh_set_record(token, rec);}
       if (v == BVH_CACHED) return;
       audit = true;   // also captured (opaque region), for the cache's position check
     }
@@ -2463,9 +2480,12 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
   if(c->rt && g_tileset_capture && cfg_hot(CfgHot::rt_native_tileset) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
   uint32_t materialRecord=UINT32_MAX;
-  if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+  if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST){
+    CpuDetailTimer timer(CpuDetailOpaqueMaterial);
     materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,g_stride,uint32_t(prims));
+  }
   if (token != UINT32_MAX) {
+    CpuDetailTimer timer(CpuDetailBvhRecord);
     if (capture) bvh_captured(token, d.offset, uint32_t(prims), alpha, alpha ? rec : UINT32_MAX,materialRecord);
     else bvh_note_skipped(token);
   }
@@ -2478,8 +2498,11 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     c->alpha_draws += alpha;
   }
   if (capture) {
-    if(c->rt && alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+    if(c->rt && alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST){
+      CpuDetailTimer timer(CpuDetailAlphaMaterial);
       native_hit::note_prepass(cmd,s,args,rec,d.offset,g_stride,uint32_t(prims));
+    }
+    CpuDetailTimer timer(CpuDetailXfbCommands);
     VkDeviceSize off = d.offset, size = d.reserved;
     p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
     p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
