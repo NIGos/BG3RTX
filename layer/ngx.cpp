@@ -17,7 +17,6 @@
 // rr is read on every evaluate, so it switches without a restart; the first
 // evaluate after a switch carries Reset=1.
 #include "host.h"
-#include "recording_init.h"
 
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_defs_dlssd.h>
@@ -250,7 +249,7 @@ struct Guide {
   VkDeviceMemory memory = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
   VkFormat format = VK_FORMAT_UNDEFINED;
-  RecordingInit initialized;
+  bool initialized = false;
   NVSDK_NGX_Resource_VK res{};
 };
 
@@ -271,7 +270,6 @@ static std::mutex g_gbuf_mu;
 static std::mutex g_guide_mu;
 static Guide g_guide[3];  // diffuse, specular, normal+roughness
 static uint32_t g_guide_w = 0, g_guide_h = 0;
-static RecordingInit g_guides_producer;
 
 static VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
 static VkPipelineLayout g_pl = VK_NULL_HANDLE;
@@ -524,7 +522,7 @@ static bool guide_create(DeviceData* dd, Guide& g, VkFormat fmt, uint32_t w, uin
   vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
   if (dd->vk.CreateImageView(dd->device, &vi, nullptr, &g.view) != VK_SUCCESS) return false;
   g.format = fmt;
-  g.initialized = {};
+  g.initialized = false;
   g.res = {};
   g.res.Resource.ImageViewInfo.ImageView = g.view;
   g.res.Resource.ImageViewInfo.Image = g.image;
@@ -544,7 +542,7 @@ static bool guide_create(DeviceData* dd, Guide& g, VkFormat fmt, uint32_t w, uin
 
 bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view) {
   std::lock_guard lock(g_guide_mu);
-  if (!g_guide[0].view || g_guide_w != w || g_guide_h != h || !g_guide[0].initialized.ready) return false;
+  if (!g_guide[0].view || g_guide_w != w || g_guide_h != h || !g_guide[0].initialized) return false;
   *view = g_guide[0].view;
   return true;
 }
@@ -553,7 +551,6 @@ static bool ensure_guides(DeviceData* dd, uint32_t w, uint32_t h) {
   std::lock_guard lock(g_guide_mu);
   if (g_guide_w == w && g_guide_h == h && g_guide[0].image) return true;
   for (auto& g : g_guide) guide_destroy(dd, g);
-  g_guides_producer = {};
   retire_guide_pool();
   const VkFormat fmts[3] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT};
   for (int i = 0; i < 3; ++i)
@@ -826,7 +823,7 @@ static void guides_init_barrier(DeviceData* dd, VkCommandBuffer cmd) {
   VkImageMemoryBarrier init[3];
   uint32_t n = 0;
   for (auto& g : g_guide)
-    if (g.initialized.needed(cmd_recording(cmd))) {
+    if (!g.initialized) {
       init[n] = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
       init[n].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
       init[n].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -835,7 +832,7 @@ static void guides_init_barrier(DeviceData* dd, VkCommandBuffer cmd) {
       init[n].image = g.image;
       init[n].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
       ++n;
-      g.initialized.record(cmd_recording(cmd));
+      g.initialized = true;
     }
   if (n)
     dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
@@ -874,7 +871,6 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
     if (x.w == p.width && x.h == p.height && !x.rr_failed) f = &x;
   if (!f) return;
   if (!ensure_layouts(dd) || !ensure_guides(dd, p.width, p.height)) return;
-  if (g_guides_producer.pending && g_guides_producer.pending != cmd_recording(cmd)) return;
   g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe);
   if (!g_pipe) return;
 
@@ -947,7 +943,6 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
     dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
                               nullptr, 0, nullptr, 4, b);
   }
-  g_guides_producer = {}; g_guides_producer.record(cmd_recording(cmd));
   g_guides_frame = frame_index();
   static bool said = false;
   if (!said) {
@@ -1258,10 +1253,7 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   // see record_guides_at_gbuffer). At evaluate time the G-buffer memory has
   // already been reused by later passes, so rr_guides_at=0 is a debug mode.
   const bool late = cfg_int("rr_guides_at", 1) == 0;
-  const bool fresh = g_guides_frame + 2 >= frame_index() && g_guides_frame != 0 &&
-      (g_guides_producer.ready || cmd_executes_recording(cmd, g_guides_producer.pending));
-  if (g_guides_producer.pending && !cmd_executes_recording(cmd, g_guides_producer.pending))
-    return refuse("guide producer has not been submitted");
+  const bool fresh = g_guides_frame + 2 >= frame_index() && g_guides_frame != 0;
   if (!late && !fresh) return refuse("no guides recorded at the G-buffer pass this frame");
   SetKey key{gb.rt[0], gb.rt[1], gb.rt[2], depth->Resource.ImageViewInfo.Image, out_view ? out_img : VK_NULL_HANDLE,
              VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL};
@@ -1299,11 +1291,7 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   pc.out_size[0] = out->Resource.ImageViewInfo.Width;
   pc.out_size[1] = out->Resource.ImageViewInfo.Height;
   pc.show = uint32_t(show);
-  if (late) {
-    dispatch_guides(dd, cmd, set, pc);
-    g_guides_producer = {}; g_guides_producer.record(cmd_recording(cmd));
-    g_guides_frame = frame_index();
-  }
+  if (late) dispatch_guides(dd, cmd, set, pc);
   // Makes the guide writes (this or an earlier command buffer) visible to NGX.
   memory_barrier(dd, cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                  VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_SHADER_READ_BIT);
@@ -1727,18 +1715,3 @@ void ngx_init() {
 }
 
 }  // namespace bg3
-
-namespace bg3 {
-void ngx_discard_recording(uint64_t recording) {
-  std::lock_guard lock(g_mu);
-  std::lock_guard guide_lock(g_guide_mu);
-  for (auto& guide : g_guide) guide.initialized.discard(recording);
-  g_guides_producer.discard(recording);
-}
-void ngx_submit_recording(uint64_t recording) {
-  std::lock_guard lock(g_mu);
-  std::lock_guard guide_lock(g_guide_mu);
-  for (auto& guide : g_guide) guide.initialized.submitted(recording);
-  g_guides_producer.submitted(recording);
-}
-} // namespace bg3

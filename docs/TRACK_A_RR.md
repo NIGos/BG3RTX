@@ -806,24 +806,3 @@ in Test Dialogue3. This is a visual decision, not a statistical quality pass.
 
 Dialogue3 drift repair (pt-d3-analysis, 2026-11-03): 12 counterbalanced adjacent OFF/ON pairs; freeze masks from all OFF windows and use a Bonferroni exact paired sign gate (12 observables, minimum 8 pairs). See post_temporal/predicted.json for the derived 338.9 s plan, 818.9 s load/readiness bound and offline fixtures.
 The earlier four-window receipt was insufficient (2 pairs). Later VALID 032335 had 10 pairs; all 12 primary sign tests missed significance, float energy +0.1492% failed, and background registration failed. S8 remains unqualified; the Ultra promotion follows the explicit visual verdict above.
-
-
-### Submission ownership repair (layer-submit, 2026-11-05)
-
-L11/L12/L17: RR descriptor slots now keep the exact recording lease until reset
-or free and require the existing queue-specific lifetime completion poll before
-rewriting. A completed but still executable recording retains its descriptors,
-since Vulkan permits resubmission. Ring exhaustion falls back instead of wrapping.
-Guide initialization and content publication use L15's `RecordingInit`: another
-recording cannot consume an unsubmitted guide producer. A primary may use guides
-from a secondary it has already executed. Successful submit publishes secondary
-and primary producer IDs; reset/free cancels pending producers.
-Temporal output is usable locally for the final pass, but history becomes valid
-only after successful submission; a discarded producer invalidates the history.
-An unrelated recording with a pending temporal producer uses the ordinary post
-path. No settings, ABI, shader or variant changes (request delta 0).
-Source integration tests pass 7/7. BelowNormal `scripts/build.ps1 -Test` passes
-184/184 CTests, including the added CPU ownership cases (255.62 s test time).
-GPU cost and visual behavior are unmeasured here;
-no live run or queue write was performed. After the offline gate, a separately
-authorized Ultra smoke should confirm RR stays active in the normal submit order.
