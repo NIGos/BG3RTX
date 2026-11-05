@@ -214,9 +214,9 @@ function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
     # Explicit state observations must follow the acknowledged requested values.
     # Keep build reconciliation anchored at settings read, including intervening builds.
     $observationText=if ($null -ne $ack) { $freshText.Substring($ack.Index+$ack.Length) } else { $freshText.Substring($cfg.Length) }
-    # Quiet-only contracts (driver or GI monitor) select cached variants too. Background starts may
+    # Quiet-only contracts select cached variants too. Background starts may
     # describe abandoned alternatives, so do not invent completion requirements.
-    if (@($step.wait_log).Count -eq 1 -and $step.wait_log[0] -match 'watch.*pipelines 0|^gi: background builds') {
+    if (@($step.wait_log).Count -eq 1 -and $step.wait_log[0] -match 'watch.*pipelines 0') {
       if ($observationText -notmatch $step.wait_log[0]) { $step.wait_log[0] }
       return
     }

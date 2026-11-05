@@ -1,4 +1,4 @@
-## Ultra GI attribution batch (branch attr, diagnostic, 2026-11-05)
+## Ultra GI attribution batch (abandoned after the S8 result, 2026-11-05)
 
 - `tools/live_batches/opt_r6/attr`: inn and S8, one launch each, Ultra dev profile.
   Windows: base-a, near-only (gi_far=0, sun on), base-b, sun-off (gi_hit_sun=0), base-c;
@@ -12,3 +12,5 @@
   phases now wait for GI idle or burst completion after the acknowledgement.
 - OMM, AO and direct-off windows dropped to keep each launch under 5 minutes.
 - Lint frozen and non-frozen pass; attr test 5/5.
+- Abandoned: the inn never passed readiness; the batch, its test and the GI-idle readiness change
+  were removed (readiness back to eb935214). The far/sun split continues offline in frame_replay.
