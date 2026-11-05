@@ -254,11 +254,11 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 3}, false, {{"rt","1","Ray-tracing support"},{"sharc_device","1","Ray-tracing support"}}, false, "Surfaces", {"Estimate", "0.5–0.7 ms", "Up to 520 MB", "Estimated water cost: 0.5–0.7 ms and up to 520 MB on RTX 5090 at Water Queens House."}, "Needs Ray-tracing detail. Turning water on or raising its level needs a game restart; lowering it or turning it off applies after saving. Uses up to about 520 MB of video memory."},
 
   {"dlss5_nr", "DLSS 5 Neural Rendering (experimental)",
-   "Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
+   "(experimental) Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
    Kind::Choice, Apply::Restart, "Restart the game after changing DLSS 5 or its runtime file", false,
    {{"off", "Off", 0, {{"dlss5_nr", "0"}}, {}, {}, false, false, false, Apply::Restart},
-    {"on", "On", kCapDlss, {{"dlss5_nr", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "Ray Reconstruction before post effects"}}, true, "Surfaces", {},
+    {"on", "On", kCapDlss, {{"dlss5_nr", "1"}}, {{"rr", 1}}, {}, false, false, true, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "Ray Reconstruction before post effects"}}, false, "DLSS 5", {},
    "Experimental and off in every preset. Requires Ray Reconstruction before post effects and a compatible user-provided nvngx_dlssnr.dll. The launcher prepares the runtime before Play; custom or unsigned runtimes are identified in the log and may be rejected by NVIDIA (0xbad0000b). Restart after changing this option or the runtime file."},
 
   {"water_surface_fresnel", "Water surface reflections",
@@ -538,6 +538,8 @@ inline constexpr KV kDefaults[] = {
     {"dlss5_nr", "0"},
     {"dlss5_nr_runtime", ""},
     {"dlss5_nr_bypass", "0"},
+    {"hotkey_rt_toggle", "Ctrl+Shift+F9"},
+    {"hotkey_dlss5", "Ctrl+Shift+F8"},
     {"game_dlss_guard", "1"},
     {"core", "1"},
     {"dump_shaders", "1"},
@@ -985,7 +987,7 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 // Release 2026-11: Water surface reflections only. Strand hair (exp_hair_*) is a post-release
 // update and returns to this list with it; until then release resets its keys.
 inline constexpr const char* kOptInKnobs[] = {
-  "water_surface_fresnel", "dlss5_nr"};
+  "water_surface_fresnel"};
 inline bool opt_in_knob(const Knob& k) {
   for (const char* id : kOptInKnobs) if (std::string(id) == k.id) return true;
   return false;
@@ -1316,7 +1318,7 @@ inline bool choice_visible(const Knob& k, int c, bool dev, bool opt_in = false) 
 }
 
 inline bool choice_requires_experimental(const Knob& k, int c) {
-  return k.kind==Kind::Choice && c>=0 && c<choice_count(k) &&
+  return std::string(k.id)!="dlss5_nr" && k.kind==Kind::Choice && c>=0 && c<choice_count(k) &&
     (k.choices[c].awaiting_qualification || k.choices[c].experimental || (k.experimental && c>0));
 }
 

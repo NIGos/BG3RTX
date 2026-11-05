@@ -232,3 +232,8 @@ textarea { width: 100%; min-height: 90px; padding: 10px; border: 1px solid var(-
   * { box-shadow: none !important; }
 }
 .card-foot > .btn { justify-self: start; }
+
+.shortcuts { margin-top: 24px; }
+.shortcut-label { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.shortcut-label input { min-width: 0; max-width: 100%; box-sizing: border-box; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--text-3); border-radius: 6px; cursor: pointer; }
+.shortcut-label input::placeholder { color: var(--text-3); opacity: 1; }

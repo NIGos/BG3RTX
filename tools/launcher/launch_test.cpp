@@ -45,6 +45,12 @@ int main() {
   fail_flush=true;check(!write_file_atomic(path,"replacement",&error));fail_flush=false;
   check(read_file(path,text)&&text=="previous");
   fail_open=true;check(!save_game_dir(L"C:\\Game",&error)&&!error.empty());
+  State bindings;bindings.shortcuts[0]="Alt+R";bindings.shortcuts[1]="None";
+  auto rendered=bg3::settings::render_user_ini("unmanaged=retained\nhotkey_dlss5=F1\n",bg3::settings::kHigh,bg3::settings::preset_values(bg3::settings::kHigh),forced_keys(bindings));
+  auto keys=bg3::settings::parse_ini(rendered);
+  check(bg3::settings::lookup(keys,"hotkey_rt_toggle")=="Alt+R");
+  check(bg3::settings::lookup(keys,"hotkey_dlss5")=="None");
+  check(rendered.find("unmanaged=retained")!=std::string::npos);
   State state;load_state(state);check(!state.settings_readable);
   check(!save_state(state,&error));fail_open=false;
   DeleteFileW(path);

@@ -100,10 +100,13 @@ Stock hair stays visible; no replacement hair is part of this release.
 **Show experimental options** in the launcher to try it; it needs a game restart. Options rejected
 in testing are not part of this release.
 
-**Compare with the original image:** press **Ctrl+Shift+F9** in game to switch every ray-traced effect off
+**Compare with the original image:** by default, press **Ctrl+Shift+F9** in game to switch every ray-traced effect off
 and on again. DLSS and frame generation stay as they are. **Ctrl+Shift+F10** switches the last
 Experimental option off and on, but only options that apply without a restart; in this release
-there is none, so it has no effect yet.
+there is none, so it has no effect yet. **Ctrl+Shift+F8** toggles experimental DLSS 5 Neural Rendering
+when it was enabled at game start. DLSS 5 has its own launcher page, runtime picker and status.
+Customise the RT shortcut on Advanced and the DLSS 5 shortcut on DLSS 5 under Keyboard shortcuts.
+Choose None to disable or Reset to default to restore; save changes to apply.
 
 ## Known limits (beta)
 

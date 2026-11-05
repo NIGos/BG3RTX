@@ -39,6 +39,18 @@ for(const category of new Set(fixture.settings.map(s=>s.category))){
   for(const e of card.querySelectorAll('button,input'))assert(ids.has(e.attributes['aria-describedby']));
  }
 }
+ids.get('nav-DLSS 5').onclick();
+assert(ids.get('dlss5-runtime-browse')&&ids.get('hotkey_dlss5'));
+const nrKey=ids.get('hotkey_dlss5');
+const event=key=>({key,ctrlKey:true,shiftKey:true,preventDefault(){},stopPropagation(){}});
+let count=sent.length;nrKey.onkeydown(event('F9'));assert.strictEqual(sent.length,count,'conflict reached bridge');
+nrKey.onkeydown(event('F10'));assert.strictEqual(sent.length,count,'reserved F10 reached bridge');
+nrKey.onkeydown({...event('N'),ctrlKey:false,shiftKey:false,altKey:true});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'shortcut',id:'hotkey_dlss5',value:'Alt+N'});
+ids.get('nav-Advanced').onclick();assert(ids.get('hotkey_rt_toggle'));
+const reset=all(ids.get('section-content')).find(e=>e.textContent==='Reset to default');reset.onclick();
+assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'resetShortcut',id:'hotkey_rt_toggle'});
+ids.get('hotkey_rt_toggle').onkeydown(event('Delete'));assert.strictEqual(sent.at(-1).value,'None');
 ids.get('nav-Lighting').onclick();
 assert.deepStrictEqual(all(ids.get('section-content')).filter(e=>e.tagName==='article'&&e.id).map(e=>e.id),
  ['rt_geometry','rr','sun_shadows','gi','exp_hidden_surface','local_shadows','box_lights','exp_native_coverage','rt_intensity'].map(id=>'card-'+id));
@@ -47,7 +59,8 @@ const rr=ids.get('control-rr-0');assert(rr.type==='checkbox'&&rr.attributes['ari
 rr.focus();render(fixture);assert.strictEqual(document.activeElement,ids.get(rr.id),'focus lost on bridge update');
 const checkbox=ids.get(rr.id);let clicked=false;checkbox.click=()=>clicked=true;checkbox.onkeydown({key:'Enter',preventDefault(){}});assert(clicked);
 for(let p=0;p<4;p++){ids.get('preset-'+p).onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'preset',value:p});}
-assert(!ids.get('navigation').children.some(e=>['nav-Advanced','nav-Memory'].includes(e.id)));
+assert(ids.get('navigation').children.some(e=>e.id==='nav-Advanced'));
+assert(!ids.get('navigation').children.some(e=>e.id==='nav-Memory'));
 assert(!all(ids.get('section-content')).some(e=>e.id==='experimental-summary'));
 ids.get('nav-Support').onclick();
 assert(all(ids.get('section-content')).some(e=>e.textContent.includes("Ctrl+Shift+F9 in game switches all ray-traced lighting off and on")));

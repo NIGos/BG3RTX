@@ -421,14 +421,14 @@ static void test_gui_levels() {
     // a knob in any other category would be in the schema but never shown.
     if (!k.dev_only) {
       const std::string c = k.category;
-      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Advanced" || c == "Support");   // the Memory page shows capacity only
+      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Advanced" || c == "DLSS 5" || c == "Support");   // the Memory page shows capacity only
     }
     // Off in every preset for experimental knobs.
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 0);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 16));
+  CHECK(user_exp == 1);   // Release has no experimental controls.
+  CHECK(dev.size() == size_t(kKnobCount - 17));
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
@@ -962,7 +962,7 @@ static void test_gui_review_safety() {
   const auto& fg=*find_knob("frame_generation");
   for(int from=0;from<4;++from)for(int to=0;to<4;++to)
     CHECK(transition_apply(fg,from,to)==((from==0)!=(to==0)?Apply::Restart:Apply::Live));
-  for(const auto& k:kKnobs)if(k.experimental&&!k.dev_only)CHECK_EQ(k.category,"Advanced");
+  for(const auto& k:kKnobs)if(k.experimental&&!k.dev_only)CHECK_EQ(k.category,"DLSS 5");
   const auto& fresnel=*find_knob("water_surface_fresnel");
   CHECK(!choice_available(fresnel,1,false,false,~0u));
   CHECK(!choice_available(fresnel,1,false,true,~0u));
@@ -1155,7 +1155,7 @@ static void test_consolidation_policy() {
 
 static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
-    "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water",
+    "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water", "dlss5_nr",
     "exp_hidden_surface", "box_lights", "rr_post_temporal", "exp_native_coverage", "detailed_logging"};
   std::vector<std::string> visible;
   for (const auto& k : kKnobs) {
@@ -1324,8 +1324,10 @@ static void test_detailed_logging() {
 
 static void test_dlss5_native_setting() {
   const auto* k = find_knob("dlss5_nr");
-  CHECK(k && k->experimental && k->dev_only && k->apply == Apply::Restart);
-  CHECK(k && opt_in_knob(*k) && knob_visible(*k, false, true) && !knob_visible(*k, false));
+  CHECK(k && k->experimental && !k->dev_only && k->apply == Apply::Restart);
+  CHECK(k && !opt_in_knob(*k) && knob_visible(*k, false, true) && knob_visible(*k, false));
+  CHECK_EQ(code_default("hotkey_rt_toggle"), "Ctrl+Shift+F9");
+  CHECK_EQ(code_default("hotkey_dlss5"), "Ctrl+Shift+F8");
   CHECK_EQ(code_default("dlss5_nr"), "0");
   CHECK_EQ(code_default("dlss5_nr_runtime"), "");
   CHECK_EQ(code_default("dlss5_nr_bypass"), "0");
@@ -1335,7 +1337,7 @@ static void test_dlss5_native_setting() {
   CHECK(key_change_needs_restart("dlss5_nr_runtime", "", "C:/runtime/nvngx_dlssnr.dll"));
   CHECK(!key_change_needs_restart("dlss5_nr_runtime", "same", "same"));
   Map released=code_defaults();released["dev"]="0";released["dlss5_nr"]="1";
-  enforce_release_policy(released);CHECK_EQ(get(released,"dlss5_nr"),"0");
+  enforce_release_policy(released);CHECK_EQ(get(released,"dlss5_nr"),"1");
   released["experimental_options"]="1";released["dlss5_nr"]="1";
   enforce_release_policy(released);CHECK_EQ(get(released,"dlss5_nr"),"1");
 }

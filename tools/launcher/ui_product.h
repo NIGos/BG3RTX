@@ -6,6 +6,7 @@
 #include "version.h"
 #include "compatibility.h"
 #include "../../common/experimental_ab.h"
+#include "../../common/hotkeys.h"
 
 static std::wstring g_screenshot, g_review;
 static std::vector<int> g_tab_ids;
@@ -15,7 +16,7 @@ static bool g_screenshot_bottom=false, g_no_game=false;
 static float g_screenshot_scale=0;
 static int g_review_width=0;
 enum { PRESET=20, SUGGEST, TABS, EXPAND, SAVE, PLAY, DISCARD, CLOSE, REPORT, BROWSE,
-       GAME, STATUS, NOTE, NEXT, RETRY, LOG, FOLDER, RESET, ERROR_DETAILS, ADAPTER, NOTICES, HEADER, NR_BROWSE, NR_CLEAR, PRESET_LOW=60, KNOB=1000, DETAILS=2000 };
+       GAME, STATUS, NOTE, NEXT, RETRY, LOG, FOLDER, RESET, ERROR_DETAILS, ADAPTER, NOTICES, HEADER, NR_BROWSE, NR_CLEAR, HK_RT=50, HK_NR, HK_RT_RESET, HK_NR_RESET, PRESET_LOW=60, KNOB=1000, DETAILS=2000 };
 struct Ui {
   HWND wnd{}, body{}; HFONT font{}, bold{}; HBRUSH bg{};
   bg3::experimental_ab::Selection ab_selection;
@@ -41,7 +42,7 @@ static st::Map effective_settings() {
   auto m=saved_settings();m["dlss5_nr_runtime"]=g.st.dlss5_runtime_path;for(int i=0;i<st::kKnobCount;++i){st::KVList v;st::knob_kvs(st::kKnobs[i],g.st.values[i],v);for(auto& kv:v)m[kv.first]=kv.second;}return m;
 }
 static bool opt_in() { return !g.dev && g.experimental; }
-static int dirty_count() {return std::max(int(g.ab_selection.pending || g.experimental!=g.saved_experimental),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir)+int(g.st.dlss5_runtime_path!=g.st.loaded_dlss5_runtime_path));}
+static int dirty_count() {return std::max(int(g.ab_selection.pending || g.experimental!=g.saved_experimental),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir)+int(g.st.dlss5_runtime_path!=g.st.loaded_dlss5_runtime_path)+int(g.st.shortcuts[0]!=g.st.loaded_shortcuts[0])+int(g.st.shortcuts[1]!=g.st.loaded_shortcuts[1]));}
 static bool needs_restart(const st::Map& a,const st::Map& b) {return launcher::ui_state::restart(a,b);}
 static std::string game_session() {
   HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);if(snapshot==INVALID_HANDLE_VALUE)return {};
@@ -88,6 +89,21 @@ static void scroll_to(int n) {
   SCROLLINFO si{sizeof si,SIF_RANGE|SIF_PAGE|SIF_POS,0,std::max(0,g.height-1),UINT(r.bottom),g.scroll};SetScrollInfo(g.body,SB_VERT,&si,TRUE);
 }
 static LRESULT CALLBACK focusproc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR) {
+  const int id=GetDlgCtrlID(h);
+  if((id==HK_RT||id==HK_NR)&&(m==WM_KEYDOWN||m==WM_SYSKEYDOWN) && !(l&(1ll<<30))) {
+    if(w==VK_TAB)return DefSubclassProc(h,m,w,l);
+    int i=id==HK_RT?0:1;
+    bg3::hotkeys::Key k{};
+    if(w==VK_DELETE||w==VK_BACK)k={0,0,true};
+    else if((w>=VK_F1&&w<=VK_F12)||(w>='A'&&w<='Z')||(w>='0'&&w<='9'))
+      k={unsigned(w),unsigned(((GetKeyState(VK_CONTROL)&0x8000)?1:0)|((GetKeyState(VK_SHIFT)&0x8000)?2:0)|((GetKeyState(VK_MENU)&0x8000)?4:0)),true};
+    if(k.valid){auto value=bg3::hotkeys::format(k);
+      auto error=bg3::hotkeys::validate(i==0?value:g.st.shortcuts[0],i==1?value:g.st.shortcuts[1]);
+      if(error.empty()){g.st.shortcuts[i]=value;SetWindowTextW(h,widen(value).c_str());status(L"Keyboard shortcut changed. Save to apply.");}
+      else status(widen(error));
+    }
+    return 0;
+  }
   if(m==WM_SETFOCUS && GetParent(h)==g.body){
     RECT child{},body{};GetWindowRect(h,&child);GetWindowRect(g.body,&body);
     if(child.top<body.top)scroll_to(g.scroll+child.top-body.top-S(16));
@@ -107,9 +123,9 @@ static void layout() {
 static bool matches(const st::Knob& k) {
   if(!st::knob_visible(k,g.dev,opt_in()))return false;
   if(k.dev_only && !(opt_in() && st::opt_in_knob(k)))return g.tab==5;
-  if(k.experimental)return g.tab==3&&g.experimental;
+  if(k.experimental&&std::string(k.id)!="dlss5_nr")return g.tab==3&&g.experimental;
   std::string c=k.category;
-  return (g.tab==1&&c=="Lighting")||(g.tab==6&&c=="Surfaces")||(g.tab==2&&c=="Performance")||(g.tab==3&&c=="Advanced");
+  return (g.tab==1&&c=="Lighting")||(g.tab==6&&c=="Surfaces")||(g.tab==2&&c=="Performance")||(g.tab==3&&c=="Advanced")||(g.tab==7&&c=="DLSS 5");
 }
 static std::wstring choice_label(const st::Knob& k,int c) {
   if(c<0)return L"Custom value preserved";
@@ -219,6 +235,13 @@ static void rebuild() {
       button(g.body,DETAILS+i,L"Details and requirements",32,y,256);y+=48;place(add(g.body,L"STATIC",L"",SS_ETCHEDHORZ,0),16,y,w,2);y+=24;
     }
   }
+  if(g.tab==3||g.tab==7){int i=g.tab==3?0:1;
+    label(g.body,L"Keyboard shortcuts",32,y,w-32,28,true);y+=36;
+    label(g.body,i==0?L"All ray tracing off/on":L"DLSS 5 off/on",32,y,w-32,24);y+=28;
+    place(add(g.body,L"EDIT",widen(g.st.shortcuts[i]),WS_TABSTOP|WS_BORDER|ES_READONLY,i==0?HK_RT:HK_NR),32,y,w-232,30);
+    button(g.body,i==0?HK_RT_RESET:HK_NR_RESET,L"Reset to default",w-192,y,192);y+=40;
+    label(g.body,L"Press a key combination in the field. Delete or Backspace disables it.",32,y,w-32,48);y+=56;
+  }
   g.height=S(y+16);scroll_to(previous_scroll);g.updating=false;footer();if(focus_id)if(HWND target=control(g.body,focus_id))SetFocus(target);
 }
 static void browse() {
@@ -228,6 +251,8 @@ static void browse() {
 }
 static void report_problem() { launcher::web::native_report(g.wnd); }
 static bool save(bool) {
+  auto shortcut_error=bg3::hotkeys::validate(g.st.shortcuts[0],g.st.shortcuts[1]);
+  if(!shortcut_error.empty()){status(widen(shortcut_error));return false;}
   if(!g.st.settings_readable){status(L"Settings could not be read. Close and retry before saving.");return false;}
   auto preview=st::preview_dependencies(g.st.values,effective_settings(),g.st.caps,false,g.dev,g.experimental,opt_in());
   if(!preview.changed.empty()){
@@ -263,7 +288,7 @@ static bool save(bool) {
   if(!persist(&err)){g.pending=old_pending;status(L"Settings not saved. Restart information could not be saved. "+err);return false;}
   if(!write_file_atomic(user_ini_path(),text,&err)){status(L"Settings not saved. Your edits are kept. "+err);return false;}
   g.ab_selection.pending=false;
-  g.st.user_text=text;g.st.user=after;g.st.values=preview.values;g.st.loaded=preview.values;g.st.loaded_dlss5_runtime_path=g.st.dlss5_runtime_path;
+  g.st.user_text=text;g.st.user=after;g.st.values=preview.values;g.st.loaded=preview.values;g.st.loaded_dlss5_runtime_path=g.st.dlss5_runtime_path;for(int i=0;i<2;++i)g.st.loaded_shortcuts[i]=g.st.shortcuts[i];
   if(!save_game_dir(g.dir,&err)){status(L"Game folder not saved. "+err);return false;}
   g.saved_experimental=g.experimental;g.saved=g.st.values;g.saved_preset=g.st.preset;g.saved_dir=g.dir;
   status(L"Saved.");rebuild();return true;
@@ -308,10 +333,13 @@ static void command(int id,int code,HWND source) {
       rebuild();SetFocus(control(g.body,EXPAND));break;
     case NEXT:{int previous=g.stage;g.stage=std::min(4,g.stage+1);std::wstring err;if(!persist(&err)){g.stage=previous;status(L"Setup progress could not be saved. "+err);}else rebuild();break;}
     case SAVE:save(false);break;case PLAY:play();break;
-    case DISCARD:g.experimental=g.saved_experimental;g.ab_selection.pending=false;g.st.values=g.saved;g.st.preset=g.saved_preset;g.dir=g.saved_dir;g.st.dlss5_runtime_path=g.st.loaded_dlss5_runtime_path;g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);rebuild();break;
+    case DISCARD:for(int i=0;i<2;++i)g.st.shortcuts[i]=g.st.loaded_shortcuts[i];g.experimental=g.saved_experimental;g.ab_selection.pending=false;g.st.values=g.saved;g.st.preset=g.saved_preset;g.dir=g.saved_dir;g.st.dlss5_runtime_path=g.st.loaded_dlss5_runtime_path;g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);rebuild();break;
     case RESET:select_preset(g.st.preset);break;
     case CLOSE:SendMessageW(g.wnd,WM_CLOSE,0,0);break;
     case BROWSE:browse();break;
+    case HK_RT_RESET:case HK_NR_RESET:{int i=id==HK_RT_RESET?0:1;auto value=std::string(bg3::hotkeys::defaults[i]);
+      auto error=bg3::hotkeys::validate(i==0?value:g.st.shortcuts[0],i==1?value:g.st.shortcuts[1]);
+      if(error.empty()){g.st.shortcuts[i]=value;rebuild();}else status(widen(error));break;}
     case NR_BROWSE:g.st.dlss5_runtime_path=launcher::dlss5::browse(g.wnd,g.st.dlss5_runtime_path);g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);status(L"Runtime file selected. Save and restart the game to apply.");rebuild();break;
     case NR_CLEAR:g.st.dlss5_runtime_path.clear();g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);status(L"DLSS 5 will look in the game folder. Save to keep this change.");rebuild();break;
     case NOTICES:{auto path=root_dir()+L"\\THIRD_PARTY.md";if(!file_exists(path))path=root_dir()+L"\\docs\\release\\THIRD_PARTY.md";ShellExecuteW(g.wnd,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL);break;}
@@ -413,7 +441,7 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   for(int p=0;p<st::kPresetCount;++p)add(g.wnd,L"BUTTON",widen(st::kPresetLabel[p]),WS_TABSTOP|BS_AUTORADIOBUTTON|BS_PUSHLIKE|(p==0?WS_GROUP:0),PRESET_LOW+p);
   add(g.wnd,L"BUTTON",L"Use suggested preset",WS_TABSTOP,SUGGEST);add(g.wnd,L"STATIC",L"Suggested preset\nTested GPU: RTX 5090",SS_LEFT,NOTE);
   auto tabs=add(g.wnd,WC_TABCONTROLW,L"",WS_TABSTOP,TABS);
-  for(auto entry:{std::pair<int,const wchar_t*>{0,L"Overview"},{1,L"Lighting"},{6,L"Surfaces"},{2,L"Performance"},{3,L"Advanced"},{4,L"Help && support"},{5,L"Developer"}}){
+  for(auto entry:{std::pair<int,const wchar_t*>{0,L"Overview"},{1,L"Lighting"},{6,L"Surfaces"},{2,L"Performance"},{7,L"DLSS 5"},{3,L"Advanced"},{4,L"Help && support"},{5,L"Developer"}}){
     if(entry.first==5&&!g.dev)continue;
     TCITEMW ti{};ti.mask=TCIF_TEXT;ti.pszText=const_cast<LPWSTR>(entry.second);int row=TabCtrl_GetItemCount(tabs);TabCtrl_InsertItem(tabs,row,&ti);g_tab_ids.push_back(entry.first);if(entry.first==g.tab)TabCtrl_SetCurSel(tabs,row);
   }

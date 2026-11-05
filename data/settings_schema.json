@@ -158,17 +158,17 @@
        {"id": "refraction", "label": "Include refraction", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "dlss5_nr", "label": "DLSS 5 Neural Rendering (experimental)",
-     "description": "Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
-     "apply": "restart", "apply_note": "Restart the game after changing DLSS 5 or its runtime file", "advanced": false, "experimental": true, "developer": true,
-     "category": "Surfaces", "summary": "Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
+     "description": "(experimental) Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
+     "apply": "restart", "apply_note": "Restart the game after changing DLSS 5 or its runtime file", "advanced": false, "experimental": true, "developer": false,
+     "category": "DLSS 5", "summary": "(experimental) Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
      "details": "Experimental and off in every preset. Requires Ray Reconstruction before post effects and a compatible user-provided nvngx_dlssnr.dll. The launcher prepares the runtime before Play; custom or unsigned runtimes are identified in the log and may be rejected by NVIDIA (0xbad0000b). Restart after changing this option or the runtime file.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {"rr_post": "1"},
      "required_from_choice": {"rr_post": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"dlss5_nr": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "restart", "caps": ["dlss"], "keys": {"dlss5_nr": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"dlss5_nr": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["dlss"], "keys": {"dlss5_nr": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
      ]},
     {"id": "water_surface_fresnel", "label": "Water surface reflections",
      "description": "Experimental: works out the reflection at the water surface separately from the water's depth colour. Mostly visible at the edges of shallow pools; open water barely changes.",

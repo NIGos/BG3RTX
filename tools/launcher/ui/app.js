@@ -34,12 +34,14 @@ const icons = {
  Needs:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.4v.2"/>'
 };
 function icon(name) {const s=el('span','icon');s.setAttribute('aria-hidden','true');s.innerHTML='<svg viewBox="0 0 24 24" focusable="false">'+icons[name]+'</svg>';return s;}
-const sections = ['Lighting','Surfaces','Performance','Experimental','Advanced','Support'];
+icons['DLSS 5']=icons.Performance;
+const sections = ['Lighting','Surfaces','DLSS 5','Performance','Experimental','Advanced','Support'];
 const labels = {Support:'Help & support'};
 const leads = {
  Lighting:'Ray-traced shadows, bounced light and the strength of the mod.',
  Surfaces:'Reflections, water and post-effect smoothing.',
  Performance:'Frame rate, latency and frame generation.',
+ 'DLSS 5':'Experimental neural rendering. Requires Ray Reconstruction and your own runtime file.',
  Experimental:'Not fully tested. May change the image or cost performance.',
  Support:'Game folder, graphics checks and problem reports.'
 };
@@ -123,8 +125,8 @@ function card(s) {
  if(s.id==='dlss5_nr') {
   const runtime=el('div','runtime-file'),path=el('p','detail-copy path',state.dlss5RuntimePath||'No file selected - automatic discovery');
   path.id='dlss5-runtime-path';runtime.append(el('p','detail-heading','DLSS 5 runtime file'),path,el('p','help-copy',state.dlss5RuntimeStatus||'Your runtime is prepared before Play; it is not included with BG3RTX.'));
-  const row=el('div','row'),browse=el('button','btn','Browse...');browse.id='dlss5-runtime-browse';browse.onclick=()=>send('browseDlss5Runtime');row.append(browse);
-  if(state.dlss5RuntimePath){const clear=el('button','btn','Use automatic discovery');clear.id='dlss5-runtime-clear';clear.onclick=()=>send('clearDlss5Runtime');row.append(clear);}
+  const row=el('div','row'),browse=el('button','btn','Browse...');browse.id='dlss5-runtime-browse';browse.setAttribute('aria-describedby','needs-'+s.id);browse.onclick=()=>send('browseDlss5Runtime');row.append(browse);
+  if(state.dlss5RuntimePath){const clear=el('button','btn','Use automatic discovery');clear.id='dlss5-runtime-clear';clear.setAttribute('aria-describedby','needs-'+s.id);clear.onclick=()=>send('clearDlss5Runtime');row.append(clear);}
   runtime.append(row);foot.append(runtime);
  }
  c.append(foot);
@@ -142,6 +144,36 @@ function fitChoices() {
 if(window.addEventListener)window.addEventListener('resize',fitChoices);
 document.fonts?.ready?.then(fitChoices);
 function sectionHead(root,id) {const head=el('div','section-head');head.append(el('h2','section-title',labels[id]||id));if(leads[id])head.append(el('p','section-lead',leads[id]));root.append(head);}
+function shortcutsCard(id) {
+ const box=el('article','card shortcuts');box.append(el('h3','','Keyboard shortcuts'));
+ const name=id==='hotkey_rt_toggle'?'All ray tracing off/on':'DLSS 5 off/on';
+ const label=el('label','shortcut-label',name),input=el('input');input.type='text';input.readOnly=true;input.id=id;
+ input.value=state.shortcuts?.[id]||(id==='hotkey_rt_toggle'?'Ctrl+Shift+F9':'Ctrl+Shift+F8');
+ input.placeholder='Press a key combination';input.setAttribute('aria-label',name+' ? press a key combination');
+ const help=el('p','help-copy','Select the field and press a key combination. Delete or Backspace disables it. Escape cancels.');
+ input.onfocus=()=>{input.value='';};input.onblur=()=>{input.value=state.shortcuts?.[id]||'None';};
+ input.onkeydown=e=>{
+  e.preventDefault();e.stopPropagation();
+  if(e.key==='Escape'){input.blur();return;}
+  if(e.key==='Tab'){input.blur();return;}
+  let value;
+  if(e.key==='Delete'||e.key==='Backspace')value='None';
+  else {
+   let key=e.key.toUpperCase();
+   if(!/^(F[1-9]|F1[0-2]|[A-Z0-9])$/.test(key))return;
+   value=(e.ctrlKey?'Ctrl+':'')+(e.shiftKey?'Shift+':'')+(e.altKey?'Alt+':'')+key;
+  }
+  const other=id==='hotkey_dlss5'?'hotkey_rt_toggle':'hotkey_dlss5';
+  if(value!=='None'&&((e.ctrlKey&&e.shiftKey&&e.key.toUpperCase()==='F10')||value===state.shortcuts?.[other])){help.textContent='This shortcut is already in use. Choose another combination.';input.value=value;return;}
+  send('shortcut',{id,value});
+ };
+ const reset=el('button','btn','Reset to default');reset.onclick=()=>send('resetShortcut',{id});
+ const disable=el('button','btn','None');disable.onclick=()=>send('shortcut',{id,value:'None'});
+ input.setAttribute('aria-describedby',id+'-help');help.id=id+'-help';
+ const actions=el('div','row');actions.append(reset,disable);label.append(input);box.append(label,help,actions);
+ if(id==='hotkey_dlss5')box.append(el('p','help-copy','Works while playing when DLSS 5 was On at game start.'));
+ return box;
+}
 function renderSettings() {
  const root=$('section-content');rememberDisclosures(root);root.replaceChildren();
  sectionHead(root,section);
@@ -171,18 +203,19 @@ function renderSettings() {
   ['Water','Strand hair','Scene capture'].forEach(name=>{const items=all.filter(s=>group(s)===name);if(!items.length)return;root.append(el('h3','group-title',name));const grid=el('div','grid');items.forEach(s=>grid.append(card(s)));root.append(grid);});
   fitChoices();return;
  }
- const isExperimental=s=>s.experimental===true||(s.experimental===undefined&&s.maturity==='experimental');
+ const isExperimental=s=>s.id!=='dlss5_nr'&&(s.experimental===true||(s.experimental===undefined&&s.maturity==='experimental'));
  const regular=all.filter(s=>!isExperimental(s)),experimental=all.filter(isExperimental);
  const grid=el('div','grid');regular.forEach(s=>grid.append(card(s)));root.append(grid);
  // Developer mode: one disclosure authorizes experimental choices; policy remains in the bridge.
  if(state.developer&&(experimental.length||section==='Advanced')) {
   const d=el('details','exp');d.open=experimentalOpen;const summary=el('summary');summary.id='experimental-summary';summary.append(pill('Experimental','exp'),el('span','','Unqualified features. Cost and output may vary.'));d.append(summary);const g=el('div','grid');experimental.forEach(s=>g.append(card(s)));if(!experimental.length)g.append(el('p','help-copy','Experimental choices are available on their feature cards when expanded.'));d.append(g);d.ontoggle=()=>{if(experimentalOpen!==d.open){experimentalOpen=d.open;send('experimental',{value:d.open});}};root.append(d);
  }
+ if(section==='Advanced'||section==='DLSS 5')root.append(shortcutsCard(section==='Advanced'?'hotkey_rt_toggle':'hotkey_dlss5'));
  fitChoices();
 }
 function renderNavigation() {
  const nav=$('navigation');nav.replaceChildren();
- const list=sections.filter(id=>id==='Advanced'?state.developer:id==='Experimental'?releaseOptIn():true);
+ const list=sections.filter(id=>id==='Experimental'?releaseOptIn():true);
  if(state.developer&&(state.settings||[]).some(s=>s.developer))list.splice(list.length-1,0,'Developer');
  list.forEach(id=>{const b=el('button',id===section?'on':'');b.id='nav-'+id;b.setAttribute('aria-current',id===section?'page':'false');b.append(icon(id),el('span','',labels[id]||id));b.onclick=()=>{section=id;render(state);$('main').scrollTop=0;};nav.append(b);});
  const foot=el('div','nav-foot');
@@ -198,7 +231,7 @@ function render(next) {
  const focused=document.activeElement?.id;
  const focusedDialog=['confirmation','report-dialog'].find(id=>$(id).open&&$(id).contains(document.activeElement));
  state=next;if(state.experimental!==undefined)experimentalOpen=state.experimental;
- if(['Advanced','Developer','Memory'].includes(section)&&!state.developer)section='Lighting';
+ if(['Developer','Memory'].includes(section)&&!state.developer)section='Lighting';
  if(section==='Experimental'&&!releaseOptIn())section='Lighting';
  $('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
  const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const on=!state.custom&&state.preset===index,b=el('button',on?'on':'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',on?'true':'false');b.title=[state.presetDescriptions?.[index],index===state.recommendedPreset?'Suggested for this GPU; performance varies.':''].filter(Boolean).join('\n');b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
