@@ -28,6 +28,8 @@ def generate(exe=None):
     # Raw key, no knob. Preserve the compact-hit developer observation profile.
     # Hit shading and hit GI must remain ON in every window or core disables 1031.
     state.update(dev='1', rf_hit_shade='1', rf_hit_gi='1', qa_exposure_hold='1')
+    # The trace writes the float pre-post export only with the pan capture path prepared (as opt_r1 scene_holds).
+    state.update(pan_prepare='1', pan_edge='1', pan_post='1', pan_capture='0')
     estimates = {}
     for slug, save in [('inn', 'The Blushing Mermaid - 96h 39m'), ('s8', 'Water Queens House')]:
         name = 'opt-compact-rf-'+slug
@@ -47,6 +49,11 @@ def generate(exe=None):
             plan.append(phase(measured, 20.1, set=setting, frames=600, settle_frames=0,
                               stats_reset=True, wait_stats=[rx for _, rx in TIMERS],
                               wait_log_timeout=10))
+        # Energy exports after every cost window: a trace capture raised later pass costs when interleaved.
+        for label, value in STATES:
+            setting = KEY+'='+value
+            plan.append(phase('ready-energy-'+label, 1.1, set=setting, wait_log=[quiet],
+                              wait_log_fresh=[quiet], wait_log_timeout=8))
             plan.append(phase('energy-'+label, 8, set=setting, trace_at=[1]))
         plan.append(phase('restore', 1.1, set=KEY+'=0,qa_exposure_hold=0', wait_log=[quiet],
                           wait_log_fresh=[quiet], wait_log_timeout=8))

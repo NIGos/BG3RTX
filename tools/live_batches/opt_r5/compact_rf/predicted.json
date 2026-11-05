@@ -9,23 +9,23 @@
   "timer_period_frames": 120,
   "jobs": {
     "inn": {
-      "scheduled_seconds": 137.9,
+      "scheduled_seconds": 142.3,
       "load_allowance_seconds": 120,
       "expected_readiness_seconds": 0,
-      "estimated_seconds": 257.9,
+      "estimated_seconds": 262.3,
       "nominal_rendered_fps": 30,
       "historical_p10_fps": 11.69134840218328,
-      "historical_frame_estimate_seconds": 383.18,
+      "historical_frame_estimate_seconds": 387.58,
       "readiness": "Unproven: conditional fresh QUIET waits; hard stop 300 s."
     },
     "s8": {
-      "scheduled_seconds": 134.9,
+      "scheduled_seconds": 139.3,
       "load_allowance_seconds": 120,
       "expected_readiness_seconds": 0,
-      "estimated_seconds": 254.9,
+      "estimated_seconds": 259.3,
       "nominal_rendered_fps": 30,
       "historical_p10_fps": 25.48853016135551,
-      "historical_frame_estimate_seconds": 269.06,
+      "historical_frame_estimate_seconds": 273.46,
       "readiness": "Unproven: conditional fresh QUIET waits; hard stop 300 s."
     }
   },
