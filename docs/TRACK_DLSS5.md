@@ -187,95 +187,113 @@ commands directly; a D3D12 consumer still requires legal cross-API scheduling.
 A renamed NGX export alone does not make the unmodified bridge NR-only or stop
 its intentional RR bypass. No external callback was implemented in phase 2a.
 
-## 5. Runtime and source licences
+## 5. Runtime selection and licences (user decision, 2026-11-05)
 
-`DCS/distribution-policy.json:11` marks NR UserSupplied, proprietary, not bundled.
-Use an explicitly selected x64 NVIDIA-signed runtime; verify signature/version/hash
-before loading, record provenance, reject unsigned/modified files. DCS's broader
-patched-binary allowance (`DCS/docs/USER_GUIDE.md:172`) is not BG policy.
-OTA-installed files are candidates only after verification; no NR download or
-redistribution grant is established. `BG/docs/release/THIRD_PARTY.md:41` inventories
-SR/RR/FG, not NR. The NVIDIA exception names those features (`LICENSE-EXCEPTION.md:23`)
-and grants no rights to NVIDIA binaries (`:31`); clarify NR coverage before release.
-DCS loader `external/cheeky/src/nr_runtime_module.cpp:91` spoofs caller identity and
-`:151` patches an imported function in memory. Establish an acceptable load route;
-the supported core route below avoids this workaround. Never ship an altered NVIDIA binary.
+Product discovery order is game-folder nvngx_dlssnr.dll first, then the user's
+path. Log the actual path, version, SHA-256 and WinVerifyTrust status; **unsigned
+or HashMismatch NR runtimes are accepted by the application**, without a signature
+option. The fixture's explicit --runtime path selects one candidate at a time for
+comparison; it does not silently substitute a different DLL when NGX rejects one.
+The installed NGX core remains NVIDIA-signature verified. No runtime is bundled.
 
-BR is MIT (`BR/LICENSE:3`, permission/retention `:5`/`:12`): reused portions may be
-combined into GPL-3.0-or-later BG3RTX while retaining the complete copyright,
-permission and disclaimer in source/distribution notices. Record commit/files in
-`docs/release/THIRD_PARTY.md` and package the exact MIT text under release licences
-when code is ported. This grants rights to BR code, not the NVIDIA runtime.
-Depth GLSL/SPIR-V has additional Alan Z/NIGos MIT provenance
-(`BR/src/depth_convert_spv.h:29`, `BR/README.md:356`); preserve both notices if reused.
-Drop ReShade/MinHook rather than importing their dependencies/notices unnecessarily.
-The bridge MIT notice is now retained in `docs/release/licences/DLSS5-bridge-MIT.txt`
-and its fixture reuse is recorded in `docs/release/THIRD_PARTY.md`. New core tests
-copy only the user-authorized, byte-identical signed NR DLL into ignored .scratch;
-no NVIDIA DLL is added to source control or the player payload.
+This application policy cannot disable NGX core's own secure-loading checks.
+The current game-folder 310.8.3 is accepted/logged by the fixture, but the driver
+core rejects its signature and cannot create feature 18; see results below.
+Do not patch the driver, spoof caller identity or misreport signed-fallback timings
+as measurements of the custom DLL. A product fallback must log that rejection
+before attempting the next configured path on its existing NGX owner.
 
-## 6. Core-route results and remaining gates
+DCS/distribution-policy.json:11 marks NR UserSupplied, proprietary, not bundled.
+BG/LICENSE-EXCEPTION.md:23 names SR/RR/FG and grants no rights to NVIDIA files
+(:31); clarify NR coverage before release. Bridge MIT source notice remains in
+docs/release/licences/DLSS5-bridge-MIT.txt and inventory. Reused DCS codec/shader
+arrays are the user's code. No ReShade/MinHook or NVIDIA DLL is added to payload.
+Runtime copies under ignored .scratch are byte-identical, hash-checked test inputs,
+not source or redistributable assets. Never modify shared SDKs or reference trees.
 
-The earlier direct-snippet --nr Init_Ext PlatformError (0xbad00002) did not test
-the supported core path. New modes --nr-core-vulkan and --nr-core-d3d12 use the
-public SDK client (nvsdk_ngx_s.lib) to call the verified driver's NGX core.
-Core 32.0.16.2114 / driver 621.14 was selected; the original first-directory search
-had selected older core 32.0.16.2101. Source and scratch NR copy are NVIDIA-signed
-310.8.0.0, both SHA-256 e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e.
-The BG3-folder 310.8.3 DLL remains HashMismatch and is not loaded.
+## 6. Fixture gaps: measured results and remaining blockers
 
-CoreSession keeps PathListInfo strings/pointers alive and logs verbosely to
-.scratch/dlss5-core-<route>-<pid>/logs/ngx-callback.log. SDK public Init signatures
-are used, not a cast of driver/snippet Init_Ext to a different ABI.
-Vulkan feature-extension discovery must have a non-null ApplicationDataPath: the
-first probe omitted it and faulted; corrected once, discovery returns 0x1 and all
-four extensions above. This invalid first probe is not evidence against Vulkan.
+Vulkan core Init/capabilities/Allocate/Create/Evaluate/Release all return 0x1 for
+signed 310.8.0.0. Core 32.0.16.2114 (driver 621.14); all seven Vulkan images,
+feature, pipelines, descriptor sets and direction UBOs persist across frames.
+RG32F normalized motion now matches DCS vulkan_nr.cpp:54; interop --copy stays RG16F.
+The fixture prefers HOST_CACHED coherent staging, builds/checks data in ordinary
+CPU vectors and memcpy's mapped buffers rather than repeatedly scanning mapped
+memory. Six timestamps separately bracket NR, encode and decode in the same CB.
+Each frame logs evaluate CPU time, submit/fence wait, preparation, NVML SM/memory
+clocks/P-state and VK_EXT_memory_budget budget/usage; CSV is flushed per frame.
+Timing median now averages the two central samples; p90 uses nearest rank (CPU tested).
 
-| Observable | Vulkan core | D3D12 core |
-|---|---|---|
-| Init / GetCapabilityParameters / AllocateParameters | all 0x1 | all 0x1 |
-| DLSSNR.Available / NeedsUpdatedDriver / FeatureInitResult | 1 / 0 / 0x1 | 1 / 0 / 0x1 |
-| Feature 18 Create / Evaluate / Release | all 0x1 | all 0x1 |
-| Synthetic output through DCS HDR codec | six 3840 x 1600 frames finite/changed, alpha preserved | four 128 x 64 frames finite/changed, ingress exact |
-| Shutdown1 | no return within 30 s; process exits 2 | same |
+**72 frames / 12 warmup / 60 measured, 3840 x 1600, signed 310.8.0:**
 
-The core log says denial value 0 and loads the staged signed snippet. It also
-reports cache misses for versions/0/files before choosing PathListInfo; a cache
-miss alone is **not** a final load failure. Exact capability keys work; speculative
-18.Available-style keys return 0xbad00010 (unknown key), not unsupported NR.
+| GPU interval | Median ms | p90 ms |
+|---|---:|---:|
+| NR evaluate alone | 6.519856 | 7.146592 |
+| Encode | 0.119776 | 0.174080 |
+| Decode | 0.102144 | 0.104160 |
+| Encode + NR + decode | 6.785024 | 7.379104 |
 
-**3840 x 1600 Vulkan NR cost, validation explicitly off:** after two warmup frames,
-NR samples 46.119, 97.012, 6.221, 97.294 ms; tool's upper median **97.012 ms**,
-range **6.221-97.294 ms**, codec+NR upper median 100.649 ms. These timestamps exclude
-upload/readback and CPU checks. Large variation makes this **unqualified cost**;
-do not replace it with the fastest sample or the earlier 8-12 ms estimate.
-No D3D12 device/shared images/timeline semaphore exists on this Vulkan path.
+These are validation-off diagnostic timings after the competing game exited.
+All 60 outputs are finite and changed. NR range 6.235232-7.539744 ms; no ~97 ms
+frame recurred. Evaluate CPU median/p90 0.327800/0.342500 ms, maximum 0.406300 ms.
+Own usage stays 1,629,663,232 B / budget 32,945,209,344 B: no own oversubscription
+or per-frame recreation. Sampled SM 930-1950 MHz, memory 7001 MHz, P3, GPU 10-22%.
+These post-submit clock snapshots are not clocks throughout the NR interval.
 
-Default validation exposed missing storage-image read/write-without-format device
-bits; enabling supported bits removed those feature errors. Retest still reports
-VUID-vkCmdDraw-None-09600 on runtime-owned nv.ngx.dlssnr.resource (UNDEFINED versus
-GENERAL). Fixture images have explicit transitions. Do not suppress the finding
-or invent a barrier for an internal image handle/ownership contract we do not own.
-The no-validation run measures API/pixel feasibility, not zero validation errors.
+Two fixture causes of unstable measurements were removed: repeated mapped-memory
+scans and full-frame scalar half conversions (millions of ldexp calls). Cached
+vectors/staging plus a 65,536-entry lookup generated by the exact reference half
+decoder shorten CPU gaps. The preceding run without that lookup still had a
+65.918176 ms NR maximum despite a 6.246288 ms median. With the lookup, its repeat
+has a 7.539744 ms maximum. This is evidence of improved fixture behavior, not proof
+of a single cause for every historical spike; clock policy remains workload-dependent.
+A separate contention-affected run measured 25.417056/29.361056 ms median/p90;
+Cyberpunk PID 41568 used 93.578% 3D and GPU stayed 98% after fixture exit. It started
+14:04:39, after the original 13:38 noisy run, so cannot explain that earlier run.
+The original ~97 ms cause cannot be established retrospectively. Current results
+exclude recurring long CPU waits in Evaluate, own VRAM exhaustion and recreation.
 
-Both core routes stall in Shutdown1 after the last telemetry-shutdown log message.
-That message does not establish the cause. Cleanup is bounded, prints every 5 s,
-and terminates the standalone process at 30 s without unloading active runtime
-code. All measured work/fences and feature release completed first; overall exit 2
-remains **BLOCKED**, even when the sequence prints success. No device lost observed.
+**Game-folder 310.8.3:** app accepts HashMismatch, version and SHA are logged
+(f95feb54137ea11979f9b4ec4f00afd84b5c98a5624d3388fbf6a87714a39fcc).
+Core log: nvLoadSignedLibraryW failed, "The digital signature of the object did
+not verify"; DLSSNR.Available=0, FeatureInitResult=0xbad00004, Create=0xbad0000b.
+Zero evaluate frames: its NR median/p90 are **unavailable**, not 0 and not signed
+runtime numbers. Sixty NR samples cannot be collected through this core route
+without bypassing NVIDIA's own checks, which was not done. Byte-identical source
+and scratch copy have the same result. Signed input SHA remains
+e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e.
 
-Evidence: .scratch/dlss5-core-vulkan-3840.log (pid 4972); default-validation retest
-.scratch/dlss5-core-vulkan-validation.log (pid 31836); D3D12 fallback
-.scratch/dlss5-core-d3d12-small.log (pid 44620). Each has its own full callback log.
-DCS Vulkan shader arrays are byte-identical to source and pass spirv-val Vulkan 1.2.
-CPU LUID/fence CTest passes. No game, queue, git writes or layer/core ABI changes.
+**Validation remains blocked, not filtered.** Inputs/output GENERAL is valid for
+storage-capable ReadWrite resources (SDK vk.h:140; DCS Vulkan does the same).
+The seven fixture image handles are 0x30..0x42; VUID-vkCmdDraw-None-09600 instead
+names runtime-created image 0xc5, nv.ngx.dlssnr.resource, tracked UNDEFINED while
+its descriptor expects GENERAL. Both corrected RG32 guides and controlled
+SHADER_READ_ONLY inputs/ReadWrite=false with proper restore reproduce it. Generic
+public aliases were also tested and reverted after failing to change it. No
+safe transition/ownership contract for internal 0xc5 is exposed; no unknown-image
+barrier, validation filter, SDK binary patch or callback bypass was introduced.
+A clean signed-runtime NR validation run has **not** been established.
 
-Earlier --copy remains PASS: six 3840 x 1600 frames, exact all four images,
-validation 0, Vulkan A+B upper median 2.532 ms and D3D12 copy 0.207 ms. Its transport
-cost is **not added** to the direct Vulkan NR path. No new shader request variants:
-the fixture uses two exact embedded DCS kernels, not new production shader requests.
+**Shutdown policy gap closed operationally, SDK bug retained as evidence:**
+explicit ReleaseFeature=0x1, completed fences and vkDeviceWaitIdle=VK_SUCCESS still
+precede a Shutdown1 stall past 30 s. --try-shutdown reproduces once with 5 s
+progress. Default finish now releases/idles, logs Shutdown1 as an explicit no-op
+and retains modules/session/device/callback until immediate process exit (exit 0
+for a successful sequence). This follows TRACK_B_FG.md:348's no-op principle;
+unlike the product's Streamline-owned shared session, the standalone fixture has
+no surviving owner, so this is process-exit retention, **not clean SDK shutdown**.
+No delayed thread is followed by runtime unload/device destruction.
 
-NOT READY_FOR_LIVE: resolve validation/shutdown and qualify stable cost, then finish
-offline provider/guide/reset/lifetime gates. Only afterward request one explicit
-same-run OFF/ON/OFF Dialogue1 Ultra gate with FG off and 2x/4x, float energy/QA,
-UI/DoF/skin/hair and no device lost/stale frames. No jobs prepared or queued.
+Evidence: .scratch/dlss5-signed-cached72.log and
+.scratch/dlss5-core-vulkan-28508/timings.csv; preceding idle72/bench72 logs retain
+tail/contention evidence. Latest custom rejection: .scratch/dlss5-custom-final.log
+(exit 1), layout: .scratch/dlss5-validation-final.log (exit 1). Earlier experiments:
+.scratch/dlss5-rg32-validation.log, dlss5-readonly-validation.log and
+dlss5-generic-validation.log. Full NGX logs are in each core-session logs folder.
+CPU statistics/fence/LUID tests pass. No game launches, queue access, git writes,
+settings/presets, production shaders or host ABI changes.
+
+Native 2b still needs no D3D12 transport or command splitting. It is not ready
+for live testing: internal-runtime validation remains unresolved, the current
+custom runtime is core-rejected. Timings are now measured without the competing
+game, but validation-off timing does not qualify correctness. No job is prepared or queued; future live requires fresh authorization.

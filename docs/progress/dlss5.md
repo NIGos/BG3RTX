@@ -1,26 +1,26 @@
-## Native DLSS5 core route (branch dlss5, API feasibility PASS / qualification BLOCKED, 2026-11-05)
+## Native DLSS5 fixture gaps (branch dlss5, PARTIAL / externally blocked, 2026-11-05)
 
-- Supported public SDK/core Init with persistent NR PathListInfo and verbose callback
-  logging works; use signed core 32.0.16.2114, driver 621.14 (old attempt chose .2101).
-- Vulkan core: Init/capabilities/Allocate/Create/Evaluate/Release all 0x1;
-  DLSSNR.Available=1, NeedsUpdatedDriver=0, FeatureInitResult=1. D3D12 core same.
-- Verified signed 310.8.0 source + authorized scratch copy have identical SHA-256
-  e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e.
-  BG3's HashMismatch 310.8.3 is never loaded. No spoof/patch or tracked DLL.
-- Vulkan encode -> NR -> decode runs in one command buffer, with no D3D12 device,
-  interop or command split. Six 3840 x 1600 frames finite/changed, alpha preserved.
-- Validation-off NR post-warmup 46.119/97.012/6.221/97.294 ms (upper median 97.012);
-  codec+NR upper median 100.649 ms. Large spread: cost UNQUALIFIED, fastest not a budget.
-- Required read/write-without-format feature bits fixed; default validation retains
-  internal nv.ngx.dlssnr.resource GENERAL/UNDEFINED VUID-vkCmdDraw-None-09600.
-- Both APIs release feature then stall in Shutdown1 after telemetry log; no result
-  within 30 s, bounded process termination exits 2. Whole-run qualification BLOCKED.
-- D3D12 fallback 128 x 64: four frames finite/changed, ingress exact, NR 2.239 ms.
-- Earlier copy 3840 x 1600 exact / validation 0: Vulkan 2.532 + D3D12 copy 0.207 ms;
-  this interop transport is not part of the selected Vulkan core path.
-- CPU CTest passes; exact DCS Vulkan codec arrays pass spirv-val; MIT notice retained.
-- 2b is now direct Vulkan provider + device/search-path/guide/lifetime/settings work,
-  roughly 1-2 KLOC plus shader/settings/tests. Drop command redirection/splitting.
-- Evidence .scratch/dlss5-core-vulkan-3840.log, -vulkan-validation.log, -d3d12-small.log;
-  full logs under each .scratch/dlss5-core-<route>-<pid>/logs/ngx-callback.log.
-- No game, queue, git writes, presets, production shaders or ABI changes. NOT READY_FOR_LIVE.
+- NR signatures are log-only, without an unsigned option. Product order: game folder,
+  then user path; core stays verified. No NVIDIA binary is modified or bundled.
+- Corrected motion to DCS RG32F. Cached staging and CPU vectors replace mapped-memory
+  scanning. Feature, images, pipelines, descriptors and UBOs persist per run.
+- Added frame CSV: GPU NR/encode/decode, evaluate CPU, submit/wait, preparation,
+  NVML clocks/P-state/utilization and memory budget. Median/p90 CPU tests pass.
+- Signed 310.8.0, 3840 x 1600, 72 frames / 12 warmup / 60 measured: NR median
+  6.519856 / p90 7.146592 ms; encode .119776 / .174080, decode .102144 / .104160.
+  NR maximum 7.539744 ms; finite changed output; validation off.
+- Competing Cyberpunk exited before final run. Exact half-decoder lookup removes
+  millions of ldexp calls between submits; prior idle run max 65.918176 ms, final
+  max 7.539744 ms. Historical ~97 ms cause remains unknown. Evaluate CPU median
+  .327800 ms; usage 1.63 GB / budget 32.95 GB; SM 930-1950 MHz, MEM 7001 MHz, P3.
+- Custom 310.8.3 HashMismatch is app-accepted; core rejects its signature:
+  Available 0, FeatureInitResult 0xbad00004, Create 0xbad0000b. No NR median/p90 exists.
+- Validation blocked: fixture handles 0x30..0x42 versus internal 0xc5 GENERAL/UNDEFINED,
+  VUID 09600. General/read-only/RG32 tests do not fix it. No filtering or SDK patch.
+- ReleaseFeature 0x1 + device idle 0 still precede Shutdown1 stall > 30 s. Added
+  explicit no-op/process-exit retention; successful sequence exits 0. This is not
+  clean SDK shutdown. --try-shutdown preserves the bounded repro; no unsafe unload.
+- Evidence: .scratch/dlss5-signed-cached72.log, core-vulkan-28508/timings.csv,
+  dlss5-custom-final.log and dlss5-validation-final.log (both exit 1).
+- No game, queue, git writes, production shaders, presets or ABI changes. Native 2b
+  needs no D3D12 or split. NOT READY_FOR_LIVE: validation/custom-core blockers.

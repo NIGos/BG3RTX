@@ -1,77 +1,78 @@
 # DLSS5 offscreen fixture
 
-Build CMake targets dlss5_fixture and dlss5_fixture_logic_test with MSVC,
-Vulkan SDK/NGX SDK client and BelowNormal priority (scripts/low-priority.ps1).
-The fixture sets itself BelowNormal, disables implicit layers and refuses BG3/DX11
-processes. It is not shipped or run automatically by CTest. CPU test:
-`ctest -R ^dlss5_fixture_logic_test$ --output-on-failure`.
+Build dlss5_fixture and dlss5_fixture_logic_test with MSVC/Vulkan/NGX SDK and
+BelowNormal priority (scripts/low-priority.ps1). No implicit layers, no game or
+queue integration, no automatic GPU CTest. The executable also checks BG3/DX11.
 
-Recommended Vulkan core probe (check Get-Process before **each** GPU invocation):
-
-```powershell
-if (Get-Process bg3 -ErrorAction SilentlyContinue) { throw 'BG3 running' }
-./bin/dlss5_fixture.exe --nr-core-vulkan --runtime 'C:/path/nvngx_dlssnr.dll'
-```
-
-Fallback and independent transport test:
+The current timing-only repro uses --no-validation because the separate validation
+gate remains blocked. First close other GPU workloads, then check BG3 immediately
+before every GPU invocation:
 
 ```powershell
 if (Get-Process bg3 -ErrorAction SilentlyContinue) { throw 'BG3 running' }
-./bin/dlss5_fixture.exe --nr-core-d3d12 --runtime 'C:/path/nvngx_dlssnr.dll'
-if (Get-Process bg3 -ErrorAction SilentlyContinue) { throw 'BG3 running' }
-./bin/dlss5_fixture.exe --copy --frames 6
+./bin/dlss5_fixture.exe --nr-core-vulkan --runtime 'C:/path/nvngx_dlssnr.dll' --frames 72 --warmup 12 --no-validation
 ```
 
-Default 3840 x 1600, eight frames, first two excluded from timing. Options:
---width N --height N --frames N (at least three), --ngx-core PATH (otherwise highest
-installed numeric core version, verified), --no-validation (explicit timing-only
-opt-out). Default requires installed Khronos validation. The legacy --nr mode
-retains the direct-snippet attempt for comparison; use the public core modes now.
---verify-runtime --runtime PATH performs only CPU signature/version/hash checking.
+--width/--height default 3840/1600; --frames includes warmup (maximum 600).
+--warmup defaults 2; use >=60 remaining measured frames. --no-validation is an
+explicit diagnostic timing opt-out, not a validation pass. Omit it and use four
+frames to reproduce the validation failure. --readonly-inputs
+reproduces the input-layout experiment; GENERAL remains the DCS-compatible default.
+--try-shutdown performs a bounded real Shutdown1 probe after feature release and
+vkDeviceWaitIdle. Default skips that known-stalling call and retains the owner,
+modules, callbacks and VkDevice until immediate process exit; no unsafe unload.
+The standalone no-op is not a claim of clean SDK shutdown or another shared owner.
 
-Core modes verify x64, valid NVIDIA Corporation signature (WinVerifyTrust with
-cached certificates only) and log version/SHA-256 before loading the signed core.
-They make the explicitly authorized NR copy in a unique ignored
-.scratch/dlss5-core-<route>-<pid>/runtime folder, verify its signature again and
-require identical SHA-256. Read-only handles deny mutation throughout the session.
-The staged snippet is loaded **by NGX**, never via a direct snippet Init or a
-caller-name/import patch. No NVIDIA binary is added to tracked source/player files.
+Fixture comparison selects the explicit --runtime input; product discovery will
+try the game-folder DLL first, then the configured user path, logging failures and
+actual selection. There is **no unsigned-runtime option**: all NR inputs log version,
+SHA-256, signature status and are accepted by the app regardless of signature.
+Core remains NVIDIA-signature verified. --verify-runtime --runtime PATH is CPU-only
+identity logging and succeeds on the current custom HashMismatch DLL. Identity
+checks retain read-only handles; core modes use byte-identical ignored .scratch
+copies with matching hashes. No NVIDIA binary is modified or bundled.
 
-Public SDK Init passes persistent FeatureCommonInfo PathListInfo and verbose
-LoggingInfo. Full callback log: .scratch/dlss5-core-<route>-<pid>/logs/ngx-callback.log.
-Important results and NR log lines also go to stdout; redirect stdout/stderr to a
-.scratch evidence log. Every NGX result is logged. Unknown candidate capability
-keys are distinguished from available=false; exact DLSSNR keys exist on this core.
+Public SDK core Init gets persistent FeatureCommonInfo paths and verbose logging.
+Full NGX log: .scratch/dlss5-core-vulkan-<pid>/logs/ngx-callback.log. Each session
+also writes timings.csv. Every frame includes separate GPU NR/encode/decode,
+evaluate-call CPU time, submit/fence wait, preparation, SM/memory MHz, P-state,
+GPU utilization and device-local VK_EXT_memory_budget bytes. NVML is loaded from
+System32 and matched to the Vulkan adapter PCI address, never adapter index 0.
+Median averages central samples; p90 is nearest rank. No API clock subtraction.
 
-Vulkan core mode owns a Vulkan-only device with discovered feature-18 extensions,
-BDA and queried storage-image features. No D3D12 device, external images or shared
-fence is created. In one command buffer: upload synthetic HDR/depth/MV, DCS Vulkan
-encode, direct core feature-18 evaluate, DCS Vulkan decode, readback. Shader arrays
-in dlss5_nr_vulkan_spv.h are exact DCS nr_encode16/nr_decode16 kernels; constants,
-separate direction descriptors/UBOs and barriers are adapted from its Vulkan helper.
-Input guides are full-resolution normal Z, previous-minus-current UV, no jitter;
-only the first frame resets history. This does not qualify BG3 guide resampling.
+All images/feature/codec pipelines/descriptors/UBOs persist. Core mode uses seven
+private Vulkan images, including DCS-compatible RG32F normalized motion. HDR encode,
+NR and decode record in one command buffer. Warmup only initializes history once.
+The fixture uses CPU cached vectors plus memcpy for input and readback checking;
+HOST_CACHED coherent staging avoids repeated uncached mapped-memory scans.
+Uploads/readbacks and CPU checks are outside GPU shader intervals.
+The earlier --copy/D3D12 modes remain available but are not the native game design.
 
-Vulkan timestamps separately bracket NR and codec+NR; upload/readback and CPU
-checking are excluded. The timing helper reports an **upper median** for even
-sample counts. D3D12 core mode uses the earlier legal A -> D3D12 -> B timeline
-transport with DCS D3DCompile codec; no unrelated API clocks are subtracted.
-Copy mode round-trips all four images and checks bit identity and fence values.
+2026-11-05 signed 310.8.0: 72 frames, 12 warmup, 60 measured, finite changed HDR.
+3840 x 1600 median/p90: NR 6.519856/7.146592 ms; encode .119776/.174080 ms;
+decode .102144/.104160 ms; combined 6.785024/7.379104 ms. Validation was off.
+NR range 6.235232-7.539744 ms. Evaluate CPU median/p90 .327800/.342500 ms;
+VRAM stable 1.63 GB / budget 32.95 GB, sampled SM 930-1950 MHz, MEM 7001 MHz, P3.
+The exact reference half-decoder lookup removes millions of scalar ldexp calls
+between submits. Before it, an idle run still reached 65.918176 ms; after it,
+no >7.540 ms NR samples in this run. No global driver power/clock settings changed.
+Earlier 25.417056/29.361056 ms numbers were contention-affected by Cyberpunk PID
+41568 (GPU 98% after fixture exit). That game has exited for the final run.
+No recreation, own VRAM exhaustion or recurring long Evaluate CPU wait is seen.
+The original ~97 ms cause lacks retrospective clock/budget data and remains unknown.
+Final timing CSV: .scratch/dlss5-core-vulkan-28508/timings.csv; log:
+.scratch/dlss5-signed-cached72.log. These timings do not qualify validation.
 
-Results 2026-11-05: both core APIs Init/capabilities/Create/Evaluate/Release return
-0x1, DLSSNR.Available=1. Vulkan 3840 x 1600 produced finite changed decoded HDR
-for six frames. Timing-only run (--no-validation): four post-warmup NR samples
-46.119, 97.012, 6.221, 97.294 ms, upper median 97.012 ms; unstable, not qualified.
-D3D12 fallback 128 x 64 passed four frames, NR upper median 2.239 ms.
+Custom game-folder 310.8.3 is accepted by this app but NGX secure loading rejects
+its signature: Available 0, FeatureInitResult 0xbad00004, Create 0xbad0000b; zero NR
+frames and no median/p90. Do not silently benchmark a signed fallback under its name.
 
-Default Vulkan validation still reports an internal nv.ngx.dlssnr.resource layout
-error (VUID-vkCmdDraw-None-09600) after required feature bits were enabled.
-Both API routes stall on Shutdown1 after the last telemetry log message. The
-fixture prints shutdown progress every 5 seconds and terminates at 30 seconds
-without unloading a live runtime. Thus the **whole run exits 2/BLOCKED** even when
-pixel/timing sequence checks pass. No shutdown result code was returned; do not
-label it success or attribute the stall to telemetry alone.
+Validation is still NOT clean. All 7 owned images explicitly transition; the error
+is unowned runtime image 0xc5 expected GENERAL / tracked UNDEFINED, VUID 09600. RG32,
+GENERAL and controlled read-only input layouts do not remove it. No error filtered,
+unknown internal image transitioned or NVIDIA binary patched. Default validation
+fails the run; --no-validation timings cannot qualify this gap.
 
-Build/CPU checks, exact shader identity and spirv-val pass. See TRACK_DLSS5.md
-for full evidence/provenance and revised 2b: Vulkan core removes interop/splitting,
-but validation, lifecycle and stable cost still gate game integration/live tests.
+Shutdown probe: ReleaseFeature 0x1 and device-idle 0 precede a 30 s Shutdown1 stall.
+Successful no-op-policy sequence exits 0 while retaining resources to process exit;
+errors still exit nonzero. See docs/TRACK_DLSS5.md for evidence and remaining blocks.

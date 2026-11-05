@@ -4,10 +4,21 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <algorithm>
+#include <vector>
 
 namespace bg3::dlss5 {
 
 using Luid = std::array<std::uint8_t, 8>;
+
+struct Distribution { double median, p90, minimum, maximum; };
+inline std::optional<Distribution> summarize(std::vector<double> samples) {
+  if (samples.empty()) return std::nullopt;
+  std::sort(samples.begin(), samples.end());
+  const auto n = samples.size();
+  return Distribution{(samples[(n - 1) / 2] + samples[n / 2]) * .5,
+                      samples[(9 * n + 9) / 10 - 1], samples.front(), samples.back()};
+}
 
 // An invalid Vulkan deviceLUID must never select even a byte-identical DXGI LUID.
 inline bool same_luid(const Luid& vulkan, bool valid, const Luid& dxgi) noexcept {

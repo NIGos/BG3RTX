@@ -19,6 +19,7 @@
 #include <nvsdk_ngx.h>
 #include <nvsdk_ngx_vk.h>
 #include <mutex>
+#include <chrono>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -85,7 +86,7 @@ struct RuntimeFile {
     GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
     LONG status = WinVerifyTrust(nullptr, &action, &trust);
     std::wstring organization;
-    if (status == ERROR_SUCCESS) {
+    if (trust.hWVTStateData) {
       auto* provider = WTHelperProvDataFromStateData(trust.hWVTStateData);
       auto* signer = provider ? WTHelperGetProvSignerFromChain(provider, 0, FALSE, 0) : nullptr;
       if (signer && signer->csCertChain) {
@@ -97,7 +98,8 @@ struct RuntimeFile {
     }
     trust.dwStateAction = WTD_STATEACTION_CLOSE; WinVerifyTrust(nullptr, &action, &trust);
     std::printf("runtime path=%ls trust=0x%08x organization=%ls\n", path.c_str(), unsigned(status), organization.c_str());
-    need(status == ERROR_SUCCESS && organization == L"NVIDIA Corporation", "runtime rejected: valid NVIDIA signature required");
+    std::printf("runtime signature_status=%s model_policy=%s\n",status==ERROR_SUCCESS?"Valid":status==TRUST_E_BAD_DIGEST?"HashMismatch":status==TRUST_E_NOSIGNATURE?"Unsigned":"OtherFailure",model?"accept-and-log":"require-NVIDIA-signed-core");
+    if (!model) need(status == ERROR_SUCCESS && organization == L"NVIDIA Corporation", "NGX core rejected: valid NVIDIA signature required");
     DWORD dummy{}; DWORD bytes = GetFileVersionInfoSizeW(path.c_str(), &dummy);
     need(bytes != 0, "runtime has no version resource");
     std::vector<uint8_t> v(bytes); need(GetFileVersionInfoW(path.c_str(), 0, bytes, v.data()) != 0, "runtime version read");
@@ -145,7 +147,7 @@ struct Context {
   VkInstance instance{}; VkPhysicalDevice physical{}; VkDevice device{}; VkQueue queue{};
   uint32_t family{}; VkPhysicalDeviceMemoryProperties memory{}; float tick{};
   VkCommandPool pool{}; VkCommandBuffer a{}, b{}; VkFence produced{}, completed{}; VkQueryPool queries{};
-  bool a_pending{}, b_pending{};
+  bool a_pending{}, b_pending{}; bool memory_budget{};
   VkSemaphore timeline{}; VkDebugUtilsMessengerEXT messenger{};
   ComPtr<ID3D12Device> d12; ComPtr<ID3D12CommandQueue> q12;
   ComPtr<ID3D12CommandAllocator> allocator; ComPtr<ID3D12GraphicsCommandList> list;
@@ -217,6 +219,7 @@ struct Context {
     }
     vkcheck(vkEnumerateDeviceExtensionProperties(physical, nullptr, &count, nullptr), "device extensions");
     std::vector<VkExtensionProperties> available(count); vkcheck(vkEnumerateDeviceExtensionProperties(physical, nullptr, &count, available.data()), "device extensions");
+    for (auto& x : available) if (!std::strcmp(x.extensionName,VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) { extensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);memory_budget=true;break; }
     for (auto name : extensions) { bool found = false; for (auto& x : available) found |= !std::strcmp(name, x.extensionName); need(found, name); }
     VkPhysicalDeviceTimelineSemaphoreFeatures tf{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES};
     VkPhysicalDeviceBufferDeviceAddressFeatures bda{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES};
@@ -253,7 +256,7 @@ struct Context {
     VkCommandBuffer commands[2]; vkcheck(vkAllocateCommandBuffers(device, &ai, commands), "command buffers"); a = commands[0]; b = commands[1];
     VkFenceCreateInfo fc{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO}; vkcheck(vkCreateFence(device, &fc, nullptr, &completed), "completion fence");
     vkcheck(vkCreateFence(device, &fc, nullptr, &produced), "producer completion fence");
-    VkQueryPoolCreateInfo qc{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; qc.queryType = VK_QUERY_TYPE_TIMESTAMP; qc.queryCount = 4;
+    VkQueryPoolCreateInfo qc{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; qc.queryType = VK_QUERY_TYPE_TIMESTAMP; qc.queryCount = 6;
     vkcheck(vkCreateQueryPool(device, &qc, nullptr, &queries), "Vulkan queries");
     if (nr_info) { std::puts("Vulkan core fixture: no D3D12 device, external-memory images or shared semaphore"); return; }
     D3D12_COMMAND_QUEUE_DESC q{}; q.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -283,6 +286,9 @@ struct Context {
     hrcheck(q12->GetTimestampFrequency(&frequency), "D3D12 timestamp frequency");
   }
   uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags flags) {
+    if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+      for(uint32_t i=0;i<memory.memoryTypeCount;++i)
+        if((bits&(1u<<i)) && (memory.memoryTypes[i].propertyFlags & (flags|VK_MEMORY_PROPERTY_HOST_CACHED_BIT))==(flags|VK_MEMORY_PROPERTY_HOST_CACHED_BIT)) return i;
     for (uint32_t i = 0; i < memory.memoryTypeCount; ++i)
       if ((bits & (1u << i)) && (memory.memoryTypes[i].propertyFlags & flags) == flags) return i;
     throw std::runtime_error("compatible memory type unavailable");
@@ -327,6 +333,7 @@ struct Context {
   }
 };
 #include "dlss5_core_session.h"
+#include "dlss5_fixture_telemetry.h"
 struct Image {
   Context& c; ComPtr<ID3D12Resource> resource; VkImage image{}; VkDeviceMemory memory{}; VkFormat format{}; uint32_t bytes{};
   Image(Context& ctx, uint32_t w, uint32_t h, VkFormat vf, DXGI_FORMAT df, uint32_t bpp) : c(ctx), format(vf), bytes(bpp) {
@@ -374,6 +381,7 @@ struct Buffer {
     VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO}; ai.allocationSize = req.size;
     ai.memoryTypeIndex = c.memory_type(req.memoryTypeBits, local ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT :
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    std::printf("buffer bytes=%llu local=%d memory_type=%u flags=0x%x heap=%u\n",static_cast<unsigned long long>(bytes),int(local),ai.memoryTypeIndex,c.memory.memoryTypes[ai.memoryTypeIndex].propertyFlags,c.memory.memoryTypes[ai.memoryTypeIndex].heapIndex);
     vkcheck(vkAllocateMemory(c.device, &ai, nullptr, &memory), "staging memory");
     vkcheck(vkBindBufferMemory(c.device, buffer, memory, 0), "staging bind");
     if (!local) vkcheck(vkMapMemory(c.device, memory, 0, VK_WHOLE_SIZE, 0, &mapped), "staging map");
@@ -496,7 +504,7 @@ struct Neural {
       hrcheck(c.d12->CreateComputePipelineState(&ps, IID_PPV_ARGS(&pso)), "codec pipeline");
     };
     pipeline("EncodeMain", encode); pipeline("DecodeMain", decode);
-    std::puts("NR feature 18 created: signed, unmodified runtime; DCS full-frame HDR codec ready");
+    std::puts("NR feature 18 created: identity-logged, unmodified runtime; DCS full-frame HDR codec ready");
   }
   static unsigned scaling(Params* p) { p->Set("DLSSNR.ScalingRatio", 1.0f); return 1; }
   static void parameters(Params* params, uint32_t w, uint32_t h) {
@@ -561,26 +569,29 @@ struct Neural {
 
 float half_to_float(uint16_t h);
 double median(std::vector<double> values);
-void vk_image_barrier(Context& c, VkCommandBuffer cmd, VulkanImage& image, bool initial = false) {
+void vk_image_barrier(Context& c, VkCommandBuffer cmd, VulkanImage& image, bool initial = false, VkImageLayout from=VK_IMAGE_LAYOUT_GENERAL, VkImageLayout to=VK_IMAGE_LAYOUT_GENERAL) {
   VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-  b.oldLayout = initial ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_GENERAL;
-  b.newLayout = VK_IMAGE_LAYOUT_GENERAL; b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  b.oldLayout = initial ? VK_IMAGE_LAYOUT_UNDEFINED : from;
+  b.newLayout = to; b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   b.srcAccessMask = initial ? 0 : VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
   b.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
   b.image = image.image; b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
   vkCmdPipelineBarrier(cmd, initial ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &b);
 }
-int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, uint32_t h, uint32_t frames, bool validation) {
+int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, uint32_t h, uint32_t frames, bool validation, bool try_shutdown = false, uint32_t warmup=2, bool readonly_inputs=false) {
   Context c; CoreSession session;
   session.prepare(runtime, core, "vulkan");
   c.init(validation, &session.info, session.data.c_str()); no_game(); session.init(c, true);
   Neural::parameters(session.params, w, h);
-  VulkanImage color(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT), depth(c,w,h,VK_FORMAT_R32_SFLOAT), motion(c,w,h,VK_FORMAT_R16G16_SFLOAT);
+  GpuTelemetry telemetry(c);
+  auto milliseconds=[](){return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();};
+  VulkanImage color(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT), depth(c,w,h,VK_FORMAT_R32_SFLOAT), motion(c,w,h,VK_FORMAT_R32G32_SFLOAT);
   VulkanImage original(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT), proxy(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT);
   VulkanImage neural(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT), output(c,w,h,VK_FORMAT_R16G16B16A16_SFLOAT);
   VulkanCodec codec(c);
-  uint64_t pixels = uint64_t(w)*h, bytes = pixels*16;
+  uint64_t pixels = uint64_t(w)*h, bytes = pixels*20;
+  std::printf("fixture images color=%p depth=%p motion=%p original=%p proxy=%p neural=%p output=%p\n",reinterpret_cast<void*>(color.image),reinterpret_cast<void*>(depth.image),reinterpret_cast<void*>(motion.image),reinterpret_cast<void*>(original.image),reinterpret_cast<void*>(proxy.image),reinterpret_cast<void*>(neural.image),reinterpret_cast<void*>(output.image));
   Buffer upload(c,bytes,VK_BUFFER_USAGE_TRANSFER_SRC_BIT), readback(c,pixels*8,VK_BUFFER_USAGE_TRANSFER_DST_BIT);
   struct Feature {
     NVSDK_NGX_Handle* handle{};
@@ -597,21 +608,39 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     vkcheck(vkQueueSubmit(c.queue,1,&submit,c.produced),"Vulkan core submit"); c.a_pending=true; c.wait_vulkan();
     vkcheck(vkResetFences(c.device,1,&c.produced),"Vulkan core reset fence");
   };
-  submit_frame(); ngxcheck(unsigned(result),"Vulkan core feature 18 create"); need(feature.handle!=nullptr,"Vulkan core null feature");
-  std::vector<double> nr_times,total_times;
+  submit_frame();
+  if(result!=NVSDK_NGX_Result_Success || !feature.handle){
+    std::printf("FEATURE_BLOCKED create=0x%08x; NR frames=0, median/p90 unavailable (not zero)\n",unsigned(result));
+    if(feature.handle){CoreSession::log_result("Vulkan ReleaseFeature",NVSDK_NGX_VULKAN_ReleaseFeature(feature.handle));feature.handle=nullptr;}
+    bool clean=session.finish_vulkan(try_shutdown);std::fflush(nullptr);
+    if(!clean)ExitProcess(session.finish_failed?2:1);
+    ngxcheck(unsigned(result),"Vulkan core feature 18 create");need(feature.handle!=nullptr,"Vulkan core null feature");
+  }
+  std::vector<double> nr_times,total_times,encode_times,decode_times,eval_cpu_times,wait_cpu_times,prep_cpu_times;
+  std::vector<uint8_t> cpu_input(bytes); std::vector<uint16_t> cpu_output(pixels*4);
+  // Preserve the reference half decoder exactly, without millions of scalar
+  // ldexp calls between GPU submissions (which also distort idle clock policy).
+  std::vector<float> half_values(65536);
+  for(unsigned i=0;i<65536;++i)half_values[i]=half_to_float(uint16_t(i));
+  FILE* csv{};auto csv_path=session.directory/"timings.csv";need(_wfopen_s(&csv,csv_path.c_str(),L"wb")==0 && csv,"timing CSV");
+  std::fprintf(csv,"frame,warmup,nr_ms,encode_ms,decode_ms,total_ms,eval_cpu_ms,submit_wait_ms,prepare_cpu_ms,sm_mhz,memory_mhz,pstate,gpu_util,budget_bytes,usage_bytes\n");
+  std::printf("benchmark frames=%u warmup=%u measured=%u feature_create_count=1 fixture_resources_persistent=1 timing_csv=%ls readonly_inputs=%d\n",frames,warmup,frames-warmup,csv_path.c_str(),int(readonly_inputs));
   for(uint32_t frame=0;frame<frames;++frame){
     no_game();
-    auto* half=static_cast<uint16_t*>(upload.mapped);
-    auto* z=reinterpret_cast<float*>(static_cast<uint8_t*>(upload.mapped)+pixels*8);
-    auto* mv=reinterpret_cast<uint16_t*>(static_cast<uint8_t*>(upload.mapped)+pixels*12);
+    double prep_start=milliseconds();
+    auto* half=reinterpret_cast<uint16_t*>(cpu_input.data());
+    auto* z=reinterpret_cast<float*>(cpu_input.data()+pixels*8);
+    auto* mv=reinterpret_cast<float*>(cpu_input.data()+pixels*12);
     for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
       uint64_t i=uint64_t(y)*w+x;
       half[i*4]=uint16_t(0x3000+((x+frame*7)%512)*4); half[i*4+1]=uint16_t(0x3000+(y%512)*4);
       half[i*4+2]=((x/32+y/32+frame)%2)?0x4400:0x3400; half[i*4+3]=0x3c00;
-      z[i]=.25f+.5f*float(y)/h; mv[i*2]=frame?0x0c00:0; mv[i*2+1]=0;
+      z[i]=.25f+.5f*float(y)/h; mv[i*2]=frame?0.000244140625f:0; mv[i*2+1]=0;
     }
+    std::memcpy(upload.mapped,cpu_input.data(),size_t(bytes));
+    double prep_ms=milliseconds()-prep_start;
     vkcheck(vkResetCommandBuffer(c.a,0),"Vulkan core reset recording"); vkcheck(vkBeginCommandBuffer(c.a,&begin),"Vulkan core begin sequence");
-    vkCmdResetQueryPool(c.a,c.queries,0,4);
+    vkCmdResetQueryPool(c.a,c.queries,0,6);
     VulkanImage* all[]{&color,&depth,&motion,&original,&proxy,&neural,&output};
     for(auto* image:all)vk_image_barrier(c,c.a,*image,frame==0);
     VulkanImage* inputs[]{&color,&depth,&motion}; uint64_t offsets[]{0,pixels*8,pixels*12};
@@ -627,6 +656,10 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,2);
     codec.record(c.a,true,{color.view,color.view,color.view},{original.view,proxy.view},constants);
     vk_image_barrier(c,c.a,original);vk_image_barrier(c,c.a,proxy);
+    vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,4);
+    if(readonly_inputs)for(auto* image:{&proxy,&depth,&motion}){
+      vk_image_barrier(c,c.a,*image,false,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);image->ngx.ReadWrite=false;
+    }
     session.params->Set("DLSSNR.Color",static_cast<void*>(&proxy.ngx)); session.params->Set("DLSSNR.Output",static_cast<void*>(&neural.ngx));
     session.params->Set("DLSSNR.Depth",static_cast<void*>(&depth.ngx));session.params->Set("DLSSNR.MVec",static_cast<void*>(&motion.ngx));
     for(auto prefix:{"Color","Output","Depth","MVec"}){
@@ -637,11 +670,15 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     session.params->Set("DLSSNR.MVecScaleX",float(w));session.params->Set("DLSSNR.MVecScaleY",float(h));
     session.params->Set("DLSSNR.DepthInverted",0u);session.params->Set("DLSSNR.Reset",frame==0?1u:0u);
     vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,0);
+    double eval_start=milliseconds();
     result=NVSDK_NGX_VULKAN_EvaluateFeature(c.a,feature.handle,session.params,nullptr);
+    double eval_ms=milliseconds()-eval_start;
     CoreSession::log_result("NVSDK_NGX_VULKAN_EvaluateFeature(18)",result);
     vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,1);
     if(result==NVSDK_NGX_Result_Success){
+      if(readonly_inputs)for(auto* image:{&proxy,&depth,&motion})vk_image_barrier(c,c.a,*image,false,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
       vk_image_barrier(c,c.a,neural);
+      vkCmdWriteTimestamp(c.a,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,c.queries,5);
       codec.record(c.a,false,{original.view,proxy.view,neural.view},{output.view,proxy.view},constants);
       vk_image_barrier(c,c.a,output);
     }
@@ -650,21 +687,42 @@ int run_vulkan_core(const fs::path& runtime, const fs::path& core, uint32_t w, u
     if(result==NVSDK_NGX_Result_Success)vkCmdCopyImageToBuffer(c.a,output.image,VK_IMAGE_LAYOUT_GENERAL,readback.buffer,1,&copy);
     VkMemoryBarrier host{VK_STRUCTURE_TYPE_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;
     vkCmdPipelineBarrier(c.a,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&host,0,nullptr,0,nullptr);
-    vkcheck(vkEndCommandBuffer(c.a),"Vulkan core end sequence");submit_frame();ngxcheck(unsigned(result),"Vulkan core feature18 evaluate");
-    auto* decoded=static_cast<uint16_t*>(readback.mapped);size_t changed{};double delta{},mean{};
+    vkcheck(vkEndCommandBuffer(c.a),"Vulkan core end sequence");
+    double wait_start=milliseconds();submit_frame();double wait_ms=milliseconds()-wait_start;
+    auto gpu=telemetry.snapshot();
+    ngxcheck(unsigned(result),"Vulkan core feature18 evaluate");
+    std::memcpy(cpu_output.data(),readback.mapped,size_t(pixels*8));
+    auto* decoded=cpu_output.data();size_t changed{};double delta{},mean{};
     for(size_t i=0;i<pixels*4;++i){
-      float value=half_to_float(decoded[i]); need(std::isfinite(value),"non-finite Vulkan NR decoded HDR");
+      float value=half_values[decoded[i]]; need(std::isfinite(value),"non-finite Vulkan NR decoded HDR");
       if(i%4==3)need(decoded[i]==half[i],"Vulkan NR codec alpha changed");
-      else{double d=std::abs(double(value)-half_to_float(half[i]));changed+=d>1e-4;delta+=d;mean+=value;}
+      else{double d=std::abs(double(value)-half_values[half[i]]);changed+=d>1e-4;delta+=d;mean+=value;}
     }
     need(changed>pixels/10,"Vulkan NR decoded output unchanged");
-    uint64_t times[4]{};vkcheck(vkGetQueryPoolResults(c.device,c.queries,0,4,sizeof times,times,sizeof(uint64_t),VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WAIT_BIT),"Vulkan NR timings");
+    uint64_t times[6]{};vkcheck(vkGetQueryPoolResults(c.device,c.queries,0,6,sizeof times,times,sizeof(uint64_t),VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WAIT_BIT),"Vulkan NR timings");
     double nr_ms=double(times[1]-times[0])*c.tick/1e6,total_ms=double(times[3]-times[2])*c.tick/1e6;
-    if(frame>=2){nr_times.push_back(nr_ms);total_times.push_back(total_ms);}
-    std::printf("Vulkan core frame %u/%u PASS reset=%u finite=1 changed=%zu mean_delta=%g mean=%g NR=%.3f codec+NR=%.3f ms\n",frame+1,frames,frame==0?1:0,changed,delta/(pixels*3),mean/(pixels*3),nr_ms,total_ms);
-    need(validation_errors==0,"Vulkan core validation errors (pixel/timing evidence printed before failure)");
+    double encode_ms=double(times[4]-times[2])*c.tick/1e6,decode_ms=double(times[3]-times[5])*c.tick/1e6;
+    if(frame>=warmup){nr_times.push_back(nr_ms);total_times.push_back(total_ms);encode_times.push_back(encode_ms);decode_times.push_back(decode_ms);eval_cpu_times.push_back(eval_ms);wait_cpu_times.push_back(wait_ms);prep_cpu_times.push_back(prep_ms);}
+    std::fprintf(csv,"%u,%u,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,%u,%u,%llu,%llu\n",frame+1,frame<warmup?1:0,nr_ms,encode_ms,decode_ms,total_ms,eval_ms,wait_ms,prep_ms,gpu.sm_mhz,gpu.mem_mhz,gpu.pstate,gpu.gpu_util,static_cast<unsigned long long>(gpu.budget_bytes),static_cast<unsigned long long>(gpu.usage_bytes));std::fflush(csv);
+    std::printf("Vulkan frame %u/%u warmup=%u finite=1 changed=%zu nr=%.3f encode=%.3f decode=%.3f eval_cpu=%.3f submit_wait=%.3f prep_cpu=%.3f ms SM=%u MEM=%u P%u budget=%llu usage=%llu\n",frame+1,frames,frame<warmup?1:0,changed,nr_ms,encode_ms,decode_ms,eval_ms,wait_ms,prep_ms,gpu.sm_mhz,gpu.mem_mhz,gpu.pstate,static_cast<unsigned long long>(gpu.budget_bytes),static_cast<unsigned long long>(gpu.usage_bytes));
+    if(validation_errors){
+      std::fclose(csv);
+      std::fprintf(stderr,"VALIDATION_BLOCKED errors=%u; no validation messages filtered\n",validation_errors.load());
+      CoreSession::log_result("Vulkan ReleaseFeature",NVSDK_NGX_VULKAN_ReleaseFeature(feature.handle));feature.handle=nullptr;
+      bool clean=session.finish_vulkan(try_shutdown);std::fflush(nullptr);
+      if(!clean)ExitProcess(session.finish_failed?2:1);
+      need(false,"Vulkan core validation errors");
+    }
   }
-  std::printf("SEQUENCE_PASS Vulkan core NR %ux%u frames=%u validation=%s errors=%u NR_upper_median=%.3f codec+NR_upper_median=%.3f ms (2 warmup excluded; no D3D12, interop or split; shutdown still required)\n",w,h,frames,validation?"on":"off",validation_errors.load(),median(nr_times),median(total_times));
+  std::fclose(csv);
+  auto report=[](const char* label,const std::vector<double>&v){auto st=nr::summarize(v);need(st.has_value(),"no post-warmup samples");std::printf("SUMMARY %s count=%zu median=%.6f p90=%.6f min=%.6f max=%.6f ms\n",label,v.size(),st->median,st->p90,st->minimum,st->maximum);};
+  report("NR",nr_times);report("encode",encode_times);report("decode",decode_times);report("codec+NR",total_times);report("eval_cpu",eval_cpu_times);report("submit_wait",wait_cpu_times);report("prepare_cpu",prep_cpu_times);
+  std::printf("SEQUENCE_PASS Vulkan core NR %ux%u frames=%u measured=%zu validation=%s errors=%u; feature_create_count=1 images=7 persistent; no D3D12/interop/split\n",w,h,frames,nr_times.size(),validation?"on":"off",validation_errors.load());
+  CoreSession::log_result("Vulkan ReleaseFeature",NVSDK_NGX_VULKAN_ReleaseFeature(feature.handle));feature.handle=nullptr;
+  bool clean=session.finish_vulkan(try_shutdown);
+  std::printf("fixture finish clean_sdk_shutdown=%d shutdown_probe_stalled=%d idle_failed=%d exit_policy=%s\n",int(clean),int(session.shutdown_stalled),int(session.finish_failed),clean?"normal":"process-lifetime-no-op");
+  std::fflush(nullptr);
+  if(!clean) ExitProcess(session.finish_failed?2:0);
   return 0;
 }
 
@@ -820,25 +878,28 @@ int run(bool neural, const fs::path& runtime, const fs::path& core, uint32_t w, 
 int wmain(int argc, wchar_t** argv) {
   setvbuf(stdout, nullptr, _IONBF, 0); setvbuf(stderr, nullptr, _IONBF, 0);
   SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
-  bool neural = false, copy = false, verify = false, core_vk = false, core_d12 = false, validation = true;
-  fs::path runtime, core; uint32_t w = 3840, h = 1600, frames = 8;
+  bool neural = false, copy = false, verify = false, core_vk = false, core_d12 = false, validation = true, try_shutdown = false, readonly_inputs=false;
+  fs::path runtime, core; uint32_t w = 3840, h = 1600, frames = 8, warmup=2;
   try {
     for (int i = 1; i < argc; ++i) {
       std::wstring arg = argv[i];
       auto value = [&]() -> const wchar_t* { need(i+1 < argc, "missing option value"); return argv[++i]; };
       if (arg == L"--nr-core-vulkan") core_vk = true; else if (arg == L"--nr-core-d3d12") core_d12 = true;
       else if (arg == L"--copy") copy = true; else if (arg == L"--nr") neural = true;
+      else if (arg == L"--readonly-inputs") readonly_inputs=true;
+      else if (arg == L"--warmup") warmup=std::stoul(value());
+      else if (arg == L"--try-shutdown") try_shutdown = true;
       else if (arg == L"--verify-runtime") verify = true;
       else if (arg == L"--runtime") runtime = value(); else if (arg == L"--ngx-core") core = value();
       else if (arg == L"--width") w = std::stoul(value()); else if (arg == L"--height") h = std::stoul(value());
       else if (arg == L"--frames") frames = std::stoul(value()); else if (arg == L"--no-validation") validation = false;
-      else throw std::runtime_error("usage: dlss5_fixture --copy | --nr-core-vulkan | --nr-core-d3d12 | --nr --runtime PATH [--ngx-core PATH] [--width N --height N --frames N] [--no-validation]; --verify-runtime --runtime PATH is CPU-only");
+      else throw std::runtime_error("usage: dlss5_fixture --copy | --nr-core-vulkan | --nr-core-d3d12 | --nr --runtime PATH [--ngx-core PATH] [--width N --height N --frames N --warmup N] [--no-validation] [--readonly-inputs] [--try-shutdown]; --verify-runtime --runtime PATH is CPU-only");
     }
     need(unsigned(copy)+unsigned(neural)+unsigned(verify)+unsigned(core_vk)+unsigned(core_d12) == 1, "select exactly one mode");
-    need(w >= 32 && h >= 32 && w <= 8192 && h <= 8192 && frames >= 3 && frames <= 120, "dimensions/frames outside fixture bounds");
+    need(w >= 32 && h >= 32 && w <= 8192 && h <= 8192 && frames >= 3 && frames <= 600 && warmup < frames, "dimensions/frames/warmup outside fixture bounds");
     if (neural || verify || core_vk || core_d12) { need(!runtime.empty(), "--runtime required"); RuntimeFile checked; checked.verify(runtime, true); }
     if (verify) return 0;
-    if (core_vk) return run_vulkan_core(runtime, core, w, h, frames, validation);
+    if (core_vk) return run_vulkan_core(runtime, core, w, h, frames, validation, try_shutdown, warmup, readonly_inputs);
 
     return run(neural || core_d12, runtime, core, w, h, frames, validation, core_d12);
   } catch (const std::exception& e) { std::fprintf(stderr, "FAIL/BLOCKED %s\n", e.what()); return 1; }

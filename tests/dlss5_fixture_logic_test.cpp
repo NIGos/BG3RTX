@@ -1,6 +1,7 @@
 #include "../tools/dlss5_fixture_logic.h"
 
 #include <cstdio>
+#include <cmath>
 #include <limits>
 
 namespace {
@@ -13,6 +14,13 @@ void check(bool condition, const char* message) {
 
 int main() {
   using namespace bg3::dlss5;
+  check(!summarize({}), "empty timings cannot report a fabricated percentile");
+  auto stats = summarize({97.294, 6.221, 97.012, 46.119});
+  check(stats && std::abs(stats->median - 71.5655) < .00001 && stats->p90 == 97.294,
+        "even timing median averages central samples; p90 uses nearest rank");
+  stats = summarize({10, 9, 8, 7, 6, 5, 4, 3, 2, 1});
+  check(stats && stats->median == 5.5 && stats->p90 == 9 && stats->minimum == 1 && stats->maximum == 10,
+        "percentiles preserve the tail rather than selecting the fastest sample");
   const Luid luid{{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}};
   check(same_luid(luid, true, luid), "valid identical LUID matches");
   check(!same_luid(luid, false, luid), "invalid Vulkan LUID cannot match");
