@@ -10,8 +10,6 @@ import re
 from scripts.queue_gates import phase_states
 
 QUIET = r"\[watch\].*\| pipelines 0 \(0 ms in driver\)"
-GI_QUIET = r"gi: background builds (?:\(\d+ frames\): 0 frames waiting, 0 pending, 0 started|done:)"
-GI_QUIET_KEYS = {"gi_far", "gi_hit_sun", "gi_hit_direct"}
 # Keep the legacy pattern registry so checked-in plans remain compatible.
 # These records are conditional on an actual build, not mandatory announcements.
 TABLE = {
@@ -122,7 +120,7 @@ def requirements(job, plan):
             if key in TABLE:
                 # Pipeline requests depend on the complete target state and may
                 # already be resident. Only fresh driver quiescence is required.
-                wanted[key] = [GI_QUIET if key in GI_QUIET_KEYS and GI_QUIET in plan[i].get("wait_log", []) else QUIET]
+                wanted[key] = [QUIET]
             else:
                 # Unknown keys need an explicit contract, never an invented
                 # shader build/quiet interval (they may be layer-only too).
@@ -142,7 +140,7 @@ def apply(job, plan):
             if not required:
                 continue
             patterns.extend(required)
-            fresh.extend(required)
+            fresh.append(QUIET)
         phase["wait_log"] = list(dict.fromkeys(patterns))
         phase["wait_log_fresh"] = list(dict.fromkeys(fresh))
         phase["wait_log_timeout"] = max(float(phase.get("wait_log_timeout", 0)), 180)
@@ -163,7 +161,7 @@ def problems(job, plan):
                             key in p]
                 if not specific:
                     missing.append("unknown pipeline mapping; declare key-specific wait_log")
-            if patterns and not any(p in fresh for p in (QUIET, GI_QUIET)):
+            if patterns and QUIET not in fresh:
                 missing.append("fresh quiescence after settings write")
             if missing:
                 errors.append(f"readiness: {phase.get('label')}: changed {key} requires pipeline wait_log ({'; '.join(missing)})")
