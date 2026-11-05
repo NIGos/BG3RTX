@@ -42,6 +42,9 @@ def check(name, ok, info=""):
 H, D = "host", "device"
 # key "declaring shader:resource" -> [(C++ file, exact evidence substring, memory, note)]
 ATOMIC_TARGETS = {
+    "shaders/gi/gi_sun_wave.hlsli:giSunWave": [
+        ("core/gi.cpp", "ci.usage=VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;", D,
+         "g_sw_buffer: ensure_sun_wave_buffer chooses DEVICE_LOCAL memory; queue counter at binding 51")],
     "shaders/rt/hit_material_instanced_remap.hlsl:remap": [
         ("layer/hit_material.cpp", "if(!remaps.empty() && remap_ready() && create(q.remap,perm,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,true)){",
          H, "q.remap counters + permutations (rt_hit_material_instanced only; one atomic per instance, not per pixel)")],

@@ -126,3 +126,6 @@ rt/water_reflect.hlsl?WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1
 rt/hair_primary_count.hlsl
 rt/hair_primary_gbuffer.hlsl
 rt/hair_primary_velocity.hlsl
+
+gi/gi_sun_wave_visibility.hlsl
+gi/gi_sun_wave_resolve.hlsl

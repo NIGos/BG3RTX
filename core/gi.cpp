@@ -1,3 +1,4 @@
+#include "../common/sun_wave.h"
 #include "../common/native_hit_gi_bindings.h"
 #include "../common/native_hit_rf_bindings.h"
 #include "../common/native_hit_tileset_fields.h"
@@ -302,6 +303,12 @@ VkDescriptorSetLayout g_set_layout = VK_NULL_HANDLE, g_rt_set_layout = VK_NULL_H
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_rt_layout = VK_NULL_HANDLE, g_ls_layout = VK_NULL_HANDLE;
 Pipe g_trace, g_temporal, g_ao_apply, g_composite, g_contact, g_rt_shadow, g_rt_debug, g_trace_rt, g_ls, g_ls_prep;
 Pipe g_hit_material, g_hit_direct, g_hit_two_bounce, g_hit_gi, g_hit_gi_sharc;
+Pipe g_sw_visibility, g_sw_resolve, g_sw_trace[2];
+VkBuffer g_sw_buffer=VK_NULL_HANDLE;
+VkDeviceMemory g_sw_memory=VK_NULL_HANDLE;
+VkDeviceSize g_sw_bytes=0;
+VkDescriptorBufferInfo g_sw_info{};
+bool g_sw_active=false;
 Pipe g_hit_gi_sun, g_hit_gi_sun_sharc;   // gi_hit_sun (gi_trace_rt_hit_sun.hlsl): + the sun set 3
 Pipe g_pan_primary, g_pan_ls;
 Pipe g_rt_origin;   // robust ray origins (rt_origin=1, AUDIT_RT fix 6)
@@ -1207,6 +1214,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
                                                  (spec_cascade ? unsigned(sv::kSpecCascade) : 0u) |
                                                  (&p == &g_composite_fibre ? unsigned(sv::kHairFibreGi) : 0u));
   std::string slot_key = selected;
+  if (sv::gi_far_entry(file)) slot_key += g_sw_active ? "#sw=1" : "#sw=0";
   if(sv::occ_stats_entry(file)) slot_key += occ_stats ? "#occ=1" : "#occ=0";
   if(sv::rf_hit_gi_entry(file)) slot_key += rf_gi ? "#rfgi=1" : "#rfgi=0";
   // Step S2a: the instanced hit-material families (RT_SPEC_HIT_FAMILY) take wind RGB as constant 1004.
@@ -1232,7 +1240,10 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   }
   // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
   // value keeps its own slot and pipeline, as the cascade constant does.
-  if (sv::gi_far_entry(file)) specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+  if (sv::gi_far_entry(file)) {
+    specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+    specs.add(sv::kSpecIdGiSunWave, g_sw_active ? 1u : 0u);
+  }
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
     specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
@@ -2576,6 +2587,11 @@ bool gather_hit_gi_writes(const Bound& b,VkWriteDescriptorSet* writes,uint32_t& 
   const VkWriteDescriptorSet* write=nullptr;
   if(slot.binding<kLsBindings)write=&b.w[slot.binding];
   else if(slot.binding==50u)write=&b.hair_origin_write;
+  else if(slot.binding==51u){
+    VkWriteDescriptorSet w=b.w[20];w.dstBinding=51u;
+    if(g_sw_active)w.pBufferInfo=&g_sw_info;
+    writes[n++]=w;continue;
+  }
   else for(uint32_t i=0;i<kNumExtras;++i)if(kExtras[i].binding==slot.binding)write=&b.xw[i];
   if(!write || write->dstBinding!=slot.binding || write->descriptorType!=slot.type || write->descriptorCount!=slot.count)return false;
   writes[n++]=*write;
@@ -2662,6 +2678,32 @@ void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,
 // Qualified hidden-hit GI uses native local-light inputs, material set1 and
 // optional SHaRC set4. gi_hit_sun adds the D-LS sun set as set 3 (this frame's write_sun_set);
 // without it (ring full, layout failure) the direct-only variant runs, as gi_hit_sun=0.
+bool refresh_sun_wave(Pipe& p,const char* file,VkPipelineLayout layout){
+  // Only an exact installed specialization/layout may consume the current records.
+  p.pipeline=VK_NULL_HANDLE;
+  return refresh(p,file,layout);
+}
+bool ensure_sun_wave_buffer(uint32_t rays) {
+  const uint64_t bytes=bg3::sun_wave::allocation_bytes(g_hw,g_hh,rays);
+  if(!bytes)return false;
+  if(g_sw_buffer && g_sw_bytes>=bytes){g_sw_info={g_sw_buffer,0,g_sw_bytes};return true;}
+  const auto* d=static_cast<const Bg3DeviceInfo*>(host->persist(BG3_DEVICE_INFO_KEY,sizeof(Bg3DeviceInfo)));
+  if(!d || d->version<1)return false;
+  const auto& vk=*host->vk;
+  VkBuffer buffer=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;
+  VkBufferCreateInfo ci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};ci.size=bytes;
+  ci.usage=VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  if(vk.CreateBuffer(host->device,&ci,nullptr,&buffer)!=VK_SUCCESS)return false;
+  VkMemoryRequirements req{};vk.GetBufferMemoryRequirements(host->device,buffer,&req);
+  VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};ai.allocationSize=req.size;ai.memoryTypeIndex=UINT32_MAX;
+  for(uint32_t i=0;i<d->memory.memoryTypeCount;++i)
+    if((req.memoryTypeBits&(1u<<i))&&(d->memory.memoryTypes[i].propertyFlags&VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)){ai.memoryTypeIndex=i;break;}
+  if(ai.memoryTypeIndex==UINT32_MAX || vk.AllocateMemory(host->device,&ai,nullptr,&memory)!=VK_SUCCESS || vk.BindBufferMemory(host->device,buffer,memory,0)!=VK_SUCCESS){
+    vk.DestroyBuffer(host->device,buffer,nullptr);if(memory)vk.FreeMemory(host->device,memory,nullptr);return false;
+  }
+  host->defer_destroy(BG3_DEFER_BUFFER,uint64_t(g_sw_buffer));host->defer_destroy(BG3_DEFER_MEMORY,uint64_t(g_sw_memory));
+  g_sw_buffer=buffer;g_sw_memory=memory;g_sw_bytes=bytes;g_sw_info={buffer,0,bytes};return true;
+}
 bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& pc){
  if(!bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))))return false;
  VkDescriptorSetLayout alpha_layout{};VkDescriptorSet unused{};
@@ -2677,12 +2719,27 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  const unsigned em_index=(sun?2u:0u)+(s.sharc?1u:0u);
  static const char* const kEmFiles[4]={"gi/gi_trace_rt_hit_direct_em.hlsl","gi/gi_trace_rt_sharc_hit_direct_em.hlsl",
                                        "gi/gi_trace_rt_hit_sun_em.hlsl","gi/gi_trace_rt_sharc_hit_sun_em.hlsl"};
+ g_sw_active=false;
  VkDescriptorSet em=hit_em_set(cmd);
  if(em && !(ensure_hit_gi_em_layout(alpha_layout,sun!=VK_NULL_HANDLE,s.sharc) && refresh(g_hit_gi_em[em_index],kEmFiles[em_index],g_hit_gi_em_layout[em_index])))em=VK_NULL_HANDLE;
  VkPipelineLayout layout=em?g_hit_gi_em_layout[em_index]:sun?(s.sharc?g_hit_gi_sun_sharc_layout:g_hit_gi_sun_layout):(s.sharc?g_hit_gi_layout:g_hit_gi_plain_layout);
- Pipe& p=em?g_hit_gi_em[em_index]:sun?(s.sharc?g_hit_gi_sun_sharc:g_hit_gi_sun):(s.sharc?g_hit_gi_sharc:g_hit_gi);
- if(!em && !refresh(p,sun?(s.sharc?"gi/gi_trace_rt_sharc_hit_sun.hlsl":"gi/gi_trace_rt_hit_sun.hlsl")
-                  :(s.sharc?"gi/gi_trace_rt_sharc_hit_direct.hlsl":"gi/gi_trace_rt_hit_direct.hlsl"),layout))return false;
+ Pipe* selected=em?&g_hit_gi_em[em_index]:sun?(s.sharc?&g_hit_gi_sun_sharc:&g_hit_gi_sun):(s.sharc?&g_hit_gi_sharc:&g_hit_gi);
+ const char* trace_file=em?kEmFiles[em_index]:sun?(s.sharc?"gi/gi_trace_rt_sharc_hit_sun.hlsl":"gi/gi_trace_rt_hit_sun.hlsl")
+                  :(s.sharc?"gi/gi_trace_rt_sharc_hit_direct.hlsl":"gi/gi_trace_rt_hit_direct.hlsl");
+ if(!em && !refresh(*selected,trace_file,layout))return false;
+ if(sun && !s.sharc && !bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t)))) && host->cfg_int("gi_sun_wave",0)!=0 && ensure_sun_wave_buffer(pc.rays)){
+   // The auxiliary slots include the exact pipeline layout in refresh's installed key.
+   const bool visibility=refresh_sun_wave(g_sw_visibility,"gi/gi_sun_wave_visibility.hlsl",layout);
+   const bool resolve=refresh_sun_wave(g_sw_resolve,"gi/gi_sun_wave_resolve.hlsl",layout);
+   if(visibility && resolve){
+     // Keep ON/OFF in separate Pipe objects: async fallback may never run an ON
+     // trace without its two consumers or resolve records produced by an OFF trace.
+     g_sw_active=true;
+     if(refresh_sun_wave(g_sw_trace[em?1:0],trace_file,layout))selected=&g_sw_trace[em?1:0];
+     else g_sw_active=false;
+   }
+ }
+ Pipe& p=*selected;
  auto traversal=prepare_omm_traversal(cmd,b,p.pipeline);if(!traversal.valid())return false;
  VkDescriptorSet material_alpha=b.alpha;
  if(!host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&material_alpha))return false;
@@ -2709,7 +2766,22 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  if(sun)hp.ls_flags|=g_sunt_ok && g_sunt.view?(1u<<25):0u;
  if(em)hit_em_prepare(cmd,hp);
  vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof hp,&hp);
+ if(g_sw_active){
+   memory_barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
+   vk.CmdFillBuffer(cmd,g_sw_buffer,0,GI_SUN_WAVE_HEADER_BYTES,0u);
+   memory_barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+ }
  vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);
+ if(g_sw_active){
+   memory_barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+   vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_sw_visibility.pipeline);
+   const uint32_t groups=(g_hw*g_hh*hp.rays+63u)/64u;
+   vk.CmdDispatch(cmd,(std::min)(groups,65535u),(groups+65534u)/65535u,1);
+   memory_barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+   vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_sw_resolve.pipeline);
+   vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);
+ }
+
  if(!g_hit_em_logged && host->cfg_int("rt_hit_emission",0)>0){
   g_hit_em_logged=true;
   host->log("hit emission: first hit-GI dispatch %s the emissive scene (sun %d, sharc %d)",
@@ -3784,7 +3856,7 @@ void gi_release() {
   g_lsl_ok = false;
   sunt_release();
   g_sunt_ok = false;
-  for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug,
+  for (Pipe* p : {&g_sw_visibility, &g_sw_resolve, &g_sw_trace[0], &g_sw_trace[1], &g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_hair_fibre, &g_composite_fibre, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k, &g_occ, &g_ls_full_box_occ,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
@@ -3809,6 +3881,8 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_rg_buf);
   host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_rg_mem);
   g_rg_pool = VK_NULL_HANDLE, g_rg_dsl = VK_NULL_HANDLE, g_rg_buf = VK_NULL_HANDLE, g_rg_mem = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_BUFFER,uint64_t(g_sw_buffer));host->defer_destroy(BG3_DEFER_MEMORY,uint64_t(g_sw_memory));
+  g_sw_buffer=VK_NULL_HANDLE;g_sw_memory=VK_NULL_HANDLE;g_sw_bytes=0;g_sw_active=false;
   g_rg_set = VK_NULL_HANDLE;
   hit_em_drop();
   g_hit_em_logged = false;

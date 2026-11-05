@@ -30,6 +30,8 @@
 #include <string>
 #include <vector>
 #include "../common/replay_pack.h"
+#include "replay_ab.h"
+#include "../common/sun_wave.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_gi_bindings.h"
 #include "../common/native_hit_rf_bindings.h"
@@ -73,6 +75,10 @@ Gpu g;
 bool g_pipeline_stats = false;
 fs::path g_reference_out;
 std::map<uint32_t, uint32_t> g_specs;
+std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_ab_specs;
+fs::path g_ab_spv, g_wave_visibility_spv, g_wave_resolve_spv;
+bool g_ab_require_equal = false;
+bool ab_mode() { return !g_ab_specs.empty() || !g_ab_spv.empty(); }
 bool g_reference_mismatch = false;
 std::atomic<unsigned> g_validation_errors{};
 [[noreturn]] void die(const std::string& what) { std::fprintf(stderr, "FAIL %s\n", what.c_str()); std::exit(1); }
@@ -747,9 +753,12 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
   rp::Pass pass = *rp::find_pass(m.pass);
   static std::vector<rp::Slot> trust_slots;
-  if (!g_sun_trust.empty()) {
+  const bool gi_trace_contract = std::string(pass.shader).rfind("gi/gi_trace_rt", 0) == 0;
+  if (!g_sun_trust.empty() || !g_wave_visibility_spv.empty() || gi_trace_contract) {
     trust_slots.assign(pass.slots, pass.slots + pass.slot_count);
-    trust_slots.push_back({3, 8, rp::kStorage, 1, VK_FORMAT_R32_UINT, "sunTrust"});
+    if (!g_sun_trust.empty() && !rp::find_slot(pass, 3, 8)) trust_slots.push_back({3, 8, rp::kStorage, 1, VK_FORMAT_R32_UINT, "sunTrust"});
+    if ((gi_trace_contract || !g_wave_visibility_spv.empty()) && !rp::find_slot(pass, 0, 51)) trust_slots.push_back({0, 51, rp::kSsbo, 1, 0, "sunWave"});
+    if (!g_wave_visibility_spv.empty() && !rp::find_slot(pass, 1, 19)) trust_slots.push_back({1, 19, rp::kSampler, 16, 0, "nativeTilesetSamplers"});
     pass.slots = trust_slots.data(); pass.slot_count = uint32_t(trust_slots.size());
   }
   fs::create_directories(out);
@@ -815,6 +824,21 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     upload(it->second, r.offset, d.data() + r.file_offset, size_t(n));
   }
   Buf stats = make_buffer(kCounters * 64 * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true);
+  uint32_t wave_slots = 0;
+  Buf wave_buffer;
+  if (!g_wave_visibility_spv.empty()) {
+    auto wave_push = file(m.push); apply_push_set(wave_push);
+    uint32_t width, height, rays;
+    check(wave_push.size() >= 36, "sun wave push bytes");
+    std::memcpy(&width, wave_push.data() + 8, 4); std::memcpy(&height, wave_push.data() + 12, 4);
+    std::memcpy(&rays, wave_push.data() + 32, 4);
+    const uint64_t bytes = bg3::sun_wave::allocation_bytes(width, height, rays);
+    check(bytes != 0, "sun wave buffer size exceeds 32-bit shader offsets (or has zero dimensions/rays)");
+    wave_slots = uint32_t(uint64_t(width) * height * rays);
+    wave_buffer = make_buffer(bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false);
+    buffers[key(0, 51)] = wave_buffer;
+    std::printf("[replay] sun wave: %u slots, %.1f MB scratch\n", wave_slots, bytes / 1048576.0);
+  }
   // Images (inputs), outputs, dummies.
   std::map<uint64_t, std::map<uint32_t, Img>> images;   // slot -> element -> image
   // The writer stores each VkImage once and names its file from every descriptor element that binds
@@ -1022,7 +1046,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       if (slot.set == 0 && slot.binding == 20) bi = {stats.b, 0, VK_WHOLE_SIZE};
       else if (it != buffers.end()) bi = {it->second.b, 0, it->second.size};
       else {
-        (slot.set < 2 ? missing : missing_lighting).push_back(slot.name);
+        if (!(slot.set == 0 && slot.binding == 51)) (slot.set < 2 ? missing : missing_lighting).push_back(slot.name);
         dummies.push_back(make_buffer(256, slot.kind == rp::kUbo ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false));
         bi = {dummies.back().b, 0, 256};
       }
@@ -1078,7 +1102,37 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   pl.setLayoutCount = pass.set_count; pl.pSetLayouts = setLayouts.data(); pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &pushRange;
   VkPipelineLayout layout; vkcheck(vkCreatePipelineLayout(g.dev, &pl, nullptr, &layout), "pipeline layout");
-  VkPipeline pipeline = make_pipeline(spirv, layout);
+  const auto common_specs = g_specs;
+  for (const auto& [id, values] : g_ab_specs) g_specs[id] = values.first;
+  VkPipeline pipeline = make_pipeline(spirv, layout), pipeline_b = pipeline;
+  if (ab_mode()) {
+    check(!hooks, "paired A/B is not supported with PT/native hooks");
+    g_specs = common_specs;
+    for (const auto& [id, values] : g_ab_specs) g_specs[id] = values.second;
+    auto code_b = spirv;
+    if (!g_ab_spv.empty()) {
+      auto bytes = read_file(g_ab_spv);
+      check(!bytes.empty() && bytes.size() % 4 == 0, "--ab-spv SPIR-V size");
+      code_b.resize(bytes.size() / 4); std::memcpy(code_b.data(), bytes.data(), bytes.size());
+    }
+    pipeline_b = make_pipeline(code_b, layout);
+  }
+  VkPipeline wave_visibility{}, wave_resolve{};
+  if (!g_wave_visibility_spv.empty()) {
+    g_specs = common_specs; g_specs[GI_SUN_WAVE_SPEC_ID] = 1;
+    auto from_file = [&](const fs::path& name) {
+      auto bytes = read_file(name); check(!bytes.empty() && bytes.size() % 4 == 0, "sun wave SPIR-V size");
+      std::vector<uint32_t> code(bytes.size() / 4); std::memcpy(code.data(), bytes.data(), bytes.size());
+      return make_pipeline(code, layout);
+    };
+    wave_visibility = from_file(g_wave_visibility_spv); wave_resolve = from_file(g_wave_resolve_spv);
+  }
+  g_specs = common_specs;
+  auto wave_enabled = [&](bool b) {
+    const auto it = g_ab_specs.find(GI_SUN_WAVE_SPEC_ID);
+    const uint32_t value = it == g_ab_specs.end() ? (g_specs.count(GI_SUN_WAVE_SPEC_ID) ? g_specs.at(GI_SUN_WAVE_SPEC_ID) : 0) : (b ? it->second.second : it->second.first);
+    return value != 0;
+  };
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; qi.queryType = VK_QUERY_TYPE_TIMESTAMP; qi.queryCount = 2;
   VkQueryPool queries; vkcheck(vkCreateQueryPool(g.dev, &qi, nullptr, &queries), "query pool");
   if (!quiet) {   // what the pack costs the GPU (a 2 GB VT cache included; host staging is kStageBytes)
@@ -1092,8 +1146,28 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   }
   ReplayProgress progress;
   std::vector<double> timings;
-  for (uint32_t run = 0; run < repeat; ++run) {
-    if (run) progress.tick(run, repeat, hooks && hooks->note ? hooks->note(run) : std::string());
+  const uint32_t dispatches = ab_mode() ? 4 + repeat * 4 : repeat;
+  std::ofstream ab_csv;
+  std::vector<double> ab_deltas;
+  RunResult pair_reference;
+  double quartet_ms[4]{};
+  bool pair_outputs_equal = true, pair_counters_equal = true;
+  bool all_outputs_equal = true, all_counters_equal = true;
+  uint32_t first_failed_pair = UINT32_MAX;
+  bool explained_outputs = false, explained_counters = false, saved_failed_pair = false;
+  if (ab_mode()) {
+    ab_csv.open(out / "ab.csv");
+    ab_csv << "pair,A_ms,B_ms,delta_ms,outputs_equal,counters_equal\n";
+    std::puts("[replay] paired A/B: 4 warmup dispatches excluded; each pair ABBA/BAAB, delta B-A (linear drift cancels)");
+  }
+  for (uint32_t run = 0; run < dispatches; ++run) {
+    if (run) progress.tick(run, dispatches, hooks && hooks->note ? hooks->note(run) : std::string());
+    const bool warmup = ab_mode() && run < 4;
+    const uint32_t pair = ab_mode() && !warmup ? (run - 4) / 4 : 0;
+    const uint32_t phase = ab_mode() ? run % 4 : 0;
+    const bool use_b = ab_mode() && (warmup ? (run & 1) != 0 : ((phase == 1 || phase == 2) != ((pair & 1) != 0)));
+    const bool use_wave = wave_enabled(use_b);
+    check(!use_wave || wave_visibility, "spec1034=1 requires --sun-wave-visibility and --sun-wave-resolve");
     std::memset(stats.map, 0, size_t(stats.size));
     push = push_pack;
     if (hooks && hooks->patch) hooks->patch(run, push);
@@ -1109,11 +1183,28 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       barrier(c, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
               VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
               VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_UNIFORM_READ_BIT);
-      vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+      vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, use_b ? pipeline_b : pipeline);
       vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, pass.set_count, sets.data(), 0, nullptr);
       vkCmdPushConstants(c, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pass.push_bytes, push.data());
-      vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queries, 0);
+      // Wait for preceding output clears/uploads; time only this dispatch chain.
+      vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queries, 0);
+      if (use_wave) {
+        vkCmdFillBuffer(c, wave_buffer.b, 0, GI_SUN_WAVE_HEADER_BYTES, 0);
+        barrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+      }
       vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
+      if (use_wave) {
+        barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+        vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, wave_visibility);
+        const uint32_t groups = (wave_slots + 63) / 64;
+        vkCmdDispatch(c, std::min(groups, 65535u), (groups + 65534u) / 65535u, 1);
+        barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+        vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, wave_resolve);
+        vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
+      }
       vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, queries, 1);
       barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
               VK_ACCESS_HOST_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
@@ -1122,23 +1213,99 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     vkcheck(vkGetQueryPoolResults(g.dev, queries, 0, 2, sizeof ticks, ticks, 8, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT), "timestamps");
     RunResult rr;
     rr.gpu_ms = double(ticks[1] - ticks[0]) * g.tick_ns * 1e-6;
-    timings.push_back(rr.gpu_ms);
+    if (!warmup) timings.push_back(rr.gpu_ms);
     std::vector<uint8_t> raw(static_cast<size_t>(stats.size)); std::memcpy(raw.data(), stats.map, raw.size());
     rr.stats = fold(raw);
     rr.raw_stats = std::move(raw);
     for (auto& o : outputs) rr.outputs.push_back(summarize(o.name, o.img.format, o.img.w, o.img.h, read_image(o.img)));
-    if (!quiet || run == 0) {
+    if ((!quiet && !ab_mode()) || run == 0) {
       std::printf("[replay] %s run %u: dispatch %u x %u x %u, GPU %.3f ms\n", m.pass.c_str(), run, m.groups[0], m.groups[1], m.groups[2], rr.gpu_ms);
       for (auto& l : gi_hit_direct_lines(rr.stats)) std::printf("  %s\n", l.c_str());
       for (auto& r : rr.outputs)
         std::printf("  output %s %ux%u: mean %.7g %.7g %.7g %.7g, non-finite %llu, fnv1a %016llx\n", r.name.c_str(), r.w, r.h, r.mean[0], r.mean[1],
                     r.mean[2], r.mean[3], (unsigned long long)r.nonfinite, (unsigned long long)r.hash);
     }
+    if (ab_mode() && !warmup) {
+      quartet_ms[phase] = rr.gpu_ms;
+      if (phase == 0) {
+        pair_reference = rr;
+        pair_outputs_equal = pair_counters_equal = true;
+      } else {
+        pair_counters_equal &= pair_reference.raw_stats == rr.raw_stats;
+        pair_outputs_equal &= pair_reference.outputs.size() == rr.outputs.size();
+        for (size_t i = 0; i < rr.outputs.size() && i < pair_reference.outputs.size(); ++i)
+          pair_outputs_equal &= pair_reference.outputs[i].raw == rr.outputs[i].raw;
+        if ((!pair_outputs_equal || !pair_counters_equal) && first_failed_pair == UINT32_MAX) first_failed_pair = pair;
+        if (pair == first_failed_pair) {
+          if (!saved_failed_pair) {
+            saved_failed_pair = true;
+            const std::string reference_label = (pair & 1) ? "B" : "A";
+            const std::string current_label = use_b ? "B" : "A";
+            const std::string suffix = current_label == reference_label ? "_repeat" : "";
+            for (const auto& output : pair_reference.outputs) write_vec(out / ("ab_" + reference_label + "_" + output.name + ".raw"), output.raw);
+            for (const auto& output : rr.outputs) write_vec(out / ("ab_" + current_label + suffix + "_" + output.name + ".raw"), output.raw);
+            if (!pair_counters_equal) {
+              write_vec(out / ("ab_" + reference_label + "_rtstats.bin"), pair_reference.raw_stats);
+              write_vec(out / ("ab_" + current_label + suffix + "_rtstats.bin"), rr.raw_stats);
+            }
+            std::printf("[replay] saved first failed pair raw outputs as ab_%s_* and ab_%s%s_*\n", reference_label.c_str(), current_label.c_str(), suffix.c_str());
+          }
+          if (!pair_outputs_equal && !explained_outputs) {
+            explained_outputs = true;
+            if (rr.outputs.size() != pair_reference.outputs.size())
+              std::printf("[replay] A/B mismatch: output count %zu vs %zu\n", pair_reference.outputs.size(), rr.outputs.size());
+            for (size_t i = 0; i < rr.outputs.size() && i < pair_reference.outputs.size(); ++i) {
+              const auto& a = pair_reference.outputs[i]; const auto& b = rr.outputs[i];
+              const auto diff = bg3::replay::byte_difference(a.raw, b.raw);
+              if (!diff.count) continue;
+              const size_t component_bytes = a.format == VK_FORMAT_R16G16B16A16_SFLOAT ? 2 : 4;
+              const size_t components = a.format == VK_FORMAT_R16G16B16A16_SFLOAT || a.format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
+              const size_t component = diff.first / component_bytes, pixel = component / components;
+              std::printf("[replay] A/B mismatch %s pair %u phase %u vs phase 0: %zu differing bytes, first byte %zu component %zu pixel (%zu,%zu) channel %zu; sizes %zu/%zu\n",
+                          a.name.c_str(), pair + 1, phase, diff.count, diff.first, component, pixel % a.w, pixel / a.w, component % components, a.raw.size(), b.raw.size());
+            }
+          }
+          if (!pair_counters_equal && !explained_counters) {
+            explained_counters = true;
+            const auto diff = bg3::replay::byte_difference(pair_reference.raw_stats, rr.raw_stats);
+            const size_t index = diff.first / sizeof(uint32_t);
+            uint32_t a = 0, b = 0;
+            if ((index + 1) * 4 <= pair_reference.raw_stats.size()) std::memcpy(&a, pair_reference.raw_stats.data() + index * 4, 4);
+            if ((index + 1) * 4 <= rr.raw_stats.size()) std::memcpy(&b, rr.raw_stats.data() + index * 4, 4);
+            std::printf("[replay] A/B counter mismatch pair %u phase %u vs phase 0: %zu differing bytes, first counter %zu bin %zu flat index %zu values %u/%u; sizes %zu/%zu\n",
+                        pair + 1, phase, diff.count, index / 64, index % 64, index, a, b, pair_reference.raw_stats.size(), rr.raw_stats.size());
+          }
+        }
+      }
+      if (phase == 3) {
+        const double outside = (quartet_ms[0] + quartet_ms[3]) * 0.5;
+        const double inside = (quartet_ms[1] + quartet_ms[2]) * 0.5;
+        const double a = (pair & 1) ? inside : outside, b = (pair & 1) ? outside : inside;
+        ab_deltas.push_back(b - a);
+        all_outputs_equal &= pair_outputs_equal; all_counters_equal &= pair_counters_equal;
+        std::printf("[replay] pair %u/%u %s: A %.6f ms B %.6f ms delta %+.6f ms; outputs %s counters %s\n",
+                    pair + 1, repeat, (pair & 1) ? "BAAB" : "ABBA", a, b, b - a,
+                    pair_outputs_equal ? "bit-equal" : "DIFFER", pair_counters_equal ? "bit-equal" : "DIFFER");
+        ab_csv.precision(12);
+        ab_csv << pair + 1 << ',' << a << ',' << b << ',' << b - a << ',' << pair_outputs_equal << ',' << pair_counters_equal << '\n';
+        ab_csv.flush(); std::fflush(stdout);
+      }
+    }
     if (hooks && hooks->each) hooks->each(run, rr);
-    if (hooks && run + 1 < repeat) continue;   // many runs: keep only the last (outputs below)
+    if ((hooks || ab_mode()) && run + 1 < dispatches) continue;   // many runs: keep only the last (outputs below)
     result.runs.push_back(std::move(rr));
   }
-  if (progress.printed) progress.tick(repeat, repeat, hooks && hooks->note ? hooks->note(repeat) : std::string());
+  if (progress.printed) progress.tick(dispatches, dispatches, hooks && hooks->note ? hooks->note(dispatches) : std::string());
+  if (ab_mode()) {
+    const auto summary = bg3::replay::ab_summary(ab_deltas);
+    char line[512];
+    std::snprintf(line, sizeof line, "paired delta B-A: median %+.6f ms, 95%% median CI [%+.6f, %+.6f] ms (%zu ABBA/BAAB pairs, exact binomial order statistics); outputs %s; counters %s",
+                  summary.median, summary.low, summary.high, ab_deltas.size(),
+                  all_outputs_equal ? "100% bit-equal" : "DIFFER", all_counters_equal ? "100% bit-equal" : "DIFFER");
+    std::printf("[replay] %s\n", line);
+    std::ofstream(out / "ab_summary.txt") << line << '\n';
+    if (g_ab_require_equal && !(all_outputs_equal && all_counters_equal)) g_reference_mismatch = true;
+  }
   std::sort(timings.begin(), timings.end());
   const size_t mid = timings.size() / 2;
   const double median_ms = timings.size() % 2 ? timings[mid] : (timings[mid - 1] + timings[mid]) * 0.5;
@@ -2088,6 +2255,14 @@ int self_test(const fs::path& dir) {
   for (size_t i = 0; same && i < a.outputs.size(); ++i) same = a.outputs[i].raw == b.outputs[i].raw;
   same = same && std::memcmp(a.stats.t, b.stats.t, sizeof a.stats.t) == 0;
   line("4 deterministic: two dispatches bit-identical (images, counters)", same, "giRaw fnv1a " + [&] { char s[32]; std::snprintf(s, sizeof s, "%016llx", (unsigned long long)a.outputs[0].hash); return std::string(s); }());
+  {
+    const bool old_mismatch = g_reference_mismatch;
+    g_ab_specs[2147483647u] = {0, 1}; // unused ID: identical pipelines are the zero-delta control
+    g_ab_require_equal = true;
+    replay(dir / "lit", &code, {}, {}, dir / "paired-out", 2, true);
+    line("4a paired pipelines: all measured dispatches bit-identical", !g_reference_mismatch, "outputs and raw counter bins");
+    g_ab_specs.clear(); g_ab_require_equal = false; g_reference_mismatch = old_mismatch;
+  }
   bool finite = a.outputs[0].nonfinite == 0 && a.outputs[1].nonfinite == 0;
   { // Reference-output gate uses the same disk files and helper as --reference-out, no extra dispatch.
     const auto ref = dir / "lit-out";
@@ -2190,6 +2365,7 @@ int main(int argc, char** argv) {
   fs::path pack, out, hlsl, spv, synth, test;
   std::vector<std::string> defines;
   uint32_t repeat = 1;
+  bool repeat_given = false;
   std::string compile_pass = "gi";
   bool synth_box = false, synth_lighting = false, synth_casters = false, compile_only = false;
   bool validation = true, dark = false, pt = false, pt_cost_only = false, pt_skip_cost = false, native = false;
@@ -2202,12 +2378,29 @@ int main(int argc, char** argv) {
     else if (args[i] == "--hlsl") hlsl = next();
     else if (args[i] == "--spv") spv = next();
     else if (args[i] == "--define") defines.push_back(next());
-    else if (args[i] == "--repeat") repeat = uint32_t(std::max(1, std::atoi(next().c_str())));
+    else if (args[i] == "--repeat") { repeat = uint32_t(std::max(1, std::atoi(next().c_str()))); repeat_given = true; }
+    else if (args[i] == "--ab-spv") g_ab_spv = next();
+    else if (args[i] == "--sun-wave-visibility") g_wave_visibility_spv = next();
+    else if (args[i] == "--sun-wave-resolve") g_wave_resolve_spv = next();
+    else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
+    else if (args[i] == "--ab-self-test") return bg3::replay::ab_self_test() ? 0 : 1;
     else if (args[i] == "--no-validation") validation = false;
     else if (args[i] == "--pipeline-stats") g_pipeline_stats = true;
     else if (args[i] == "--compile-only") compile_only = true;
     else if (args[i] == "--compile-pass") compile_pass = next();
     else if (args[i] == "--reference-out") g_reference_out = next();
+    else if (args[i] == "--ab-spec") {
+      const std::string kv = next(); const size_t eq = kv.find('='), comma = kv.find(',');
+      check(eq != std::string::npos && comma != std::string::npos && eq < comma, "--ab-spec ID=A,B");
+      auto number = [&](const std::string& text) {
+        size_t used = 0; const auto value = std::stoull(text, &used, 0);
+        check(used == text.size() && value <= UINT32_MAX && text.find('-') == std::string::npos, "--ab-spec requires uint32 ID=A,B");
+        return uint32_t(value);
+      };
+      const auto id = number(kv.substr(0, eq));
+      check(g_ab_specs.count(id) == 0, "duplicate --ab-spec ID");
+      g_ab_specs[id] = {number(kv.substr(eq + 1, comma - eq - 1)), number(kv.substr(comma + 1))};
+    }
     else if (args[i] == "--spec") {
       const std::string kv = next(); const size_t eq = kv.find('=');
       check(eq != std::string::npos, "--spec ID=UINT");
@@ -2238,6 +2431,12 @@ int main(int argc, char** argv) {
       g_push_set.emplace_back(kv.substr(0, eq), kv.substr(eq + 1));
     }
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
+  }
+  check(g_wave_visibility_spv.empty() == g_wave_resolve_spv.empty(), "sun wave requires both --sun-wave-visibility and --sun-wave-resolve");
+  if (ab_mode()) {
+    check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--ab-spec/--ab-spv require ordinary pack replay");
+    check(repeat <= (UINT32_MAX - 4) / 4, "paired repeat count too large");
+    if (!repeat_given) repeat = 40;
   }
   if (!test.empty()) return self_test(test);
   if (!pt_test.empty()) return pt_self_test(pt_test);

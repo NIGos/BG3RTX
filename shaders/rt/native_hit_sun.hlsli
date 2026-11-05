@@ -83,7 +83,16 @@ HdDirect native_hit_sun(NativeHitMaterial material,float3 position,float3 outgoi
  if(RT_CASCADE_ON)g_rt_cascade_ray=true;
 #endif
 #ifdef NATIVE_HIT_SUN_DISC
- uint visibility=rt_visibility(rt_offset_ray(position,normal),native_hit_sun_dir(L),pc.rt_tmax,cone);
+ const float3 sun_origin=rt_offset_ray(position,normal), sun_direction=native_hit_sun_dir(L);
+ uint visibility;
+#ifdef GI_SUN_WAVE_HOOK
+ if(kGiSunWave!=0u){
+   sw_queue(sun_origin,sun_direction,pc.rt_tmax,footprint,term.radiance);
+   // Diagnostics retain the original active-lane masks and exact raw counter bins.
+   visibility=pc.rt_stats!=0u?rt_visibility(sun_origin,sun_direction,pc.rt_tmax,cone):kRtLit;
+ }else
+#endif
+ visibility=rt_visibility(sun_origin,sun_direction,pc.rt_tmax,cone);
 #else
  uint visibility=rt_visibility(rt_offset_ray(position,normal),L,pc.rt_tmax,cone);
 #endif

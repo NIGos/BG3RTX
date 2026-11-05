@@ -222,6 +222,36 @@ core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
 - Live gate: as M4.1 at S3 Campsite; cost = `gi: trace pass` GPU median ON minus OFF (one more
   ray per supported hit, expected +0.1 ms).
 
+## Deferred hidden-hit sun visibility (`gi_sun_wave=0`, 2026-11-05)
+
+Developer raw key, specialization 1034; retired 1032-1033 remain unused. Rejected offline:
+slower in S8, camp and inn. The raw key remains off. No live qualification claimed.
+The existing trace records each original bounce-add event and eligible sun visibility tuple.
+A dense dispatch traces queued sun rays, then an 8x8 resolve replays each pixel's events in
+original ray order. Visible radiance and emission retain separate additions. Weighted events
+store the fp32 operands and weight so the resolve can retain the original multiply/add.
+The hidden continuation stores local/AO terms, the lit sun scatter and far-rule operands;
+resolve selects the cached visibility, applies the original guard/far rule and final encoding.
+Pixels with no deferred query or only lit answers retain the trace's exact stored output;
+they need no continuation replay. This also avoids changing fused arithmetic for unrelated rays.
+All three packs have 100% bit-equal stored outputs and raw counter bins with statistics on
+and off. Forty paired ABBA/BAAB samples per pack give ON-OFF medians (95% median intervals):
+S8 +0.736 ms [+0.540, +0.849], camp +3.114 ms [+2.452, +3.898], inn +0.737 ms
+[+0.638, +0.863]. All measured samples are bit-equal; none supports a performance gain.
+Main-shader far/sun attribution and full commands are in [sunwave](progress/sunwave.md).
+Key-OFF release equivalence passes all 215 ordinary requests against main (2,056 assignments).
+The full build and all 191 CTests pass. This is an exact rejected prototype, not a promoted effect.
+
+Scratch is device-local: 16-byte header, 4-byte queue index + 192-byte record per ray,
+and 32 bytes per pixel (1,158,164,496 bytes at 2560x1067 with two rays). Allocation rejects
+uint32 byte-address overflow and falls back to the ordinary trace while resources/pipelines
+are unavailable. There are two fixed new requests, visibility and resolve; capabilities
+specialize in the visibility request. SHaRC and OMM explicitly keep the ordinary path.
+When `rt_stats=1`, trace also issues the original sun queries solely to preserve diagnostic
+active-lane masks and raw counter bins. Dense traversal suppresses duplicate counters; the
+stored output still uses its visibility result. Performance is measured with `rt_stats=0`.
+Guard/unknown counters outside diagnostic mode need separate exceptional-case coverage.
+
 ## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; live S8 energy gate failed, kept off)
 
 2026-11-04 outcomes. One-ray Ultra GI (`ultra-gi-1ray`, gi1 live 17:48, all 16 window gates OK): GI trace

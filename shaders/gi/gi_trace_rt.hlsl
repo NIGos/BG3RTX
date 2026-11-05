@@ -31,6 +31,7 @@
 // (r cache, g screen, b no radiance: fallback), as fractions of the rays; sharc_debug=6 the
 // cache's contribution split by the leak test (r occluded cell, g clean, b thin surface).
 #include "gi_common.hlsli"
+#include "gi_sun_wave.hlsli"
 // Limit the experiment to GI closest rays; sun/local visibility stays unchanged.
 #define RT_COMPACT_HIT_STATE 1
 #include "../rt/rt_common.hlsli"
@@ -55,6 +56,7 @@
 // The R0 roof rule (shared with rf_hit_shade) and the sun pass's disc sampling.
 #define NATIVE_HIT_SUN_ROOF 1
 #define NATIVE_HIT_SUN_DISC 1
+#define GI_SUN_WAVE_HOOK 1
 #define NATIVE_HIT_SUN_STAT_BASE 320u
 #define NATIVE_HIT_SUN_XBASE 325u
 #include "../rt/native_hit_sun.hlsli"
@@ -184,6 +186,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (d <= 0.0 || dot(e, e) + 1.0 > 5.4e10) {
     giRaw[id] = float4(0, 0, 0, 1);
     giRawDepth[id] = 0;
+    if (kGiSunWave != 0u) sw_pixel(id, 0.0.xxx, 0.0, 0.0);
     return;
   }
   float2 uv = (float2(fp) + 0.5) / float2(pc.full);
@@ -239,6 +242,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const float R0 = max(shc.gi_base_radius, 0.01);
 #endif
   for (uint r = 0; r < pc.rays; ++r) {
+    sw_begin(id, r);
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
     float3 o = RT_SECONDARY_ORIGIN(fp,org, P, N, dist * pa, dir);
 #if SHARC_QUERY_PASS || RT_HIT_GI_DIRECT
@@ -298,7 +302,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
         float3 L;
         if (prev_bounce_at(qp, L)) {
-          bounce += L * w;
+          sw_bounce_mul(bounce, L, w);
           seen += L;
           nseen += 1.0;
           visible = true;
@@ -341,7 +345,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #if RT_HIT_GI_DIRECT && RT_HIT_EMISSION
     if (visible && (HIT_EM_FLAGS & 1u) != 0u) {
       const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
-      bounce += he.radiance * w;
+      sw_bounce_mul(bounce, he.radiance, w);
       if (pc.rt_stats != 0u) hit_em_count(1u, he, dot(he.radiance * w, float3(0.2126, 0.7152, 0.0722)), fp.x ^ fp.y);
     }
 #endif
@@ -379,8 +383,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
       sharc_stat_sum(kShContribThin, cell.thin && !cell.occluded ? lq : 0u);
       leak += cell.occluded ? float3(lc, 0, 0) : cell.thin ? float3(0, 0, lc) : float3(0, lc, 0);
       if (found) {
-        bounce += Lc * w;
-        occ += w;
+        sw_bounce_mul(bounce,Lc,w);
+        sw_occ(occ, w);
         tiers.x += 1.0;
         continue;
       }
@@ -404,7 +408,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     // occlusion is unchanged); the point/spot (and sun) term below adds to it.
     if (!visible && !aborted && t >= 0.0 && pc.gi_rt_fallback == 0u) {
       const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
-      bounce += he.radiance * w;
+      sw_bounce_mul(bounce, he.radiance, w);
       if (pc.rt_stats != 0u) hit_em_count(0u, he, dot(he.radiance * w, float3(0.2126, 0.7152, 0.0722)), fp.x ^ fp.y);
     }
 #endif
@@ -492,6 +496,29 @@ void main(uint3 tid : SV_DispatchThreadID) {
             uint value=uint(clamp(dot(direct.radiance*w,float3(.2126,.7152,.0722)),0.0,8.0)*8192.0+0.5);
             uint sum=WaveActiveSum(value);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((286u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,sum);
           }
+#if RT_HIT_GI_SUN
+          if (kGiSunWave != 0u && g_sw_queued) {
+            float sw_rb = 0.0, sw_w0 = w, sw_rho = 0.0;
+            uint sw_local = 0u;
+            bool sw_far = false, sw_roof = false;
+#if RT_GI_FAR || defined(RT_SPEC_GI_FAR)
+#if defined(RT_SPEC_GI_FAR)
+            sw_far = kSpecGiFar != 0u;
+#else
+            sw_far = true;
+#endif
+            if (sw_far) {
+              sw_rb = RB; sw_w0 = fr.w0; sw_local = far_local;
+              sw_rho = gi_far_luminance(material.scattering.value.Rd);
+              sw_roof = t > RB && !gi_far_roof_clear(o, dir, t);
+            }
+#endif
+            // The cached lit scatter is the same call as native_hit_sun's final lit call.
+            const bool sw_ao = !((pc.ao_direct&3u)==1u && (pc.ao_direct&12u)==12u);
+            sw_pending(direct.radiance, g_sw_sun_lit * (sw_ao ? native_hit_ao_factor(hit_a) : 1.0),
+                       w, t, sw_rb, sw_w0, sw_local, sw_rho, sw_far, sw_roof);
+          }
+#endif
 #if RT_GI_FAR
 #if RT_HIT_GI_SUN
           // Beyond R0 the hit needs the sun (gi_far_hit) and a roof-clear ray: else the fallback.
@@ -510,7 +537,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
               // The old rule's bounce on this ray: the complete local term (+ the sun) within R0, with w0.
               else if(far_local==kGiFarLocalKnown)far_stat(8u,gi_far_luminance((direct.radiance+far_sun_l)*fr.w0));
             }
-            bounce+=fh.bounce;occ+=fh.occ;continue;
+            sw_bounce_far(bounce, fh.bounce, (far_local==kGiFarLocalKnown?direct.radiance:0.0.xxx)+(far_sun?far_sun_l:0.0.xxx), fr.w);sw_occ_far(occ, fh.occ, 1.0-saturate(far_rho), fr.w);continue;
           }
           // No known radiance (sun unsupported beyond R0, or the local term outside the froxels without
           // the sun): the fallback below, with the base fade.
@@ -533,21 +560,21 @@ void main(uint3 tid : SV_DispatchThreadID) {
               // The old rule's bounce on this ray: the complete local term (+ the sun) within R0, with w0.
               else if(far_local==kGiFarLocalKnown)far_stat(8u,gi_far_luminance((direct.radiance+far_sun_l)*fr.w0));
             }
-            bounce+=fh.bounce;occ+=fh.occ;continue;
+            sw_bounce_far(bounce, fh.bounce, (far_local==kGiFarLocalKnown?direct.radiance:0.0.xxx)+(far_sun?far_sun_l:0.0.xxx), fr.w);sw_occ_far(occ, fh.occ, 1.0-saturate(far_rho), fr.w);continue;
           }
           // No known radiance (sun unsupported beyond R0, or the local term outside the froxels without
           // the sun): the fallback below, with the base fade.
           }else{
 #if RT_HIT_GI_SUN
-          if(gi_hit_term_ok(direct.radiance+sun_l,hit_bin)){bounce+=(direct.radiance+sun_l)*w;occ+=w;continue;}
+          if(gi_hit_term_ok(direct.radiance+sun_l,hit_bin)){sw_bounce_mul(bounce,direct.radiance+sun_l,w);sw_occ(occ, w);continue;}
 #else
-          if(gi_hit_term_ok(direct.radiance,hit_bin)){bounce+=direct.radiance*w;occ+=w;continue;}
+          if(gi_hit_term_ok(direct.radiance,hit_bin)){sw_bounce_mul(bounce,direct.radiance,w);sw_occ(occ, w);continue;}
 #endif
           }
 #elif RT_HIT_GI_SUN
-          if(gi_hit_term_ok(direct.radiance+sun_l,hit_bin)){bounce+=(direct.radiance+sun_l)*w;occ+=w;continue;}
+          if(gi_hit_term_ok(direct.radiance+sun_l,hit_bin)){sw_bounce_mul(bounce,direct.radiance+sun_l,w);sw_occ(occ, w);continue;}
 #else
-          if(gi_hit_term_ok(direct.radiance,hit_bin)){bounce+=direct.radiance*w;occ+=w;continue;}
+          if(gi_hit_term_ok(direct.radiance,hit_bin)){sw_bounce_mul(bounce,direct.radiance,w);sw_occ(occ, w);continue;}
 #endif
           // Not finite: fallback0 below (the key-off ray).
         }
@@ -556,12 +583,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
 #if RT_GI_FAR
     if (visible) {
-      occ += w;
+      sw_occ(occ, w);
       if (pc.rt_stats != 0u) far_stat(5u, w);
     } else if (pc.gi_rt_fallback != 1) {
       // As without gi_far: the base fade, so a hit beyond R0 without known radiance keeps the native ambient.
-      occ += fr.w0;
-      wfall += fr.w0;
+      sw_occ(occ, fr.w0);
+      sw_fall(wfall, fr.w0);
       if (pc.rt_stats != 0u) {
         far_stat(5u, fr.w0);
         g_far_stat[4] += !aborted && t > RB ? 1u : 0u;
@@ -570,31 +597,32 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #elif defined(RT_SPEC_GI_FAR)
     if (kSpecGiFar != 0u) {
       if (visible) {
-        occ += w;
+        sw_occ(occ, w);
         if (pc.rt_stats != 0u) far_stat(5u, w);
       } else if (pc.gi_rt_fallback != 1) {
-        occ += fr.w0;
-        wfall += fr.w0;
+        sw_occ(occ, fr.w0);
+        sw_fall(wfall, fr.w0);
         if (pc.rt_stats != 0u) {
           far_stat(5u, fr.w0);
           g_far_stat[4] += !aborted && t > RB ? 1u : 0u;
         }
       }
     } else {
-      if (visible) occ += w;
+      if (visible) sw_occ(occ, w);
       else if (pc.gi_rt_fallback != 1) {
-        occ += w;
-        wfall += w;
+        sw_occ(occ, w);
+        sw_fall(wfall, w);
       }
     }
 #else
-    if (visible) occ += w;
+    if (visible) sw_occ(occ, w);
     else if (pc.gi_rt_fallback != 1) {
-      occ += w;
-      wfall += w;
+      sw_occ(occ, w);
+      sw_fall(wfall, w);
     }
 #endif
   }
+  if (kGiSunWave != 0u) sw_pixel(id, seen, nseen, d);
   if (pc.gi_rt_fallback == 2 && nseen > 0.0) bounce += seen / nseen * wfall;
   float n = float(max(pc.rays, 1u));
 #if SHARC_QUERY_PASS
