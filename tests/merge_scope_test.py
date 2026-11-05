@@ -84,6 +84,7 @@ class MergeScopeTests(unittest.TestCase):
         self.assertIn('coverage_handling', tooling_tests(ROOT, ['scripts/qa_coverage.py',
                                                               'tests/coverage_handling_test.py']))
         self.assertNotIn('water_surface_shader', tooling_tests(ROOT, ['tests/water_surface_shader_test.py']))
+        self.assertNotIn('rr_r11', tooling_tests(ROOT, ['tests/rr_r11_test.py']))
 
     @patch('scripts.merge_scope.subprocess.run', side_effect=RuntimeError('gate failed'))
     def test_gate_failure_propagates(self, run):

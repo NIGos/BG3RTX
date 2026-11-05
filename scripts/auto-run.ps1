@@ -174,6 +174,7 @@ $guardRunner = Tagged $caps 'live-guard' '.runner.txt'
 $guardPollAt=[datetime]::MinValue; $guardFinalAt=$null
 $guardPython = if(Get-Command py -ErrorAction SilentlyContinue){'py'}else{'python'}
 $guardMargin=1.0
+$guardContext = if($env:BG3RTX_QUEUE_CONTEXT){$env:BG3RTX_QUEUE_CONTEXT | ConvertFrom-Json}else{$null}
 if($env:BG3RTX_QUEUE_CONTEXT_FILE){
   $guardContext=Get-Content -LiteralPath $env:BG3RTX_QUEUE_CONTEXT_FILE -Raw | ConvertFrom-Json
   if($null -ne $guardContext.job.live_flow.settling_margin_s){$guardMargin=[double]$guardContext.job.live_flow.settling_margin_s}
@@ -569,6 +570,16 @@ if($SELightProbe){
 }
 try {
 Assert-QueueLaunchProcesses
+# Process-local overlay policy, inherited by launch-bg3 and the game alongside
+# clean mode's Steam/EOS/GOG disables. Never change the player's launcher policy.
+if ($guardContext.job.keep_reshade -eq $true) {
+  # Clear an inherited disable flag too: this job explicitly tests compatibility.
+  $env:DISABLE_VK_LAYER_reshade_1 = $null
+  Write-Host "Test overlay allowed: VK_LAYER_reshade (keep_reshade=true; disable flag cleared)"
+} else {
+  $env:DISABLE_VK_LAYER_reshade_1 = "1"
+  Write-Host "Test overlay disabled: VK_LAYER_reshade (DISABLE_VK_LAYER_reshade_1=1)"
+}
 $game = @(& (Join-Path $PSScriptRoot "launch-bg3.ps1") @launchArgs | Where-Object { $_ -is [System.Diagnostics.Process] })[0]
 if (-not $game) { throw "launch-bg3.ps1 returned no process" }
 # The game keeps Normal priority on purpose: offline builds (dxc, cl) run BelowNormal, and a

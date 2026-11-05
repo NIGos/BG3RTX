@@ -180,6 +180,37 @@ bin/frame_replay --pack <pack> --spv sun.spv --ab-spv direct.spv --spec 1007=0 `
   --sun-trust trust.bin --repeat 40 --out .scratch/sun-split
 ```
 
+## BLAS policy A/B (replay only, 2026-11-05)
+
+`--blas-policy legacy|layer|trace` selects reconstruction flags. Default `legacy` preserves
+historical replay (all FAST_TRACE, no update flag). `layer` uses FAST_TRACE | ALLOW_COMPACTION
+for static mesh-pool BLAS and FAST_BUILD | ALLOW_UPDATE for dynamic/cascade BLAS.
+`trace` changes only dynamic/cascade to FAST_TRACE | ALLOW_UPDATE. The cascade policy models
+`rt_cascade_refit=1` (Ultra default). Static BLAS are built but not compacted in replay.
+
+`--ab-blas --repeat 40` keeps both layer A and trace B BLAS/TLAS resident and selects the
+TLAS outside each timed dispatch. Static BLAS are shared. Existing ABBA/BAAB timing,
+per-sample warmup, output/counter checks and first-mismatch snapshots apply unchanged.
+`--blas-control` with `--ab-blas` builds both sides using layer flags (zero-change control).
+After trace measurement, `blas.csv` and `blas_summary.txt` report 40 paired GPU timings
+of build and refit, separately for dynamic class 1 and cascade class 2. Each timestamp
+covers one batched build call with disjoint aligned scratch for all BLAS in that class;
+it excludes allocation, upload and TLAS work. Four warmups per measurement are excluded.
+
+Classes are derived from InstInfo: soup = dynamic, pool = static unless kInfoHeld bit 31;
+static alpha pool row indices (1..4096 in bits 16..31) cannot overlap bit 31. The manifest's
+casters directive identifies cascade geometry before its patched InstInfo is classified.
+Unique BLAS/tris and held counts are printed; conflicting classes for a shared key fail.
+Legacy/hair/unavailable geometry remains masked out as in ordinary replay.
+
+Run only without bg3.exe. Use a supported sun/far module, `--sun-trust`, Ultra spec values,
+`--push radius=6 --push rays=2 --push rt_stats=0 --ab-warmup 8`. Old GI packs lack the
+emissive scene set: `_em` shaders cannot run on their lighting set 2. Results without
+emission are an approximation to full Ultra, and frozen-geometry refits cannot establish
+cost or traversal quality after animated deformation. A stable-scene estimate uses
+(build + R * refit) / (R + 1), R = 600 dynamic and 60 cascade; topology changes add builds.
+`--ab-self-test` also checks class derivation, including every static alpha pool row.
+
 ## Origin replay (2026-11-05)
 
 `--origin` adapts an existing `gi_hit_direct` pack in memory. It reads `Push::full`,
