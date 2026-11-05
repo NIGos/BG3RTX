@@ -985,6 +985,8 @@ their energy gates pass. Ultra is the first possible preset after combined smoke
 ## Receiver probe live state (rf-ls-regs, offline candidate, 2026-11-05)
 
 `rf_compact_probe_state=0` is a developer raw key, Vulkan specialization 1031, no knob or preset.
+
+Live result (2026-11-05, Ultra with the optional Far + reflections mode, rf_hit_shade=rf_hit_gi=1; the default Far mode never runs this code): two VALID in-run A/B runs, opt-compact-rf-inn.1.121959 and opt-compact-rf-s8.1.122421. Reflections OFF/ON/OFF/ON: inn 5.736/5.613/5.810/5.755 ms (OFF spread 0.074), S8 3.615/3.529/3.566/3.574 ms (spread 0.050); ON minus the preceding OFF -0.12, -0.05, -0.09, +0.01 ms. Float pre-post energy within the OFF-repeat band in every pair. Kept off (user decision): about 0.05 ms, not separated from noise, only in a non-default mode.
 With `rf_hit_gi>0`, ON evaluates the same receiver probe/DFG/occlusion block after hit shading.
 Only its position changes: all inputs are read-only during the intervening traversal/shading;
 guard increments are integer additions with the same multiplicity. No ray, precision or accumulation changes.
