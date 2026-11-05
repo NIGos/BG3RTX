@@ -1,4 +1,6 @@
 #include "../common/perf_hook_state.h"
+#include "../common/cpu_exact_cache.h"
+#include "../common/cpu_instance_rows.h"
 #include "../common/cpu_build_keys.h"
 #include "../common/cpu_deferred_ranges.h"
 #include "../common/native_hit_records.h"
@@ -1989,20 +1991,16 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     return BVH_CAPTURE;
   }
   // The instance stream: host-mapped, in range.
-  for (int k = 0; k < 3; ++k) {
-    const CmdState::VertexBinding& vb = s->vb[ip.row_binding[k]];
-    uint32_t stride = ip.row_stride[k] ? ip.row_stride[k] : uint32_t(vb.stride);
-    VkDeviceSize size = vb.buffer ? geo_buffer_size(vb.buffer) : 0;
-    VkDeviceSize first = vb.offset + VkDeviceSize(d.args.first_instance) * stride + ip.row_offset[k];
-    VkDeviceSize last = first + VkDeviceSize(d.args.instances - 1) * stride + 16;
-    const uint8_t* p = vb.buffer && stride && size && last <= size ? mapped_ptr(vb.buffer, first) : nullptr;
-    if (!p) {
-      ++g_st.not_inst_stream;
-      return BVH_CAPTURE;
-    }
-    fd.rows[k] = p;
-    fd.row_stride[k] = stride;
+  std::array<cpu_opt::InstanceRowSource,3> row_sources{};
+  for(unsigned k=0;k<3;++k){const auto& vb=s->vb[ip.row_binding[k]];
+    row_sources[k]={uint64_t(vb.buffer),vb.offset,vb.stride,ip.row_stride[k],ip.row_offset[k]};
   }
+  const auto row_prepared=cpu_opt::instance_rows(row_sources,d.args.first_instance,d.args.instances,
+    buffer_resource_epoch(),cfg_hot(CfgHot::cpu_opt3)!=0,
+    [](uint64_t buffer){return geo_buffer_size(VkBuffer(buffer));},
+    [](uint64_t buffer,uint64_t offset){return mapped_ptr(VkBuffer(buffer),offset);});
+  for(unsigned k=0;k<3;++k){fd.rows[k]=row_prepared.rows[k];fd.row_stride[k]=row_prepared.strides[k];}
+  if(!row_prepared.valid){++g_st.not_inst_stream;return BVH_CAPTURE;}
   // The mesh: what the per-vertex inputs read.
   uint64_t mk = mix(mix(ip.vtx_sig, d.alpha), indexed);
   mk = mix(mix(mix(mk, d.args.count), d.args.first), uint64_t(int64_t(d.args.vertex_offset)));

@@ -1266,10 +1266,12 @@ normalization and scope limitations are in that directory's README.
 Offline build/test: `scripts/build.ps1 -Test` PASS 180/180, 273.19 s CTest,
 using the checkout-local shader cache. Final analyzer fixtures pass separately.
 
-## CPU hook candidate cpu_opt2 (2026-11-05, default 0)
+## CPU hook candidate cpu_opt2 (2026-11-05, qualified default 1)
 
-Layer-only, ABI and shader requests unchanged. Offline candidate; no live saving or
-quality pass claimed. Inn Ultra capture pre-draw costs 8.785 ms static / 9.764 ms
+Layer-only, ABI and shader requests unchanged. Qualified by the inn Ultra
+`opt-cpu2-inn.1.052927.log.cpu.md` receipt: hook bodies -0.30 ms/frame versus
+OFF repeat spread 0.088 ms/frame (user-provided qualification). Default is now 1;
+the key remains available for A/B. Earlier context: capture pre-draw 8.785 ms static / 9.764 ms
 pan; enclosing pass-after costs 2.449 / 4.047 ms. Nested receipts must not be summed.
 
 - Alpha descriptor slots use a capture-local index, keeping the ordered view list
@@ -1298,3 +1300,36 @@ key toggles and capture resets; all 0 through 17 eviction ranges; and all 0 thro
 4 lifetime handles. Synthetic alpha-slot and eviction-range benchmarks report CPU
 cost separately from game savings. Full validation and the prepared inn Ultra
 600-frame A/B batch are recorded in [opt-cpu2](progress/opt-cpu2.md).
+
+## CPU pre-draw candidate cpu_opt3 (2026-11-05, default 0)
+
+Layer-only, NO_PIPELINE; ABI unchanged and shader request delta 0. The inn Ultra
+CPU2 receipt places pre-draw at about 9.2 ms/frame, including material hooks 2.27,
+alpha records 1.90, cascade identity 1.03, BVH classification 0.84 and pipeline
+lookup 0.28. About 2.9 ms remains unattributed. These are nested receipts, not
+independent frame costs. New detailed-logging-only QPC scopes split prepass
+observation, cascade membership, draw planning, alpha lookup, opaque/alpha material,
+BVH record publication and XFB commands, with enclosing cascade/emissive paths.
+They make the remaining work observable; no new live attribution is claimed.
+
+Cache only immutable preparation. Every mapped packet must still be read fresh:
+host writes need no descriptor or resource epoch change. Never cache per-frame
+record indices, descriptor slots, occurrence counts, audit decisions, output
+allocation or lifetime observation. Buffer creation/destruction, memory rebind,
+map/unmap and free invalidate pointer/range preparation through a monotonic
+resource epoch; pipeline and alpha registries retain their own generations.
+Hit-material staging runs outside its provider mutex under cpu_opt3; packet
+publication and rejection counters remain inside the lock.
+
+Prepared check: restart the layer, load the inn Ultra save, run the single
+`tools/live_batches/opt_r4/cpu3/` job after explicit authorization. CPU1 and CPU2
+stay on; CPU3 toggles OFF/ON/OFF/ON in one session, 600 rendered frames per window.
+Quiet readiness only. Every window must contain all CPU timer receipts. Both ON
+pre-draw and hook-body medians must beat both OFF medians beyond the OFF repeat
+spread. CPU3 remains off pending this evidence; game CPU/GPU costs and rendered
+quality/energy are unmeasured. Offline validation and final cache details are in
+[opt-cpu3](progress/opt-cpu3.md).
+
+Offline validation: all 183 CTests pass (184.67 s). Multi-frame production-helper
+fixtures cover exact outputs and lifecycle invalidation. Synthetic row preparation
+at 5000 draws/1500 streams saves 0.1794 ms/frame; this is not a game cost receipt.

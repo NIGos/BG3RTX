@@ -17,6 +17,7 @@
 #include "../common/vram_guard.h"
 #include "../common/native_hit_recording.h"
 #include "../common/cpu_material_scratch.h"
+#include "../common/cpu_material_prepare.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -866,21 +867,29 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  // Count real audited duplicates even beyond the storage bound. Unrelated
  // shader families never reserve an audited candidate's geometry identity.
  if(p.materials.size()>=material_slots){++p.slot_overflow;return false;}
- // rt_hit_material_capture_unlocked: only this recording's thread writes this packet until it is
- // finalized (other threads read finalized packets only), so the binding reads run unlocked.
- const bool unlocked=capture_unlocked();if(unlocked)lock.unlock();
+ // Only this recording's thread writes the packet until finalization. Keep the
+ // shared packet/global mutations under mutex, but cpu_opt3 also stages the
+ // mapped engine/material bytes and reads live wind/camera inputs outside it.
+ // These contents are deliberately read on every draw: descriptor/resource
+ // epochs alone cannot detect the game's writes to persistently mapped UBOs.
+ const bool cpu_opt3=cfg_hot(CfgHot::cpu_opt3)!=0;
  Material material{};
- const bool captured=tileset?capture_tileset(cmd,state,material):capture(cmd,state,material,irecipe);
- if(unlocked)lock.lock();
- if(!captured){++p.binding_declined;if(counts)++counts->bindings;return false;}
- // Instanced pairs: the record-time engine (STI layout) and 1:1 bytes staged in the gather's layout.
  unsigned char stage[instanced::kStageBytes];
- if(irecipe){uint32_t engine[16]{},ubo[8]{};const uint32_t eb=pool::engine_bytes(*irecipe),mb=native_vt::material_bytes(*irecipe);
+ auto stage_inputs=[&](){
+  if(!irecipe)return true;
+  uint32_t engine[16]{},ubo[8]{};const uint32_t eb=pool::engine_bytes(*irecipe),mb=native_vt::material_bytes(*irecipe);
   if(eb>sizeof engine || mb>sizeof ubo || !read_mapped(material.engine.buffer,material.engine.offset,engine,eb) || (mb && !read_mapped(material.physical_ubo.buffer,material.physical_ubo.offset,ubo,mb)) ||
-     !instanced::stage(*irecipe,engine,eb/4u,ubo,mb/4u,stage)){++p.binding_declined;++counts->bindings;return false;}
+     !instanced::stage(*irecipe,engine,eb/4u,ubo,mb/4u,stage))return false;
   material.family=family;material.staged=true;material.instances=args.instances;material.inputs=read_inputs(cmd,state,family);
   const uint32_t flags=instanced::row_flags(*irecipe)|instanced::family_flags(family);std::memcpy(&material.row.parameters[3],&flags,4); // row word 220
- }
+  return true;
+ };
+ // Keep the OFF path's ordering. A failed prepare is accounted only after the
+ // mutex is reacquired; no packet counters or publication escape its lock.
+ const auto prepared=cpu_opt::prepare_material(lock,capture_unlocked(),cpu_opt3,
+  [&](){return tileset?capture_tileset(cmd,state,material):capture(cmd,state,material,irecipe);},stage_inputs);
+ if(prepared==cpu_opt::MaterialPrepare::CaptureFailed){++p.binding_declined;if(counts)++counts->bindings;return false;}
+ if(prepared==cpu_opt::MaterialPrepare::StageFailed){++p.binding_declined;++counts->bindings;return false;}
  uint32_t vertices=0;if(!tileset_vertex_count(args.count,args.instances,vertices))return false;
  *bytes=VkDeviceSize(vertices)*stride;ChunkPlacement place{};
  if(!place_in_chunks(uint32_t(p.chunks.size()),p.cursor,*bytes,stream_bytes,deferred_chunks,place)){++p.stream_overflow;if(counts)++counts->stream;return false;}
