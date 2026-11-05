@@ -3,8 +3,10 @@
   "diagnostic": true,
   "launches": 1,
   "static_camera": true,
-  "max_seconds": 300,
+  "max_seconds": 504,
   "shader_request_delta": 0,
+  "warm_readiness_budget_seconds": 240,
+  "warm_policy": "Fresh driver quiescence and selected trace completion before timing; 37 s per cold OFF request, 3 s per resident Ultra return.",
   "reference": "captures/queue/logs/opt-profile-inn.1.005111.log: Ultra GI trace about 13.6 ms",
   "brackets": [
     {

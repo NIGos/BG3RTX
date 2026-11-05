@@ -1,11 +1,12 @@
 """Prepare one static Ultra GI trace attribution launch; never stage or run."""
 from copy import deepcopy
 from pathlib import Path
+import math
 import sys
 
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
-from tools.live_batches import live_flow as flow, lint_snapshot
+from tools.live_batches import live_flow as flow, lint_snapshot, pipeline_readiness
 from tools.live_batches.combine import assignments
 from tools.live_batches.opt_profile.make_jobs import phase
 from tools.live_batches.release_qual.make_final import retime_final
@@ -15,6 +16,8 @@ FEATURES = [('direct', 'gi_hit_direct', '0'), ('sun', 'gi_hit_sun', '0'),
             ('emission', 'rt_hit_emission', '0'), ('far', 'gi_far', '0'),
             ('second-ray', 'gi_rr_rays', '1'), ('material', 'rt_hit_material', '0')]
 TRACE = 'gi: trace pass'
+# Six cold alternatives get 37 s each; six returns to resident Ultra get 3 s.
+WARM_TIMEOUT_BUDGET = 240
 
 
 def generate():
@@ -33,7 +36,9 @@ def generate():
     # beyond the ordinary GPU timer, no captures, no camera motion.
     for name, key, off in FEATURES:
         for label, value in [('off', off), ('on', base[key])]:
-            plan.append(phase('warm-'+name+'-'+label, 1, set=f'{key}={value}'))
+            plan.append(phase('warm-'+name+'-'+label, 1, set=f'{key}={value}',
+                wait_log=[pipeline_readiness.GI_TRACE, pipeline_readiness.QUIET],
+                wait_log_fresh=[pipeline_readiness.QUIET], wait_log_timeout=37 if label=='off' else 3))
     every, brackets = [], []
     for name, key, off in FEATURES:
         windows = []
@@ -62,14 +67,20 @@ def generate():
         purpose='Diagnostic attribution only: each feature OFF / Ultra ON / OFF, other Ultra dependencies held on.',
         timeout=300, max_minutes=5, hold=90, stop_on_dump=False)
     retime_final(job, plan)
-    # Missed readiness fails quickly; the absolute launch watchdog is 300 s.
+    # Cold shader requests are awaited only here, before all cost windows.
+    # Later transitions revisit resident variants and retain the short watchdog.
     for p in plan[1:]:
         if p.get('wait_log'):
-            p['wait_log_timeout'] = 3
+            p['wait_log_timeout'] = (37 if p['label'].endswith('-off') else 3) if p['label'].startswith('warm-') else 3
+    budget = flow.duration_budget(job, plan)
+    job['timeout'] = math.ceil(budget['seconds'] + budget['readiness_timeout_seconds'] + 1)
+    job['max_minutes'] = math.ceil(job['timeout']/60)
     flow.write(plan_path, plan)
     flow.write(HERE/'jobs'/f'{name}.json', job)
     flow.write(HERE/'predicted.json', dict(status='READY_FOR_LIVE', diagnostic=True,
-        launches=1, static_camera=True, max_seconds=300, shader_request_delta=0,
+        launches=1, static_camera=True, max_seconds=job['timeout'], shader_request_delta=0,
+        warm_readiness_budget_seconds=WARM_TIMEOUT_BUDGET,
+        warm_policy='Fresh driver quiescence and selected trace completion before timing; 37 s per cold OFF request, 3 s per resident Ultra return.',
         reference='captures/queue/logs/opt-profile-inn.1.005111.log: Ultra GI trace about 13.6 ms',
         brackets=brackets, attribution='trace(on) minus mean(trace(off-a), trace(off-b)); report both signed bracket deltas and OFF drift.',
         baseline='Pair-specific OFF: only the named feature differs from Ultra. Dependencies stay enabled; costs are conditional and not additive.',

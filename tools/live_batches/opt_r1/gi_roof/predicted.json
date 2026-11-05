@@ -1,7 +1,7 @@
 {
   "status": "OFFLINE_CHECKS_PENDING",
   "key": "gi_roof_reject",
-  "spec_id": 1027,
+  "spec_id": 1028,
   "default": 0,
   "scene": "The Blushing Mermaid - 96h 39m",
   "preset": "ultra",

@@ -73,7 +73,7 @@ def masks(depths, materials):
     return edge, interior
 
 
-def burst(directory):
+def burst(directory, extras=()):
     meta = json.loads((directory/'burst.json').read_text(encoding='utf-8'))
     if not (meta.get('valid_transport') and meta.get('edge_only') and
             meta.get('K') == 8 and meta.get('sample_stride') == 2):
@@ -85,13 +85,13 @@ def burst(directory):
         f = by.setdefault(e['record_frame'], {})
         if e['name'] in f:
             raise ValueError('duplicate sample')
-        f[e['name']] = decode(directory/e['file'], e)
+        f[e['name']] = None if e['name'] in extras else decode(directory/e['file'], e)
     ids = sorted(by)
     if len(ids) != 8 or ids != list(range(ids[0], ids[0]+8)):
         raise ValueError('rendered frames not eight consecutive record frames')
     for i, f in enumerate(ids):
         expected = {'depth', 'final', 'material', 'albedo'} if i in (0, 7) else {'depth', 'final'}
-        if set(by[f]) != expected:
+        if set(by[f]) - set(extras) != expected:
             raise ValueError(f'incomplete frame {f}')
     return dict(codes=[by[f]['final'][..., :3] for f in ids],
                 depth=[by[f]['depth'][..., 0] for f in ids],

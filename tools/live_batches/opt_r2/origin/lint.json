@@ -1,526 +1,510 @@
 {
-  "corpus": {
-    "saves": {
-      "Test Dialogue1": 13,
-      "Water Queens House": 37,
-      "Test Dialogue3": 5,
-      "The Blushing Mermaid - 96h 39m": 6,
-      "Campsite - 27h": 12,
-      "Adamantine Forge": 5,
-      "Test Dialogue2": 1
-    },
-    "valid_logs": 79
+  "problems": [],
+  "regex_coverage": {
+    "forbid: \\[crash\\] exception 0x": 0,
+    "forbid: VK_ERROR_DEVICE_LOST": 0,
+    "forbid: \\[hot\\] core (rejected|faulted)": 0,
+    "forbid: FAILED, keeping previous": 0,
+    "forbid: compile call failed": 0,
+    "forbid: RR creation failed": 0,
+    "forbid: RR evaluate failed": 0,
+    "forbid: \\[water\\] water geometry UNAVAILABLE": 0,
+    "forbid: \\[water\\] build submission failed": 0,
+    "forbid: \\[water\\] reflections unavailable": 0,
+    "forbid: \\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed": 0,
+    "forbid: \\[water\\] compose UNAVAILABLE": 0,
+    "forbid: \\[water\\] compose: FS [0-9a-f]+ NOT patched": 0,
+    "forbid: \\[water\\] compose: variant pipeline creation failed": 0,
+    "forbid: \\[water\\] compose: a water pipeline blends": 0,
+    "forbid: \\[rrpost\\] exposure hold REFUSED": 0,
+    "forbid: \\[cascade\\] could not allocate": 0,
+    "forbid: skipped: no variant for": 0,
+    "forbid: set 1 [1-9]\\d* out-of-range reads skipped": 0,
+    "forbid: \\[hit material pool basis\\] over kBasisCapBytes": 0,
+    "expect: \\[auto\\] scene ready": 19,
+    "expect: \\[hot\\] core generation \\d+ loaded": 19,
+    "expect: \\[ngx\\] RR create .*: Success": 19
   },
-  "jobs": {
-    "tools\\live_batches\\opt_r2\\origin\\jobs\\opt-origin-inn.json": {
-      "problems": [],
-      "regex_coverage": {
-        "forbid: \\[crash\\] exception 0x": 0,
-        "forbid: VK_ERROR_DEVICE_LOST": 0,
-        "forbid: \\[hot\\] core (rejected|faulted)": 0,
-        "forbid: FAILED, keeping previous": 0,
-        "forbid: compile call failed": 0,
-        "forbid: RR creation failed": 0,
-        "forbid: RR evaluate failed": 0,
-        "forbid: \\[water\\] water geometry UNAVAILABLE": 0,
-        "forbid: \\[water\\] build submission failed": 0,
-        "forbid: \\[water\\] reflections unavailable": 0,
-        "forbid: \\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed": 0,
-        "forbid: \\[water\\] compose UNAVAILABLE": 0,
-        "forbid: \\[water\\] compose: FS [0-9a-f]+ NOT patched": 0,
-        "forbid: \\[water\\] compose: variant pipeline creation failed": 0,
-        "forbid: \\[water\\] compose: a water pipeline blends": 0,
-        "forbid: \\[rrpost\\] exposure hold REFUSED": 0,
-        "forbid: \\[cascade\\] could not allocate": 0,
-        "forbid: skipped: no variant for": 0,
-        "forbid: set 1 [1-9]\\d* out-of-range reads skipped": 0,
-        "forbid: \\[hit material pool basis\\] over kBasisCapBytes": 0,
-        "expect: \\[auto\\] scene ready": 19,
-        "expect: \\[hot\\] core generation \\d+ loaded": 19,
-        "expect: \\[ngx\\] RR create .*: Success": 19
-      },
-      "windows": [
-        {
-          "window": "off-a--static-a",
-          "gate": "off-a origin GPU",
-          "complete": 3,
-          "required": 2,
-          "period_frames": 60,
-          "minimum_frames": 120,
-          "minimum_seconds_exclusive": 10.263999999999214,
-          "period_s": 5.131999999999607,
-          "fps": 11.69134840218328,
-          "fps_evidence": {
-            "fps": 11.69134840218328,
-            "source": "VALID p10",
-            "windows": 57
-          }
-        },
-        {
-          "window": "off-a--static-a",
-          "gate": "off-a current TLAS",
-          "complete": 3,
-          "required": 2,
-          "period_frames": 60,
-          "minimum_frames": 120,
-          "minimum_seconds_exclusive": 10.263999999999214,
-          "period_s": 5.131999999999607,
-          "fps": 11.69134840218328,
-          "fps_evidence": {
-            "fps": 11.69134840218328,
-            "source": "VALID p10",
-            "windows": 57
-          }
-        },
-        {
-          "window": "energy-off-a",
-          "gate": "off-a float energy",
-          "complete": 1,
-          "required": 1,
-          "minimum_seconds_exclusive": 3.822186666666653
-        },
-        {
-          "window": "on-a--static-a",
-          "gate": "on-a origin GPU",
-          "complete": 3,
-          "required": 2,
-          "period_frames": 60,
-          "minimum_frames": 120,
-          "minimum_seconds_exclusive": 10.263999999999214,
-          "period_s": 5.131999999999607,
-          "fps": 11.69134840218328,
-          "fps_evidence": {
-            "fps": 11.69134840218328,
-            "source": "VALID p10",
-            "windows": 57
-          }
-        },
-        {
-          "window": "on-a--static-a",
-          "gate": "on-a current TLAS",
-          "complete": 3,
-          "required": 2,
-          "period_frames": 60,
-          "minimum_frames": 120,
-          "minimum_seconds_exclusive": 10.263999999999214,
-          "period_s": 5.131999999999607,
-          "fps": 11.69134840218328,
-          "fps_evidence": {
-            "fps": 11.69134840218328,
-            "source": "VALID p10",
-            "windows": 57
-          }
-        },
-        {
-          "window": "energy-on-a",
-          "gate": "on-a float energy",
-          "complete": 1,
-          "required": 1,
-          "minimum_seconds_exclusive": 3.822186666666653
-        },
-        {
-          "window": "off-b--static-a",
-          "gate": "off-b origin GPU",
-          "complete": 3,
-          "required": 2,
-          "period_frames": 60,
-          "minimum_frames": 120,
-          "minimum_seconds_exclusive": 10.263999999999214,
-          "period_s": 5.131999999999607,
-          "fps": 11.69134840218328,
-          "fps_evidence": {
-            "fps": 11.69134840218328,
-            "source": "VALID p10",
-            "windows": 57
-          }
-        },
-        {
-          "window": "off-b--static-a",
-          "gate": "off-b current TLAS",
-          "complete": 3,
-          "required": 2,
-          "period_frames": 60,
-          "minimum_frames": 120,
-          "minimum_seconds_exclusive": 10.263999999999214,
-          "period_s": 5.131999999999607,
-          "fps": 11.69134840218328,
-          "fps_evidence": {
-            "fps": 11.69134840218328,
-            "source": "VALID p10",
-            "windows": 57
-          }
-        },
-        {
-          "window": "energy-off-b",
-          "gate": "off-b float energy",
-          "complete": 1,
-          "required": 1,
-          "minimum_seconds_exclusive": 3.822186666666653
-        },
-        {
-          "window": "on-b--static-a",
-          "gate": "on-b origin GPU",
-          "complete": 3,
-          "required": 2,
-          "period_frames": 60,
-          "minimum_frames": 120,
-          "minimum_seconds_exclusive": 10.263999999999214,
-          "period_s": 5.131999999999607,
-          "fps": 11.69134840218328,
-          "fps_evidence": {
-            "fps": 11.69134840218328,
-            "source": "VALID p10",
-            "windows": 57
-          }
-        },
-        {
-          "window": "on-b--static-a",
-          "gate": "on-b current TLAS",
-          "complete": 3,
-          "required": 2,
-          "period_frames": 60,
-          "minimum_frames": 120,
-          "minimum_seconds_exclusive": 10.263999999999214,
-          "period_s": 5.131999999999607,
-          "fps": 11.69134840218328,
-          "fps_evidence": {
-            "fps": 11.69134840218328,
-            "source": "VALID p10",
-            "windows": 57
-          }
-        },
-        {
-          "window": "energy-on-b",
-          "gate": "on-b float energy",
-          "complete": 1,
-          "required": 1,
-          "minimum_seconds_exclusive": 3.822186666666653
-        }
-      ],
-      "duration": {
-        "seconds": 145.68399999999997,
-        "minimum_seconds": 120.5,
-        "unresolved": [
-          {
-            "window": "warmup",
-            "reasons": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
-              "scene/pipeline settle bound retained; not a producer cadence"
-            ]
-          },
-          {
-            "window": "warm-key-1",
-            "reasons": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
-              "scene/pipeline settle bound retained; not a producer cadence"
-            ]
-          },
-          {
-            "window": "warm-key-0",
-            "reasons": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
-              "scene/pipeline settle bound retained; not a producer cadence"
-            ]
-          },
-          {
-            "window": "ready-on-a",
-            "reasons": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-            ]
-          },
-          {
-            "window": "ready-off-b",
-            "reasons": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-            ]
-          },
-          {
-            "window": "ready-on-b",
-            "reasons": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-            ]
-          },
-          {
-            "window": "restore",
-            "reasons": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-            ]
-          }
-        ],
-        "expected_readiness_seconds": 0,
-        "readiness_timeout_seconds": 120.0,
-        "windows": [
-          {
-            "window": "warmup",
-            "seconds": 29.0,
-            "minimum_seconds": 29.0,
-            "savings_seconds": 0,
-            "unresolved": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
-              "scene/pipeline settle bound retained; not a producer cadence"
-            ],
-            "readiness_timeout_seconds": 60.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "unproven; no VALID same-save/key observation",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "warm-key-1",
-            "seconds": 5.0,
-            "minimum_seconds": 5.0,
-            "savings_seconds": 0,
-            "unresolved": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
-              "scene/pipeline settle bound retained; not a producer cadence"
-            ],
-            "readiness_timeout_seconds": 10.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "unproven; no VALID same-save/key observation",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "warm-key-0",
-            "seconds": 5.0,
-            "minimum_seconds": 5.0,
-            "savings_seconds": 0,
-            "unresolved": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
-              "scene/pipeline settle bound retained; not a producer cadence"
-            ],
-            "readiness_timeout_seconds": 10.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "unproven; no VALID same-save/key observation",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "ready-off-a",
-            "seconds": 1.1,
-            "minimum_seconds": 1.1,
-            "savings_seconds": 0,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "off-a--static-a",
-            "seconds": 15.496,
-            "minimum_seconds": 10.3,
-            "savings_seconds": 5.196,
-            "unresolved": [],
-            "readiness_timeout_seconds": 30.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "energy-off-a",
-            "seconds": 5.0,
-            "minimum_seconds": 3.9,
-            "savings_seconds": 1.1,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "qa-off-a",
-            "seconds": 4.8,
-            "minimum_seconds": 4.8,
-            "savings_seconds": 0,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "ready-on-a",
-            "seconds": 1.1,
-            "minimum_seconds": 1.1,
-            "savings_seconds": 0,
-            "unresolved": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-            ],
-            "readiness_timeout_seconds": 10.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "unproven; no VALID same-save/key observation",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "on-a--static-a",
-            "seconds": 15.496,
-            "minimum_seconds": 10.3,
-            "savings_seconds": 5.196,
-            "unresolved": [],
-            "readiness_timeout_seconds": 30.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "energy-on-a",
-            "seconds": 5.0,
-            "minimum_seconds": 3.9,
-            "savings_seconds": 1.1,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "qa-on-a",
-            "seconds": 4.8,
-            "minimum_seconds": 4.8,
-            "savings_seconds": 0,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "ready-off-b",
-            "seconds": 1.1,
-            "minimum_seconds": 1.1,
-            "savings_seconds": 0,
-            "unresolved": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-            ],
-            "readiness_timeout_seconds": 10.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "unproven; no VALID same-save/key observation",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "off-b--static-a",
-            "seconds": 15.496,
-            "minimum_seconds": 10.3,
-            "savings_seconds": 5.196,
-            "unresolved": [],
-            "readiness_timeout_seconds": 30.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "energy-off-b",
-            "seconds": 5.0,
-            "minimum_seconds": 3.9,
-            "savings_seconds": 1.1,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "qa-off-b",
-            "seconds": 4.8,
-            "minimum_seconds": 4.8,
-            "savings_seconds": 0,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "ready-on-b",
-            "seconds": 1.1,
-            "minimum_seconds": 1.1,
-            "savings_seconds": 0,
-            "unresolved": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-            ],
-            "readiness_timeout_seconds": 10.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "unproven; no VALID same-save/key observation",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "on-b--static-a",
-            "seconds": 15.496,
-            "minimum_seconds": 10.3,
-            "savings_seconds": 5.196,
-            "unresolved": [],
-            "readiness_timeout_seconds": 30.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "energy-on-b",
-            "seconds": 5.0,
-            "minimum_seconds": 3.9,
-            "savings_seconds": 1.1,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "qa-on-b",
-            "seconds": 4.8,
-            "minimum_seconds": 4.8,
-            "savings_seconds": 0,
-            "unresolved": [],
-            "readiness_timeout_seconds": 0.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "no wait",
-            "minimum_readiness_wait_seconds": 0
-          },
-          {
-            "window": "restore",
-            "seconds": 1.1,
-            "minimum_seconds": 1.1,
-            "savings_seconds": 0,
-            "unresolved": [
-              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
-            ],
-            "readiness_timeout_seconds": 10.0,
-            "expected_readiness_seconds": 0,
-            "readiness_samples": 0,
-            "readiness_source": "unproven; no VALID same-save/key observation",
-            "minimum_readiness_wait_seconds": 0
-          }
-        ],
-        "findings": [
-          "duration: off-a--static-a: 15.496 s > 1.5x minimum 10.3 s; save 5.196 s",
-          "duration: on-a--static-a: 15.496 s > 1.5x minimum 10.3 s; save 5.196 s",
-          "duration: off-b--static-a: 15.496 s > 1.5x minimum 10.3 s; save 5.196 s",
-          "duration: on-b--static-a: 15.496 s > 1.5x minimum 10.3 s; save 5.196 s"
+  "windows": [
+    {
+      "window": "off-a--static-a",
+      "gate": "off-a origin GPU",
+      "complete": 3,
+      "required": 2,
+      "period_frames": 60,
+      "minimum_frames": 120,
+      "minimum_seconds_exclusive": 10.263999999999214,
+      "period_s": 5.131999999999607,
+      "fps": 11.69134840218328,
+      "fps_evidence": {
+        "fps": 11.69134840218328,
+        "source": "VALID p10",
+        "windows": 57
+      }
+    },
+    {
+      "window": "off-a--static-a",
+      "gate": "off-a current TLAS",
+      "complete": 3,
+      "required": 2,
+      "period_frames": 60,
+      "minimum_frames": 120,
+      "minimum_seconds_exclusive": 10.263999999999214,
+      "period_s": 5.131999999999607,
+      "fps": 11.69134840218328,
+      "fps_evidence": {
+        "fps": 11.69134840218328,
+        "source": "VALID p10",
+        "windows": 57
+      }
+    },
+    {
+      "window": "energy-off-a",
+      "gate": "off-a float energy",
+      "complete": 1,
+      "required": 1,
+      "minimum_seconds_exclusive": 3.822186666666653
+    },
+    {
+      "window": "on-a--static-a",
+      "gate": "on-a origin GPU",
+      "complete": 3,
+      "required": 2,
+      "period_frames": 60,
+      "minimum_frames": 120,
+      "minimum_seconds_exclusive": 10.263999999999214,
+      "period_s": 5.131999999999607,
+      "fps": 11.69134840218328,
+      "fps_evidence": {
+        "fps": 11.69134840218328,
+        "source": "VALID p10",
+        "windows": 57
+      }
+    },
+    {
+      "window": "on-a--static-a",
+      "gate": "on-a current TLAS",
+      "complete": 3,
+      "required": 2,
+      "period_frames": 60,
+      "minimum_frames": 120,
+      "minimum_seconds_exclusive": 10.263999999999214,
+      "period_s": 5.131999999999607,
+      "fps": 11.69134840218328,
+      "fps_evidence": {
+        "fps": 11.69134840218328,
+        "source": "VALID p10",
+        "windows": 57
+      }
+    },
+    {
+      "window": "energy-on-a",
+      "gate": "on-a float energy",
+      "complete": 1,
+      "required": 1,
+      "minimum_seconds_exclusive": 3.822186666666653
+    },
+    {
+      "window": "off-b--static-a",
+      "gate": "off-b origin GPU",
+      "complete": 3,
+      "required": 2,
+      "period_frames": 60,
+      "minimum_frames": 120,
+      "minimum_seconds_exclusive": 10.263999999999214,
+      "period_s": 5.131999999999607,
+      "fps": 11.69134840218328,
+      "fps_evidence": {
+        "fps": 11.69134840218328,
+        "source": "VALID p10",
+        "windows": 57
+      }
+    },
+    {
+      "window": "off-b--static-a",
+      "gate": "off-b current TLAS",
+      "complete": 3,
+      "required": 2,
+      "period_frames": 60,
+      "minimum_frames": 120,
+      "minimum_seconds_exclusive": 10.263999999999214,
+      "period_s": 5.131999999999607,
+      "fps": 11.69134840218328,
+      "fps_evidence": {
+        "fps": 11.69134840218328,
+        "source": "VALID p10",
+        "windows": 57
+      }
+    },
+    {
+      "window": "energy-off-b",
+      "gate": "off-b float energy",
+      "complete": 1,
+      "required": 1,
+      "minimum_seconds_exclusive": 3.822186666666653
+    },
+    {
+      "window": "on-b--static-a",
+      "gate": "on-b origin GPU",
+      "complete": 3,
+      "required": 2,
+      "period_frames": 60,
+      "minimum_frames": 120,
+      "minimum_seconds_exclusive": 10.263999999999214,
+      "period_s": 5.131999999999607,
+      "fps": 11.69134840218328,
+      "fps_evidence": {
+        "fps": 11.69134840218328,
+        "source": "VALID p10",
+        "windows": 57
+      }
+    },
+    {
+      "window": "on-b--static-a",
+      "gate": "on-b current TLAS",
+      "complete": 3,
+      "required": 2,
+      "period_frames": 60,
+      "minimum_frames": 120,
+      "minimum_seconds_exclusive": 10.263999999999214,
+      "period_s": 5.131999999999607,
+      "fps": 11.69134840218328,
+      "fps_evidence": {
+        "fps": 11.69134840218328,
+        "source": "VALID p10",
+        "windows": 57
+      }
+    },
+    {
+      "window": "energy-on-b",
+      "gate": "on-b float energy",
+      "complete": 1,
+      "required": 1,
+      "minimum_seconds_exclusive": 3.822186666666653
+    }
+  ],
+  "duration": {
+    "seconds": 145.68399999999997,
+    "minimum_seconds": 120.5,
+    "unresolved": [
+      {
+        "window": "warmup",
+        "reasons": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+          "scene/pipeline settle bound retained; not a producer cadence"
         ]
       },
-      "replay": {
-        "log": null,
-        "problems": [
-          "no VALID log for save"
+      {
+        "window": "warm-key-1",
+        "reasons": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+          "scene/pipeline settle bound retained; not a producer cadence"
+        ]
+      },
+      {
+        "window": "warm-key-0",
+        "reasons": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+          "scene/pipeline settle bound retained; not a producer cadence"
+        ]
+      },
+      {
+        "window": "ready-on-a",
+        "reasons": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+        ]
+      },
+      {
+        "window": "ready-off-b",
+        "reasons": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+        ]
+      },
+      {
+        "window": "ready-on-b",
+        "reasons": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+        ]
+      },
+      {
+        "window": "restore",
+        "reasons": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
         ]
       }
-    }
+    ],
+    "expected_readiness_seconds": 0,
+    "readiness_timeout_seconds": 120.0,
+    "windows": [
+      {
+        "window": "warmup",
+        "seconds": 29.0,
+        "minimum_seconds": 29.0,
+        "savings_seconds": 0,
+        "unresolved": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+          "scene/pipeline settle bound retained; not a producer cadence"
+        ],
+        "readiness_timeout_seconds": 60.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "unproven; no VALID same-save/key observation",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "warm-key-1",
+        "seconds": 5.0,
+        "minimum_seconds": 5.0,
+        "savings_seconds": 0,
+        "unresolved": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+          "scene/pipeline settle bound retained; not a producer cadence"
+        ],
+        "readiness_timeout_seconds": 10.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "unproven; no VALID same-save/key observation",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "warm-key-0",
+        "seconds": 5.0,
+        "minimum_seconds": 5.0,
+        "savings_seconds": 0,
+        "unresolved": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+          "scene/pipeline settle bound retained; not a producer cadence"
+        ],
+        "readiness_timeout_seconds": 10.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "unproven; no VALID same-save/key observation",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "ready-off-a",
+        "seconds": 1.1,
+        "minimum_seconds": 1.1,
+        "savings_seconds": 0,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "off-a--static-a",
+        "seconds": 15.496,
+        "minimum_seconds": 10.3,
+        "savings_seconds": 5.196,
+        "unresolved": [],
+        "readiness_timeout_seconds": 30.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "energy-off-a",
+        "seconds": 5.0,
+        "minimum_seconds": 3.9,
+        "savings_seconds": 1.1,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "qa-off-a",
+        "seconds": 4.8,
+        "minimum_seconds": 4.8,
+        "savings_seconds": 0,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "ready-on-a",
+        "seconds": 1.1,
+        "minimum_seconds": 1.1,
+        "savings_seconds": 0,
+        "unresolved": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+        ],
+        "readiness_timeout_seconds": 10.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "unproven; no VALID same-save/key observation",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "on-a--static-a",
+        "seconds": 15.496,
+        "minimum_seconds": 10.3,
+        "savings_seconds": 5.196,
+        "unresolved": [],
+        "readiness_timeout_seconds": 30.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "energy-on-a",
+        "seconds": 5.0,
+        "minimum_seconds": 3.9,
+        "savings_seconds": 1.1,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "qa-on-a",
+        "seconds": 4.8,
+        "minimum_seconds": 4.8,
+        "savings_seconds": 0,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "ready-off-b",
+        "seconds": 1.1,
+        "minimum_seconds": 1.1,
+        "savings_seconds": 0,
+        "unresolved": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+        ],
+        "readiness_timeout_seconds": 10.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "unproven; no VALID same-save/key observation",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "off-b--static-a",
+        "seconds": 15.496,
+        "minimum_seconds": 10.3,
+        "savings_seconds": 5.196,
+        "unresolved": [],
+        "readiness_timeout_seconds": 30.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "energy-off-b",
+        "seconds": 5.0,
+        "minimum_seconds": 3.9,
+        "savings_seconds": 1.1,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "qa-off-b",
+        "seconds": 4.8,
+        "minimum_seconds": 4.8,
+        "savings_seconds": 0,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "ready-on-b",
+        "seconds": 1.1,
+        "minimum_seconds": 1.1,
+        "savings_seconds": 0,
+        "unresolved": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+        ],
+        "readiness_timeout_seconds": 10.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "unproven; no VALID same-save/key observation",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "on-b--static-a",
+        "seconds": 15.496,
+        "minimum_seconds": 10.3,
+        "savings_seconds": 5.196,
+        "unresolved": [],
+        "readiness_timeout_seconds": 30.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "energy-on-b",
+        "seconds": 5.0,
+        "minimum_seconds": 3.9,
+        "savings_seconds": 1.1,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "qa-on-b",
+        "seconds": 4.8,
+        "minimum_seconds": 4.8,
+        "savings_seconds": 0,
+        "unresolved": [],
+        "readiness_timeout_seconds": 0.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "no wait",
+        "minimum_readiness_wait_seconds": 0
+      },
+      {
+        "window": "restore",
+        "seconds": 1.1,
+        "minimum_seconds": 1.1,
+        "savings_seconds": 0,
+        "unresolved": [
+          "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+        ],
+        "readiness_timeout_seconds": 10.0,
+        "expected_readiness_seconds": 0,
+        "readiness_samples": 0,
+        "readiness_source": "unproven; no VALID same-save/key observation",
+        "minimum_readiness_wait_seconds": 0
+      }
+    ],
+    "findings": [
+      "duration: off-a--static-a: 15.496 s > 1.5x minimum 10.3 s; save 5.196 s",
+      "duration: on-a--static-a: 15.496 s > 1.5x minimum 10.3 s; save 5.196 s",
+      "duration: off-b--static-a: 15.496 s > 1.5x minimum 10.3 s; save 5.196 s",
+      "duration: on-b--static-a: 15.496 s > 1.5x minimum 10.3 s; save 5.196 s"
+    ]
+  },
+  "replay": {
+    "log": null,
+    "problems": [
+      "no VALID log for save"
+    ]
   }
 }
