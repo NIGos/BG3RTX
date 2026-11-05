@@ -1245,7 +1245,7 @@ Round 1 supersedes that prewarm/readiness plan: both candidate registrations and
 
 | Candidate | Verdict | Evidence |
 |---|---|---|
-| `gi_far_roof_early` (1038) | **Qualified, always on** | Exact. Offline paired: S8 -1.73, inn -1.36, camp +0.005 [-0.06,+0.06] (240 pairs). Live S8 VALID: GI trace -1.4/-1.7 ms. |
+| `gi_far_roof_early` (1038) | **Qualified, always on** | Exact. Offline paired: S8 -1.73, inn -1.36, camp +0.005 [-0.06,+0.06] (240 pairs). Live VALID: S8 GI trace -1.4/-1.7 ms; inn -0.8/-1.0 ms (opt-roof-inn.1.220224). |
 | `gi_far_roof_identity` (1036) | Rejected, removed | Camp +0.08 [+0.05,+0.12] ms, no gain elsewhere. |
 | `gi_sun_wave` (1034) | Rejected, removed | Exact but slower: +0.74 / +3.11 / +0.74 ms (S8/camp/inn). Sun rays cost only 0.01-0.43 ms; far is the cost. |
 | `gi_lane_permute` (1032), `gi_ao_r16f` (1033) | Rejected, removed | Live S8: GI trace +3.8 ms with the permutation. AO R16F at most 0.06 ms. |
@@ -1253,7 +1253,8 @@ Round 1 supersedes that prewarm/readiness plan: both candidate registrations and
 | `gi_far_lean` (1039) | Rejected, removed | Far registers 243 -> 239/218, no occupancy step; inn +0.35, S8 +0.96 ms. |
 | GI-only conservative TLAS | Rejected (offline) | Culls 0.9-3.5% of instances; extra TLAS 0.27-0.36 ms; net +0.5..+0.7 ms. |
 | Ultra scene build | No candidate | Convert/BLAS/TLAS 0.6/0.4/0.2 (S8), 1.2/0.8/0.3 (inn); no exact work with a supported gain. |
-| Local shadows | Not reachable offline | Replay packs lack shadow views/atlas, projectors, cookies; needs a pack writer extension first. |
+| Local shadows | No candidate worth keeping | Pack writer extended (raw BCn, ABI 27); inn pack replays bit-exactly. Split: point/spot 0.54, rays 0.29, boxes 0.23 ms. `ls_fast` exact but 0.012 ms: dropped. |
 
 Kept tools: frame_replay paired A/B (`--ab-spec`), origin replay, pipeline statistics for GI/RF/LS.
 Far GI cost (paired, ms, S8/camp/inn): traversal 0.33/3.79/2.07, extra hidden shading 1.56/2.04/0.93, roof loop 0.47/0.33/0.37.
+| SER (hardware reordering) | Out of scope for this round | Driver supports it only in RT pipelines; needs raygen/SBT port, 1-2 weeks, 0-10% expected (docs/SER_FEASIBILITY_20261105.md). |

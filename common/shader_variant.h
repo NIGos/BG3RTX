@@ -47,7 +47,7 @@ enum SpecId : unsigned {
   kSpecIdHairGroomShadowT = 1026,    // C2: strand shadow transmittance, default pre-C2 opaque query
   kSpecIdRfCompactProbeState = 1031, // RF: evaluate receiver probes after hit shading
   // Retired: 1037 group-shared origin depth (no paired saving). Never reuse.
-  // Retired 2026-11-05: 1032 lane permutation (slower), 1033 aux AO R16F. Never reuse.
+  // Retired 2026-11-05: 1032 lane permutation (slower), 1033 aux AO R16F, 1040 ls_fast (0.012 ms). Never reuse.
   // Retired 2026-11-05: 1034 deferred hidden-hit sun wave (slower). Never reuse.
   // Retired 2026-11-05: 1035 gi_far_roof_early, 1036 gi_far_roof_identity (measured losses). Never reuse.
   // Retired: 1039 gi_far_lean (exact, below occupancy target; paired timing losses). Never reuse.
