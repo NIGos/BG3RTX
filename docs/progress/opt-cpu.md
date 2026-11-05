@@ -1,4 +1,4 @@
-# opt-cpu: CPU scene scratch candidate
+## CPU scene scratch candidate (branch opt-cpu, READY_FOR_LIVE, 2026-11-05)
 
 - Watch CPU submit is ms per reporting interval, not per frame: 58-185 / 120 =
   0.48-1.54 ms/frame, including driver submit/queue wait. Inn Ultra static/pan
