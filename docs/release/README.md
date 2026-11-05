@@ -118,7 +118,10 @@ there is none, so it has no effect yet.
 - Other overlays (Steam, Discord, EOS, GOG Galaxy) can conflict. If the game crashes at start or frame
   generation does nothing, turn them off for one launch. NVIDIA Smooth Motion is turned off
   automatically while frame generation is on.
-- ReShade, other graphics mods and HDR are untested together with BG3RTX.
+- ReShade 6 (its Vulkan layer) with frame generation on: the game hides the DLSS option and BG3RTX's
+  Ray Reconstruction never runs (Streamline fails to start NGX). A fix (`sl_init_after_create=1`) waits
+  for an in-game test. Until then, turn ReShade off for BG3 or set frame generation off.
+- Other graphics mods and HDR are untested together with BG3RTX.
 - The DirectX 11 renderer is not supported.
 
 ## Reporting a bug

@@ -415,6 +415,8 @@ add_executable(fg_copy_lease_test tests/fg_copy_lease_test.cpp)
 add_test(NAME fg_copy_lease_test COMMAND fg_copy_lease_test)
 add_executable(fg_extent_test tests/fg_extent_test.cpp)
 add_test(NAME fg_extent_test COMMAND fg_extent_test)
+add_executable(sl_init_trigger_test tests/sl_init_trigger_test.cpp)
+add_test(NAME sl_init_trigger_test COMMAND sl_init_trigger_test)
 # bg3rtx.log size cap (common/log_rotate.h, docs/release/RELEASE_BETA.md).
 add_executable(log_rotate_test tests/log_rotate_test.cpp)
 add_test(NAME log_rotate_test COMMAND log_rotate_test)

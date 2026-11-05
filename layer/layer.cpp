@@ -155,6 +155,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
       app && app->pApplicationName ? app->pApplicationName : "?", app && app->pEngineName ? app->pEngineName : "?",
       app ? VK_API_VERSION_MAJOR(app->apiVersion) : 0, app ? VK_API_VERSION_MINOR(app->apiVersion) : 0,
       ci->enabledExtensionCount);
+  // A layer above ours changes when the device is complete (common/sl_init_trigger.h):
+  // say once whether ReShade's implicit layer is in the process.
+  static std::atomic<bool> overlay_logged{false};
+  if (!overlay_logged.exchange(true)) {
+    HMODULE rs = GetModuleHandleA("ReShade64.dll");
+    char path[MAX_PATH] = {};
+    if (rs) GetModuleFileNameA(rs, path, MAX_PATH);
+    log("[compat] ReShade %s%s", rs ? "loaded: " : "not loaded", path);
+  }
   return VK_SUCCESS;
 }
 
