@@ -31,13 +31,15 @@ TABLE["rt_compact_hit_state"] = [GI_TRACE]
 TABLE["rf_compact_probe_state"] = [r"gi: gi/rt_reflections[^ /]*\.hlsl[^ ]* generation "]
 GI_QUERY = [GI_TRACE, r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation ",
             r"gi: gi/rt_reflections\.hlsl[^ ]* generation "]
+# These variants may already be cached: TABLE consumers must not turn the
+# legacy family patterns into mandatory generation announcements.
 for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
             "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
             "rt_alpha_fine_lod", "rt_vt_alpha_masks", "rt_omm", "rt_omm_dyn"):
-    TABLE[key] = list(GI_QUERY)
+    TABLE[key] = [QUIET]
 for key in ("gi_far", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
             "rt_hit_emission", "rt_emissive"):
-    TABLE[key] = [GI_TRACE]
+    TABLE[key] = [QUIET]
 WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"
 for key in ("rt_water_compose_shift",
             "rt_water_shadows", "rt_water_ls_shadows",
