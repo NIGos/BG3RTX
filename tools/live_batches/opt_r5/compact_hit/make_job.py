@@ -24,6 +24,9 @@ def generate(exe):
     flow.readiness_budget.configure([])
     state = observation_state(str(Path(exe).resolve()), 'ultra')
     state[KEY] = '0'
+    # The knob is developer-only: the release policy (dev=0) forces it to 0, so the A/B needs dev=1
+    # (both windows share it; the release profile is otherwise unchanged).
+    state['dev'] = '1'
     estimates = {}
     for slug, save in [('camp', 'Campsite - 27h'), ('inn', 'The Blushing Mermaid - 96h 39m')]:
         name = 'opt-compact-hit-'+slug
