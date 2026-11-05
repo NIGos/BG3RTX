@@ -663,6 +663,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_lean_hooks", "1"},
     {"perf_hitmat_lists", "0"},
     {"perf_hook_state", "0"},
+    {"cpu_opt1", "0"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_mask", "0"},
     {"rt_hit_material_pool_alpha", "1"},
