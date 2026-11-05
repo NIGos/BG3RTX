@@ -2,7 +2,7 @@
 # powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1
 # No game, launcher, upload, Git mutation, shortcut or existing installation runs.
 # Setup is compiled and executed only against the isolated throwaway tree.
-param([ValidateRange(1,100000)][int]$ExpectedFiles = 221, [switch]$NoBuild)
+param([ValidateRange(1,100000)][int]$ExpectedFiles = 223, [switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -287,8 +287,8 @@ try {
   Pass 'Uninstall' "$($original.Count)/$($original.Count) original files restored byte-for-byte; fake game unchanged; no owned payload/metadata remains."
 
   $stage = 'Setup'
-  Run 'verify compiled Setup' ('& ' + (Quote (Join-Path $PSScriptRoot 'verify_setup.ps1')) + ' -PayloadDir ' + (Quote $payload) + ' -OutDir ' + (Quote (Join-Path $run 'setup')) + ' -TestRoot ' + (Quote $scratch))
-  Pass 'Setup' 'Inno 6.7.3 compiled; 221 ZIP payload hashes match after install/update; settings retained by default and removed on opt-in; shader cache removed; 0 owned files or HKCU Apps entries remain. Shortcuts disabled in qualification; no launcher execution.'
+  Run 'verify compiled Setup' ('& ' + (Quote (Join-Path $PSScriptRoot 'verify_setup.ps1')) + ' -PayloadDir ' + (Quote $payload) + ' -OutDir ' + (Quote (Join-Path $run 'setup')) + ' -TestRoot ' + (Quote $scratch) + ' -ExpectedFiles ' + $ExpectedFiles)
+  Pass 'Setup' "Inno 6.7.3 compiled; $ExpectedFiles ZIP payload hashes match after install/update; settings retained by default and removed on opt-in; shader cache removed; 0 owned files or HKCU Apps entries remain. Shortcuts disabled in qualification; no launcher execution."
 
 } catch {
   $results[$stage].Status = 'FAIL'
