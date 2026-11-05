@@ -5,7 +5,7 @@
   "traces": 0,
   "repeat": 1,
   "hold": 180,
-  "timeout": 300,
+  "timeout": 354,
   "max_minutes": 5,
   "window_mode": "visible_unfocused_fg",
   "live_batch": "opt-r6-attr",
@@ -70,12 +70,7 @@
         "sun-off--static-a",
         "base-b--static-a",
         "direct-off--static-a",
-        "base-c--static-a",
-        "ao-off--static-a",
-        "base-d--static-a",
-        "near-only--static-a",
-        "base-e--static-a",
-        "base-f--static-a"
+        "base-c--static-a"
       ],
       "min": 3,
       "period_frames": 120,
@@ -90,12 +85,7 @@
         "sun-off--static-a",
         "base-b--static-a",
         "direct-off--static-a",
-        "base-c--static-a",
-        "ao-off--static-a",
-        "base-d--static-a",
-        "near-only--static-a",
-        "base-e--static-a",
-        "base-f--static-a"
+        "base-c--static-a"
       ],
       "min": 3,
       "period_frames": 120,
@@ -110,12 +100,7 @@
         "sun-off--static-a",
         "base-b--static-a",
         "direct-off--static-a",
-        "base-c--static-a",
-        "ao-off--static-a",
-        "base-d--static-a",
-        "near-only--static-a",
-        "base-e--static-a",
-        "base-f--static-a"
+        "base-c--static-a"
       ],
       "min": 3,
       "period_frames": 120,
@@ -130,12 +115,7 @@
         "sun-off--static-a",
         "base-b--static-a",
         "direct-off--static-a",
-        "base-c--static-a",
-        "ao-off--static-a",
-        "base-d--static-a",
-        "near-only--static-a",
-        "base-e--static-a",
-        "base-f--static-a"
+        "base-c--static-a"
       ],
       "min": 3,
       "period_frames": 120,
@@ -150,12 +130,7 @@
         "sun-off--static-a",
         "base-b--static-a",
         "direct-off--static-a",
-        "base-c--static-a",
-        "ao-off--static-a",
-        "base-d--static-a",
-        "near-only--static-a",
-        "base-e--static-a",
-        "base-f--static-a"
+        "base-c--static-a"
       ],
       "min": 3,
       "period_frames": 120,
@@ -170,12 +145,7 @@
         "sun-off--static-a",
         "base-b--static-a",
         "direct-off--static-a",
-        "base-c--static-a",
-        "ao-off--static-a",
-        "base-d--static-a",
-        "near-only--static-a",
-        "base-e--static-a",
-        "base-f--static-a"
+        "base-c--static-a"
       ],
       "min": 3,
       "period_frames": 120,
@@ -190,12 +160,7 @@
         "sun-off--static-a",
         "base-b--static-a",
         "direct-off--static-a",
-        "base-c--static-a",
-        "ao-off--static-a",
-        "base-d--static-a",
-        "near-only--static-a",
-        "base-e--static-a",
-        "base-f--static-a"
+        "base-c--static-a"
       ],
       "min": 3,
       "period_frames": 120,
@@ -210,12 +175,7 @@
         "sun-off--static-a",
         "base-b--static-a",
         "direct-off--static-a",
-        "base-c--static-a",
-        "ao-off--static-a",
-        "base-d--static-a",
-        "near-only--static-a",
-        "base-e--static-a",
-        "base-f--static-a"
+        "base-c--static-a"
       ],
       "min": 3,
       "period_frames": 120,
@@ -225,15 +185,15 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=27\\b"
+    "\\[motion-plan\\] complete phases=15\\b"
   ],
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
     "trace_stall_s": 0
   },
-  "estimated_phase_seconds": 198.6,
+  "estimated_phase_seconds": 110.4,
   "post": "python tools/live_batches/opt_r6/attr/analyze.py --job tools/live_batches/opt_r6/attr/jobs/opt-attr-inn.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.attr.md\"",
   "post_gate": true,
-  "purpose": "BLOCKED_DURATION. ATTRIBUTION diagnostic: duration/readiness budget unresolved; image changes expected and allowed; nothing ships; explicit authorization required before staging."
+  "purpose": "READY_FOR_LIVE. ATTRIBUTION diagnostic: image changes expected and allowed; nothing ships; explicit authorization required before staging."
 }

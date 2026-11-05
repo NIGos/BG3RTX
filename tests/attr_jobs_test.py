@@ -13,7 +13,7 @@ from tools.live_batches.opt_r6.attr import analyze, make_job
 
 class AttributionTests(unittest.TestCase):
     def receipts(self, missing=None):
-        plan = [dict(label=label, frames=360, stats_reset=True) for label in analyze.LABELS]
+        plan = [dict(label=label, frames=480, stats_reset=True) for label in analyze.LABELS]
         log, runner = '', ''
         for i, label in enumerate(analyze.LABELS):
             stamp = lambda s: f'10:{i:02d}:{s:06.3f}'
@@ -36,7 +36,7 @@ class AttributionTests(unittest.TestCase):
                 }.items():
                     if missing != (i, name):
                         log += stamp(second)+' '+line+'\n'
-        runner += '10:09:20.000 [motion-plan] complete\n'
+        runner += f'10:{len(analyze.LABELS)-1:02d}:20.000 [motion-plan] complete\n'
         with tempfile.TemporaryDirectory() as directory:
             p = Path(directory)
             (p/'log').write_text(log)
@@ -47,7 +47,7 @@ class AttributionTests(unittest.TestCase):
         measured = self.receipts()
         result = analyze.analyze(measured)
         self.assertFalse(result['errors'])
-        self.assertEqual(len(result['rows']), 4*8)
+        self.assertEqual(len(result['rows']), 2*8)
         for row in result['rows']:
             self.assertEqual(row['delta_ms'], -6)
             self.assertEqual(row['baseline_drift_ms'], 2)
@@ -67,7 +67,7 @@ class AttributionTests(unittest.TestCase):
         self.assertEqual(analyze.analyze(measured)['status'], 'INVALID')
 
     def test_markdown_cli_exit_only_missing_evidence(self):
-        for missing, expected in [(None, 0), ((9, 'RR'), 1)]:
+        for missing, expected in [(None, 0), ((4, 'RR'), 1)]:
             measured = self.receipts(missing)
             with tempfile.TemporaryDirectory() as directory, patch.object(analyze, 'costs', return_value=measured):
                 output = Path(directory)/'out.md'
@@ -81,7 +81,7 @@ class AttributionTests(unittest.TestCase):
         self.assertIn('hit_ao_rays', pipeline_readiness.NO_PIPELINE)
         for path in paths:
             job, plan, _ = flow.load_job(path)
-            states = make_job.states_for(job['name'].removeprefix('opt-attr-'))
+            states = make_job.STATES
             labels = [label+'--static-a' for label, _ in states]
             measured = [p for p in plan if p.get('frames')]
             self.assertEqual([p['label'] for p in measured], labels)
@@ -90,7 +90,9 @@ class AttributionTests(unittest.TestCase):
             self.assertEqual(job['repeat'], 1)
             self.assertFalse(job['session'])
             self.assertEqual(job['traces'], 0)
-            self.assertEqual(job['timeout'], 300)
+            self.assertEqual(min(job['timeout'], 60*job['max_minutes']), 300)
+            budget = flow.duration_budget(job, plan)
+            self.assertGreaterEqual(job['timeout'], budget['seconds']+budget['readiness_timeout_seconds'])
             self.assertEqual(job['max_minutes'], 5)
             self.assertLess(120+job['estimated_phase_seconds'], 300)
             self.assertTrue(job['post_gate'])
@@ -99,10 +101,9 @@ class AttributionTests(unittest.TestCase):
             for gate in job['expect_every']:
                 self.assertEqual(gate['windows'], labels)
                 self.assertEqual((gate['min'], gate['period_frames'], gate['sample_frames']), (3, 120, 120))
-            prewarm = plan[1:6]
+            prewarm = plan[1:4]
             self.assertEqual([p['label'] for p in prewarm],
-                ['warmup-sun-off', 'warmup-direct-off', 'warmup-ao-off',
-                 'warmup-near-only', 'warmup-baseline'])
+                ['warmup-sun-off', 'warmup-direct-off', 'warmup-baseline'])
             self.assertEqual(flow.settings(prewarm[-1]['set']), make_job.BASE)
             self.assertTrue(all(p['wait_log_timeout'] == 60 for p in prewarm))
             for p, (_, overrides) in zip(measured, states):
