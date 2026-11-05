@@ -528,6 +528,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   if (r == VK_SUCCESS) {
     if (!batch || !cmds.empty()) sl_note_submit(cmds);
     alpha_submit_recordings(cmds);
+    post_submit_recordings(cmds);
   }
   omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
   if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
@@ -592,6 +593,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   if (r == VK_SUCCESS) {
     if (!batch || !cmds.empty()) sl_note_submit(cmds);
     alpha_submit_recordings(cmds);
+    post_submit_recordings(cmds);
   }
   omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
   if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);

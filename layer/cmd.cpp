@@ -91,9 +91,21 @@ uint64_t cmd_recording(VkCommandBuffer cmd){
   std::shared_lock lock(g_cmd_mu);auto i=g_cmds.find(cmd);
   return i==g_cmds.end()?0:std::atomic_ref<uint64_t>(i->second->recording).load(std::memory_order_acquire);
 }
+static void post_discard_recording(uint64_t recording) {
+  rrpost_discard_recording(recording); ngx_discard_recording(recording);
+}
+void post_submit_recordings(const std::vector<VkCommandBuffer>& cmds) {
+  for (auto cmd : cmds) {
+    auto* s = cmd_state(cmd);
+    if (!s) continue;
+    // Copy IDs at ExecuteCommands, never look up a secondary's current handle.
+    for (auto recording : s->post_secondaries) { rrpost_submit_recording(recording); ngx_submit_recording(recording); }
+    rrpost_submit_recording(s->recording); ngx_submit_recording(s->recording);
+  }
+}
 void cmd_forget(VkCommandBuffer cmd) {
   sl_discard_recording(cmd);
-  alpha_discard_recording(cmd_recording(cmd));
+  alpha_discard_recording(cmd_recording(cmd));post_discard_recording(cmd_recording(cmd));
   terrain_capture_discard(cmd);
   std::unique_lock<std::shared_mutex> lock(g_cmd_mu);
   auto it = g_cmds.find(cmd);
@@ -122,12 +134,12 @@ static void discard_recordings(VkDevice device, VkCommandPool pool, bool destroy
       else { state->begin_flags=0; ++it; }
     }
   }
-  for (auto recording:recordings) { alpha_discard_recording(recording); }
+  for (auto recording:recordings) { alpha_discard_recording(recording); post_discard_recording(recording); }
   for (auto command:commands) { sl_discard_recording(command); terrain_capture_discard(command); bvh_cmd_reset(command); }
 }
 static void discard_recording(VkCommandBuffer command) {
   sl_discard_recording(command);
-  alpha_discard_recording(cmd_recording(command));
+  alpha_discard_recording(cmd_recording(command));post_discard_recording(cmd_recording(command));
   terrain_capture_discard(command);
   {
     std::unique_lock lock(g_cmd_mu);
@@ -472,10 +484,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   diag(DIAG_BEGIN_CMD);
   bvh_cmd_reset(cmd);   // recorded again: a previous recording not submitted is dropped
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
-  if(r==VK_SUCCESS){sl_discard_recording(cmd);alpha_discard_recording(cmd_recording(cmd));terrain_capture_discard(cmd);omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
+  if (r != VK_SUCCESS) return r; // retain the previous recording on failed begin
+  if(r==VK_SUCCESS){sl_discard_recording(cmd);alpha_discard_recording(cmd_recording(cmd));post_discard_recording(cmd_recording(cmd));terrain_capture_discard(cmd);omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   std::atomic_ref<uint64_t>(s->recording).store(++recordings,std::memory_order_release);
+  s->post_secondaries.clear();
   s->begin_flags = r==VK_SUCCESS && bi ? bi->flags : 0;
   s->ours_since_event = false;
   if (r == VK_SUCCESS) fault_checkpoint(cmd, kCkCmdBegin, uint32_t(s->recording));
@@ -978,6 +992,8 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
   for (uint32_t i = 0; i < n; ++i) {
     CmdState* sec = cmd_state(cmds[i]);
     if (!sec) continue;
+    s->post_secondaries.push_back(sec->recording);
+    s->post_secondaries.insert(s->post_secondaries.end(), sec->post_secondaries.begin(), sec->post_secondaries.end());
     s->refs.insert(s->refs.end(), sec->refs.begin(), sec->refs.end());   // submitted with the primary
     for (auto& [img, lay] : sec->sl_layouts) sl_note_barrier(s, img, lay);
     for (auto& [img, lay] : sec->sl_input_layouts) sl_note_event_barrier(s, img, lay);
