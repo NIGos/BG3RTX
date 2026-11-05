@@ -386,7 +386,12 @@ float native_hit_ao(float3 position,float3 geometric_normal,float footprint,uint
  hd_pstat(2u,true);
  if(g_hd_stats && g_hd_pbase!=0u){
   uint v=WaveActiveSum(uint(A*8192.0+0.5));
+#ifdef RT_GI_WAVE_BIN
+  uint ab=0u;if(RT_GI_PERMUTE_ON)ab=RT_GI_WAVE_BIN(g_hd_bin);
+  if(WaveIsFirstLane() && v)rtStats.InterlockedAdd(((g_hd_pbase+3u)*64u+(RT_GI_PERMUTE_ON?ab:(WaveReadLaneFirst(g_hd_bin)&63u)))*4u,v);
+#else
   if(WaveIsFirstLane() && v)rtStats.InterlockedAdd(((g_hd_pbase+3u)*64u+(WaveReadLaneFirst(g_hd_bin)&63u))*4u,v);
+#endif
  }
  return A;
 }

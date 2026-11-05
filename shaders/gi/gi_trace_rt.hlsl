@@ -33,6 +33,29 @@
 #include "gi_common.hlsli"
 // Limit the experiment to GI closest rays; sun/local visibility stays unchanged.
 #define RT_COMPACT_HIT_STATE 1
+[[vk::constant_id(1032)]] const uint kGiLanePermute = 0u;
+// Keep each 8x4 (32-lane) tile intact, including partial image edges. Two rays
+// remain serial in their original pixel; group barriers still have all 64 lanes.
+uint2 gi_lane_pixel(uint3 gid, uint gix) {
+  uint n = (gix & 7u) | (((gix >> 3u) & 3u) << 3u);
+  return gid.xy * 8u + uint2(
+      (n & 1u) | ((n >> 1u) & 2u) | ((n >> 2u) & 4u),
+      ((n >> 1u) & 1u) | ((n >> 2u) & 2u) | ((gix >> 3u) & 4u));
+}
+// Diagnostic wave sums historically choose the first *logical* active pixel's
+// bin. Preserve that choice under divergent control flow after lane remapping.
+static uint g_gi_logical_lane;
+uint gi_wave_bin(uint bin) {
+#if RT_HIT_GI_DIRECT
+  if (kGiLanePermute != 0u && WaveGetLaneCount() >= 32u)
+    return WaveActiveMin((g_gi_logical_lane << 6u) | (bin & 63u)) & 63u;
+#endif
+  // Non-material passes use group-constant bins already.
+  return WaveReadLaneFirst(bin) & 63u;
+}
+
+#define RT_GI_WAVE_BIN(bin) gi_wave_bin(bin)
+#define RT_GI_PERMUTE_ON (kGiLanePermute != 0u)
 #include "../rt/rt_common.hlsli"
 // Retain the geometric normal, rather than the complete hit, across direct-light traversal.
 [[vk::constant_id(1029)]] const uint kRtCompactHitState = 0u;
@@ -148,11 +171,11 @@ bool gi_far_roof_clear(float3 o, float3 d, float t) {
 static uint g_far_stat[kGiFarStatCount];
 groupshared uint gs_far_stat[kGiFarStatCount];
 void far_stat(uint k, float v) { g_far_stat[k] += uint(clamp(v, 0.0, 8.0) * 8192.0 + 0.5); }
-void gi_trace_px(uint3 tid);
+void gi_trace_px(uint3 tid, uint3 gid, uint gix);
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV_GroupIndex) {
   for (uint k = 0; k < kGiFarStatCount; ++k) g_far_stat[k] = 0u;
-  gi_trace_px(tid);
+  gi_trace_px(tid, gid, gix);
 #if defined(RT_SPEC_GI_FAR)
   if (pc.rt_stats != 0u && kSpecGiFar != 0u) {   // uniform (a push constant and the constant)
 #else
@@ -169,13 +192,18 @@ void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV
     if (gix < kGiFarStatCount && gs_far_stat[gix]) rtStats.InterlockedAdd(((kGiFarStatFirst + gix) * 64u + bin) * 4u, gs_far_stat[gix]);
   }
 }
-void gi_trace_px(uint3 tid) {
+void gi_trace_px(uint3 tid, uint3 gid, uint gix) {
 #else
 [numthreads(8, 8, 1)]
-void main(uint3 tid : SV_DispatchThreadID) {
+void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV_GroupIndex) {
 #endif
   g_rt_pass = kRtPassGI;   // aborted queries count as this pass's unknowns (rt_common.hlsli)
   uint2 id = tid.xy;
+  if (kGiLanePermute != 0u && WaveGetLaneCount() >= 32u) {
+    // Keep the OFF dispatch-ID input in its original form after specialization.
+    id = gi_lane_pixel(gid, gix);
+    g_gi_logical_lane = ((id.y & 7u) << 3u) | (id.x & 7u);
+  }
   if (any(id >= pc.half)) return;
   uint2 fp = gi_fp(id);
   float d = gDepth.Load(int3(fp, 0));
@@ -471,7 +499,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
           const float3 sun_l=sun_ok?sun.radiance*(sun_ao?native_hit_ao_factor(hit_a):1.0):0.0.xxx;
           if(pc.rt_stats!=0u){
             uint sv=uint(clamp(dot(sun_l*w,float3(.2126,.7152,.0722)),0.0,8.0)*8192.0+0.5);
-            uint ss=WaveActiveSum(sv);if(WaveIsFirstLane() && ss)rtStats.InterlockedAdd((328u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,ss);
+            uint ss=WaveActiveSum(sv);uint sb=0u;if(kGiLanePermute!=0u)sb=gi_wave_bin(hit_bin);if(WaveIsFirstLane() && ss)rtStats.InterlockedAdd((328u*64u+(kGiLanePermute!=0u?sb:(WaveReadLaneFirst(hit_bin)&63u)))*4u,ss);
           }
 #else
           // The screen's AO-on-direct factor (native_hit_ao_direct): its AO rays only where a
@@ -490,7 +518,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
             // Luminance x 8192, clamped at 8: hit radiance is b13[0]-scaled (~1e-3), below the
             // old x 256 step (live S8: a sum of 0 could not tell zero from small).
             uint value=uint(clamp(dot(direct.radiance*w,float3(.2126,.7152,.0722)),0.0,8.0)*8192.0+0.5);
-            uint sum=WaveActiveSum(value);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((286u*64u+(WaveReadLaneFirst(hit_bin)&63u))*4u,sum);
+            uint sum=WaveActiveSum(value);uint wb=0u;if(kGiLanePermute!=0u)wb=gi_wave_bin(hit_bin);if(WaveIsFirstLane() && sum)rtStats.InterlockedAdd((286u*64u+(kGiLanePermute!=0u?wb:(WaveReadLaneFirst(hit_bin)&63u)))*4u,sum);
           }
 #if RT_GI_FAR
 #if RT_HIT_GI_SUN

@@ -1,0 +1,6 @@
+--- a/tools/live_batches/pipeline_readiness.py
++++ b/tools/live_batches/pipeline_readiness.py
+@@ -29,1 +29,3 @@
+ TABLE["rt_compact_hit_state"] = [GI_TRACE]
++TABLE["gi_lane_permute"] = [GI_TRACE]
++TABLE["gi_ao_r16f"] = [r"gi: gi/(?:gi_ao_apply|rt_local_shadows[^ /]*)\.hlsl[^ ]* generation "]

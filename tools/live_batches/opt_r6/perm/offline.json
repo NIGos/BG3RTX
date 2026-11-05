@@ -1,0 +1,94 @@
+{
+  "replay": {
+    "s8": {
+      "off": {
+        "median_ms": 13.938272,
+        "sha256": {
+          "giRaw.raw": "e7bd84ffd54de538e51926c707d33e2e843949587a3049a0734bff238bb531ee",
+          "giRawDepth.raw": "c70d060f161878b3118588526612615fdb5fb80f8b1d3fc2bb6c4daf1bb940fa",
+          "rtstats.bin": "116c744692ad05aded8a70e55014c688b452ccfc844195c44f178ac1aceebdb7"
+        }
+      },
+      "on": {
+        "median_ms": 8.852736,
+        "sha256": {
+          "giRaw.raw": "e7bd84ffd54de538e51926c707d33e2e843949587a3049a0734bff238bb531ee",
+          "giRawDepth.raw": "c70d060f161878b3118588526612615fdb5fb80f8b1d3fc2bb6c4daf1bb940fa",
+          "rtstats.bin": "116c744692ad05aded8a70e55014c688b452ccfc844195c44f178ac1aceebdb7"
+        }
+      },
+      "bit_equal": true,
+      "nonzero_counter_bins": 2848
+    },
+    "camp": {
+      "off": {
+        "median_ms": 60.16864,
+        "sha256": {
+          "giRaw.raw": "261a311f8cb8a11a5681121cc07760e3808e6a60599a86cff866ef4a81f0e48f",
+          "giRawDepth.raw": "d3c500621901060b6a8ed0e3265b34ac05e3204fa7664cbd1aee80eac1f52fc2",
+          "rtstats.bin": "747002046d58baadb8508064bc32885479ffaf9194cf0741f8be295dae05282a"
+        }
+      },
+      "on": {
+        "median_ms": 49.110304,
+        "sha256": {
+          "giRaw.raw": "261a311f8cb8a11a5681121cc07760e3808e6a60599a86cff866ef4a81f0e48f",
+          "giRawDepth.raw": "d3c500621901060b6a8ed0e3265b34ac05e3204fa7664cbd1aee80eac1f52fc2",
+          "rtstats.bin": "747002046d58baadb8508064bc32885479ffaf9194cf0741f8be295dae05282a"
+        }
+      },
+      "bit_equal": true,
+      "nonzero_counter_bins": 3163
+    },
+    "inn": {
+      "off": {
+        "median_ms": 10.618496,
+        "sha256": {
+          "giRaw.raw": "bf17f49f53fb345ed6d619ec650c39c0205a1b56f7e4b6d2775c6eee633f38df",
+          "giRawDepth.raw": "9f57983a80eeefcd18506483699f7973b3bf5275f63b7ab0cccaf8f92277086b",
+          "rtstats.bin": "ac71970178c90e426694ad01af9953a9fcd3e50370b0041c6cae2cee8b16b54b"
+        }
+      },
+      "on": {
+        "median_ms": 10.854592,
+        "sha256": {
+          "giRaw.raw": "bf17f49f53fb345ed6d619ec650c39c0205a1b56f7e4b6d2775c6eee633f38df",
+          "giRawDepth.raw": "9f57983a80eeefcd18506483699f7973b3bf5275f63b7ab0cccaf8f92277086b",
+          "rtstats.bin": "ac71970178c90e426694ad01af9953a9fcd3e50370b0041c6cae2cee8b16b54b"
+        }
+      },
+      "bit_equal": true,
+      "nonzero_counter_bins": 2873
+    }
+  },
+  "repeats": 11,
+  "registers": {
+    "main": 255,
+    "off": 255,
+    "on": 255
+  },
+  "request_delta": 0,
+  "spec_ids": [
+    1032,
+    1033
+  ],
+  "ao_native_codes_exact": 1024,
+  "limitations": "Captured base hit-direct packs omit unsupported resources/AS cases; paired equality is not universal coverage. Replay timings include diagnostic counters and are noisy, not live saving evidence. RGBA diagnostic allocation stays resident.",
+  "release_equivalence": {
+    "baseline": "025f0a48eec0ff0d5d126e9aad628367c6599940",
+    "counts": {
+      "identical": 140,
+      "equivalent": 75,
+      "DIFFERENT": 0
+    },
+    "control": true,
+    "assignments": 5075,
+    "actual_frozen_checks": 131,
+    "universal_certificates": 75
+  },
+  "final_build_test": "PASS: scripts/build.ps1 -Test, 192/192 CTests; final source including one-time scalar-image clear",
+  "lint": {
+    "stock": "Missing readiness mappings owned by tooling lane",
+    "integration": "Frozen and current corpus PASS with the two proposed registry records injected in memory; source untouched"
+  }
+}

@@ -17,6 +17,7 @@
 // The trace is a lower bound for an effect that only removes ambient light: the floor it
 // gives is lower than "everything but the ambient" by the halved direct light above.
 #include "gi_common.hlsli"
+#include "gi_aux_ao.hlsli"
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -30,7 +31,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float vis = gather_history(fp, d).a;
   float4 ao = gAO[fp];
   // The game's own AO, for the D-LS pass's AO-on-direct factor (ao_direct=2).
-  gAux[fp] = float4(ao.x, 0.0, 0.0, 0.0);
+  aux_ao_store(fp, ao.x);
   // Replace rather than multiply: the game's SSAO and our visibility measure
   // the same occlusion, and their product darkens contacts twice.
   ao.x = lerp(ao.x, vis, pc.ao);

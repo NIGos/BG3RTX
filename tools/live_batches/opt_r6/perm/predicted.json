@@ -1,0 +1,44 @@
+{
+  "status": "READY_FOR_LIVE",
+  "key": "gi_lane_permute",
+  "spec_constants": [
+    1032,
+    1033
+  ],
+  "keys": [
+    "gi_lane_permute",
+    "gi_ao_r16f"
+  ],
+  "shader_request_delta": 0,
+  "launches": 2,
+  "preset": "Ultra release",
+  "frames_per_window": 600,
+  "timer_period_frames": 120,
+  "jobs": {
+    "s8": {
+      "scheduled_seconds": 102.9,
+      "load_allowance_seconds": 120,
+      "expected_readiness_seconds": 0,
+      "estimated_seconds": 222.9,
+      "nominal_rendered_fps": 30,
+      "historical_p10_fps": 25.48853016135551,
+      "historical_frame_estimate_seconds": 237.06,
+      "readiness": "Unproven: conditional fresh QUIET waits; hard stop 300 s."
+    },
+    "inn": {
+      "scheduled_seconds": 105.9,
+      "load_allowance_seconds": 120,
+      "expected_readiness_seconds": 0,
+      "estimated_seconds": 225.9,
+      "nominal_rendered_fps": 30,
+      "historical_p10_fps": 11.69134840218328,
+      "historical_frame_estimate_seconds": 351.18,
+      "readiness": "Unproven: conditional fresh QUIET waits; hard stop 300 s."
+    }
+  },
+  "prediction": "GI trace lower by 0-0.40 ms; scalar AO fold/local reads lower by 0-0.06 ms. Other passes within OFF spread.",
+  "offline_proof": "docs/progress/gi-perm.md",
+  "decision": "SAVING only when both ON GI trace medians beat both OFF medians by more than the OFF repeat spread; otherwise NO_SAVING. Missing evidence is INVALID.",
+  "readiness": "No 1032/1033 binding in experimental_specs. Warmup exercises ON, then fresh QUIET after every toggle; no build-generation witness required.",
+  "pending": "Readiness registry integration is required when status is READY_FOR_TOOLING_INTEGRATION. Offline only; no launch, queue writes or live saving claim."
+}
