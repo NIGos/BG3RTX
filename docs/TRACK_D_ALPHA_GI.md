@@ -665,7 +665,7 @@ Production GPU replay also passes solid/clear native alpha fixtures (277 real ca
 
 Key-off gate: 173 requests/194 entries match HEAD after specialization and unused-capability removal; validation passes. All keys remain off until live cost and combined Ultra qualification.
 
-## Origin normal load on demand (2026-11-05, opt-origin, READY_FOR_LIVE)
+## Origin normal load on demand (2026-11-05, opt-origin, rejected; historical design)
 
 `rt_origin_lazy_normal=1` (specialization 1027, default 0, developer Performance
 control) defers the shading-normal fetch/decode/lighting-space normalization until
@@ -695,3 +695,12 @@ detailed logging, separate origin GPU cost / float pre-post energy / rendered K8
 QA windows. Each ON must save more than OFF-repeat cost spread, preserve energy
 within OFF-derived noise, and pass the existing temporal detector versus both OFFs.
 GPU saving remains unmeasured; no game launch or queue staging occurred.
+
+
+Round 1 outcome (2026-11-05, opt-apply1): rejected for no saving. Inn origin pass
+OFF 1.514 / 1.495 ms, ON 1.634 / 1.520 ms (ON increases 0.1295 / 0.0155 ms
+against OFF-repeat spread 0.019 ms in the retained analysis). Evidence:
+`captures/queue/logs/opt-origin-inn.1.012845.log`. Code, key, shader branch,
+prewarm registration, candidate-only tests and `tools/live_batches/opt_r2/origin`
+were removed. Specialization ID 1027 remains reserved. The design and offline
+receipts above are historical, not a pending candidate or quality pass.

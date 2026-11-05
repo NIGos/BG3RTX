@@ -25,13 +25,13 @@ inline constexpr unsigned kSpecCascadeId = 1000;
 // Specialization constant ids, one per on/off key (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): the one
 // registry, so branches never pick the same id. Reserved for the steps that are not merged yet; an id is never reused.
 enum SpecId : unsigned {
+  // Reserved retired IDs: 1027 rt_origin_lazy_normal, 1028 gi_roof_reject. Never reuse.
   // Retired: 1001 GI motion sample, 1002 previous-radiance guard. Never reuse.
   kSpecIdCascade = kSpecCascadeId,   // GI and water cascade masks, including sun-ray selection
   kSpecIdHitInstanced = 1003,        // S2  RT_HIT_INSTANCED
   kSpecIdWindRgb = 1004,             // S2  RT_HIT_WIND_RGB
   // Retired: 1005 IP grass, 1006 generated two-sided pool rows. Never reuse.
   kSpecIdGiFar = 1007,               // S2  RT_GI_FAR
-  kSpecIdGiRoofReject = 1028,        // opt-roof: skip discarded hidden far shading
   kSpecIdTileset = 1008,             // S3  RT_NATIVE_TILESET
   kSpecIdHairOrigin = 1009,          // S3  RT_HAIR_PHYSICAL_ORIGIN
   kSpecIdScalpHair = 1010,           // S3  RT_NATIVE_SCALP + RT_NATIVE_HAIR (always together)
@@ -45,7 +45,6 @@ enum SpecId : unsigned {
   // Retired: 1022 alpha metadata cache, 1023 empty water tiles, 1024 compact hit state. Never reuse.
   kSpecIdWaterSurfaceFresnel = 1025, // M5.6 clean interface / column partition
   kSpecIdHairGroomShadowT = 1026,    // C2: strand shadow transmittance, default pre-C2 opaque query
-  kSpecIdOriginLazyNormal = 1027,    // exact deferred G-buffer normal in rt_origin
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.

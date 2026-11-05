@@ -15,8 +15,6 @@
 #include "gi_common.hlsli"
 #include "../rt/rt_common.hlsli"
 
-[[vk::constant_id(1027)]] const uint RT_ORIGIN_LAZY_NORMAL = 0u;
-
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
 #include "../rt/hair_receiver.hlsli"
 #endif
@@ -46,9 +44,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float dist = length(P);
   float3 V = -P / dist;
   float pa = pixel_angle(uv);
-  float3 Ns = 0.0.xxx;
-  if (RT_ORIGIN_LAZY_NORMAL == 0u)
-    Ns = to_lighting_space(decode_normal(gNormal.Load(int3(fp, 0)).xy));
+  float3 Ns = to_lighting_space(decode_normal(gNormal.Load(int3(fp, 0)).xy));
 
   float4 o = float4(depth_geo_normal(int2(fp), P), kOriginNoHit);
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
@@ -146,22 +142,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
     }
   }
-  if (RT_ORIGIN_LAZY_NORMAL != 0u) {
-    // A finite non-degenerate geometric result never uses the shading normal,
-    // except in the diagnostic comparison below. Do not load/decode it or keep
-    // it live across traversal for those pixels. Keep the original ordering:
-    // fallback Ns is NOT flipped to V, and a non-finite w resets the whole value.
-    const bool degenerate = dot(o.xyz, o.xyz) < 0.5;
-    if (!degenerate && dot(o.xyz, V) < 0.0) o.xyz = -o.xyz;
-    [branch] if (degenerate || !all(isfinite(o)) || pc.rt_stats != 0u)
-      Ns = to_lighting_space(decode_normal(gNormal.Load(int3(fp, 0)).xy));
-    if (degenerate) o.xyz = Ns;
-    if (!all(isfinite(o))) o = float4(Ns, kOriginNoHit);
-  } else {
-    if (dot(o.xyz, o.xyz) < 0.5) o.xyz = Ns;   // degenerate: fall back to the shading normal
-    else if (dot(o.xyz, V) < 0.0) o.xyz = -o.xyz;
-    if (!all(isfinite(o))) o = float4(Ns, kOriginNoHit);
-  }
+  if (dot(o.xyz, o.xyz) < 0.5) o.xyz = Ns;   // degenerate: fall back to the shading normal
+  else if (dot(o.xyz, V) < 0.0) o.xyz = -o.xyz;
+  if (!all(isfinite(o))) o = float4(Ns, kOriginNoHit);
   rtOrigin[fp] = o;
 #ifdef RT_SPEC_HAIR_ORIGIN
   if (RT_HAIR_ORIGIN_ON) {

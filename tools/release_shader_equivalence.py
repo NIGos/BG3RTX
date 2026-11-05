@@ -36,21 +36,20 @@ from tools.shader_identity import (Cache, Progress, SourceTree, Toolchain, compi
                                    default_jobs, lower_priority, split_request, unchanged_since)
 from tools.spirv_equivalence import canonical, first_difference, specialize
 
-# Registry and release-policy contract of bundle35. Unknown removals fail closed.
+# Reviewed release-policy contract through opt-tools2 (main f3d3c41a). Unknown removals fail closed.
 # Explicit zero overrides: guards, IP grass and generated pool rows. The others
 # are dev_only knobs absent from kOptInKnobs, hence knob choice 0 is enforced.
 REMOVED_KEYS = {1001: "gi_temporal_mv_sample", 1002: "gi_prev_radiance_guard",
                 1005: "rt_hit_material_ip_grass", 1006: "rt_hit_material_generated",
                 1016: "rt_water_hit_shade", 1021: "rt_water_hit_cost",
                 1022: "rt_alpha_metadata_cache", 1023: "rt_water_empty_tiles",
-                1024: "rt_compact_hit_state"}
-# Reviewed candidate disabled-path contract. This does NOT certify key ON.
-FIXED_OFF_KEYS = {1028: "gi_roof_reject"}
-# gi_roof_reject (1028) and rt_origin_lazy_normal (1027) are both release-off.
-ORIGIN_OFF_KEYS = {1027: "rt_origin_lazy_normal"}
-# The domain audit above is of bundle35's settings/release policy. A different
+                1024: "rt_compact_hit_state",
+                1027: "rt_origin_lazy_normal", 1028: "gi_roof_reject"}
+# Retired 1027/1028 were dev-only knobs, default 0, absent from kOptInKnobs;
+# enforce_release_policy selected their OFF choice even with experimental_options=1.
+# Remaining specialization domains are unchanged from bundle35. A different
 # policy needs a fresh audit, rather than silently applying these assumptions.
-REVIEWED_POLICY_SHA256 = "6081e6b3682aeba6c2fe4bf3c51ad0d8d15b21823ea4303cc127262e6b4b9761"
+REVIEWED_POLICY_SHA256 = "6dd244a42ee02d07374dccabdfd46c1f2e1eaceca86fda0d1ddf179e5147fdcb"
 
 
 def validate_policy(data):
@@ -95,7 +94,7 @@ def baseline_request(request, known):
 def assignments(ids, removed, fixed=None):
     # Every other registered retained constant is an on/off uint. Crossing both
     # values is a conservative superset of release preset and opt-in states.
-    fixed = (fixed or {}) | {i: 0 for i in ids & set(FIXED_OFF_KEYS)}
+    fixed = fixed or {}
     retained = sorted(ids - removed - fixed.keys())
     domains = [(0,) if i == 1008 else (0, 1) for i in retained]
     return [dict(zip(retained, values)) | fixed | {i: 0 for i in sorted(removed)}
@@ -174,7 +173,7 @@ def check_request(item):
             # Leave retained constants symbolic. Canonical equality is then
             # universal, not evidence inferred from a few sampled assignments.
             universal_assign = ((item[5] if len(item) > 5 else {}) |
-                                {i: 0 for i in REMOVED_KEYS | FIXED_OFF_KEYS} | {1008: 0})
+                                {i: 0 for i in REMOVED_KEYS} | {1008: 0})
             universal = (normalizer.get(a, universal_assign, temp, "old") ==
                          normalizer.get(b, universal_assign, temp, "new"))
             actual_checks += 1
@@ -235,17 +234,9 @@ def main(argv=None):
             raise RuntimeError(f"unreviewed removed spec IDs: {sorted(removed)}")
         if removed:
             validate_policy(base.read("common/settings.h"))
-        for spec, key in itertools.chain(FIXED_OFF_KEYS.items(), ORIGIN_OFF_KEYS.items()):
-            if spec in shader_ids(new):
-                defaults = new.read("common/settings.h").decode().split("// BEGIN GENERATED DEFAULTS", 1)[1]
-                if not re.search(r'\{"' + re.escape(key) + r'", "0"\}', defaults):
-                    raise RuntimeError(f"disabled-path key {key} must default to 0")
-        print("candidate spec constants fixed OFF (ON is not certified): " +
-              ", ".join(f"{i} {key}" for i, key in FIXED_OFF_KEYS.items()), flush=True)
         fixed = {i: 0 for i in args.freeze_spec}
         if not fixed.keys() <= registry_ids(new) - registry_ids(base):
             raise RuntimeError("--freeze-spec must name newly added registered constants only")
-        fixed |= {i: 0 for i in FIXED_OFF_KEYS}
         print(f"explicit candidate OFF constants: {fixed}", flush=True)
         print("removed spec constants (release value 0): " + ", ".join(f"{i} {REMOVED_KEYS[i]}" for i in sorted(removed)), flush=True)
         listed = new.requests()

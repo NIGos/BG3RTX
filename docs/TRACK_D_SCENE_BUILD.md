@@ -1159,7 +1159,7 @@ Records were complete 19, unknown 33, capture-incomplete 0. Cross-launch, ON qua
 13.06 M to 10.57 M (row rejects +6.3 M). Post-release: let the diag window wait for the pipeline build, then
 explain the row rejects before any coverage claim.
 
-### Independent scene hold packing (2026-11-05, opt-scene, offline candidate)
+### Independent scene hold packing (2026-11-05, opt-scene, qualified)
 
 The measured High-after-Ultra session retains the device's 88-byte capture stride,
 but High disables `rt_hair_pool_trim`. This disables existing ordinary-recipe
@@ -1170,8 +1170,8 @@ not an attribution of the entire preset timing difference. Both presets bake
 zero steady-state dynamic OMMs; UV checks still execute. High also uses the
 60-frame rebuild interval versus Ultra 600.
 
-`rt_scene_compact_holds` (developer-only, default 0, forced off in release)
-independently opts into the existing `hold_pack.hlsl` path. It changes only the
+`rt_scene_compact_holds` (developer A/B key, default 1, forced on in release
+and set to 1 in every preset; no player option) independently enables the existing `hold_pack.hlsl` path. It changes only the
 packing predicate, not capture, BLAS flags, rebuild cadence, held-slot age or
 retirement. Only static-camera enabled holds with a native 88-byte layout are
 eligible. Opaque held geometry has no material payload; alpha recipes 1-3 use
@@ -1225,3 +1225,23 @@ the initial failed attempt is discarded. Live-flow lint reports 0 issues and
 shader or ABI changes. READY_FOR_LIVE awaits measured cost, float energy and
 flicker gates; no quality or saving pass is claimed. No game, queue staging
 or commit occurred.
+
+
+Round 1 decision (2026-11-05, opt-apply1): kept and enabled by the coordinator's
+qualification. Same-launch High inn A/B: reported saving 0.87 ms versus OFF-repeat
+spread 0.075 ms; float pre-post energy stays within OFF spread. BVH geometry is
+identical by the packing fixtures. Log:
+`captures/queue/logs/opt-scene-compact-holds-inn.1.014837.log`.
+The retained report `.claude/worktrees/opt-tools2/.scratch/opt-tools2/scene.scene.json`
+exists: its period medians show scene build OFF 3.04475 ms / ON 2.144 ms and
+convert OFF 2.007 ms / ON 1.127 ms. Those report aggregates differ from the
+coordinator's 0.87 ms / 0.075 ms decision receipt; they are not additive savings.
+The historical report's overall FAIL is from rendered flicker comparisons, not
+energy or geometry; no temporal-detector pass is claimed. This qualification
+supersedes the earlier READY_FOR_LIVE status above. Check the inn on High after
+a layer restart; developer mode can toggle the key for A/B. Shader request delta 0;
+no ABI change. A 24-byte capture device already has nothing to pack.
+
+Round 1 final offline checks: 176/176 CTests pass (150.24 s); release shaders
+against main f3d3c41a: 203 identical / 11 equivalent / 0 different, 1,041
+assignments and negative control PASS. Receipt: `.scratch/release-equivalence.json`.

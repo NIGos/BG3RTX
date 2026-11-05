@@ -1059,7 +1059,7 @@ static void test_retired_rejected_controls() {
     CHECK(schema_json().find(id) == std::string::npos);
   }
   for (const char* key : {"rr_hair_resolve", "rt_cascade_static_only"}) CHECK(code_default(key) == nullptr);
-  for (const char* key : {"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "rt_scene_compact_holds"}) {
+  for (const char* key : {"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch"}) {
     CHECK_EQ(code_default(key), "0");
     for (int p=0;p<kPresetCount;++p) { Map preset; for (const auto& kv : expand_preset(p)) preset[kv.first]=kv.second; CHECK(preset.count(key) == 0); }
     Map release=code_defaults(); release[key]="1"; release["dev"]="0";
@@ -1067,6 +1067,16 @@ static void test_retired_rejected_controls() {
     Map developer=code_defaults(); developer[key]="1"; developer["dev"]="1";
     enforce_release_policy(developer); CHECK_EQ(get(developer,key),"1");
   }
+  CHECK(find_knob("rt_scene_compact_holds") == nullptr);
+  CHECK_EQ(code_default("rt_scene_compact_holds"), "1");
+  for (int p=0; p<kPresetCount; ++p) {
+    Map preset; for (const auto& kv : expand_preset(p)) preset[kv.first]=kv.second;
+    CHECK_EQ(get(preset,"rt_scene_compact_holds"),"1");
+  }
+  Map release=code_defaults(); release["rt_scene_compact_holds"]="0";
+  enforce_release_policy(release); CHECK_EQ(get(release,"rt_scene_compact_holds"),"1");
+  Map developer=release; developer["dev"]="1"; developer["rt_scene_compact_holds"]="0";
+  enforce_release_policy(developer); CHECK_EQ(get(developer,"rt_scene_compact_holds"),"0");
   const Map defaults=code_defaults();
   const Map legacy=parse_ini("rr_hair_resolve=1\nrt_cascade_static_only=1\nperf_hitmat_lists=1\nperf_hook_state=1\nperf_submit_batch=1\n");
   CHECK(knob_values(merge_layers({&defaults,&legacy})) == knob_values(merge_layers({&defaults})));
