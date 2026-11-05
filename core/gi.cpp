@@ -254,6 +254,7 @@ constexpr ExtraBinding kExtras[] = {
     {41, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4},       // RT3, set 1 b4 (class parameters)
     {42, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},      // SSS profiles, set 1 b28
     {43, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 7},      // set 0 b0 frame constants
+    {51, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 | 4}, // scalar AO; never used by trace/RF
     {44, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 7},       // gAux: .x the game's own AO before the fold (ao_direct)
     {45, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4},      // D-LS per-light data: runtime lights uploaded (core/ls_lights.cpp)
     {46, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4},       // D-LS per-light data: one record per light array slot
@@ -416,6 +417,8 @@ bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
 Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F; full resolution at startup opt-in, otherwise 1x1.
+Bg3Image g_aux_ao{}; // R16F AO; warmed allocation stays resident across A/B.
+bool g_aux_ao_full=false, g_aux_ao_ready=false;
 Bg3Image g_origin{}, g_aux{};   // extras 40 and 44 (full resolution, RGBA16F)
 Bg3Image g_ls_nodata{};          // extra 46 when there is no per-light data: 1x1 RGBA32UI (the shaders' type)
 bool g_x_logged = false;
@@ -496,7 +499,7 @@ void timing_collect() {
 }
 
 Bg3Image* const all_images[] = {&g_raw, &g_hist[0], &g_hist[1], &g_raw_depth, &g_hist_depth[0], &g_hist_depth[1],
-                                &g_prev_radiance, &g_rt_vis, &g_rf_hit, &g_origin, &g_aux, &g_ls_nodata};
+                                &g_prev_radiance, &g_rt_vis, &g_rf_hit, &g_origin, &g_aux, &g_aux_ao, &g_ls_nodata};
 
 // Log-only subdivisions of the enclosing GI timer. Hit direct/sun/emission and
 // far bounce run INSIDE gi_trace_rt, so the existing trace timer includes them.
@@ -725,7 +728,19 @@ void release_images() {
 
 bool ensure_images(uint32_t w, uint32_t h) {
   uint32_t shift = gi_res_shift();
-  if (w == g_w && h == g_h && shift == g_shift && g_raw.image) return true;
+  const bool narrow = host->cfg_int("dev", 0) && host->cfg_int("gi_ao_r16f", 0);
+  if (w == g_w && h == g_h && shift == g_shift && g_raw.image) {
+    if (narrow && !g_aux_ao_full) {
+      Bg3Image next{};
+      const auto use = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+      if (!host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use, &next)) return false;
+      host->defer_destroy(BG3_DEFER_IMAGE_VIEW, uint64_t(g_aux_ao.view));
+      host->defer_destroy(BG3_DEFER_IMAGE, uint64_t(g_aux_ao.image));
+      host->defer_destroy(BG3_DEFER_MEMORY, uint64_t(g_aux_ao.memory));
+      g_aux_ao=next; g_aux_ao_full=true; g_aux_ao_ready=false;
+    }
+    return true;
+  }
   release_images();
   g_shift = shift;
   uint32_t hw = shift ? (w + 1) / 2 : w, hh = shift ? (h + 1) / 2 : h;
@@ -740,6 +755,7 @@ bool ensure_images(uint32_t w, uint32_t h) {
             host->alloc_image(w, h, VK_FORMAT_R8G8B8A8_UNORM, use, &g_rt_vis) &&
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_origin) &&
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_aux) &&
+            host->alloc_image(narrow?w:1u, narrow?h:1u, VK_FORMAT_R16_SFLOAT, use, &g_aux_ao) &&
             host->alloc_image(1, 1, VK_FORMAT_R32G32B32A32_UINT, use, &g_ls_nodata) &&
             host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use | VK_IMAGE_USAGE_SAMPLED_BIT, &g_rf_hit);
   if(ok) {
@@ -751,6 +767,7 @@ bool ensure_images(uint32_t w, uint32_t h) {
     release_images();
     return false;
   }
+  g_aux_ao_full=narrow; g_aux_ao_ready=false;
   g_w = w, g_h = h, g_hw = hw, g_hh = hh;
   host->log("gi: resources for %ux%u (GI at %ux%u)", w, h, hw, hh);
   return true;
@@ -1220,6 +1237,10 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   if (p.active_layout != lay) { p.pipeline = VK_NULL_HANDLE; p.active_layout = lay; }
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
   PipelineSpecs specs;
+  if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
+    specs.add(sv::kSpecIdGiLanePermute, host->cfg_int("dev", 0) && host->cfg_int("gi_lane_permute", 0) ? 1u : 0u);
+  if (std::strcmp(file, "gi/gi_ao_apply.hlsl") == 0 || std::strncmp(file, "gi/rt_local_shadows", 19) == 0)
+    specs.add(sv::kSpecIdGiAoR16f, host->cfg_int("dev", 0) && host->cfg_int("gi_ao_r16f", 0) ? 1u : 0u);
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
   if (std::strncmp(file, "gi/rt_reflections", 17) == 0)
     // The GI-disabled specialization gained a register in the offline trial; leave it unchanged.
@@ -1381,6 +1402,7 @@ void bind_extras(Bound& b, const Snapshot& s) {
                         ? VkDescriptorBufferInfo{s.x_frame.buffer, s.x_frame.offset, (std::min)(s.x_frame.range, VkDeviceSize(65536))}
                         : VkDescriptorBufferInfo{s.cam.buffer, s.cam.offset, s.cam.range};
         break;
+      case 51: b.ximg[i] = {VK_NULL_HANDLE, g_aux_ao.view, G}; break;
       case 44: b.ximg[i] = {VK_NULL_HANDLE, g_aux.view, G}; break;
       // D-LS per-light data; without it (allocation failed) any valid descriptor of the
       // type: the passes then never read them (ls_flags bit 0 clear, no match pass).
@@ -2949,6 +2971,16 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
     g_images_ready = true;
+    g_aux_ao_ready = true;
+  }
+  if (!g_aux_ao_ready) {
+    image_layout(cmd, g_aux_ao.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    VkClearColorValue zero{};
+    VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    host->vk->CmdClearColorImage(cmd, g_aux_ao.image, VK_IMAGE_LAYOUT_GENERAL, &zero, 1, &range);
+    memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
+    g_aux_ao_ready=true;
   }
   timing_init();
   timing_collect();
@@ -3133,7 +3165,9 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       s.aux_ao = true;
       image_layout(cmd, s.ao.image, s.ao.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
       pass_timestamp(cmd, kAoFold, 0);
-      const bool ao_applied = dispatch(cmd, g_ao_apply, b, pc, g_w, g_h);
+      Push ao_pc=pc;
+      if (s.pan) ao_pc.ls_pass |= 0x80000000u; // AO-only RGBA diagnostic mirror
+      const bool ao_applied = dispatch(cmd, g_ao_apply, b, ao_pc, g_w, g_h);
       pass_timestamp(cmd, kAoFold, 1, ao_applied);
       image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kCS);
     }

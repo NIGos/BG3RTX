@@ -83,7 +83,11 @@ bool rt_ray_valid(float3 o, float3 d, inout float tmax) {
 
 void stat_add(uint index, bool cond, uint bin) {
   uint n = WaveActiveCountBits(cond);
+#ifdef RT_GI_WAVE_BIN
+  uint b = RT_GI_WAVE_BIN(bin);
+#else
   uint b = WaveReadLaneFirst(bin) & 63u;
+#endif
   if (WaveIsFirstLane() && n) rtStats.InterlockedAdd((index * 64 + b) * 4, n);
 }
 
