@@ -910,7 +910,7 @@ bool lsref_ls_ref(uint2 fp, inout float3 o_d, inout float3 o_s) {
   //   2 the game's own factor with its own SSAO (the look of the original, noise-free).
   float3 xd = 0, xs = 0;
   if (ao_mode != 0u && !validate) {
-    float ssao = (pc.ao_direct & 16u) != 0u ? aux_ao_at(fp) : ao;
+    float ssao = (pc.ao_direct & 16u) != 0u ? gAux[fp].x : ao;
     float so = lFlags.m0.x > 0.0 ? saturate(pow(max(abs(sf.nov_raw + ssao), 9.9999997e-05), exp2(-16.0 * sf.a - 1.0)) - 1.0 + ssao) : 1.0;
     float td_f = ao_mode == 1u ? 1.0 : lerp(1.0, lFlags.m0.x > 0.0 ? ssao : 1.0, lFlags.m0.y);
     float ts_f = ao_mode == 1u ? 1.0 : lerp(1.0, so, lFlags.m0.y);

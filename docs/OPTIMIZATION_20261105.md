@@ -1215,3 +1215,12 @@ At that revision, startup alternatives included roof reject (SpecId 1028) and la
 
 Round 1 supersedes that prewarm/readiness plan: both candidate registrations and
 `opt_prewarm` are removed, and the GI attribution job is abandoned.
+
+## Round 6 (2026-11-05 afternoon): lane permutation rejected, attribution
+
+- `gi_lane_permute` (SpecId 1032): bijective thread-to-pixel remap of the GI trace kernel, outputs 100% bit-equal
+  offline. Live S8 Ultra (opt-perm-s8.1.181043, VALID): GI trace OFF/ON/OFF/ON 8.42/12.86/8.97/12.21 ms, about
+  +3.8 ms slower. Rejected; code, key and batch removed (with `gi_ao_r16f`, exact but at most 0.06 ms). Ids 1032-1033 retired.
+- Attribution, S8 Ultra (opt-attr-s8.1.173918, VALID): GI trace 8.0 ms -> 2.1 ms with `gi_hit_sun=0` (which also
+  removes gi_far) and -> 1.5 ms with `gi_hit_direct=0`. Nearly all the trace cost is the hidden-hit branch with sun
+  and far. The far/sun split is next, offline (frame_replay --sun-trust).
