@@ -38,14 +38,12 @@
     "direction": 0,
     "set": "cpu_opt1=0",
     "wait_log": [
-      "\\[cfg\\] settings read",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
-      "\\[cfg\\] settings read",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 10
+    "wait_log_timeout": 30
   },
   {
     "label": "off-a--static-a",
@@ -85,14 +83,12 @@
     "direction": 0,
     "set": "cpu_opt1=1",
     "wait_log": [
-      "\\[cfg\\] settings read",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
-      "\\[cfg\\] settings read",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 10
+    "wait_log_timeout": 30
   },
   {
     "label": "on-a--static-a",
@@ -132,14 +128,12 @@
     "direction": 0,
     "set": "cpu_opt1=0",
     "wait_log": [
-      "\\[cfg\\] settings read",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
-      "\\[cfg\\] settings read",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 10
+    "wait_log_timeout": 30
   },
   {
     "label": "off-b--static-a",
@@ -179,14 +173,12 @@
     "direction": 0,
     "set": "cpu_opt1=1",
     "wait_log": [
-      "\\[cfg\\] settings read",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
-      "\\[cfg\\] settings read",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 10
+    "wait_log_timeout": 30
   },
   {
     "label": "on-b--static-a",

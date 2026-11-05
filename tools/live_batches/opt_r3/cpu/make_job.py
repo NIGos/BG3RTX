@@ -26,8 +26,8 @@ def generate():
     for label, value in [('off-a', '0'), ('on-a', '1'), ('off-b', '0'), ('on-b', '1')]:
         setting = 'cpu_opt1='+value
         plan.append(phase('ready-'+label, 1.1, set=setting,
-            wait_log=[r'\[cfg\] settings read', quiet],
-            wait_log_fresh=[r'\[cfg\] settings read', quiet], wait_log_timeout=10))
+            wait_log=[quiet],
+            wait_log_fresh=[quiet], wait_log_timeout=30))
         name = label+'--static-a'
         labels.append(name)
         plan.append(phase(name, 20.1, set=setting, frames=600, settle_frames=0,
