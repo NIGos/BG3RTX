@@ -155,7 +155,9 @@ def main():
             job['expect'].append(r'\[vt alpha\].*')
         flow.write(HERE / 'jobs' / (job['name']+'.json'), job)
         flow.write(HERE / 'plans' / (job['name']+'.json'), plan)
-    flow.tighten_files(HERE, frozen=True)
+    # Size capture windows with the runner's current VALID corpus, rather than
+    # an older frozen stall p95 that can shorten energy-static below preflight.
+    flow.tighten_files(HERE)
     # Frame count ends these motions. Retired seconds-based travel endpoints
     # must not inflate the watchdog estimate or request a longer camera pan.
     for path in (HERE / 'jobs').glob('*.json'):

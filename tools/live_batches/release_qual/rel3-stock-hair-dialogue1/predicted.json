@@ -6,7 +6,7 @@
   "load_allowance_seconds": 120,
   "expected_minutes": 3.32,
   "scheduled_seconds": 79.1,
-  "readiness_seconds": 0,
+  "readiness_seconds": 0.013,
   "captures": 1,
   "disk_estimate_mb": 70,
   "expect": [
