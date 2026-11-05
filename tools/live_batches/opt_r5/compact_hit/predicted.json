@@ -1,0 +1,37 @@
+{
+  "status": "READY_FOR_LIVE",
+  "key": "rt_compact_hit_state",
+  "spec_constant": 1029,
+  "shader_request_delta": 0,
+  "launches": 2,
+  "preset": "Ultra release",
+  "frames_per_window": 600,
+  "timer_period_frames": 120,
+  "jobs": {
+    "camp": {
+      "scheduled_seconds": 114.9,
+      "load_allowance_seconds": 120,
+      "expected_readiness_seconds": 0,
+      "estimated_seconds": 234.9,
+      "nominal_rendered_fps": 30,
+      "historical_p10_fps": 11.909487892019543,
+      "historical_frame_estimate_seconds": 356.42,
+      "readiness": "Unproven: conditional fresh QUIET waits; hard stop 300 s."
+    },
+    "inn": {
+      "scheduled_seconds": 105.9,
+      "load_allowance_seconds": 120,
+      "expected_readiness_seconds": 0,
+      "estimated_seconds": 225.9,
+      "nominal_rendered_fps": 30,
+      "historical_p10_fps": 11.69134840218328,
+      "historical_frame_estimate_seconds": 351.18,
+      "readiness": "Unproven: conditional fresh QUIET waits; hard stop 300 s."
+    }
+  },
+  "prediction": "GI trace lower by 0-0.5 ms at camp/inn Ultra; registers 255 -> 243, spill bytes 816 -> 44. Other passes unchanged within OFF repeat spread. Image identical (bit-equal offline).",
+  "offline_proof": "docs/progress/gi-livestate.md",
+  "decision": "SAVING only when both ON GI trace medians beat both OFF medians by more than the OFF repeat spread; otherwise NO_SAVING. Missing evidence is INVALID.",
+  "readiness": "No 1029 binding in experimental_specs. Warmup exercises ON, then fresh QUIET after every toggle; no build-generation witness required.",
+  "pending": "Offline only. No launch, queue writes or live saving claim."
+}
