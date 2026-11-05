@@ -270,7 +270,7 @@ Two exact candidates (implemented and measured below); the original planning est
   0.1-0.2 ms S8 / 0-0.2 ms camp/inn, whose loop costs remain unresolved.
 
 Implementation and coordinator correction (roofrej, 2026-11-05): restore only early rejection under new SpecId 1038.
-`gi_far_roof_early` is a developer raw key, default 0 and release-forced OFF. IDs 1035 / 1036 remain retired;
+`gi_far_roof_early` was initially a developer raw key, default 0 and release-forced OFF; qualification below promotes it ON. IDs 1035 / 1036 remain retired;
 identity stays removed (its camp production loss was +0.080 [0.048, 0.117] ms). Request delta 0, ABI unchanged.
 The coordinator overturned early rejection's diagnostic-mode rejection: production uses rt_stats=0, whose earlier
 S8/camp/inn intervals passed (-0.748 [-1.034,-0.400] / -0.002 [-0.483,+0.393] / -1.023 [-2.393,-0.394] ms).
@@ -327,7 +327,18 @@ supplies registers. Trust inputs: CTY_Main_A / WLD_Main_A / SCL_Main_A, 159 / 15
 Fresh receipts: main checkout `.scratch/roofrej1038/summary.json` and adjacent commands, modules, counters, CSVs and logs.
 Historical ID 1035/1036 receipts: `.scratch/roofrej/summary.json`. Historical attribution's `.scratch/far-cost/` was absent.
 The shared proof normalizer repeats its optimizer schedule to clean constant branches exposed by specialization.
-No game, queue or git writes. Builds BelowNormal; GPU only without bg3.exe. No live qualification claimed.
+The offline preparation above made no game, queue or git writes. Builds BelowNormal; GPU only without bg3.exe.
+
+Qualification (roof-on, 2026-11-05): keep SpecId 1038 as an always-on exact optimisation, like
+`rt_compact_hit_state`. Defaults, every preset and release policy force `gi_far_roof_early=1`;
+`dev=1` preserves a raw 0 for A/B. No player knob. Host statistics mode still forces the original path.
+S8 Ultra `opt-roof-s8.1.211159` VALID: GI trace OFF/ON/OFF/ON 7.655/6.275/7.937/6.226 ms
+(-1.38/-1.71 ms); GI total 12.349/10.514/12.386/10.382 ms. RR costs about +0.2 ms in ON windows.
+The inn run is INVALID (last window short); complete windows give about 12.2 ms ON vs 12.5/13.2 ms OFF.
+Offline paired trace deltas: S8 -1.73 ms, inn -1.36 ms; camp neutral over 240 pairs,
++0.005 [-0.06,+0.06] ms. Outputs are exact (bit-equal). Request delta 0; ABI unchanged.
+In-game check: S8 Ultra, inspect roofed-room far bounce; developer A/B should leave the image unchanged
+while reducing GI trace time. These are supplied live results; this qualification edit is offline only.
 
 ## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; live S8 energy gate failed, kept off)
 

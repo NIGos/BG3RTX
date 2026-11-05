@@ -513,11 +513,11 @@ inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_
 // (rt_bvh_split=1, TRACK_D_RT.md 11) rt_rebuild_frames only paces the per-draw
 // BLAS of the captured (skinned, wind, per-draw matrix) draws, staggered per draw;
 // static meshes are built once for trace speed and never refit.
-inline constexpr KV kPresetExtra[kPresetCount][3] = {
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
-  {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}}};
+inline constexpr KV kPresetExtra[kPresetCount][4] = {
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
+  {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}}};
 
 // ---- defaults: one source (docs/SETTINGS_DESIGN.md "Defaults: one source") ----
 // kDefaults is every key bg3rtx.ini sets, with its value; kReleaseDefaults the developer
@@ -723,7 +723,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
-    {"gi_far_roof_early", "0"},
+    {"gi_far_roof_early", "1"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
@@ -1202,9 +1202,10 @@ inline void enforce_release_policy(Map& m) {
   m["rr_post"] = "1";
   m["rt_scene_compact_holds"] = "1";
   m["rt_compact_hit_state"] = "1";
+  m["gi_far_roof_early"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
        "sharc",
-       "rt_hair_receiver_guard", "gi_far_roof_early"}) m[key] = "0";
+       "rt_hair_receiver_guard"}) m[key] = "0";
   m.erase("rt_water_rf_edge"); m.erase("rt_water_rr_hitdist");
   int bounce = knob_value(*find_knob("exp_hidden_surface"), m);
   if (bounce < 0) bounce = map_int(m, "gi_far", 0) ? 2 :

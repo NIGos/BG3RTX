@@ -1218,6 +1218,15 @@ Round 1 supersedes that prewarm/readiness plan: both candidate registrations and
 
 ## Round 6 (2026-11-05 afternoon): lane permutation rejected, attribution
 
+- `gi_far_roof_early` (SpecId 1038): qualified, always on like `rt_compact_hit_state`. Default and every
+  preset use 1; release policy forces 1, while dev=1 preserves raw 0 for A/B. No player knob.
+  Host statistics mode still forces the original path. Exact (bit-equal); shader request delta 0, ABI unchanged.
+  S8 Ultra `opt-roof-s8.1.211159` VALID: GI trace OFF/ON/OFF/ON 7.655/6.275/7.937/6.226 ms
+  (-1.38/-1.71 ms); GI total 12.349/10.514/12.386/10.382 ms. RR about +0.2 ms in ON windows.
+  Inn INVALID (last window short); complete windows about 12.2 ms ON vs 12.5/13.2 ms OFF, supporting only.
+  Offline paired: S8 -1.73 ms, inn -1.36 ms, camp neutral (240 pairs +0.005 [-0.06,+0.06] ms).
+  Check S8 Ultra roofed-room far bounce with developer A/B: unchanged image, lower GI trace cost.
+  Live results supplied for this offline qualification; no new game or queue run.
 - `gi_lane_permute` (SpecId 1032): bijective thread-to-pixel remap of the GI trace kernel, outputs 100% bit-equal
   offline. Live S8 Ultra (opt-perm-s8.1.181043, VALID): GI trace OFF/ON/OFF/ON 8.42/12.86/8.97/12.21 ms, about
   +3.8 ms slower. Rejected; code, key and batch removed (with `gi_ao_r16f`, exact but at most 0.06 ms). Ids 1032-1033 retired.

@@ -1237,7 +1237,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     // Diagnostic dispatches select the original specialized executable, including its
     // register allocation: a runtime shader guard alone can still change its cost.
     specs.add(sv::kSpecIdGiFarRoofEarly,
-              host->cfg_int("rt_stats", 0) == 0 && host->cfg_int("gi_far_roof_early", 0) != 0 ? 1u : 0u);
+              host->cfg_int("rt_stats", 0) == 0 && host->cfg_int("gi_far_roof_early", 1) != 0 ? 1u : 0u);
   }
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
     specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
