@@ -71,7 +71,7 @@ int main() {
     size_t lf=0,bare=0;for(size_t i=0;i<f3.size();++i)if(f3[i]=='\n'){++lf;if(!i||f3[i-1]!='\r')++bare;}
     check(ch.size()==2&&lf>0&&bare==0);                                             // CRLF file stays CRLF
     ch.clear();check(guard_upscaler_text("not xml",&ch)=="not xml"&&ch.empty());   // unknown file left alone
-    // End to end on a temporary LOCALAPPDATA: off by default, then the reset file is repaired with a backup.
+    // End to end on a temporary LOCALAPPDATA: off when switched off or with rr=0, on by default, then the reset file is repaired with a backup.
     wchar_t tmp[MAX_PATH];GetTempPathW(MAX_PATH,tmp);
     std::wstring local=std::wstring(tmp)+L"bg3rtx_guard_test_"+std::to_wstring(GetCurrentProcessId());
     std::wstring larian=local+L"\\Larian Studios",gdir=larian+L"\\Baldur's Gate 3",lsx=gdir+L"\\graphicSettings.lsx";
@@ -79,11 +79,11 @@ int main() {
     wchar_t old_local[MAX_PATH]={};DWORD had_local=GetEnvironmentVariableW(L"LOCALAPPDATA",old_local,MAX_PATH);
     SetEnvironmentVariableW(L"LOCALAPPDATA",local.c_str());
     check(write_file_atomic(lsx,reset,&error));
-    State g;g.base=bg3::settings::parse_ini("rr=1\n");
-    check(guard_game_upscaler(g).empty());                                         // key absent: off
+    State g;g.base=bg3::settings::parse_ini("rr=1\ngame_dlss_guard=0\n");
+    check(guard_game_upscaler(g).empty());                                         // switched off
     g.base=bg3::settings::parse_ini("rr=0\ngame_dlss_guard=1\n");
     check(guard_game_upscaler(g).empty());                                         // RR off: nothing to protect
-    g.base=bg3::settings::parse_ini("rr=1\ngame_dlss_guard=1\n");
+    g.base=bg3::settings::parse_ini("rr=1\n");                                     // key absent: default on
     check(read_file(lsx,text)&&text==reset);
     check(guard_game_upscaler(g).find(L"set back to DLSS")!=std::wstring::npos);
     check(read_file(lsx,text)&&text==fixed);
