@@ -79,7 +79,23 @@ std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_ab_specs;
 fs::path g_ab_spv;
 bool g_ab_require_equal = false;
 uint32_t g_ab_warmup = 0; // untimed GPU dispatches immediately before each A/B sample
-bool ab_mode() { return !g_ab_specs.empty() || !g_ab_spv.empty(); }
+bool g_ab_blas = false, g_blas_control = false;
+// Explicit class policies: legacy preserves the historical replay; layer matches Ultra.
+std::string g_blas_policy = "legacy";
+uint32_t blas_class(uint32_t meta, bool cascade) {
+  return cascade ? 2u : (!(meta & rp::kInfoPool) || (meta & (1u << 31)) ? 1u : 0u);
+}
+bool blas_class_test() {
+  bool okay = blas_class(64, false) == 1 && blas_class(64 | rp::kInfoAlpha, false) == 1 &&
+    blas_class(64 | rp::kInfoPool, false) == 0 &&
+    blas_class(64 | rp::kInfoPool | (1u << 31), false) == 1 &&
+    blas_class(64, true) == 2;
+  for (uint32_t slot = 1; slot <= 4096; ++slot)
+    okay &= blas_class(64 | rp::kInfoPool | rp::kInfoAlpha | (slot << 16), false) == 0;
+  std::printf("%s BLAS classes: soup, alpha, pool, held, all 4096 pool alpha slots, cascade\n",okay?"PASS":"FAIL");
+  return okay;
+}
+bool ab_mode() { return g_ab_blas || !g_ab_specs.empty() || !g_ab_spv.empty(); }
 bool g_reference_mismatch = false;
 std::atomic<unsigned> g_validation_errors{};
 [[noreturn]] void die(const std::string& what) { std::fprintf(stderr, "FAIL %s\n", what.c_str()); std::exit(1); }
@@ -1031,12 +1047,20 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   if (m.instance_count) { auto d = file(m.instances); check(d.size() == instances.size() * sizeof(instances[0]), "instances size"); std::memcpy(instances.data(), d.data(), d.size()); }
   std::vector<uint8_t> info;
   { auto it = buffers.find(key(1, 7)); if (it != buffers.end()) info = download(it->second, it->second.size); }
-  struct Blas { VkAccelerationStructureKHR as{}; Buf store; VkDeviceAddress address = 0; };
-  std::map<uint64_t, Blas> blas;
+  struct Blas { VkAccelerationStructureKHR as{}; Buf store; VkDeviceAddress address = 0;
+    VkAccelerationStructureGeometryKHR geo{}; VkBuildAccelerationStructureFlagsKHR flags{};
+    uint32_t tris = 0, cls = 0; VkDeviceSize scratch_bytes = 0;
+  };
+  std::map<uint64_t, Blas> blas, blas_b;
+  auto instances_b = instances;
+  uint32_t class_count[3]{}, class_held = 0;
+  uint64_t class_tris[3]{};
+  VkQueryPoolCreateInfo bqi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; bqi.queryType = VK_QUERY_TYPE_TIMESTAMP; bqi.queryCount = 2;
+  VkQueryPool bqueries; vkcheck(vkCreateQueryPool(g.dev, &bqi, nullptr, &bqueries), "BLAS query pool");
   uint32_t skipped = 0, built = 0;
   Buf scratch;
   const VkDeviceSize align = std::max<VkDeviceSize>(g.as.minAccelerationStructureScratchOffsetAlignment, 1);
-  auto build_blas = [&](VkDeviceAddress vertices, uint32_t tris, uint32_t stride, bool opaque) {
+  auto build_blas = [&](VkDeviceAddress vertices, uint32_t tris, uint32_t stride, bool opaque, uint32_t cls = 0, bool candidate = false) {
     VkAccelerationStructureGeometryKHR geo{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
     geo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
     geo.flags = opaque ? VK_GEOMETRY_OPAQUE_BIT_KHR : VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;   // layer/bvhsplit.cpp tri_geometry
@@ -1044,7 +1068,13 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     t.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR; t.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     t.vertexData.deviceAddress = vertices; t.vertexStride = stride; t.maxVertex = tris * 3 - 1; t.indexType = VK_INDEX_TYPE_NONE_KHR;
     VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
-    bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR; bi.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    bi.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    if (g_blas_policy != "legacy" || g_ab_blas) {
+      bi.flags = cls == 0 ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR
+        : ((candidate || g_blas_policy == "trace") && !g_blas_control ? VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR
+           : VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR) | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+    }
     bi.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR; bi.geometryCount = 1; bi.pGeometries = &geo;
     VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
     g.sizesAS(g.dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, &tris, &sz);
@@ -1061,6 +1091,8 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     });
     VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR}; ai.accelerationStructure = out.as;
     out.address = g.addressAS(g.dev, &ai);
+    out.geo = geo; out.flags = bi.flags; out.tris = tris; out.cls = cls;
+    out.scratch_bytes = std::max(sz.buildScratchSize, sz.updateScratchSize);
     return out;
   };
   Buf degenerate = make_buffer(36, ssbo, false);   // one zero-area triangle: the BLAS of an instance left out
@@ -1077,13 +1109,24 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                         uint64_t(base) + uint64_t(tris) * 3 * stride <= src->second.size;
     if (!usable) {
       if (!(masked_casters && i == m.casters.instance)) ++skipped;
-      in.mask = 0; in.accelerationStructureReference = empty.address; continue;
+      in.mask = 0; in.accelerationStructureReference = empty.address; instances_b[i] = in; continue;
     }
     auto it = blas.find(k);
     // The cascade instance's BLAS is not opaque, as live (layer/bvhsplit.cpp: the sun's variant tests its candidates).
     const bool opaque = !(meta & rp::kInfoAlpha) && !(!casters.empty() && i == m.casters.instance);
-    if (it == blas.end()) { it = blas.emplace(k, build_blas(src->second.address + base, tris, stride, opaque)).first; ++built; }
+    const bool cascade = !casters.empty() && i == m.casters.instance;
+    // Static pool alpha row indices are <= 4096, so cannot overlap kInfoHeld (bit 31).
+    const bool held = pool && (meta & (1u << 31));
+    const uint32_t cls = blas_class(meta, cascade);
+    if (it == blas.end()) {
+      it = blas.emplace(k, build_blas(src->second.address + base, tris, stride, opaque, cls)).first; ++built;
+      ++class_count[cls]; class_tris[cls] += tris; class_held += held;
+      if (g_ab_blas && cls) blas_b.emplace(k, build_blas(src->second.address + base, tris, stride, opaque, cls, true));
+    }
+    check(it->second.cls == cls, "shared BLAS key has conflicting classes");
     in.accelerationStructureReference = it->second.address;
+    instances_b[i] = in;
+    if (g_ab_blas && cls) instances_b[i].accelerationStructureReference = blas_b.at(k).address;
   }
   if (skipped) result.warnings.push_back(std::to_string(skipped) + " instances left out of the TLAS (legacy soup, hair AABBs, no triangles, or outside the captured buffers): mask 0");
   Buf instBuf = make_buffer(std::max<size_t>(instances.size(), 1) * sizeof(VkAccelerationStructureInstanceKHR),
@@ -1111,6 +1154,25 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
               VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
       g.buildAS(c, 1, &tb, &rangePtr);
     }); }
+
+  VkAccelerationStructureKHR tlas_b = tlas;
+  Buf tlasStoreB;
+  if (g_ab_blas) {
+    tlasStoreB = make_buffer(ts.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false);
+    tc.buffer = tlasStoreB.b; vkcheck(g.createAS(g.dev, &tc, nullptr, &tlas_b), "candidate TLAS");
+    upload(instBuf, 0, instances_b.data(), instances_b.size() * sizeof(instances_b[0]));
+    tb.dstAccelerationStructure = tlas_b;
+    VkAccelerationStructureBuildRangeInfoKHR range{count, 0, 0, 0}; const auto* rp = &range;
+    submit([&](VkCommandBuffer c) {
+      barrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT,
+              VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+      g.buildAS(c, 1, &tb, &rp);
+    });
+    std::printf("[replay] BLAS classes unique/tris: static %u/%llu dynamic %u/%llu cascade %u/%llu; held dynamic %u; layer A vs trace B\n",
+      class_count[0], (unsigned long long)class_tris[0], class_count[1], (unsigned long long)class_tris[1],
+      class_count[2], (unsigned long long)class_tris[2], class_held);
+    std::fflush(stdout);
+  }
 
   // ---- descriptor sets: every slot of the pass contract, pack resources or dummies ----
   std::vector<VkDescriptorSetLayout> setLayouts(pass.set_count);
@@ -1284,6 +1346,17 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     const uint32_t pair = ab_mode() && !warmup ? (run - 4) / 4 : 0;
     const uint32_t phase = ab_mode() ? run % 4 : 0;
     const bool use_b = ab_mode() && (warmup ? (run & 1) != 0 : ((phase == 1 || phase == 2) != ((pair & 1) != 0)));
+    if (g_ab_blas) {
+      const auto selected = use_b ? tlas_b : tlas;
+      VkWriteDescriptorSetAccelerationStructureKHR aw{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
+      aw.accelerationStructureCount = 1; aw.pAccelerationStructures = &selected;
+      for (uint32_t i = 0; i < pass.slot_count; ++i) if (pass.slots[i].kind == rp::kTlas) {
+        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, &aw};
+        w.dstSet = sets[pass.slots[i].set]; w.dstBinding = pass.slots[i].binding;
+        w.descriptorCount = 1; w.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
+      }
+    }
     if (stats.map) std::memcpy(stats.map, initial_stats.data(), initial_stats.size());
     else upload(stats,0,initial_stats.data(),initial_stats.size());
     for (const auto& [binding,initial]:mutable_counters) upload(buffers.at(binding),0,initial.data(),initial.size());
@@ -1392,6 +1465,18 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
               if (!diff.count) continue;
               const size_t component_bytes = a.format == VK_FORMAT_R16G16B16A16_SFLOAT ? 2 : 4;
               const size_t components = a.format == VK_FORMAT_R16G16B16A16_SFLOAT || a.format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
+              size_t different_pixels = 0; double max_diff = 0;
+              for (size_t p = 0; p < size_t(a.w) * a.h; ++p) {
+                const size_t offset = p * components * component_bytes;
+                different_pixels += std::memcmp(a.raw.data()+offset,b.raw.data()+offset,components*component_bytes) != 0;
+                for (size_t k = 0; k < components; ++k) {
+                  const size_t n = p*components+k;
+                  const double av = component_bytes == 2 ? half_to_float(reinterpret_cast<const uint16_t*>(a.raw.data())[n]) : reinterpret_cast<const float*>(a.raw.data())[n];
+                  const double bv = component_bytes == 2 ? half_to_float(reinterpret_cast<const uint16_t*>(b.raw.data())[n]) : reinterpret_cast<const float*>(b.raw.data())[n];
+                  max_diff = std::max(max_diff,std::abs(av-bv));
+                }
+              }
+              std::printf("[replay] A/B numeric %s: %zu differing pixels, max absolute diff %.12g\n",a.name.c_str(),different_pixels,max_diff);
               const size_t component = diff.first / component_bytes, pixel = component / components;
               std::printf("[replay] A/B mismatch %s pair %u phase %u vs phase 0: %zu differing bytes, first byte %zu component %zu pixel (%zu,%zu) channel %zu; sizes %zu/%zu\n",
                           a.name.c_str(), pair + 1, phase, diff.count, diff.first, component, pixel % a.w, pixel / a.w, component % components, a.raw.size(), b.raw.size());
@@ -1428,6 +1513,68 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     result.runs.push_back(std::move(rr));
   }
   if (progress.printed) progress.tick(dispatches, dispatches, hooks && hooks->note ? hooks->note(dispatches) : std::string());
+  if (g_ab_blas) {
+    std::ofstream csv(out / "blas.csv"); csv << "class,mode,pair,A_ms,B_ms,delta_ms\n";
+    std::ofstream summary(out / "blas_summary.txt");
+    for (uint32_t cls : {1u, 2u}) {
+      if (!class_count[cls]) continue;
+      struct Batch {
+        std::vector<VkAccelerationStructureBuildGeometryInfoKHR> builds;
+        std::vector<VkAccelerationStructureBuildRangeInfoKHR> ranges;
+        std::vector<const VkAccelerationStructureBuildRangeInfoKHR*> ptrs;
+        Buf scratch;
+      } batches[2];
+      for (uint32_t side = 0; side < 2; ++side) {
+        auto& batch = batches[side]; auto& source = side ? blas_b : blas;
+        VkDeviceSize bytes = 0;
+        for (auto& [k,b] : source) if (b.cls == cls) bytes += (b.scratch_bytes + align - 1) / align * align;
+        batch.scratch = make_buffer(bytes + align, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
+        VkDeviceAddress addr = (batch.scratch.address + align - 1) / align * align;
+        for (auto& [k,b] : source) if (b.cls == cls) {
+          VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+          bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR; bi.flags = b.flags;
+          bi.dstAccelerationStructure = b.as; bi.geometryCount = 1; bi.pGeometries = &b.geo;
+          bi.scratchData.deviceAddress = addr; addr += (b.scratch_bytes + align - 1) / align * align;
+          batch.builds.push_back(bi); batch.ranges.push_back({b.tris,0,0,0});
+        }
+        for (auto& range : batch.ranges) batch.ptrs.push_back(&range);
+      }
+      for (uint32_t update : {0u, 1u}) {
+        for (auto& batch : batches) for (auto& bi : batch.builds) {
+          bi.mode = update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+          bi.srcAccelerationStructure = update ? bi.dstAccelerationStructure : VK_NULL_HANDLE;
+        }
+        std::vector<double> deltas, avals, bvals;
+        double times[4]{};
+        for (uint32_t run = 0; run < 4 + repeat * 4; ++run) {
+          const uint32_t pair = run < 4 ? 0 : (run - 4) / 4, phase = run % 4;
+          const bool side = run < 4 ? run % 2 : ((phase == 1 || phase == 2) != ((pair & 1) != 0));
+          auto& batch = batches[side];
+          submit([&](VkCommandBuffer c) {
+            barrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
+              VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+            vkCmdResetQueryPool(c,bqueries,0,2);
+            vkCmdWriteTimestamp(c,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,bqueries,0);
+            g.buildAS(c,uint32_t(batch.builds.size()),batch.builds.data(),batch.ptrs.data());
+            vkCmdWriteTimestamp(c,VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,bqueries,1);
+          });
+          uint64_t ticks[2]{};
+          vkcheck(vkGetQueryPoolResults(g.dev,bqueries,0,2,sizeof ticks,ticks,8,VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT),"BLAS timestamps");
+          times[phase] = double(ticks[1]-ticks[0])*g.tick_ns*1e-6;
+          if (run >= 4 && phase == 3) {
+            const double outside = (times[0]+times[3])*.5, inside = (times[1]+times[2])*.5;
+            const double a = pair & 1 ? inside : outside, b = pair & 1 ? outside : inside;
+            avals.push_back(a); bvals.push_back(b); deltas.push_back(b-a);
+            csv.precision(12); csv << cls << ',' << update << ',' << pair+1 << ',' << a << ',' << b << ',' << b-a << '\n'; csv.flush();
+            if (pair % 10 == 9) { std::printf("[replay] BLAS %u %s %u/%u pairs\n",cls,update?"refit":"build",pair+1,repeat); std::fflush(stdout); }
+          }
+        }
+        const auto d = rp::ab_summary(deltas), a = rp::ab_summary(avals), b = rp::ab_summary(bvals);
+        char line[512]; std::snprintf(line,sizeof line,"class %u %s A %.6f B %.6f delta %+.6f CI [%+.6f, %+.6f] ms",cls,update?"refit":"build",a.median,b.median,d.median,d.low,d.high);
+        std::printf("[replay] %s\n",line); summary << line << '\n'; summary.flush();
+      }
+    }
+  }
   if (ab_mode()) {
     const auto summary = bg3::replay::ab_summary(ab_deltas);
     char line[512];
@@ -2681,6 +2828,12 @@ int main(int argc, char** argv) {
     else if (args[i] == "--spv") spv = next();
     else if (args[i] == "--define") defines.push_back(next());
     else if (args[i] == "--repeat") { repeat = uint32_t(std::max(1, std::atoi(next().c_str()))); repeat_given = true; }
+    else if (args[i] == "--ab-blas") g_ab_blas = true;
+    else if (args[i] == "--blas-control") g_blas_control = true;
+    else if (args[i] == "--blas-policy") {
+      g_blas_policy = next();
+      check(g_blas_policy == "legacy" || g_blas_policy == "layer" || g_blas_policy == "trace", "--blas-policy legacy|layer|trace");
+    }
     else if (args[i] == "--ab-spv") g_ab_spv = next();
     else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
     else if (args[i] == "--ab-warmup") {
@@ -2691,7 +2844,7 @@ int main(int argc, char** argv) {
       check(g_ab_warmup <= 256, "--ab-warmup requires an integer 0..256");
     }
     else if (args[i] == "--origin-self-test") return origin_self_test() ? 0 : 1;
-    else if (args[i] == "--ab-self-test") return bg3::replay::ab_self_test() ? 0 : 1;
+    else if (args[i] == "--ab-self-test") return bg3::replay::ab_self_test() && blas_class_test() ? 0 : 1;
     else if (args[i] == "--no-validation") validation = false;
     else if (args[i] == "--pipeline-stats") g_pipeline_stats = true;
     else if (args[i] == "--compile-only") compile_only = true;
@@ -2742,6 +2895,8 @@ int main(int argc, char** argv) {
     }
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
   }
+  check(!g_blas_control || g_ab_blas, "--blas-control requires --ab-blas");
+  check(!g_ab_blas || g_blas_policy != "trace", "--ab-blas baseline is layer; do not select trace baseline");
   if (g_origin) check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--origin requires ordinary pack replay");
   if (ab_mode()) {
     check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--ab-spec/--ab-spv require ordinary pack replay");
