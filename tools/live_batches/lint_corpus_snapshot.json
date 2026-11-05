@@ -50382,6 +50382,26 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+        "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+        "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+        "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
+        "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
+        "gi: GPU cost [0-9.]+ ms/frame",
+        "\\[vt alpha\\].*"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {

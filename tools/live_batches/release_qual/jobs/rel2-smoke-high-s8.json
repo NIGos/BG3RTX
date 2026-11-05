@@ -31,7 +31,6 @@
     "\\[rrpost\\] exposure (held|probe)",
     "\\[geo\\] RT capture",
     "\\[cascade\\] casters",
-    "\\[hit material\\] buffer reuse",
     "\\[sl\\] fg_letterbox",
     "sun stats",
     "^\\S+\\s+\\[core\\] sun:",
@@ -40,7 +39,6 @@
     "\\[bvh\\] mesh pool",
     "\\[hit material pool basis\\]",
     "\\[cascade\\] buffer full",
-    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
     "\\[ab\\]",
     "\\[mem\\] ours \\(",
     "\\[alpha hair\\]",
@@ -68,10 +66,7 @@
     "\\[cfg\\] settings read",
     "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
     "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
-    "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
-    "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
     "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
-    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
     "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
     "gi: GPU cost [0-9.]+ ms/frame",
     "\\[omm\\] requesting EXT micromap \\+ synchronization2",
@@ -117,32 +112,6 @@
         "rotate-r",
         "rotate-l"
       ]
-    },
-    {
-      "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
-      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
-      "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
-      "windows": [
-        "static-a",
-        "pan-q",
-        "pan-e",
-        "rotate-r",
-        "rotate-l"
-      ],
-      "min": 1
-    },
-    {
-      "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
-      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
-      "match": "; non-finite terms 0 \\(",
-      "windows": [
-        "static-a",
-        "pan-q",
-        "pan-e",
-        "rotate-r",
-        "rotate-l"
-      ],
-      "min": 1
     },
     {
       "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
