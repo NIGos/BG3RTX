@@ -2,6 +2,8 @@
 from pathlib import Path
 import sys
 import tempfile
+import subprocess
+import json
 import unittest
 from unittest.mock import patch
 
@@ -75,6 +77,28 @@ class AttributionTests(unittest.TestCase):
                     '--log', 'unused', '--runner', 'unused', '--out', str(output)]), expected)
                 self.assertIn('| Baseline mean | Delta | Drift |', output.read_text())
 
+    def test_specific_gi_quiet_runner(self):
+        # Real inn: global QUIET occurred with 3 GI builds pending at 17:38:48.
+        # Burst completion at 17:38:57.358 is the first reliable GI witness.
+        quiet = pipeline_readiness.GI_QUIET
+        step = dict(set='gi_far=1,gi_hit_sun=1', wait_log=[quiet], wait_log_fresh=[quiet])
+        ack = '[cfg] settings read\n[cfg] keys: gi_far=1 gi_hit_sun=1\n'
+        pending = 'gi: background builds (120 frames): 120 frames waiting, 1 pending, 0 started\n'
+        done = 'gi: background builds done: 6 builds in 35534 ms over 1050 presents\n'
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory)/'step.json'
+            fixture.write_text(json.dumps(step))
+            script = ". ./scripts/camera-plan.ps1; $s=Get-Content -Raw '"+str(fixture)+"' | ConvertFrom-Json; "
+            cases = [(ack+pending, False), (done+ack+pending, False),
+                     (ack+pending+done, True),
+                     (ack+'gi: background builds (120 frames): 0 frames waiting, 0 pending, 0 started', True),
+                     (ack+pending+'[watch] | pipelines 0 (0 ms in driver)', False)]
+            for text, expected in cases:
+                command = script+"$t=@'\n"+text+"\n'@; if ((Test-CameraPlanReady $s $t $t) -ne $"+str(expected).lower()+") { exit 1 }"
+                result = subprocess.run(['powershell', '-NoProfile', '-Command', command],
+                                        cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+
     def test_job_contracts(self):
         paths = sorted((make_job.HERE/'jobs').glob('*.json'))
         self.assertEqual(len(paths), 2)
@@ -90,10 +114,10 @@ class AttributionTests(unittest.TestCase):
             self.assertEqual(job['repeat'], 1)
             self.assertFalse(job['session'])
             self.assertEqual(job['traces'], 0)
-            self.assertEqual(min(job['timeout'], 60*job['max_minutes']), 300)
+            self.assertEqual(min(job['timeout'], 60*job['max_minutes']), 299)
             budget = flow.duration_budget(job, plan)
             self.assertGreaterEqual(job['timeout'], budget['seconds']+budget['readiness_timeout_seconds'])
-            self.assertEqual(job['max_minutes'], 5)
+            self.assertLess(job['max_minutes'], 5)
             self.assertLess(120+job['estimated_phase_seconds'], 300)
             self.assertTrue(job['post_gate'])
             self.assertTrue(job['expect'])
@@ -103,7 +127,7 @@ class AttributionTests(unittest.TestCase):
                 self.assertEqual((gate['min'], gate['period_frames'], gate['sample_frames']), (3, 120, 120))
             prewarm = plan[1:4]
             self.assertEqual([p['label'] for p in prewarm],
-                ['warmup-sun-off', 'warmup-direct-off', 'warmup-baseline'])
+                ['warmup-near-only', 'warmup-sun-off', 'warmup-baseline'])
             self.assertEqual(flow.settings(prewarm[-1]['set']), make_job.BASE)
             self.assertTrue(all(p['wait_log_timeout'] == 60 for p in prewarm))
             for p, (_, overrides) in zip(measured, states):
@@ -114,8 +138,8 @@ class AttributionTests(unittest.TestCase):
             for p in plan:
                 self.assertNotIn('rt_omm', flow.settings(p.get('set', '')) if p['label'] != 'warmup' else {})
                 if p['label'].startswith(('ready-', 'warmup')) or p['label'] == 'restore':
-                    self.assertIn(pipeline_readiness.QUIET, p['wait_log'])
-                    self.assertEqual(p['wait_log_fresh'], [pipeline_readiness.QUIET])
+                    self.assertIn(pipeline_readiness.GI_QUIET, p['wait_log'])
+                    self.assertEqual(p['wait_log_fresh'], [pipeline_readiness.GI_QUIET])
             self.assertFalse(pipeline_readiness.problems(job, plan))
             self.assertFalse(flow.warmup_problems(job, plan))
 

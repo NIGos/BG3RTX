@@ -13,8 +13,8 @@ from tools.live_batches.opt_profile.make_jobs import observation_state, phase
 
 HERE = Path(__file__).resolve().parent
 BASE = {'gi_hit_sun': '1', 'gi_hit_direct': '1', 'hit_ao_rays': '2', 'gi_far': '1'}
-STATES = [('base-a', {}), ('sun-off', {'gi_hit_sun': '0'}), ('base-b', {}),
-          ('direct-off', {'gi_hit_direct': '0', 'gi_hit_sun': '0'}), ('base-c', {})]
+STATES = [('base-a', {}), ('near-only', {'gi_far': '0'}), ('base-b', {}),
+          ('sun-off', {'gi_hit_sun': '0'}), ('base-c', {})]
 FRAMES = 480
 
 
@@ -38,7 +38,7 @@ def generate(exe=None):
         name = 'opt-attr-'+slug
         source = flow.read(ROOT/f'tools/live_batches/opt_profile/jobs/opt-profile-{slug}.json')
         job = deepcopy(source)
-        quiet = pipeline_readiness.QUIET
+        quiet = pipeline_readiness.GI_QUIET
         # Warm Ultra, then reconcile cached or newly selected pipelines at each transition.
         warm = dict(state)
         plan = [phase('warmup', flow.SCENE_SETTLE_SECONDS.get(save, 20), set=assignments(warm),
@@ -55,17 +55,17 @@ def generate(exe=None):
         for (label, overrides), measured in zip(states, labels):
             setting = assignments(dict(BASE, **overrides))
             plan.append(phase('ready-'+label, 1.1, set=setting, wait_log=[quiet],
-                              wait_log_fresh=[quiet], wait_log_timeout=8))
+                              wait_log_fresh=[quiet], wait_log_timeout=15))
             plan.append(phase(measured, 16.1, set=setting, frames=FRAMES, settle_frames=0,
                               stats_reset=True, wait_stats=[rx for _, rx in TIMERS],
                               wait_log_timeout=10))
         plan.append(phase('restore', 1.1, set=assignments(BASE), wait_log=[quiet],
-                          wait_log_fresh=[quiet], wait_log_timeout=8))
+                          wait_log_fresh=[quiet], wait_log_timeout=15))
         plan_rel = f'tools/live_batches/opt_r6/attr/plans/{name}.json'
         job_rel = f'tools/live_batches/opt_r6/attr/jobs/{name}.json'
         job.update(name=name, save=save, live_batch='opt-r6-attr', set=assignments(state),
                    args=['-RealPresent', '-Move', '-MovePlan', plan_rel],
-                   hold=180, timeout=300, max_minutes=5, fail_fast=True,
+                   hold=180, timeout=300, max_minutes=299/60, fail_fast=True,
                    window_mode='visible_unfocused_fg', stop_on_dump=False,
                    patterns=list(dict.fromkeys([rx for _, rx in TIMERS]+[r'\[watch\]', r'\[cfg\]',
                        r'\[auto\]', r'\[stats\]', 'gi: background builds'])),
@@ -81,7 +81,7 @@ def generate(exe=None):
         flow.repair_known_forbids(job, plan)
         budget = flow.duration_budget(job, plan)
         # Lint budgets every conditional wait at its failure limit. The runner
-        # independently clamps this allowance to max_minutes (300 s, load included).
+        # independently clamps this allowance to max_minutes (299 s, load included).
         job['timeout'] = max(300, math.ceil(budget['seconds'] + budget['readiness_timeout_seconds']))
         flow.write(ROOT/job_rel, job)
         flow.write(ROOT/plan_rel, plan)
@@ -92,21 +92,20 @@ def generate(exe=None):
                                   FRAMES*len(states)/flow.fps_windows.expected(job, state)['fps'], 3),
                               nominal_rendered_fps=30,
                               historical_p10_fps=flow.fps_windows.expected(job, state)['fps'],
-                              readiness='Unproven: conditional fresh QUIET waits; hard stop 300 s.')
+                              readiness='Unproven: fresh GI background quiet waits; hard stop 299 s.')
     # Add only new readiness queries; never refresh frozen evidence.
     lint_snapshot.extend_readiness(sorted((HERE/'jobs').glob('*.json')))
     flow.write(HERE/'predicted.json', dict(status='READY_FOR_LIVE', kind='ATTRIBUTION',
         shader_request_delta=0, launches=2, preset='Ultra observation_state, dev=1',
         frames_per_window=FRAMES, timer_period_frames=120, jobs=estimates,
         reference_gi_trace_ms=dict(inn=12.8, s8=8.0),
-        live_keys=['gi_hit_sun', 'gi_hit_direct'], skipped={
-            'ao_off_and_near_only': 'Deferred in both scenes; omitted from measurements and prewarm.',
+        live_keys=['gi_far', 'gi_hit_sun'], skipped={
+            'ao_off_and_direct_off': 'Omitted from measurements and prewarm.',
             'rt_omm': 'Restart required: common/settings.h kRestart; '
             'layer/omm_backend.cpp device creation; layer/omm_content.cpp runtime off invalidates content proof until restart.'},
         prediction='Ablations should reduce GI trace; magnitude unknown. Report variant minus adjacent baseline mean, '
                    'and following minus preceding baseline drift, for all eight timers. Effects interact; deltas are not additive.',
-        direct_off='gi_hit_direct=0 bypasses hit_gi_dispatch (core/gi.cpp); hit sun, AO, emission and far bounce disappear. '
-                   'gi_hit_sun=0 is explicit, redundant for dispatch. This is not isolated local-light cost.',
+        near_only='gi_far=0 with hit sun on isolates far bounce; sun-off also removes far bounce.',
         sun_off='Also disables far bounce (far_on requires sun).',
         scope='Diagnostic only. Image and energy changes expected and allowed. Nothing ships; no quality or saving gate.',
         pending='Offline only. No launch or queue writes. Explicit authorization required before staging.'))
