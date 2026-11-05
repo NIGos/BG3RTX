@@ -54,7 +54,7 @@ def main():
     from tools.live_batches import pipeline_readiness
     for p,wanted in zip(plan,pipeline_readiness.requirements(job,plan)):
         for key in wanted:
-            if key not in pipeline_readiness.TABLE:
+            if key==KEY or key not in pipeline_readiness.TABLE:
                 value=flow.settings(p['set'])[key]
                 p.setdefault('wait_log',[]).append(r'\[cfg\] keys:.*\b'+key+'='+value+r'(?:\s|$)')
                 if key==KEY:

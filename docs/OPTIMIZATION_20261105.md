@@ -1154,3 +1154,11 @@ After separate explicit user steering, group by save into 2-5 minute sessions wi
 | PREFER_FAST_TRACE everywhere, longer unconditional refit intervals, rebuild/refit tuning from only AS cost | Refits already exist; earlier FAST_TRACE trial increased build/refit cost without useful trace improvement (`docs/TRACK_D_SCENE_BUILD.md:475`). Need total build + all trace costs and moving-geometry equivalence; no new visible degradation is allowed. |
 | Async compute or SER as an immediate saving estimate | No queue critical-path/driver occupancy evidence in these logs; current same-frame dependencies and GPU contention can prevent overlap. No defensible ms estimate, and this audit does not open a new scheduling research lane. |
 | Promote perf_submit_batch / perf_hook_state / perf_hitmat_lists solely from this map | Existing implementations are off in the measured release jobs; disabled CPU timing cannot qualify them. Use their existing offline tests and qualification plans, not duplicate implementations or invented CPU savings. |
+
+## Tooling round opt-tools2, 2026-11-05
+
+Both cost analyzers now share the real complete-period text contract. Reports retain per-window GPU medians, OFF repeat spread, signed ON deltas, float pre-post RGB/luminance from rrpost slot 2 dumps.json, and rendered QA verdicts. Detailed captures include optional post histories; animation masks are resized to final-image resolution before the existing detector runs.
+
+Reanalysis of scene 014837 and origin 012845: valid FAIL receipts, not analysis exceptions. Scene convert saves 0.8703 ms versus 0.0750 ms OFF spread; origin ON costs increase by 0.1295/0.0155 ms versus 0.0190 ms OFF spread. Float luminance deltas fit OFF repeat spread for both runs. Every QA pair fails; no quality qualification is claimed. Full reports and retained run-era plans: `.scratch/opt-tools2/`.
+
+Startup alternatives now include roof reject (SpecId 1028) and lazy origin normal (1027) only for dev/detailed logging or explicit opt_prewarm mask 1/2/3. Release startup remains unchanged; layer-only compact holds has no specialization. GI attribution awaits each feature variant and fresh driver quiescence in dedicated warm phases, with 240 s total warm readiness budget before any measured window. No new shader requests or live runs.

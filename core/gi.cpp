@@ -167,7 +167,9 @@ void prewarm_experimental(const std::string& req, const std::string& entry, VkPi
   std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
   if (!g_prewarmed[uint64_t(layout)].insert(req + "|" + entry).second) return;
   unsigned count = 0;
-  for (const auto& specs : bg3::pipe_async::experimental_specs(base, host->cfg_int("dev", 0) != 0)) {
+  for (const auto& specs : bg3::pipe_async::experimental_specs(
+           base, host->cfg_int("dev", 0) != 0, host->cfg_int("detailed_logging", 0) != 0,
+           uint32_t(host->cfg_int("opt_prewarm", 0)))) {
     const auto key = build_key(req, entry, layout, specs);
     count += g_builds.prewarm(key, uint64_t(layout), [req, entry, layout, specs] {
       return build_pipeline(req, entry, layout, specs);

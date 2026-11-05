@@ -86,7 +86,7 @@ def generate():
     flow.write(job_path, job)
     flow.write(plan_path, plan)
     flow.write(HERE/'predicted.json', dict(status='OFFLINE_CHECKS_PENDING', key='gi_roof_reject',
-        spec_id=1027, default=0, scene=source['save'], preset='ultra', states=STATES,
+        spec_id=1028, default=0, scene=source['save'], preset='ultra', states=STATES,
         expected_trace_saving_ms=[.30, 1.50], measured_saving_ms=None,
         exactness='After emission and successful screen/SHaRC paths; blocked hidden t > RB forces far_sun false, radiance false, fr.w0 zero. Original fallback retained. rt_stats bypasses optimization.',
         cost='Both ON windows must reduce GI trace and enclosing GI beyond OFF-repeat spread. Report all six active per-pass timers independently; contact is absent with RT sun on. Do not add nested timers.',

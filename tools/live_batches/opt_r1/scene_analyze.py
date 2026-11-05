@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 from scripts import queue_gates as gates
 from scripts.qa import detectors as det
 from tools.live_batches import live_flow as flow
-from tools.live_batches.edge_flicker.analyze import burst
+from tools.live_batches.ab_receipts import gpu_samples, summary, print_verdict, burst, moving_mask
 from tools.live_batches.release_qual.analyze_final import energy, COSTS
 from tools.m4_promotion_gate import t_quantile, ALPHA_FW
 
@@ -58,11 +58,11 @@ def analyze(job, plan, game, runner):
     wanted = ['convert', 'scene build', 'GI trace', 'local shadows', 'reflections']
     for label in LABELS:
         window = label+'--static-a'
-        picked = gates.complete_period_lines(selected(window), wins[window])
+        picked = selected(window)
         row = {}
         for name in wanted:
             rx = dict(COSTS, **EXTRA)[name]
-            values = [float(m[1]) for _,s in picked if (m:=re.search(rx,s))]
+            values = gpu_samples(picked, wins[window], rx)
             if len(values)<2 or not all(math.isfinite(x) for x in values):
                 errors.append(label+': insufficient complete '+name+' GPU periods')
             row[name] = values
@@ -87,13 +87,13 @@ def analyze(job, plan, game, runner):
     for label in ('off-a','off-b','off-c'):
         off=captures[label]
         shape=on['codes'][0].shape[:2]
-        frames=on['codes']+off['codes']+on['albedo']+off['albedo']
+        frames=on['codes']+off['codes']
         if any(f.shape[:2]!=shape or not np.isfinite(f).all() for f in frames):
             raise ValueError('nonfinite or mismatched QA frames')
         shift=det.view_shift(off['albedo'][0],on['albedo'][0])
         if max(abs(shift[0]),abs(shift[1]))>=1:
             errors.append('camera drift versus '+label)
-        moving=det.animated(off['albedo']+on['albedo'],[],shape)
+        moving=moving_mask(off['albedo'],on['albedo'],shape)
         q=det.temporal(on['codes'],off['codes'],moving=moving)
         q.pop('map',None)
         quality[label]=dict(shift=shift,qa=q)
@@ -117,6 +117,7 @@ def analyze(job, plan, game, runner):
             errors.append('scene build + subsequent ray passes regressed beyond OFF-repeat spread')
     return dict(status='FAIL' if errors else 'PASS',errors=errors,gpu_periods=costs,
                 savings=savings,energy=energies,qa=quality,
+                receipt=summary(costs,floats,LABELS,['off-a','off-b','off-c'],['on']),
                 limitation='Static rendered QA only; no presented FG frame-time or FPS inference. Exact geometry proof remains a separate mandatory offline gate.')
 
 
@@ -131,8 +132,9 @@ def main():
                        Path(a.runner).read_text(encoding='utf-8-sig',errors='replace'))
     except (OSError,ValueError,KeyError,TypeError) as e:
         result=dict(status='INVALID',errors=[str(e)])
+    result['sources'] = dict(job=a.job, log=a.log, runner=a.runner)
     flow.write(a.out,result)
-    print(json.dumps(dict(status=result['status'],errors=result['errors'])))
+    print_verdict(result)
     return int(result['status']!='PASS')
 
 
