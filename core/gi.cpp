@@ -1221,6 +1221,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
   PipelineSpecs specs;
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
+  if (std::strncmp(file, "gi/rt_reflections", 17) == 0)
+    // The GI-disabled specialization gained a register in the offline trial; leave it unchanged.
+    specs.add(sv::kSpecIdRfCompactProbeState, rf_gi && host->cfg_int("rf_compact_probe_state", 0) != 0 ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);
   if (hit_family) {

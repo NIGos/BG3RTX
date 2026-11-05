@@ -950,3 +950,11 @@ static camera, OFF / k1 / k2 / OFF, then k1 / OFF / k1 / OFF alternated).**
   OFF spread 0.89%. Lower presets remain Off: their qualification is not covered by this evidence.
   Developer mode retains Off/k1/k2 for comparisons. To inspect in game, use S7 inn and the
   existing `ls exact-k: active` / `ls:` GPU lines; this update requires no new live batch.
+
+## Production exact-k driver baseline (rf-ls-regs, 2026-11-05)
+
+`frame_replay --compile-only --compile-pass local-shadows` now builds the production box-k layout
+without a pack or dispatch. Native + hair-origin + cascade request, cascade 1000=1, stock hair:
+168 registers, driver Shared Memory Size 7168 bytes, Local Memory Size 68719476752 (anomalous;
+not a reliable spill measurement). No LS shader change; the existing split/reload remains intact.
+No specialization 1032 or setting was added without a demonstrated candidate.
