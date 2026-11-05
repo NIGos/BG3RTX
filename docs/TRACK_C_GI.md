@@ -535,19 +535,33 @@ Release-path equivalence is checked against main with both retired IDs at their
 baseline release value 0; retained specialization domains remain exhaustive.
 
 
-## Compact hit state offline result (gi-livestate, 2026-11-05)
+## Compact hit state qualification (gi-livestate, 2026-11-05)
 
-`rt_compact_hit_state` (developer Advanced, default 0, spec 1029) keeps the already
+`rt_compact_hit_state` (always on, default 1, spec 1029; no UI knob) keeps the already
 computed geometric normal across direct-light queries, allowing the full hit state
 to expire earlier. Repeated range-guard counters are preserved. Ray sets, samples,
 float precision and accumulation order are unchanged; shader request delta is 0.
 RTX 5090 production gi_trace_rt_hit_sun_em with native, hit-instancing, cascade and
-far specialization: registers 255 -> 243, shared memory 816 -> 44 bytes, with wind
+far specialization: registers 255 -> 243, spill 816 -> 44 bytes, with wind
 RGB both off and on. The replayable direct-only request stays at 168 registers.
 S8/camp/inn ON vs baseline: 100% bit-equal outputs and raw counters, 24 dispatches
-per run. Timings overlap OFF-repeat noise; no GPU-time saving is qualified.
+per run. Offline replay timings overlap OFF-repeat noise.
 Key-OFF release equivalence: all 214 unique requests pass, 2,120 assignments.
-Full build and all 183 CTests pass, including settings and the replay fixture.
+Promotion build and all 184 CTests pass (189.60 s), including settings and the replay fixture.
 Projection-matrix reload was rejected for changing 50 S8 output components.
+
+Live qualification: inn Ultra, two VALID runs `opt-compact-hit-inn.1.105908`
+and `opt-compact-hit-inn.1.110402`. GI trace OFF/ON/OFF/ON was
+12.721/12.555/13.228/12.634 and 12.683/12.563/13.115/12.843 ms.
+Every ON was below its preceding OFF (-0.17, -0.59, -0.12, -0.27 ms;
+mean about -0.29 ms). GI total and other passes stayed within OFF spread.
+The camp run was confounded by scene drift (all passes moved about 7 ms
+between pairs) and is not used. Qualified as exact (100% bit-equal offline)
+with no regression. The inn GI trace gain is about 0.3 ms, not separated
+from the OFF repeat spread (0.43-0.51 ms). Occupancy stays at 8 warps;
+the gain is from spill reduction. Every preset and release policy force 1;
+`dev=1` retains raw `rt_compact_hit_state=0` for in-run A/B at the inn.
+Default-OFF shader requests retain release equivalence; the default spec
+value is now 1. Shader request delta remains 0.
 See [branch evidence](progress/gi-livestate.md) for timings/spreads and
 [offline commands](../tools/frame_replay.md) for statistics and exact comparisons.

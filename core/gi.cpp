@@ -1231,7 +1231,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // value keeps its own slot and pipeline, as the cascade constant does.
   if (sv::gi_far_entry(file)) specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
-    specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 0) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
     specs.add(sv::kSpecIdTileset, tileset ? 1u : 0u);
     specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
