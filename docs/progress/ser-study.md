@@ -1,4 +1,4 @@
-﻿## SER feasibility study (branch ser-study, FEASIBLE_OFFLINE, 2026-11-05)
+## SER feasibility study (branch ser-study, FEASIBLE_OFFLINE, 2026-11-05)
 - Report: [SER_FEASIBILITY_20261105](../SER_FEASIBILITY_20261105.md). No game, queue or Git commands.
 - RTX 5090 driver 621.14 advertises NV rev 1 and EXT rev 2 SER; EXT feature true, reordering hint REORDER.
 - No SER in compute: both routes require raygen. EXT query-to-hit-object conversion does not remove that limit.
