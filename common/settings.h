@@ -723,6 +723,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
+    {"gi_far_roof_early", "0"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
@@ -1203,7 +1204,7 @@ inline void enforce_release_policy(Map& m) {
   m["rt_compact_hit_state"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
        "sharc",
-       "rt_hair_receiver_guard"}) m[key] = "0";
+       "rt_hair_receiver_guard", "gi_far_roof_early"}) m[key] = "0";
   m.erase("rt_water_rf_edge"); m.erase("rt_water_rr_hitdist");
   int bounce = knob_value(*find_knob("exp_hidden_surface"), m);
   if (bounce < 0) bounce = map_int(m, "gi_far", 0) ? 2 :
