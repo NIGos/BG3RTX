@@ -13,7 +13,7 @@ class Cpu3JobsTests(unittest.TestCase):
         defaults = flow.settings((ROOT/'bg3rtx.ini').read_text().replace('\n', ','))
         self.assertEqual(defaults['cpu_opt1'], '1')
         self.assertEqual(defaults['cpu_opt2'], '1')
-        self.assertEqual(defaults['cpu_opt3'], '0')
+        self.assertEqual(defaults['cpu_opt3'], '1')
         self.assertIn('cpu_opt3', pipeline_readiness.NO_PIPELINE)
 
     def test_one_inn_session_quiet_readiness_and_complete_cpu_windows(self):

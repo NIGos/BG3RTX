@@ -3,6 +3,8 @@
 #include "host.h"
 #include "omm_submit.h"
 #include "omm_content.h"
+#include "omm_sampler.h"
+#include "../common/cpu_descriptor_receipt.h"
 #include "assetdb.h"
 #include "cpu_detail.h"
 
@@ -33,15 +35,17 @@ void cmd_cpu_report(uint64_t frames) {
   static int mode = -1;
   static int cpu_opt2_mode = -1;
   static int cpu_opt3_mode = -1;
+  static int cpu_opt4_mode = -1;
   const int current = cfg_hot(CfgHot::perf_hook_state);
   const int current_cpu_opt2=cfg_hot(CfgHot::cpu_opt2);
   const int current_cpu_opt3=cfg_hot(CfgHot::cpu_opt3);
+  const int current_cpu_opt4=cfg_hot(CfgHot::cpu_opt4);
   static int reset_token = 0;
   const bool reset = stats_window::reset(cfg_int, reset_token);
-  if (reset || !g_cpu_timing.load() || mode != current || cpu_opt2_mode!=current_cpu_opt2 || cpu_opt3_mode!=current_cpu_opt3 || !last) {
+  if (reset || !g_cpu_timing.load() || mode != current || cpu_opt2_mode!=current_cpu_opt2 || cpu_opt3_mode!=current_cpu_opt3 || cpu_opt4_mode!=current_cpu_opt4 || !last) {
     for (auto& ticks : g_cpu_ticks) ticks.exchange(0);
     for (auto& ticks : g_cpu_detail_ticks) ticks.exchange(0);
-    g_cpu_draws.exchange(0); last = frames; mode = current; cpu_opt2_mode=current_cpu_opt2; cpu_opt3_mode=current_cpu_opt3; return;
+    g_cpu_draws.exchange(0); last = frames; mode = current; cpu_opt2_mode=current_cpu_opt2; cpu_opt3_mode=current_cpu_opt3; cpu_opt4_mode=current_cpu_opt4; return;
   }
   if (!g_cpu_timing.load() || frames - last < stats_period(300)) return;
   const uint64_t n = frames - last; last = frames;
@@ -298,7 +302,7 @@ bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, ui
   return query_binding_resolved(cmd, bp, set, binding, element, out, nullptr);
 }
 
-bool query_binding_resolved(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
+static bool query_binding_uncached(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
                             Bg3Binding* out, const CmdState* resolved) {
   if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return false;
   CmdState* s = resolved ? const_cast<CmdState*>(resolved) : cmd_state(cmd);
@@ -380,6 +384,24 @@ bool query_binding_resolved(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_
     }
   }
   return true;
+}
+
+bool query_binding_resolved(VkCommandBuffer cmd,VkPipelineBindPoint bp,uint32_t set,uint32_t binding,uint32_t element,
+                            Bg3Binding* out,const CmdState* resolved){
+ if(!cfg_hot(CfgHot::cpu_opt4))return query_binding_uncached(cmd,bp,set,binding,element,out,resolved);
+ if(bp!=VK_PIPELINE_BIND_POINT_GRAPHICS && bp!=VK_PIPELINE_BIND_POINT_COMPUTE)return false;
+ auto* s=resolved?const_cast<CmdState*>(resolved):cmd_state(cmd);if(!s || set>=8)return false;
+ const auto bi=bp_index(bp);uint64_t identity=0,version=0;
+ // Push and update-after-bind descriptors have no immutable receipt. Ordinary
+ // set ids survive frame boundaries, but never allocation/free/pool-reset reuse.
+ if(s->push_set[bi]==set || !omm::descriptor_receipt(s->sets[bi][set],binding,element,identity,version))
+  return query_binding_uncached(cmd,bp,set,binding,element,out,s);
+ thread_local cpu_opt::DescriptorReceipts<Bg3Binding> cache;
+ const cpu_opt::DescriptorReceipts<Bg3Binding>::Key key{identity,version,binding,element,
+   buffer_resource_epoch(),material_resource_epoch(),uint64_t(s->sets[bi][set]),uint64_t(bp)};
+ return cache.query(key,s->dyn[bi][set],*out,
+  [&](Bg3Binding& value){return query_binding_uncached(cmd,bp,set,binding,element,&value,s);},
+  [&](const Bg3Binding& value){cpu_opt::descriptor_uses(value,[&](uint64_t h){life_note(s,h);});});
 }
 
 // The descriptor set bound at (bind point, set), its layout and dynamic offsets.

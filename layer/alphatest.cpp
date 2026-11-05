@@ -1,6 +1,7 @@
 #include "../common/native_hit_records.h"
 #include "../common/cpu_exact_cache.h"
 #include "../common/cpu_alpha_record.h"
+#include "../common/cpu_mapped_source.h"
 // Track D phase 3: what the ray queries need to alpha-test BG3's cutout
 // geometry (chains, grates, foliage), per captured draw (docs/TRACK_D_RT.md).
 //
@@ -536,6 +537,16 @@ bool read_bound(VkCommandBuffer cmd, uint32_t set, uint32_t binding, VkDeviceSiz
   if (!query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, set, binding, 0, &b) || !b.buffer) return false;
   if (b.range != VK_WHOLE_SIZE && extra + n > b.range) return false;
   std::shared_lock<std::shared_mutex> lock(tracker().mu);
+  if(cfg_hot(CfgHot::cpu_opt4) && !g_stream_reads){
+    // Keep the mapping pinned through memcpy exactly as on the original path.
+    // Resolve immutable addresses once per epoch; host-written bytes stay live.
+    return cpu_opt::mapped_read(uint64_t(b.buffer),b.offset+extra,dst,n,buffer_resource_epoch(),true,
+      [](uint64_t buffer,uint64_t offset)->const uint8_t*{
+        auto bm=tracker().buffer_mem.find(VkBuffer(buffer));
+        if(bm==tracker().buffer_mem.end())return nullptr;auto mp=tracker().mapped.find(bm->second.first);
+        return mp==tracker().mapped.end() || !mp->second?nullptr:mp->second+bm->second.second+offset;
+      });
+  }
   auto bm = tracker().buffer_mem.find(b.buffer);
   if (bm == tracker().buffer_mem.end()) return false;
   auto mp = tracker().mapped.find(bm->second.first);
