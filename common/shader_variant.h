@@ -46,6 +46,7 @@ enum SpecId : unsigned {
   kSpecIdWaterSurfaceFresnel = 1025, // M5.6 clean interface / column partition
   kSpecIdHairGroomShadowT = 1026,    // C2: strand shadow transmittance, default pre-C2 opaque query
   kSpecIdRfCompactProbeState = 1031, // RF: evaluate receiver probes after hit shading
+  // Retired: 1037 group-shared origin depth (no paired saving). Never reuse.
   // Retired 2026-11-05: 1032 lane permutation (slower), 1033 aux AO R16F. Never reuse.
   // Retired 2026-11-05: 1034 deferred hidden-hit sun wave (slower). Never reuse.
   kSpecIdCompactHitState = 1029,    // GI: retain the normal instead of the full hit across direct lighting
