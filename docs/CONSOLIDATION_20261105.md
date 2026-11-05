@@ -80,7 +80,7 @@ Status values: open, fixing (branch), fixed (commit), removed, deferred (reason)
 |---|---|---|---|---|
 | S-F03 | gi_composite.hlsl:51; water_compose.hlsl:144,363 | P2 | half-float radiance stores overflow | fixed (bundle37): clamped to 65504 |
 | S-F04 | rr_post.hlsl:159-171 | P2 | geometric mean overflow turns bright pixels black | fixed (bundle37): log fallback |
-| S-F05 | rr_post.hlsl:67 | P2 | R11G11B10 quantisation emulation ignores exponent limits | deferred: needs a verified GPU boundary fixture |
+| S-F05 | rr_post.hlsl:67 | P2 | R11G11B10 quantisation emulation ignores exponent limits | fixed offline (rrpost-r11): real R11 image boundary oracle; subnormals, finite overflow and NaN payloads; normal-domain and quantisation-OFF release equivalence; no new key |
 | S-F06 | rt_common.hlsli:390 | P2 | alpha page coordinates computed before the mip clamp | fixed (bundle37) |
 | S-F07 | gi_trace.hlsl:59; gi_contact.hlsl:31 | P2 | UV == 1 loads one texel out of bounds | fixed (bundle37) |
 | S-F02 | gi_composite.hlsl:48 | P2 | one scalar share cannot recover diffuse RGB | deferred: design limit, no visible error shown |
