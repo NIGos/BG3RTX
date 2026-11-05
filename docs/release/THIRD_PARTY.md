@@ -14,7 +14,32 @@ copies every file in this directory and validates the required list below before
 a package. Distribution remains paused pending owner decisions. See remaining release actions below before distributing.
 This inventory is not a statement that every release requirement has been satisfied.
 
+## Offline DLSS 5 fixture source (2026-11-05)
+
+`tools/dlss5_fixture.cpp` adapts shared-image allocation and Vulkan import patterns
+from the user's `dlss5-bridge`, commit `d1cc508a7097534c5c0e01a868ebe3b6657b932b`
+(`src/synth.inc`: `Synth12MakeTexture`, `SynthVkImport`). Its MIT copyright,
+permission and disclaimer are retained verbatim in
+`docs/release/licences/DLSS5-bridge-MIT.txt` (package: `licences/DLSS5-bridge-MIT.txt`).
+The standalone fixture is an offline development tool, not an added player-payload
+executable. No ReShade API headers, MinHook or their binaries are imported for this
+fixture. No NVIDIA NR binary is added or redistributed; the fixture accepts only a
+separately supplied, verified runtime under its own NVIDIA terms. The MIT grant on
+the bridge's source does not grant rights to that runtime.
+The supported-core probe also links the existing DLSS SDK `nvsdk_ngx_s.lib`
+client in this development executable under the already collected NVIDIA RTX SDK
+terms. User-authorized runtime copies stay byte-identical in ignored `.scratch`
+search directories; no NVIDIA DLL is added to tracked source or the player payload.
+
 ## Packaged and compiled components
+
+The native DLSS 5 experiment locates a user's own `nvngx_dlssnr.dll` in the game
+folder or an explicitly selected path. The launcher prefers an NVIDIA-signed
+candidate, logs version/trust/SHA-256, and stages an unchanged copy in local
+`bin/sl/` before launch. Custom/unsigned candidates are accepted by the launcher;
+the NVIDIA core may still reject them (`0xbad0000b`). Neither this policy nor the
+BG3RTX GPL exception grants NR runtime redistribution rights. The package writer
+and package-plan test explicitly exclude `nvngx_dlssnr.dll`, even when locally staged.
 
 | Component | Release files / use | Version identified on disk | Licence / collected text |
 |---|---|---|---|
@@ -92,6 +117,7 @@ below describe those exact bytes, including original line endings. Inventory pro
 
 | Collected filename | SHA-256 (verbatim release copy) |
 |---|---|
+| `DLSS5-bridge-MIT.txt` | `813b2964a4ab9aa6c41e00c7094a389d61feeb918fcf690cb9b3e454b678770e` |
 | `NVIDIA-RTX-SDKs-DLSS.txt` | `dc2778a3283427285984cdb5b3f7f03eae7d8a06057f672f2999c5ee7fd4f67d` |
 | `Streamline-MIT.txt` | `7b6f23e7d6f3ad6292f9308d2b42cdc3d82ae4e9b2abb55f230279d83bedd43d` |
 | `Streamline-3rd-party-licenses.md` | `cb251639994465f31d2178c16acedf1ff4f9cef1c370a09782ed36d4c86c1dca` |

@@ -75,6 +75,7 @@ struct State {
   bool settings_readable = true;
   unsigned caps = ~0u;
   int suggested = bg3::settings::kHigh;
+  std::string dlss5_runtime_path, loaded_dlss5_runtime_path, dlss5_runtime_status;
 };
 void load_state(State& s);
 bg3::settings::KVList forced_keys(const State& s);

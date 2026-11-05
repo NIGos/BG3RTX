@@ -1322,6 +1322,24 @@ static void test_detailed_logging() {
   }
 }
 
+static void test_dlss5_native_setting() {
+  const auto* k = find_knob("dlss5_nr");
+  CHECK(k && k->experimental && k->dev_only && k->apply == Apply::Restart);
+  CHECK(k && opt_in_knob(*k) && knob_visible(*k, false, true) && !knob_visible(*k, false));
+  CHECK_EQ(code_default("dlss5_nr"), "0");
+  CHECK_EQ(code_default("dlss5_nr_runtime"), "");
+  CHECK_EQ(code_default("dlss5_nr_bypass"), "0");
+  for (int p=0;p<kPresetCount;++p) CHECK(preset_values(p)[knob_index("dlss5_nr")] == 0);
+  CHECK(key_change_needs_restart("dlss5_nr", "0", "1"));
+  CHECK(key_change_needs_restart("dlss5_nr", "1", "0"));
+  CHECK(key_change_needs_restart("dlss5_nr_runtime", "", "C:/runtime/nvngx_dlssnr.dll"));
+  CHECK(!key_change_needs_restart("dlss5_nr_runtime", "same", "same"));
+  Map released=code_defaults();released["dev"]="0";released["dlss5_nr"]="1";
+  enforce_release_policy(released);CHECK_EQ(get(released,"dlss5_nr"),"0");
+  released["experimental_options"]="1";released["dlss5_nr"]="1";
+  enforce_release_policy(released);CHECK_EQ(get(released,"dlss5_nr"),"1");
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1329,6 +1347,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_dlss5_native_setting();
   test_detailed_logging();
   test_consolidation_policy();
   test_stats_window();

@@ -120,6 +120,13 @@ function card(s) {
  if(detail.length)d.append(el('p','detail-copy',detail.join('\n')));
  if(requirements.length){d.append(el('p','detail-heading','Requirements'));d.append(el('p','detail-copy',requirements.join('\n')));}
  if(detail.length||requirements.length)foot.append(d);
+ if(s.id==='dlss5_nr') {
+  const runtime=el('div','runtime-file'),path=el('p','detail-copy path',state.dlss5RuntimePath||'No file selected - automatic discovery');
+  path.id='dlss5-runtime-path';runtime.append(el('p','detail-heading','DLSS 5 runtime file'),path,el('p','help-copy',state.dlss5RuntimeStatus||'Your runtime is prepared before Play; it is not included with BG3RTX.'));
+  const row=el('div','row'),browse=el('button','btn','Browse...');browse.id='dlss5-runtime-browse';browse.onclick=()=>send('browseDlss5Runtime');row.append(browse);
+  if(state.dlss5RuntimePath){const clear=el('button','btn','Use automatic discovery');clear.id='dlss5-runtime-clear';clear.onclick=()=>send('clearDlss5Runtime');row.append(clear);}
+  runtime.append(row);foot.append(runtime);
+ }
  c.append(foot);
  return c;
 }

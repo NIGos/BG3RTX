@@ -15,7 +15,7 @@ static bool g_screenshot_bottom=false, g_no_game=false;
 static float g_screenshot_scale=0;
 static int g_review_width=0;
 enum { PRESET=20, SUGGEST, TABS, EXPAND, SAVE, PLAY, DISCARD, CLOSE, REPORT, BROWSE,
-       GAME, STATUS, NOTE, NEXT, RETRY, LOG, FOLDER, RESET, ERROR_DETAILS, ADAPTER, NOTICES, HEADER, PRESET_LOW=60, KNOB=1000, DETAILS=2000 };
+       GAME, STATUS, NOTE, NEXT, RETRY, LOG, FOLDER, RESET, ERROR_DETAILS, ADAPTER, NOTICES, HEADER, NR_BROWSE, NR_CLEAR, PRESET_LOW=60, KNOB=1000, DETAILS=2000 };
 struct Ui {
   HWND wnd{}, body{}; HFONT font{}, bold{}; HBRUSH bg{};
   bg3::experimental_ab::Selection ab_selection;
@@ -38,10 +38,10 @@ static void label(HWND p,const std::wstring& text,int x,int y,int w,int h,bool b
 static void button(HWND p,int id,const std::wstring& text,int x,int y,int w) {place(add(p,L"BUTTON",text,WS_TABSTOP|BS_PUSHBUTTON,id),x,y,w,32);}
 static st::Map saved_settings() { st::Map m; st::apply_layer(m,g.st.base);st::apply_layer(m,g.st.user);return m; }
 static st::Map effective_settings() {
-  auto m=saved_settings();for(int i=0;i<st::kKnobCount;++i){st::KVList v;st::knob_kvs(st::kKnobs[i],g.st.values[i],v);for(auto& kv:v)m[kv.first]=kv.second;}return m;
+  auto m=saved_settings();m["dlss5_nr_runtime"]=g.st.dlss5_runtime_path;for(int i=0;i<st::kKnobCount;++i){st::KVList v;st::knob_kvs(st::kKnobs[i],g.st.values[i],v);for(auto& kv:v)m[kv.first]=kv.second;}return m;
 }
 static bool opt_in() { return !g.dev && g.experimental; }
-static int dirty_count() {return std::max(int(g.ab_selection.pending || g.experimental!=g.saved_experimental),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir));}
+static int dirty_count() {return std::max(int(g.ab_selection.pending || g.experimental!=g.saved_experimental),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir)+int(g.st.dlss5_runtime_path!=g.st.loaded_dlss5_runtime_path));}
 static bool needs_restart(const st::Map& a,const st::Map& b) {return launcher::ui_state::restart(a,b);}
 static std::string game_session() {
   HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);if(snapshot==INVALID_HANDLE_VALUE)return {};
@@ -210,6 +210,12 @@ static void rebuild() {
       }
       for(const auto& n:k.required_on)if(n.key){if(!need.empty())need+="\n";need+="Requires "+std::string(n.label);}
       if(!need.empty()){int lines=1+int(std::count(need.begin(),need.end(),'\n'));int height=24*lines+24*int(need.size()/std::max(30,w/9));label(g.body,widen(need),32,y,w-32,height);y+=height+8;}
+      if(std::string(k.id)=="dlss5_nr"){
+        label(g.body,L"DLSS 5 runtime file",32,y,w-32,24,true);y+=28;
+        place(add(g.body,L"EDIT",g.st.dlss5_runtime_path.empty()?L"Automatic: game folder":widen(g.st.dlss5_runtime_path),WS_BORDER|ES_READONLY|ES_AUTOHSCROLL,0),32,y,w-32,30);y+=36;
+        button(g.body,NR_BROWSE,L"Browse...",32,y,116);button(g.body,NR_CLEAR,L"Automatic discovery",160,y,200);y+=40;
+        label(g.body,widen(g.st.dlss5_runtime_status.empty()?"Runtime status is checked after choosing a file. NVIDIA-signed candidates are preferred.":g.st.dlss5_runtime_status),32,y,w-32,56);y+=64;
+      }
       button(g.body,DETAILS+i,L"Details and requirements",32,y,256);y+=48;place(add(g.body,L"STATIC",L"",SS_ETCHEDHORZ,0),16,y,w,2);y+=24;
     }
   }
@@ -218,7 +224,7 @@ static void rebuild() {
 static void browse() {
   IFileOpenDialog* d=nullptr;if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&d))))return;
   DWORD opts=0;d->GetOptions(&opts);d->SetOptions(opts|FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM);d->SetTitle(L"Choose game folder containing bin\\bg3.exe");
-  if(SUCCEEDED(d->Show(g.wnd))){IShellItem* it=nullptr;if(SUCCEEDED(d->GetResult(&it))){PWSTR p=nullptr;if(SUCCEEDED(it->GetDisplayName(SIGDN_FILESYSPATH,&p))){auto dir=game_dir_from_path(p);g.dir=dir.empty()?p:dir;CoTaskMemFree(p);rebuild();}it->Release();}}d->Release();
+  if(SUCCEEDED(d->Show(g.wnd))){IShellItem* it=nullptr;if(SUCCEEDED(d->GetResult(&it))){PWSTR p=nullptr;if(SUCCEEDED(it->GetDisplayName(SIGDN_FILESYSPATH,&p))){auto dir=game_dir_from_path(p);g.dir=dir.empty()?p:dir;g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);CoTaskMemFree(p);rebuild();}it->Release();}}d->Release();
 }
 static void report_problem() { launcher::web::native_report(g.wnd); }
 static bool save(bool) {
@@ -257,7 +263,7 @@ static bool save(bool) {
   if(!persist(&err)){g.pending=old_pending;status(L"Settings not saved. Restart information could not be saved. "+err);return false;}
   if(!write_file_atomic(user_ini_path(),text,&err)){status(L"Settings not saved. Your edits are kept. "+err);return false;}
   g.ab_selection.pending=false;
-  g.st.user_text=text;g.st.user=after;g.st.values=preview.values;g.st.loaded=preview.values;
+  g.st.user_text=text;g.st.user=after;g.st.values=preview.values;g.st.loaded=preview.values;g.st.loaded_dlss5_runtime_path=g.st.dlss5_runtime_path;
   if(!save_game_dir(g.dir,&err)){status(L"Game folder not saved. "+err);return false;}
   g.saved_experimental=g.experimental;g.saved=g.st.values;g.saved_preset=g.st.preset;g.saved_dir=g.dir;
   status(L"Saved.");rebuild();return true;
@@ -274,9 +280,9 @@ static void select_preset(int p) {
 static void play() {
   if(g_no_game||!g_screenshot.empty()||game_running()||g.stage<4)return;
   if(!save(false)||!valid_game_dir(g.dir))return;
-  auto p=make_plan(g.dir,L"",{},false,effective_fg(g.st));DWORD pid=0;std::wstring err;guard_game_upscaler(g.st);
+  auto p=make_plan(g.dir,L"",{},false,effective_fg(g.st));DWORD pid=0;std::wstring err,runtime_note;if(!launcher::dlss5::stage(g.st,g.dir,runtime_note,err)){status(err);return;}guard_game_upscaler(g.st);
   if(!launch(p,&pid,&err))status(L"Settings saved, but the game could not start. "+err+L" See Help & support.");
-  else status(L"Game started.");
+  else status(L"Game started. "+runtime_note);
 }
 static void command(int id,int code,HWND source) {
   if(g.updating)return;
@@ -302,10 +308,12 @@ static void command(int id,int code,HWND source) {
       rebuild();SetFocus(control(g.body,EXPAND));break;
     case NEXT:{int previous=g.stage;g.stage=std::min(4,g.stage+1);std::wstring err;if(!persist(&err)){g.stage=previous;status(L"Setup progress could not be saved. "+err);}else rebuild();break;}
     case SAVE:save(false);break;case PLAY:play();break;
-    case DISCARD:g.experimental=g.saved_experimental;g.ab_selection.pending=false;g.st.values=g.saved;g.st.preset=g.saved_preset;g.dir=g.saved_dir;rebuild();break;
+    case DISCARD:g.experimental=g.saved_experimental;g.ab_selection.pending=false;g.st.values=g.saved;g.st.preset=g.saved_preset;g.dir=g.saved_dir;g.st.dlss5_runtime_path=g.st.loaded_dlss5_runtime_path;g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);rebuild();break;
     case RESET:select_preset(g.st.preset);break;
     case CLOSE:SendMessageW(g.wnd,WM_CLOSE,0,0);break;
     case BROWSE:browse();break;
+    case NR_BROWSE:g.st.dlss5_runtime_path=launcher::dlss5::browse(g.wnd,g.st.dlss5_runtime_path);g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);status(L"Runtime file selected. Save and restart the game to apply.");rebuild();break;
+    case NR_CLEAR:g.st.dlss5_runtime_path.clear();g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);status(L"DLSS 5 will look in the game folder. Save to keep this change.");rebuild();break;
     case NOTICES:{auto path=root_dir()+L"\\THIRD_PARTY.md";if(!file_exists(path))path=root_dir()+L"\\docs\\release\\THIRD_PARTY.md";ShellExecuteW(g.wnd,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL);break;}
     case REPORT:report_problem();break;
     case ERROR_DETAILS:if(launcher::web::action_dialog(g.wnd,L"Error details",g.message+L"\n\nOpen a problem report?",{{IDYES,L"Report a problem"},{IDCANCEL,L"Close"}})==IDYES)report_problem();break;
@@ -380,6 +388,7 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   g.dir=game_arg.empty()?saved_game_dir():game_arg;if(!valid_game_dir(g.dir)&&g_screenshot.empty())g.dir=detect_game_dir();g.saved_dir=g.dir;
   std::string state;read_file(ui_path(),state);auto config=st::parse_ini(state);g.stage=std::clamp(std::atoi(st::lookup(config,"onboarding").c_str()),0,4);
   if(g.stage<4&&game_arg.empty()&&!st::lookup(config,"onboarding_game").empty())g.dir=widen(st::lookup(config,"onboarding_game"));
+  if(g_screenshot.empty())g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);
   g.session=game_session();g.baseline=saved_settings();if(launcher::ui_state::same_session(st::lookup(config,"session"),g.session)){
     g.pending=st::lookup(config,"pending_restart")=="1";
     for(auto& kv:config)if(kv.first.rfind("baseline_",0)==0)g.baseline[kv.first.substr(9)]=kv.second;

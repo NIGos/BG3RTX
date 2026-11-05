@@ -135,7 +135,7 @@ Bridge::Bridge(State& state,Hooks hooks):state_(state),hooks_(std::move(hooks)),
   saved_=state_.values;
 }
 st::Map Bridge::effective() const {st::Map m;st::apply_layer(m,state_.base);st::apply_layer(m,state_.user);for(int i=0;i<st::kKnobCount;++i){st::KVList kv;st::knob_kvs(st::kKnobs[i],state_.values[i],kv);for(auto& v:kv)m[v.first]=v.second;}return m;}
-int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L"")+int(!dev&&experimental!=saved_experimental_));}
+int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L"")+int(!dev&&experimental!=saved_experimental_)+int(state_.dlss5_runtime_path!=state_.loaded_dlss5_runtime_path));}
 bool Bridge::shown(const st::Knob& k) const {return st::knob_visible(k,dev,opt_in());}
 bool Bridge::is_collection_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="prepareReport";}
 bool Bridge::is_export_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="exportReport";}
@@ -158,6 +158,7 @@ bool Bridge::save_preview(bool enable_required){
 std::string Bridge::handle(const std::string& message){
   Object o;if(!Parser{message}.parse(o)){status_="Launcher request failed. Reopen the launcher.";return state_json();}
   auto type=get<std::string>(o,"type");
+  auto refresh_runtime=[&](){if(hooks_.dlss5RuntimeStatus)state_.dlss5_runtime_status=hooks_.dlss5RuntimeStatus(state_.dlss5_runtime_path);};
   if(type=="init"||type=="state")return state_json();
   if(type=="cancel"){pending_play_=false;preview_kind_.clear();changes_.clear();blocked_.clear();return state_json();}
   if(type=="confirm"){
@@ -166,17 +167,17 @@ std::string Bridge::handle(const std::string& message){
       State candidate=state_;candidate.values=preview_values_;std::string error;
       // The release opt-in travels with the settings it unlocks; Off removes the key.
       if(!dev)candidate.user_text=with_raw_key(candidate.user_text,"experimental_options",experimental?"1":"");
-      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;saved_experimental_=experimental;preview_kind_.clear();status_="Saved.";}
+      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);state_.loaded_dlss5_runtime_path=state_.dlss5_runtime_path;ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;saved_experimental_=experimental;preview_kind_.clear();status_="Saved.";}
       else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;}
     }
     if(pending_play_&&preview_kind_.empty()){
       pending_play_=false;std::string error;
       if(!can_play_||!hooks_.play||!hooks_.play(error))status_=error.empty()?"Settings saved, but the game could not start. See Help & support.":error;
-      else{status_="Game started.";can_play_=false;}
+      else{status_=error.empty()?"Game started.":error;can_play_=false;}
     }return state_json();
   }
   // An edit invalidates the exact preview to prevent stale confirmations.
-  if(type=="set"||type=="preset"||type=="discard"||type=="experimental"){preview_kind_.clear();pending_play_=false;}
+  if(type=="set"||type=="preset"||type=="discard"||type=="experimental"||type=="browseDlss5Runtime"||type=="clearDlss5Runtime"){preview_kind_.clear();pending_play_=false;}
   if(type=="set"){
     int i=st::knob_index(get<std::string>(o,"id"));int value=get<int>(o,"value",INT_MIN);
     if(i<0||!shown(st::kKnobs[i])){status_="This option is unavailable. Check its requirements in Help & support.";return state_json();}
@@ -199,7 +200,7 @@ std::string Bridge::handle(const std::string& message){
       status_=on?"Experimental options shown. Save to keep them.":"Experimental options hidden and reset to Off.";
     }
   }
-  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;if(!dev)experimental=saved_experimental_;status_="Changes discarded.";}
+  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;state_.dlss5_runtime_path=state_.loaded_dlss5_runtime_path;refresh_runtime();if(!dev)experimental=saved_experimental_;status_="Changes discarded.";}
   else if(type=="save"){pending_play_=false;save_preview(get<std::string>(o,"policy")=="enable");}
   else if(type=="play"){
     if(!can_play_)status_="Choose the game folder or close the running game to enable Play.";
@@ -211,6 +212,10 @@ std::string Bridge::handle(const std::string& message){
   else if(type=="closeReport"){report_visible_=false;}
   else if(type=="cancelReport"){status_="Report cancelled.";}
   else if(type=="browseGame"){if(hooks_.browseGame)game_path_=hooks_.browseGame();}
+  else if(type=="browseDlss5Runtime"){
+    if(hooks_.browseDlss5Runtime){state_.dlss5_runtime_path=hooks_.browseDlss5Runtime();refresh_runtime();status_="Runtime file selected. Save, then restart the game to use DLSS 5.";}
+  }
+  else if(type=="clearDlss5Runtime"){state_.dlss5_runtime_path.clear();refresh_runtime();status_="DLSS 5 will look in the game folder. Save to keep this change.";}
   else if(type=="recheck"){if(hooks_.recheck)set_compatibility(hooks_.recheck());}
   else if(type=="notices"){if(hooks_.notices)hooks_.notices();}
   else if(type=="adapter"){
@@ -255,6 +260,7 @@ std::string Bridge::state_json() const {
   for(size_t i=0;i<inspection_.adapters.size();++i){if(i)out+=",";out+="{\"value\":"+std::to_string(i)+",\"label\":"+q(inspection_.adapters[i].gpu.name)+"}";}out+="]}";
   out+=",\"presetDescriptions\":[";for(int p=0;p<st::kPresetCount;++p){if(p)out+=",";out+=q(st::kPresetDesc[p]);}out+="]";
   out+=",\"version\":"+q(BG3RTX_PRODUCT_VERSION)+",\"modStatus\":"+q(mod_status_);
+  out+=",\"dlss5RuntimePath\":"+q(state_.dlss5_runtime_path)+",\"dlss5RuntimeStatus\":"+q(state_.dlss5_runtime_status.empty()?"Runtime status is checked when the game folder or selected file changes. NVIDIA-signed runtimes are preferred.":state_.dlss5_runtime_status);
   out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Generated frames do not increase the rendered frame rate.\"";
   out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"presetLabel\":"+q(preview_preset_>=0?st::kPresetLabel[preview_preset_]:st::kPresetLabel[state_.preset])+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
   out+=std::string(",\"report\":{\"visible\":")+b(report_visible_)+",\"privacy\":"+q(diagnostics::privacy_text)+",\"loggingHint\":"+q(report_hint_)+",\"bytes\":"+std::to_string(report_.bytes)+",\"status\":"+std::to_string(int(report_.status))+",\"message\":"+q(report_.message)+",\"files\":[";
