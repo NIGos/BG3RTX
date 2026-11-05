@@ -1087,6 +1087,12 @@ static void test_retired_rejected_controls() {
   enforce_release_policy(release); CHECK_EQ(get(release,"rt_compact_hit_state"),"1");
   developer=release; developer["dev"]="1"; developer["rt_compact_hit_state"]="0";
   enforce_release_policy(developer); CHECK_EQ(get(developer,"rt_compact_hit_state"),"0");
+  CHECK(find_knob("gi_far_roof_early") == nullptr);
+  CHECK_EQ(code_default("gi_far_roof_early"), "0");
+  release=code_defaults(); release["gi_far_roof_early"]="1";
+  developer=release; developer["dev"]="1";
+  enforce_release_policy(release); CHECK_EQ(get(release,"gi_far_roof_early"),"0");
+  enforce_release_policy(developer); CHECK_EQ(get(developer,"gi_far_roof_early"),"1");
   const Map defaults=code_defaults();
   const Map legacy=parse_ini("rr_hair_resolve=1\nrt_cascade_static_only=1\nperf_hitmat_lists=1\nperf_hook_state=1\nperf_submit_batch=1\n");
   CHECK(knob_values(merge_layers({&defaults,&legacy})) == knob_values(merge_layers({&defaults})));

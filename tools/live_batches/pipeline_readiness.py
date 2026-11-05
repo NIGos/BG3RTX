@@ -27,6 +27,8 @@ TABLE = {
 GI_TRACE = r"gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\.hlsl[^ ]* generation "
 # Specialization 1029 in core/gi.cpp; cached selections still require fresh QUIET.
 TABLE["rt_compact_hit_state"] = [GI_TRACE]
+# GI roof rejection, specialization 1038 (forced OFF when rt_stats != 0).
+TABLE["gi_far_roof_early"] = [GI_TRACE]
 # RF specialization 1031; newly selected and cached variants both need fresh QUIET.
 TABLE["rf_compact_probe_state"] = [r"gi: gi/rt_reflections[^ /]*\.hlsl[^ ]* generation "]
 GI_QUERY = [GI_TRACE, r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation ",
