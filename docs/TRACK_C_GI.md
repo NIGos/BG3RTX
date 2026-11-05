@@ -565,35 +565,3 @@ Default-OFF shader requests retain release equivalence; the default spec
 value is now 1. Shader request delta remains 0.
 See [branch evidence](progress/gi-livestate.md) for timings/spreads and
 [offline commands](../tools/frame_replay.md) for statistics and exact comparisons.
-
-
-### Exact scheduling/bandwidth candidates (2026-11-05, gi-perm; tooling integration pending)
-
-Developer raw keys `gi_lane_permute` / `gi_ao_r16f` are off by default and require
-`dev=1`; spec IDs 1032/1033, request delta 0. Morton order stays inside each 8x4
-wave tile of the original 8x8 group. Seeds, serial ray/addition order and output
-addresses stay. Integer counter reductions elect the original logical first
-active pixel; far-stat barriers still include the complete physical group.
-Subgroups below 32 lanes retain identity.
-
-Scalar AO uses R16F binding 51; primary/local PAN diagnostics retain RGBA16F
-binding 44 and diagnostic AO folds mirror the original RGBA tuple. Both formats
-stay resident after first ON so A/B preserves histories. Ordinary AO writes save
-6 B/pixel; an additional full-size R16F image is retained after warmup. This is a
-bandwidth candidate, with no resident-memory saving claimed. No x precision,
-ray count, material sampling or shading-model change.
-
-[Progress and gate status](progress/gi-perm.md). Final build passes all 192 CTests.
-Full key-OFF equivalence: 140 identical + 75 equivalent requests, zero differences,
-5075 assignments. Final S8/camp/inn replay outputs/depth/full counters are 100%
-byte-equal ON/OFF. Registers remain 255 OFF/ON for Ultra hit-sun-emission/native.
-Replay GPU medians OFF -> ON (11 dispatches, noisy, counters enabled): S8
-13.938 -> 8.853 ms, camp 60.169 -> 49.110 ms, inn 10.618 -> 10.855 ms.
-
-Prepared inn/S8 Ultra batch: `tools/live_batches/opt_r6/perm/`, outside queue
-inboxes. Both keys toggle together for OFF/ON/OFF/ON 600-frame windows, dev=1,
-fresh QUIET readiness. GI trace decides only beyond OFF repeat spread.
-The separate tooling lane owns the two missing readiness mappings; stock lint
-currently rejects only those. Frozen/current integration lint passes with the
-included additive patch simulated. READY_FOR_LIVE follows registry integration
-and stock lint. No live saving or universal replay coverage is claimed.

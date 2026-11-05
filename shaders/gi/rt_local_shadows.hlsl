@@ -68,7 +68,6 @@
 // sun mask before the lighting, so its output holds only direct local light (plus
 // projector lights and in-scatter, which are not recomputed).
 #include "gi_common.hlsli"
-#include "gi_aux_ao.hlsli"
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_sun.hlsli"
@@ -361,7 +360,7 @@ void ls_finish(uint2 fp, Bg3Surface sf, Bg3Mat mt, float3 dd, float3 ds, float3 
   // (The same expressions as the LS_FULL path, so that the arithmetic is the same.)
   float3 xd = 0, xs = 0;
   if (ao_mode != 0u) {
-    float ssao = ao_mode == 2u && (pc.ao_direct & 16u) != 0u ? aux_ao_at(fp) : ao;   // (mode 1 does not use it)
+    float ssao = ao_mode == 2u && (pc.ao_direct & 16u) != 0u ? gAux[fp].x : ao;   // (mode 1 does not use it)
     float so = lFlags.m0.x > 0.0 ? saturate(pow(max(abs(sf.nov_raw + ssao), 9.9999997e-05), exp2(-16.0 * sf.a - 1.0)) - 1.0 + ssao) : 1.0;
     float td_f = ao_mode == 1u ? 1.0 : lerp(1.0, lFlags.m0.x > 0.0 ? ssao : 1.0, lFlags.m0.y);
     float ts_f = ao_mode == 1u ? 1.0 : lerp(1.0, so, lFlags.m0.y);
@@ -993,7 +992,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
   //   2 the game's own factor with its own SSAO (the look of the original, noise-free).
   float3 xd = 0, xs = 0;
   if (ao_mode != 0u && !validate) {
-    float ssao = (pc.ao_direct & 16u) != 0u ? aux_ao_at(fp) : ao;
+    float ssao = (pc.ao_direct & 16u) != 0u ? gAux[fp].x : ao;
     float so = lFlags.m0.x > 0.0 ? saturate(pow(max(abs(sf.nov_raw + ssao), 9.9999997e-05), exp2(-16.0 * sf.a - 1.0)) - 1.0 + ssao) : 1.0;
     float td_f = ao_mode == 1u ? 1.0 : lerp(1.0, lFlags.m0.x > 0.0 ? ssao : 1.0, lFlags.m0.y);
     float ts_f = ao_mode == 1u ? 1.0 : lerp(1.0, so, lFlags.m0.y);
