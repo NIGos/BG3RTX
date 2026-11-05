@@ -253,6 +253,14 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","Ray-tracing support"},{"sharc_device","1","Ray-tracing support"}}, false, "Surfaces", {"Estimate", "0.5–0.7 ms", "Up to 520 MB", "Estimated water cost: 0.5–0.7 ms and up to 520 MB on RTX 5090 at Water Queens House."}, "Needs Ray-tracing detail. Turning water on or raising its level needs a game restart; lowering it or turning it off applies after saving. Uses up to about 520 MB of video memory."},
 
+  {"dlss5_nr", "DLSS 5 Neural Rendering (experimental)",
+   "Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.",
+   Kind::Choice, Apply::Restart, "Restart the game after changing DLSS 5 or its runtime file", false,
+   {{"off", "Off", 0, {{"dlss5_nr", "0"}}, {}, {}, false, false, false, Apply::Restart},
+    {"on", "On", kCapDlss, {{"dlss5_nr", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "Ray Reconstruction before post effects"}}, true, "Surfaces", {},
+   "Experimental and off in every preset. Requires Ray Reconstruction before post effects and a compatible user-provided nvngx_dlssnr.dll. The launcher prepares the runtime before Play; custom or unsigned runtimes are identified in the log and may be rejected by NVIDIA (0xbad0000b). Restart after changing this option or the runtime file."},
+
   {"water_surface_fresnel", "Water surface reflections",
    "Experimental: works out the reflection at the water surface separately from the water's depth colour. Mostly visible at the edges of shallow pools; open water barely changes.",
    Kind::Choice, Apply::Restart, "on: restart; off: live", true,
@@ -527,6 +535,9 @@ inline constexpr KV kDefaults[] = {
     {"ab_hotkey", "1"},
     {"ab_off", "0"},
     {"experimental_options", "0"},
+    {"dlss5_nr", "0"},
+    {"dlss5_nr_runtime", ""},
+    {"dlss5_nr_bypass", "0"},
     {"game_dlss_guard", "1"},
     {"core", "1"},
     {"dump_shaders", "1"},
@@ -880,6 +891,7 @@ inline Map code_defaults() {
 // Keys read only at instance/device creation (or by static initialisers).
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (from == to) return false;
+  if (key == "dlss5_nr" || key == "dlss5_nr_runtime") return true;
   // core/gi.cpp initialize_hair_origin persists the startup reservation across core reloads.
   if (key == "rt_hair_physical_origin") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   if (key == "rt_hair_groom_primary") return true; // Safety gate until hot activation is verified.
@@ -973,7 +985,7 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 // Release 2026-11: Water surface reflections only. Strand hair (exp_hair_*) is a post-release
 // update and returns to this list with it; until then release resets its keys.
 inline constexpr const char* kOptInKnobs[] = {
-  "water_surface_fresnel"};
+  "water_surface_fresnel", "dlss5_nr"};
 inline bool opt_in_knob(const Knob& k) {
   for (const char* id : kOptInKnobs) if (std::string(id) == k.id) return true;
   return false;

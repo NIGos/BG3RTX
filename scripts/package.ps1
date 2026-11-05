@@ -143,6 +143,9 @@ if (Test-Path -LiteralPath $out) { throw "$out already exists: choose a fresh ou
 New-Item -ItemType Directory -Path $out | Out-Null
 $payload = New-Object System.Collections.Generic.List[object]
 function Copy-To([string]$src, [string]$rel) {
+  # Launcher-staged, user-supplied NR is never a redistribution payload, even if
+  # a future manifest or developer folder happens to name it.
+  if ([IO.Path]::GetFileName($rel) -ieq 'nvngx_dlssnr.dll') { throw 'DLSS 5 NR runtime is user-supplied and must never be packaged' }
   $exists = Test-Path -LiteralPath $src -PathType Leaf
   $payload.Add([pscustomobject]@{ Source = $src; Destination = $rel; Exists = $exists })
   if ($DryRun) { return }

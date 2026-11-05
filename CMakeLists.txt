@@ -36,6 +36,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/dump.cpp
   layer/replay.cpp
   layer/ngx.cpp
+  layer/dlss5.cpp
   layer/rrpost.cpp
   layer/geocapture.cpp
   layer/rtscene.cpp
@@ -161,7 +162,7 @@ add_executable(bg3rtx_launcher WIN32 tools/launcher/main.cpp tools/launcher/laun
 set_target_properties(bg3rtx_launcher PROPERTIES OUTPUT_NAME BG3RTX)
 target_include_directories(bg3rtx_launcher PRIVATE ${VULKAN_SDK}/Include "${BG3RTX_WEBVIEW2_SDK}/include" "${CMAKE_SOURCE_DIR}/tools/launcher")
 target_compile_definitions(bg3rtx_launcher PRIVATE UNICODE _UNICODE)
-target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 user32 gdi32 comdlg32 shlwapi version "${BG3RTX_WEBVIEW2_SDK}/x64/WebView2LoaderStatic.lib")
+target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 user32 gdi32 comdlg32 shlwapi version wintrust crypt32 bcrypt "${BG3RTX_WEBVIEW2_SDK}/x64/WebView2LoaderStatic.lib")
 add_custom_target(bg3rtx_launcher_ui
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/tools/launcher/ui" "$<TARGET_FILE_DIR:bg3rtx_launcher>/ui"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets/fonts" "$<TARGET_FILE_DIR:bg3rtx_launcher>/ui/fonts"
@@ -600,6 +601,12 @@ target_link_libraries(dlss5_fixture PRIVATE vulkan-1 d3d12 dxgi d3dcompiler wint
   ${BG3RTX_EXTERNAL}/DLSS/lib/Windows_x86_64/x64/nvsdk_ngx_s.lib)
 add_executable(dlss5_fixture_logic_test tests/dlss5_fixture_logic_test.cpp)
 add_test(NAME dlss5_fixture_logic_test COMMAND dlss5_fixture_logic_test)
+
+# Pure CPU native-NR boundary/guide contract and user-runtime selection.
+add_executable(dlss5_nr_frame_test tests/dlss5_nr_frame_test.cpp)
+add_test(NAME dlss5_nr_frame_test COMMAND dlss5_nr_frame_test)
+add_executable(dlss5_runtime_policy_test tests/dlss5_runtime_policy_test.cpp)
+add_test(NAME dlss5_runtime_policy_test COMMAND dlss5_runtime_policy_test)
 add_test(NAME frame_replay_test COMMAND frame_replay --self-test ${CMAKE_BINARY_DIR}/frame_replay_test)
 set_tests_properties(frame_replay_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
 # Offline PT reference (tools/pt_reference.hlsl): furnace and slab checks of the path tracer.

@@ -33,6 +33,14 @@ search directories; no NVIDIA DLL is added to tracked source or the player paylo
 
 ## Packaged and compiled components
 
+The native DLSS 5 experiment locates a user's own `nvngx_dlssnr.dll` in the game
+folder or an explicitly selected path. The launcher prefers an NVIDIA-signed
+candidate, logs version/trust/SHA-256, and stages an unchanged copy in local
+`bin/sl/` before launch. Custom/unsigned candidates are accepted by the launcher;
+the NVIDIA core may still reject them (`0xbad0000b`). Neither this policy nor the
+BG3RTX GPL exception grants NR runtime redistribution rights. The package writer
+and package-plan test explicitly exclude `nvngx_dlssnr.dll`, even when locally staged.
+
 | Component | Release files / use | Version identified on disk | Licence / collected text |
 |---|---|---|---|
 | Microsoft DirectX Shader Compiler (DXC) | `bin/dxcompiler.dll`; runtime HLSL-to-SPIR-V; `dxc/dxcapi.h` compiled into layer | Selected fallback `C:\VulkanSDK\1.4.357.0\Bin\dxcompiler.dll`: file 1.9.0.5399, product `1.9.0.5399 (a107ba613)` | University of Illinois/NCSA Open Source License, plus included third-party terms: `DirectXShaderCompiler-LICENSE.txt` and `DirectXShaderCompiler-ThirdPartyNotices.txt`, from commit `a107ba613`. See DXC classification below. |

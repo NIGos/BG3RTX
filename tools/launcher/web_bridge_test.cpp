@@ -44,6 +44,20 @@ int main(int argc,char** argv){
     pb.handle("{\"type\":\"play\"}"); pb.handle("{\"type\":\"confirm\"}");
     check(effects=="SP"&&pb.dirty()==0);
   }
+  {
+    launcher::State runtime;runtime.base={{"dev","0"}};runtime.values=st::preset_values(st::kHigh);
+    launcher::web::Hooks rh;rh.browseDlss5Runtime=[](){return std::string("C:/User runtime/nvngx_dlssnr.dll");};
+    rh.save=[](launcher::State&,const st::KVList&,std::string&){return true;};
+    launcher::web::Bridge rb(runtime,rh);
+    rb.handle("{\"type\":\"browseDlss5Runtime\"}");
+    check(runtime.dlss5_runtime_path=="C:/User runtime/nvngx_dlssnr.dll" && rb.dirty()==1);
+    check(rb.state_json().find("C:/User runtime/nvngx_dlssnr.dll")!=std::string::npos);
+    rb.handle("{\"type\":\"discard\"}");check(runtime.dlss5_runtime_path.empty()&&rb.dirty()==0);
+    rb.handle("{\"type\":\"browseDlss5Runtime\"}");rb.handle("{\"type\":\"save\"}");rb.handle("{\"type\":\"confirm\"}");
+    check(runtime.loaded_dlss5_runtime_path==runtime.dlss5_runtime_path&&rb.dirty()==0);
+    rb.handle("{\"type\":\"clearDlss5Runtime\"}");check(runtime.dlss5_runtime_path.empty()&&rb.dirty()==1);
+    rb.handle("{\"type\":\"discard\"}");check(!runtime.dlss5_runtime_path.empty()&&rb.dirty()==0);
+  }
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
   check(launcher::web::Bridge::is_export_intent("{\"type\":\"exportReport\"}"));
   check(!launcher::web::Bridge::is_export_intent("{\"type\":\"prepareReport\",\"issue\":\"exportReport\"}"));

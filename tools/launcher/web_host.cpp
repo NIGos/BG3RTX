@@ -3,6 +3,7 @@
 #include "ui_state.h"
 #include "session_logging.h"
 #include "version.h"
+#include "dlss5_runtime.h"
 #include <wrl.h>
 #include <windowsx.h>
 #include <dwmapi.h>
@@ -302,12 +303,12 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         bool pending=game_running()&&ui_state::restart(h.baseline,after);std::wstring err;
         if(!write_file_atomic(root_dir()+L"\\bg3rtx_ui.ini",ui_state::serialize(4,pending,h.session,h.baseline),&err)){error="Settings not saved. Restart information could not be saved.\n"+narrow(err);return false;}
         if(!write_file_atomic(user_ini_path(),text,&err)){error="Settings not saved. Your edits are kept.\n"+narrow(err);return false;}
-        candidate.user_text=text;candidate.user=st::parse_ini(text);candidate.loaded=candidate.values;
+        candidate.user_text=text;candidate.user=st::parse_ini(text);candidate.loaded=candidate.values;candidate.loaded_dlss5_runtime_path=candidate.dlss5_runtime_path;
         h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,after):0);return true;
       };
       hooks.play=[&h](std::string& error){
         if(h.no_game||game_running()||!valid_game_dir(h.game)){error="Choose the game folder or close the running game to enable Play.";return false;}
-        DWORD pid{};std::wstring err;guard_game_upscaler(h.state);bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?"":std::string("Settings saved, but the game could not start. See Help & support.\n")+narrow(err);return ok;
+        DWORD pid{};std::wstring err,note;if(!launcher::dlss5::stage(h.state,h.game,note,err)){error=narrow(err);return false;}guard_game_upscaler(h.state);bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?(std::string("Game started. ")+narrow(note)):std::string("Settings saved, but the game could not start. See Help & support.\n")+narrow(err);return ok;
       };
       hooks.reportHint=[] {return session_logging::hint(root_dir());};
       hooks.prepareReport=[&h](const std::string& issue,bool logs,bool settings,bool system){
@@ -326,8 +327,12 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_NOCHANGEDIR);
         dialog->SetTitle(L"Choose the game folder containing bin\\bg3.exe");
         if(SUCCEEDED(dialog->Show(h.window))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){auto dir=game_dir_from_path(path);if(valid_game_dir(dir)){std::wstring error;if(save_game_dir(dir,&error))h.game=dir;else h.bridge->set_status("Game folder not saved. "+narrow(error));}else h.bridge->set_status("Choose the game folder containing bin\\bg3.exe.");CoTaskMemFree(path);}}}
+        h.state.dlss5_runtime_status=launcher::dlss5::discovery_status(h.state,h.game);
         h.bridge->set_can_play(valid_game_dir(h.game)&&!game_running());return narrow(h.game);
       };
+      h.state.dlss5_runtime_status=launcher::dlss5::discovery_status(h.state,h.game);
+      hooks.dlss5RuntimeStatus=[&h](const std::string& path){State candidate=h.state;candidate.dlss5_runtime_path=path;return launcher::dlss5::discovery_status(candidate,h.game);};
+      hooks.browseDlss5Runtime=[&h](){return h.no_game?h.state.dlss5_runtime_path:launcher::dlss5::browse(h.window,h.state.dlss5_runtime_path);};
       hooks.recheck=[](){return inspect_graphics();};
       hooks.notices=[&h](){auto path=root_dir()+L"\\THIRD_PARTY.md";if(!file_exists(path))path=root_dir()+L"\\docs\\release\\THIRD_PARTY.md";ShellExecuteW(h.window,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL);};
       h.bridge=std::make_unique<Bridge>(h.state,std::move(hooks));
