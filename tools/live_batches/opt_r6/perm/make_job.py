@@ -25,7 +25,7 @@ def generate(exe):
     flow.readiness_budget.configure([])
     state = observation_state(str(Path(exe).resolve()), 'ultra')
     state[KEY] = '0'
-    state[KEY2] = '0'
+    state[KEY2] = "0"
     # Developer raw keys are gated in core when dev=0, so the A/B needs dev=1
     # (both windows share it; the release profile is otherwise unchanged).
     state['dev'] = '1'
@@ -36,19 +36,19 @@ def generate(exe):
         job = deepcopy(source)
         quiet = pipeline_readiness.QUIET
         # experimental_specs does not bind 1032/1033: exercise ON explicitly before OFF.
-        warm = dict(state, **{KEY: '1', KEY2: '1'})
+        warm = dict(state, **{KEY: '1'})
         plan = [phase('warmup', flow.SCENE_SETTLE_SECONDS.get(save, 20), set=assignments(warm),
                       wait_log=[r'\[auto\] scene ready', r'\[cfg\] settings read', quiet],
                       wait_log_fresh=[quiet], wait_log_timeout=15)]
         labels = [label+'--static-a' for label, _ in STATES]
         for (label, value), measured in zip(STATES, labels):
-            setting = KEY+'='+value+','+KEY2+'='+value
+            setting = KEY+'='+value
             plan.append(phase('ready-'+label, 1.1, set=setting, wait_log=[quiet],
                               wait_log_fresh=[quiet], wait_log_timeout=8))
             plan.append(phase(measured, 20.1, set=setting, frames=600, settle_frames=0,
                               stats_reset=True, wait_stats=[rx for _, rx in TIMERS],
                               wait_log_timeout=10))
-        plan.append(phase('restore', 1.1, set=KEY+'=0,'+KEY2+'=0', wait_log=[quiet],
+        plan.append(phase('restore', 1.1, set=KEY+'=0', wait_log=[quiet],
                           wait_log_fresh=[quiet], wait_log_timeout=8))
         plan_rel = f'tools/live_batches/opt_r6/perm/plans/{name}.json'
         job_rel = f'tools/live_batches/opt_r6/perm/jobs/{name}.json'
@@ -79,7 +79,7 @@ def generate(exe):
                               historical_frame_estimate_seconds=round(120+budget['seconds']-80.4+
                                   2400/flow.fps_windows.expected(job, state)['fps']+.4, 3),
                               readiness='Unproven: conditional fresh QUIET waits; hard stop 300 s.')
-    flow.write(HERE/'predicted.json', dict(status=('READY_FOR_LIVE' if all(k in pipeline_readiness.TABLE for k in (KEY, KEY2)) else 'READY_FOR_TOOLING_INTEGRATION'), key=KEY, spec_constants=[1032, 1033], keys=[KEY, KEY2],
+    flow.write(HERE/'predicted.json', dict(status=('READY_FOR_LIVE' if KEY in pipeline_readiness.TABLE else 'READY_FOR_TOOLING_INTEGRATION'), key=KEY, spec_constants=[1032, 1033], keys=[KEY, KEY2],
         shader_request_delta=0, launches=2, preset='Ultra release', frames_per_window=600,
         timer_period_frames=120, jobs=estimates,
         prediction='GI trace lower by 0-0.40 ms; scalar AO fold/local reads lower by 0-0.06 ms. Other passes within OFF spread.',

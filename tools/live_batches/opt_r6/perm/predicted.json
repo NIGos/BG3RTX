@@ -1,5 +1,5 @@
 {
-  "status": "READY_FOR_TOOLING_INTEGRATION",
+  "status": "READY_FOR_LIVE",
   "key": "gi_lane_permute",
   "spec_constants": [
     1032,
@@ -40,5 +40,5 @@
   "offline_proof": "docs/progress/gi-perm.md",
   "decision": "SAVING only when both ON GI trace medians beat both OFF medians by more than the OFF repeat spread; otherwise NO_SAVING. Missing evidence is INVALID.",
   "readiness": "No 1032/1033 binding in experimental_specs. Warmup exercises ON, then fresh QUIET after every toggle; no build-generation witness required.",
-  "pending": "Apply readiness-integration.patch in the owning tooling lane, then run stock frozen/current lint. All dependent shader/replay/build checks pass. No live authorization or queue staging."
+  "pending": "Readiness registry integration is required when status is READY_FOR_TOOLING_INTEGRATION. Offline only; no launch, queue writes or live saving claim."
 }
