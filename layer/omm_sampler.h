@@ -5,8 +5,6 @@ namespace bg3::omm {
 void sampler_device_created(DeviceData*);
 void sampler_device_destroyed(DeviceData*);
 bool sampler_tracking_active();
-// Separate from sampler policy versions: every descriptor write invalidates CPU receipts.
-bool descriptor_receipt(VkDescriptorSet,uint32_t binding,uint32_t element,uint64_t& identity,uint64_t& version);
 uint64_t sampler_identity(VkSampler);
 void sampler_created(DeviceData*,VkSampler,const VkSamplerCreateInfo&);
 void sampler_destroyed(DeviceData*,VkSampler);

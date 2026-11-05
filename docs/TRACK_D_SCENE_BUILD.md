@@ -1247,9 +1247,10 @@ Round 1 final offline checks: 176/176 CTests pass (150.24 s); release shaders
 against main f3d3c41a: 203 identical / 11 equivalent / 0 different, 1,041
 assignments and negative control PASS. Receipt: `.scratch/release-equivalence.json`.
 
-### CPU scene scratch candidate (2026-11-05, opt-cpu)
+### CPU scene scratch (2026-11-05, opt-cpu, qualified default 1)
 
-`cpu_opt1=0` by default. Reuse four CPU vectors and two membership-only tables
+`cpu_opt1=1` by default. Qualified inn Ultra hook bodies: -0.13 ms/frame CPU
+vs OFF spread 0.016 ms. Reuse four CPU vectors and two membership-only tables
 under the existing scene mutex; clear membership before every build, preserve
 draw order and first duplicate winners. Use the present-refreshed pool-trim
 setting instead of its per-draw locked/string lookup (whose fallback was stale).
@@ -1261,7 +1262,8 @@ ms/build, not a game saving. Existing inn Ultra per-draw/TLAS CPU phases are
 One Ultra inn OFF/ON/OFF/ON job, 600 frames/window, is prepared under
 `tools/live_batches/opt_r3/cpu/`. Quiet readiness only; no pipeline waits.
 Check CPU phase deltas beyond OFF repeat spread in every ON window and no
-lifecycle faults. READY_FOR_LIVE; no live saving or quality pass. Full units,
+lifecycle faults. This historical preparation was superseded by the qualified
+inn Ultra receipt above. Full units,
 normalization and scope limitations are in that directory's README.
 Offline build/test: `scripts/build.ps1 -Test` PASS 180/180, 273.19 s CTest,
 using the checkout-local shader cache. Final analyzer fixtures pass separately.
@@ -1301,7 +1303,7 @@ key toggles and capture resets; all 0 through 17 eviction ranges; and all 0 thro
 cost separately from game savings. Full validation and the prepared inn Ultra
 600-frame A/B batch are recorded in [opt-cpu2](progress/opt-cpu2.md).
 
-## CPU pre-draw candidate cpu_opt3 (2026-11-05, default 0)
+## CPU pre-draw cpu_opt3 (2026-11-05, qualified default 1)
 
 Layer-only, NO_PIPELINE; ABI unchanged and shader request delta 0. The inn Ultra
 CPU2 receipt places pre-draw at about 9.2 ms/frame, including material hooks 2.27,
@@ -1326,10 +1328,22 @@ Prepared check: restart the layer, load the inn Ultra save, run the single
 stay on; CPU3 toggles OFF/ON/OFF/ON in one session, 600 rendered frames per window.
 Quiet readiness only. Every window must contain all CPU timer receipts. Both ON
 pre-draw and hook-body medians must beat both OFF medians beyond the OFF repeat
-spread. CPU3 remains off pending this evidence; game CPU/GPU costs and rendered
-quality/energy are unmeasured. Offline validation and final cache details are in
+spread. Qualification: inn Ultra capture total -0.24 ms/frame CPU vs OFF spread
+0.054 ms; cpu_opt3 now defaults to 1. Receipt:
+`captures/queue/logs/opt-cpu3-inn.1.055551.log.cpu.md`.
+Offline validation and final cache details are in
 [opt-cpu3](progress/opt-cpu3.md).
 
 Offline validation: all 183 CTests pass (184.67 s). Multi-frame production-helper
 fixtures cover exact outputs and lifecycle invalidation. Synthetic row preparation
 at 5000 draws/1500 streams saves 0.1794 ms/frame; this is not a game cost receipt.
+
+
+## CPU cross-frame caches cpu_opt4 (2026-11-05, rejected and removed)
+
+Inn Ultra same-session A/B: capture hook bodies +0.47 / +0.54 ms/frame CPU
+vs OFF repeat spread 0.104 ms, slower in both ON windows. Evidence:
+`captures/queue/logs/opt-cpu4-inn.*.log` and its `.cpu.md` report (user-provided
+close-out receipt). Removed code, key, NO_PIPELINE entry, opt_r5 job and candidate
+tests. Retained qualified cpu_opt1/2/3 and rt_scene_compact_holds, all default 1.
+ABI unchanged; shader request delta 0. No new live run or queue staging.

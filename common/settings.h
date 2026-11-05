@@ -666,7 +666,6 @@ inline constexpr KV kDefaults[] = {
     {"cpu_opt1", "1"},
     {"cpu_opt2", "1"},
     {"cpu_opt3", "1"},
-    {"cpu_opt4", "0"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_mask", "0"},
     {"rt_hit_material_pool_alpha", "1"},

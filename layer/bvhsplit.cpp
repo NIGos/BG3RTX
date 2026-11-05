@@ -1,5 +1,4 @@
 #include "../common/perf_hook_state.h"
-#include "../common/cpu_submit_matrices.h"
 #include "../common/cpu_exact_cache.h"
 #include "../common/cpu_instance_rows.h"
 #include "../common/cpu_build_keys.h"
@@ -3850,11 +3849,6 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
   const double t_fix0 = now_ms();
   uint64_t applied = 0, late = 0, bad = 0;
   const bool reuse = cfg_hot(CfgHot::perf_hook_state) != 0;
-  const bool cpu4 = reuse && cfg_hot(CfgHot::cpu_opt4) != 0;
-  static uint64_t submit_serial=0;const uint64_t serial=++submit_serial;
-  const uint64_t resource_epoch=cpu4?buffer_resource_epoch():0;
-  cpu_opt::SubmitMatrices* persistent_matrices=nullptr;
-  if(cpu4){thread_local cpu_opt::SubmitMatrices cache;cache.begin();persistent_matrices=&cache;}
   perf::SubmitMatrices matrices; // destroyed before return; never reused across submits
   uint64_t unique = 0, build_count = 0;
   for (VkCommandBuffer c : cmds) {
@@ -3869,7 +3863,7 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
         if (reuse) {
           perf::MatrixSource source;
           for (int k = 0; k < 3; ++k) source.rows[k] = f.src[k] + VkDeviceSize(i) * f.src_stride[k];
-          const auto& value = cpu4 ? persistent_matrices->get(source,resource_epoch,serial,load_mapped16) : matrices.get(source, load_mapped16);
+          const auto& value = matrices.get(source, load_mapped16);
           std::memcpy(m, value.rows.data(), sizeof m); ok = value.valid;
         } else {
           for (int k = 0; k < 3; ++k) load_mapped16(m + 4 * k, f.src[k] + VkDeviceSize(i) * f.src_stride[k]);
@@ -3891,11 +3885,10 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
   { // cpu_timing: fresh samples after each mode/timing transition
     static double ms = 0; static uint64_t calls = 0, mats = 0, sources = 0, builds = 0;
     static int mode = -1;
-    const int current_mode=int(reuse)+2*int(cpu4);
     const bool timing = cfg_int("cpu_timing", 0) != 0;
-    if (!timing || mode != current_mode) { ms = 0; calls = mats = sources = builds = 0; mode = current_mode; }
+    if (!timing || mode != int(reuse)) { ms = 0; calls = mats = sources = builds = 0; mode = int(reuse); }
     if (applied && timing) {
-      ms += now_ms() - t_fix0; builds += build_count; mats += applied; sources += cpu4 ? persistent_matrices->size() : reuse ? matrices.size() : unique;
+      ms += now_ms() - t_fix0; builds += build_count; mats += applied; sources += reuse ? matrices.size() : unique;
     }
     if (applied && timing && ++calls >= 300) {
       if (cfg_int("cpu_timing", 0))

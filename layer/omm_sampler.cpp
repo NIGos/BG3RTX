@@ -8,27 +8,21 @@ SamplerRegistry samplers;
 uint64_t nextLayout{1},nextSet{1};
 struct Binding {VkDescriptorType type{};uint32_t count{};VkDescriptorBindingFlags flags{};std::vector<SamplerMetadata> immutable;};
 struct Layout {uint64_t id{};bool complete{};std::unordered_map<uint32_t,Binding> bindings;};
-struct Set {uint64_t id{},version{},receipt{1};VkDescriptorPool pool{};std::shared_ptr<const Layout> layout;bool unsupported{};};
+struct Set {uint64_t id{},version{};VkDescriptorPool pool{};std::shared_ptr<const Layout> layout;bool unsupported{};};
 std::unordered_map<VkDescriptorSetLayout,std::shared_ptr<Layout>> layouts;
 std::unordered_map<VkDescriptorSet,Set> sets;
 uint64_t key(VkSampler sampler){return uint64_t(reinterpret_cast<uintptr_t>(sampler));}
 bool sampler_type(VkDescriptorType type){return type==VK_DESCRIPTOR_TYPE_SAMPLER || type==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;}
 const Binding* binding(const Set& s,uint32_t b){if(!s.layout)return nullptr;auto i=s.layout->bindings.find(b);return i==s.layout->bindings.end()?nullptr:&i->second;}
 bool range(const Binding* b,uint32_t first,uint32_t count){return b && first<=b->count && count<=b->count-first;}
-void receipt(Set& s){if(s.receipt!=UINT64_MAX)++s.receipt;}
 void version(Set& s){if(s.version==UINT64_MAX)s.unsupported=true;else ++s.version;}
 }
 void sampler_device_created(DeviceData* dd){std::lock_guard lock(samplerMutex);if(owner)return;owner=dd;active.store(true,std::memory_order_release);}
-void sampler_device_destroyed(DeviceData* dd){std::lock_guard lock(samplerMutex);if(owner!=dd)return;active.store(false,std::memory_order_release);sets.clear();layouts.clear();samplers.entries.clear();owner=nullptr;material_resource_changed();}
-bool descriptor_receipt(VkDescriptorSet set,uint32_t b,uint32_t element,uint64_t& identity,uint64_t& version){
- if(!active.load(std::memory_order_acquire))return false;std::lock_guard lock(samplerMutex);auto s=sets.find(set);
- if(s==sets.end() || !s->second.id || s->second.receipt==UINT64_MAX || s->second.unsupported || !s->second.layout || !s->second.layout->complete)return false;
- const auto* def=binding(s->second,b);if(!def || def->flags || element>=def->count)return false;identity=s->second.id;version=s->second.receipt;return true;
-}
+void sampler_device_destroyed(DeviceData* dd){std::lock_guard lock(samplerMutex);if(owner!=dd)return;active.store(false,std::memory_order_release);sets.clear();layouts.clear();samplers.entries.clear();owner=nullptr;}
 bool sampler_tracking_active(){return active.load(std::memory_order_acquire);}
 uint64_t sampler_identity(VkSampler sampler){if(!active.load())return 0;std::lock_guard lock(samplerMutex);const auto* entry=samplers.lookup(key(sampler));return entry?entry->id:0;}
-void sampler_created(DeviceData* dd,VkSampler sampler,const VkSamplerCreateInfo& info){if(!active.load() || dd!=owner)return;std::lock_guard lock(samplerMutex);samplers.create(key(sampler),sampler,info);material_resource_changed();}
-void sampler_destroyed(DeviceData* dd,VkSampler sampler){if(!active.load() || dd!=owner)return;std::lock_guard lock(samplerMutex);samplers.destroy(key(sampler));material_resource_changed();}
+void sampler_created(DeviceData* dd,VkSampler sampler,const VkSamplerCreateInfo& info){if(!active.load() || dd!=owner)return;std::lock_guard lock(samplerMutex);samplers.create(key(sampler),sampler,info);}
+void sampler_destroyed(DeviceData* dd,VkSampler sampler){if(!active.load() || dd!=owner)return;std::lock_guard lock(samplerMutex);samplers.destroy(key(sampler));}
 void sampler_layout_created(DeviceData* dd,VkDescriptorSetLayout handle,const VkDescriptorSetLayoutCreateInfo& info){
   if(!active.load() || dd!=owner)return;std::lock_guard lock(samplerMutex);
   auto layout=std::make_shared<Layout>();layout->id=nextLayout==UINT64_MAX?0:nextLayout++;layout->complete=layout->id!=0;
@@ -65,16 +59,15 @@ bool immutable_sampler(VkDescriptorSet set,uint32_t b,uint32_t element,VkSampler
   if(!def || element>=def->immutable.size())return false;sampler=def->immutable[element].sampler;id=def->immutable[element].id;return true;
 }
 void sampler_template_write(VkDescriptorSet set,uint32_t b,uint32_t element,VkDescriptorType type){
-  if(!active.load())return;std::lock_guard lock(samplerMutex);auto s=sets.find(set);if(s==sets.end())return;
-  receipt(s->second);if(!sampler_type(type))return;
+  if(!active.load() || !sampler_type(type))return;std::lock_guard lock(samplerMutex);auto s=sets.find(set);if(s==sets.end())return;
   version(s->second);const auto* def=binding(s->second,b);if(!range(def,element,1) || def->type!=type)s->second.unsupported=true;
 }
 void sampler_descriptor_ranges(DeviceData* dd,uint32_t wc,const VkWriteDescriptorSet* writes,uint32_t cc,const VkCopyDescriptorSet* copies){
   if(!active.load() || dd!=owner)return;std::shared_lock tracked(tracker().mu);std::lock_guard lock(samplerMutex);
-  for(uint32_t i=0;i<wc;++i){const auto& w=writes[i];auto s=sets.find(w.dstSet);if(s==sets.end())continue;receipt(s->second);if(!sampler_type(w.descriptorType))continue;version(s->second);const auto* b=binding(s->second,w.dstBinding);
+  for(uint32_t i=0;i<wc;++i){const auto& w=writes[i];if(!sampler_type(w.descriptorType))continue;auto s=sets.find(w.dstSet);if(s==sets.end())continue;version(s->second);const auto* b=binding(s->second,w.dstBinding);
     if(!range(b,w.dstArrayElement,w.descriptorCount) || !b || b->type!=w.descriptorType || !w.pImageInfo || w.pNext)s->second.unsupported=true;
   }
-  for(uint32_t i=0;i<cc;++i){const auto& c=copies[i];auto dst=sets.find(c.dstSet);if(dst==sets.end())continue;receipt(dst->second);const auto* db=binding(dst->second,c.dstBinding);if(!db)continue;
+  for(uint32_t i=0;i<cc;++i){const auto& c=copies[i];auto dst=sets.find(c.dstSet);if(dst==sets.end())continue;const auto* db=binding(dst->second,c.dstBinding);if(!db)continue;
     version(dst->second);if(db->type==VK_DESCRIPTOR_TYPE_SAMPLER && !db->immutable.empty())continue;
     auto src=sets.find(c.srcSet);const auto* sb=src==sets.end()?nullptr:binding(src->second,c.srcBinding);
     if(!range(db,c.dstArrayElement,c.descriptorCount) || !range(sb,c.srcArrayElement,c.descriptorCount) || sb->type!=db->type || src->second.unsupported || !src->second.layout->complete){dst->second.unsupported=true;continue;}

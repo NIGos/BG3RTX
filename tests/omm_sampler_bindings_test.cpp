@@ -8,8 +8,6 @@ static Tracker tracked;static DeviceData device;static CmdState command;
 Tracker& tracker(){return tracked;}
 DeviceData* device_of(const void*){return &device;}
 CmdState* cmd_state(VkCommandBuffer,bool){return &command;}
-static uint64_t resource_epoch=1;
-void material_resource_changed() noexcept {++resource_epoch;}
 }
 using namespace bg3;using namespace bg3::omm;
 static unsigned checks;
@@ -81,44 +79,6 @@ int main(){
   // Unsupported sampler chains stay observable but cannot certify a factory.
   VkSamplerCustomBorderColorCreateInfoEXT custom{VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT};ci.pNext=&custom;sampler_created(dd,sampler,ci);binding.pImmutableSamplers=&sampler;sampler_layout_created(dd,layout,info);allocate(set,layout);
   check(!query());check(out.status==BoundSampler::Status::UnsupportedSampler);check(out.sampler.unsupportedStructure==custom.sType);
-  // CPU descriptor receipts have their own write epoch. Non-sampler writes
-  // must invalidate cached query metadata without changing sampler policy.
-  ci.pNext=nullptr;sampler_created(dd,sampler,ci);entry.sampler_id=sampler_identity(sampler);
-  VkDescriptorSetLayoutBinding receiptBindings[2]={{7,VK_DESCRIPTOR_TYPE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
-    {8,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr}};
-  info.pBindings=receiptBindings;info.bindingCount=2;sampler_layout_created(dd,layout,info);allocate(set,layout);
-  {std::unique_lock lock(tracker().mu);tracker().sets[set][desc_key(7,0)]=entry;}
-  check(query());
-  uint64_t receiptId=0,receiptVersion=0;check(descriptor_receipt(set,8,0,receiptId,receiptVersion));
-  uint64_t previousReceipt=receiptVersion;const auto allocatedReceiptId=receiptId;
-  check(!descriptor_receipt(set,8,1,receiptId,receiptVersion));check(!descriptor_receipt(set,99,0,receiptId,receiptVersion));
-  VkDescriptorBufferInfo bufferInfo{handle<VkBuffer>(123),0,64};
-  VkWriteDescriptorSet bufferWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};bufferWrite.dstSet=set;bufferWrite.dstBinding=8;
-  bufferWrite.descriptorCount=1;bufferWrite.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;bufferWrite.pBufferInfo=&bufferInfo;
-  // A known ordinary source for the actual descriptor-copy callback.
-  auto source=handle<VkDescriptorSet>(90);allocate(source,layout);
-  {std::unique_lock lock(tracker().mu);tracker().sets[source][desc_key(8,0)]={8,0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_NULL_HANDLE,bufferInfo.buffer,0,64,VK_IMAGE_LAYOUT_UNDEFINED};}
-  VkCopyDescriptorSet bufferCopy{VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};bufferCopy.srcSet=source;bufferCopy.srcBinding=8;
-  bufferCopy.dstSet=set;bufferCopy.dstBinding=8;bufferCopy.descriptorCount=1;
-  for(unsigned frame=0;frame<144;++frame){
-    const bool changed=frame%16==0;
-    if(changed){
-      if(frame%48==0)sampler_descriptor_ranges(dd,1,&bufferWrite,0,nullptr);
-      else if(frame%48==16)sampler_template_write(set,8,0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-      else sampler_descriptor_ranges(dd,0,nullptr,1,&bufferCopy);
-    }
-    check(descriptor_receipt(set,8,0,receiptId,receiptVersion));check(receiptId==allocatedReceiptId);
-    check(changed?receiptVersion>previousReceipt:receiptVersion==previousReceipt);previousReceipt=receiptVersion;
-  }
-  // Copies already advanced the original policy version before cpu_opt4, so
-  // compare directly around an ordinary write/template to prove no new change.
-  check(query());auto beforeNonSampler=out;sampler_descriptor_ranges(dd,1,&bufferWrite,0,nullptr);
-  sampler_template_write(set,8,0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);check(query());check(out.writeVersion==beforeNonSampler.writeVersion);
-  sampler_sets_freed(dd,1,&set);check(!descriptor_receipt(set,8,0,receiptId,receiptVersion));
-  allocate(set,layout);check(descriptor_receipt(set,8,0,receiptId,receiptVersion));check(receiptId!=allocatedReceiptId);
-  sampler_pool_reset(dd,pool);check(!descriptor_receipt(set,8,0,receiptId,receiptVersion));
-  allocate(set,layout);check(descriptor_receipt(set,8,0,receiptId,receiptVersion));
-  const auto beforeDestroy=resource_epoch;sampler_destroyed(dd,sampler);check(resource_epoch>beforeDestroy);
-  sampler_device_destroyed(dd);check(!sampler_tracking_active());check(!query());check(!descriptor_receipt(set,8,0,receiptId,receiptVersion));
+  sampler_device_destroyed(dd);check(!sampler_tracking_active());check(!query());
   std::printf("Bound sampler helper checks %u; fake handles, no Vulkan/device calls\n",checks);
 }
