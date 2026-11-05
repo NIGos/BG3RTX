@@ -1,24 +1,30 @@
-## BLAS flags replay (branch blasflags, incomplete, 2026-11-05)
+## BLAS flags replay (branch blasflags, rejected, 2026-11-06)
 
-- Replay-only --blas-policy legacy/layer/trace and paired --ab-blas; product code unchanged; shader request delta 0.
-- Classes exact from pool/soup/held InstInfo bits and manifest casters; static alpha slots cannot overlap held bit 31.
-- Layer A: static FAST_TRACE | ALLOW_COMPACTION; dynamic/cascade FAST_BUILD | ALLOW_UPDATE (cascade refit on).
-  B changes dynamic/cascade to FAST_TRACE | ALLOW_UPDATE; static BLAS shared, replay does not compact them.
-- Cached current sun/far production request with native/instance/cascade/far constants; radius 6 m, 2 rays,
-  rt_stats=0, compact-hit-state=1, roof-early=1, --sun-trust; 40 ABBA/BAAB pairs, 8 warmups per sample.
-- Exact Ultra unavailable: packs have lighting set 2, no emissive scene. _em trial stopped as invalid;
-  retained timings use gi_trace_rt_hit_sun (no emission). Frozen geometry also limits animated-refit inference.
-- S8 trace gain 0.046672 [0.043168, 0.049936] ms (95% median CI); outputs/counters 100% bit-equal,
-  0 differing pixels, max diff 0. Static 164/369437 tris, dynamic 272/1258387 tris, no cascade/held.
-- S8 build A/B 1.316648/1.802176 ms; paired extra 0.457704 [0.420960, 0.487472].
-  Refit A/B 0.199992/0.374704 ms; paired extra 0.174720 [0.173088, 0.177696].
-- Stable Ultra cycle: 600 refits + 1 build, cascade 60 refits + 1 build. S8 extra AS 0.175191 ms/frame;
-  net gain -0.128519 ms/frame, conservative 95% Bonferroni model interval [-0.136867, -0.122779].
-- S8 same-flags control trace B-A +0.004112 [-0.004304, 0.024368] ms; exact outputs/counters.
-- Camp control INVALID: Stalker2 started 23:35:02 during 23:34:26-23:35:29 run; candidate stopped at pair 11.
-  Partial candidate: 11/11 quartets bit-equal, but GPU timings confounded (8 -> 20-25 ms). Inn pending.
-- GPU work stopped; user notified. No bg3.exe, game launch, queue activity or git writes.
-- Verification: replay build; existing synthetic self-test PASS; class + AB statistics tests PASS;
-  synthetic dynamic/cascade A/B (build/refit included) under Vulkan validation, exact outputs/counters, 0 errors.
-- Useful replay-only code retained for remaining comparisons. No product proposal: S8 net loss; full Ultra unproved.
-- Receipts: .scratch/blasflags/{s8,s8-control,camp,camp-control}; summary.json; shader.json; command.json/log/CSV per run.
+- Replay-only --blas-policy legacy/layer/trace and --ab-blas retained; no product change; shader request delta 0.
+- Exact classes from pool/soup/held InstInfo bits and manifest casters; no held instances in these packs. Layer A: static FAST_TRACE | ALLOW_COMPACTION, dynamic/cascade FAST_BUILD | ALLOW_UPDATE; B changes only
+  dynamic/cascade to FAST_TRACE | ALLOW_UPDATE. Static BLAS shared; replay does not compact them.
+- Sun/far request with Ultra native/instance/cascade/far specs; radius 6 m, 2 rays, rt_stats=0,
+  compact-hit-state=1, roof-early=1, --sun-trust; 40 ABBA/BAAB pairs per trace/build/refit, 8 trace warmups/sample.
+- LIMIT: packs lack emissive scene descriptors; supported sun/far without emission approximates full Ultra.
+  Frozen geometry cannot establish traversal/refit cost after animation. Build timings exclude allocation/TLAS.
+- All values ms; trace gain = A-B; extra build/refit = B-A. Brackets are 95% median CIs.
+
+| Pack | Trace gain | Extra AS/frame | Net gain/frame [conservative 95% model interval] |
+|---|---|---|---|
+| S8 | 0.046672 [0.043168, 0.049936] | 0.175191 | -0.128519 [-0.136867, -0.122779] |
+| Camp | 0.377312 [0.232448, 0.641920] | 0.500884 | -0.123572 [-0.389910, 0.193367] |
+| Inn | 0.075696 [0.039024, 0.189216] | 0.692690 | -0.616994 [-0.810208, -0.462765] |
+
+| Pack/class | Extra build [95% CI] | Extra refit [95% CI] |
+|---|---|---|
+| S8 dynamic | 0.457704 [0.420960, 0.487472] | 0.174720 [0.173088, 0.177696] |
+| Camp dynamic | 0.251400 [0.183968, 0.324512] | 0.334608 [0.331808, 0.337856] |
+| Camp cascade | 0.607416 [0.546464, 0.648304] | 0.159064 [0.157968, 0.160048] |
+| Inn dynamic | 1.391960 [1.121872, 1.701520] | 0.434976 [0.429584, 0.441536] |
+| Inn cascade | 0.792368 [0.699072, 0.900816] | 0.247184 [0.245120, 0.249232] |
+
+- Net = trace gain - (build + R * refit)/(R+1) extra, R=600 dynamic/60 cascade; Bonferroni component bounds.
+- Every measured quartet: outputs/counters 100% bit-equal, 0 differing pixels, max diff 0 (candidates and controls).
+- Same-flags trace B-A controls: S8 +0.004112 [-0.004304, 0.024368], camp +0.046920 [-0.103152, 0.239136], inn -0.021656 [-0.134704, 0.026384].
+- Old camp runs remain INVALID (Stalker2 overlap); completed reruns guarded before launch/every second for Stalker2/bg3/Cyberpunk; no game detected, no game/queue/git writes.
+- Receipts: .scratch/blasflags/{s8,s8-control,camp-idle,camp-control-idle,inn-idle,inn-control-idle}; summary.json, shader.json, command/log/CSVs; previous synthetic/class/AB tests passed, 0 validation errors.
