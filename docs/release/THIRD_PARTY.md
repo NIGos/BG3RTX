@@ -117,7 +117,7 @@ below describe those exact bytes, including original line endings. Inventory pro
 
 | Collected filename | SHA-256 (verbatim release copy) |
 |---|---|
-| `DLSS5-bridge-MIT.txt` | `e9755305941ee76fdd77a520b6f402898907ceb64f6e2180bb262307ce5e0d33` |
+| `DLSS5-bridge-MIT.txt` | `813b2964a4ab9aa6c41e00c7094a389d61feeb918fcf690cb9b3e454b678770e` |
 | `NVIDIA-RTX-SDKs-DLSS.txt` | `dc2778a3283427285984cdb5b3f7f03eae7d8a06057f672f2999c5ee7fd4f67d` |
 | `Streamline-MIT.txt` | `7b6f23e7d6f3ad6292f9308d2b42cdc3d82ae4e9b2abb55f230279d83bedd43d` |
 | `Streamline-3rd-party-licenses.md` | `cb251639994465f31d2178c16acedf1ff4f9cef1c370a09782ed36d4c86c1dca` |
