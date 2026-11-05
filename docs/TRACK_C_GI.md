@@ -672,3 +672,22 @@ Default-OFF shader requests retain release equivalence; the default spec
 value is now 1. Shader request delta remains 0.
 See [branch evidence](progress/gi-livestate.md) for timings/spreads and
 [offline commands](../tools/frame_replay.md) for statistics and exact comparisons.
+
+
+## Far GI live-state trial (farregs, rejected, 2026-11-05)
+
+Production Ultra sun/emission, native/hit-inst/cascade/far, 1029=1 and 1038=1: near/far
+168/243 registers. Moving the pure roof-volume decision before hidden-hit lighting retained
+one veto bit instead of the original ray origin: 240 registers. Rematerializing the original
+base/far fade at consumption reached 239. Moving eleven far-stat uint accumulators to
+lane-owned shared words (same integer accumulation and wave/group reduction) reached 218,
+with 2816 extra shared bytes. None reached the requested 168/128-register occupancy step.
+
+Sun-trust S8/camp/inn: 40 paired ABBA/BAAB samples each, both rt_stats=0 and 1, for both
+candidates (480 pairs total); every output byte and raw counter bin 100% equal. Roof/fade
+production ON-OFF median [95% median interval], ms: +0.439 [-0.313,+1.329] /
+-0.176 [-0.547,+0.133] / +0.353 [+0.138,+0.609]. Shared-stat candidate:
++0.959 [+0.635,+1.956] / +0.132 [-0.059,+0.957] / +0.093 [-0.173,+0.251].
+No consistent timing gain; inn loses with roof/fade and S8 loses with shared stats.
+Rejected and all candidate code removed; 1039 retired, no shipped key or new shader request.
+Full diagnostic intervals and receipts: docs/progress/farregs.md and worktree .scratch/farregs/.

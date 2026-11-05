@@ -50,6 +50,7 @@ enum SpecId : unsigned {
   // Retired 2026-11-05: 1032 lane permutation (slower), 1033 aux AO R16F. Never reuse.
   // Retired 2026-11-05: 1034 deferred hidden-hit sun wave (slower). Never reuse.
   // Retired 2026-11-05: 1035 gi_far_roof_early, 1036 gi_far_roof_identity (measured losses). Never reuse.
+  // Retired: 1039 gi_far_lean (exact, below occupancy target; paired timing losses). Never reuse.
   kSpecIdGiFarRoofEarly = 1038,     // exact far hidden-hit roof rejection; diagnostics force OFF
   kSpecIdCompactHitState = 1029,    // GI: retain the normal instead of the full hit across direct lighting
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
