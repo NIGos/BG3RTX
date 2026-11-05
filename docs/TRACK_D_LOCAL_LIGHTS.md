@@ -976,3 +976,14 @@ and replay/live equality remain READY_FOR_LIVE, not qualified. Prepared static
 job: `tools/live_batches/ls_pack/jobs/ls-pack-inn.json`, save `The Blushing Mermaid -
 96h 39m`, Ultra, 2048 MiB cap, no queued work. See `tools/frame_replay.md` and
 `docs/progress/ls-pack.md` for offline verification and limitations.
+
+### Raw compressed replay correction (ls-pack2, 2026-11-05)
+
+The inn capture failed before publication: decoded BC4/BC5 is approximate.
+Diagnostic sampled BC1-BC7 allocations now include TRANSFER_SRC, and LS copies
+raw blocks over the bound view range. Packs retain VkFormat and swizzles;
+replay uploads the blocks unchanged. All decoded BCn paths fail closed for LS.
+The 2048 MiB disk cap includes manifest/codec overhead and is enforced before
+each block write. ABI stays 27; shader request delta 0. Offline fixtures cover
+BC4 atlas and BC5 cookie controls plus byte/sampling identity. Actual inn size
+and live-reference equality remain unverified; no live batch ran for this fix.

@@ -22,6 +22,7 @@ int main() {
   m.buffers = {{0, 0, 400, "s0b0.bin"}, {1, 6, 1476395008ull, ""}, {1, 8, 256, "s1b8.bin"}};
   m.ranges = {{1, 6, 64, "s1b6.ranges.bin", 0, 192}, {1, 6, 8192, "s1b6.ranges.bin", 192, 384}, {1, 1, 0, "legacy.bin"}};
   m.images = {{0, 5, 0, rp::kR32Sfloat, 2560, 1440, 1, 1, "img0.bin"}, {1, 3, 2, 146, 4096, 4096, 4, 13, "img1.bin"}};
+  m.images[1].components = {3, 3, 3, 2}; // R R R ONE
   m.omitted = {{1, 2, 17}, {1, 14, 3}};
   m.samplers = {{1, 15, 0, 1, 1, 1, 0, 0, 2, 16.0f, 1000.0f}, {1, 4, 0, 1, 1, 1, 0, 0, 0, 0.0f, 16.0f}};
   m.instances = "instances.bin"; m.instance_count = 61234;
@@ -43,7 +44,7 @@ int main() {
             b.ranges[i].file_offset == m.ranges[i].file_offset && b.ranges[i].bytes == m.ranges[i].bytes;
   for (size_t i = 0; lists && i < 2; ++i)
     lists = b.images[i].format == m.images[i].format && b.images[i].w == m.images[i].w && b.images[i].layers == m.images[i].layers &&
-            b.images[i].mips == m.images[i].mips && b.images[i].file == m.images[i].file && b.omitted[i].element == m.omitted[i].element &&
+            b.images[i].components == m.images[i].components && b.images[i].mips == m.images[i].mips && b.images[i].file == m.images[i].file && b.omitted[i].element == m.omitted[i].element &&
             b.samplers[i].aniso == m.samplers[i].aniso && b.samplers[i].max_lod == m.samplers[i].max_lod && b.samplers[i].aw == m.samplers[i].aw &&
             b.outputs[i].format == m.outputs[i].format && b.outputs[i].reference == m.outputs[i].reference;
   check(lists, "buffers, sparse ranges (file slices), images, omitted, samplers, outputs");

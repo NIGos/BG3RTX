@@ -56,7 +56,8 @@ class Writer {
   std::ostream& out_; COMPRESSOR_HANDLE handle_=nullptr;
   uint64_t expected_=0,written_=0,encoded_=24;
   std::vector<uint8_t> pending_,packed_;
-  bool ok_=true,finished_=false;
+  bool ok_=true,finished_=false,limit_exceeded_=false;
+  uint64_t encoded_limit_=~0ull;
   bool flush() {
     if(pending_.empty())return ok_;
     SIZE_T n=0; bool compressed=false;
@@ -65,13 +66,15 @@ class Writer {
       compressed=api().compress(handle_,pending_.data(),pending_.size(),packed_.data(),packed_.size(),&n)!=FALSE&&n<pending_.size();
     }
     const size_t stored=compressed?size_t(n):pending_.size();
+    if (encoded_>encoded_limit_ || 16+stored>encoded_limit_-encoded_) { limit_exceeded_=true;ok_=false;return false; }
     put32(out_,uint32_t(pending_.size()));put32(out_,uint32_t(stored));
     put32(out_,hash(pending_.data(),pending_.size()));put32(out_,compressed?1u:0u);
     out_.write(reinterpret_cast<const char*>(compressed?packed_.data():pending_.data()),std::streamsize(stored));
     encoded_+=16+stored;pending_.clear();ok_=ok_&&bool(out_);return ok_;
   }
  public:
-  Writer(std::ostream& out,uint64_t decoded_bytes):out_(out),expected_(decoded_bytes) {
+  Writer(std::ostream& out,uint64_t decoded_bytes,uint64_t encoded_limit=~0ull):out_(out),expected_(decoded_bytes),encoded_limit_(encoded_limit) {
+    if(encoded_limit<24){limit_exceeded_=true;ok_=false;return;}
     if(decoded_bytes>kMaxDecoded){ok_=false;return;}
     if(api().available())api().create(COMPRESS_ALGORITHM_XPRESS_HUFF,nullptr,&handle_);
     out_.write(kMagic,8);put64(out_,decoded_bytes);put32(out_,kBlock);put32(out_,0);
@@ -81,6 +84,7 @@ class Writer {
   ~Writer(){if(handle_)api().close(handle_);}
   bool good()const{return ok_;}
   uint64_t encoded_bytes()const{return encoded_;}
+  bool limit_exceeded()const{return limit_exceeded_;}
   bool write(const uint8_t* data,size_t count) {
     if(!ok_||finished_||count>expected_-written_){ok_=false;return false;}
     written_+=count;

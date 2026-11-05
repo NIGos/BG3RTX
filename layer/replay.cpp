@@ -26,7 +26,8 @@
 //          constants, transmittance LUT and cloud shadows; all droppable ("[replay] pack N lighting
 //          inputs: ..." says what was bound, kept and its MB).
 // Buffers without TRANSFER_SRC usage are read by a small compute shader (shaders/replay_copy.hlsl).
-// Images without TRANSFER_SRC (most game textures and the VT caches) are read through a sampled
+// Sampled BCn images gain TRANSFER_SRC at creation and retain their raw blocks.
+// Other images without TRANSFER_SRC are read through a sampled
 // 2D-array view by shaders/replay_image.hlsl and stored decoded (rp::shader_read_format: BCn as
 // 8-bit or half texels; `image ... SOURCE` names the game format). Images in pieces of at most a
 // staging chunk. Integer formats without TRANSFER_SRC stay "omitted" (replayed as NaN).
@@ -93,10 +94,15 @@ bool is_buffer_desc(VkDescriptorType t) {
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice d, const VkImageCreateInfo* ci, const VkAllocationCallbacks* a, VkImage* out) {
-  const VkResult r = g_next.CreateImage(d, ci, a, out);
+  // Raw compressed readback needs this usage from allocation time, even when
+  // replay_pack is enabled later. This wrapper exists only in diagnostic builds.
+  VkImageCreateInfo patched = *ci;
+  if (rp::block_compressed(uint32_t(ci->format)) && (ci->usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+    patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  const VkResult r = g_next.CreateImage(d, &patched, a, out);
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(g_obj_mu);
-    g_imgs[*out] = {ci->imageType, ci->format, ci->extent.width, ci->extent.height, ci->extent.depth, ci->mipLevels, ci->arrayLayers, ci->usage};
+    g_imgs[*out] = {ci->imageType, ci->format, ci->extent.width, ci->extent.height, ci->extent.depth, ci->mipLevels, ci->arrayLayers, patched.usage};
   }
   return r;
 }
@@ -377,7 +383,7 @@ struct Plan {
   std::vector<Copy> copies;
   std::vector<ImageCopy> images;
   std::map<VkImage, std::vector<size_t>> image_index;   // image -> its captures in Plan::images
-  struct Use { uint32_t set, binding, element; size_t image; bool output; uint32_t format; };   // format: of this use's view
+  struct Use { uint32_t set, binding, element; size_t image; bool output; uint32_t format; VkComponentMapping comp; };   // format: of this use's view
   std::vector<Use> uses;
   uint32_t omit_view = 0, omit_format = 0, omit_transfer = 0, omit_layout = 0, omit_size = 0, omit_budget = 0;
   std::map<uint32_t, uint32_t> omit_formats;   // VkFormat -> descriptor uses omitted for "format"
@@ -503,7 +509,7 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
     uint32_t block = 1, copy_block = 1;
     const uint32_t vb = rp::block_bytes(uint32_t(v.format), block), ib = rp::block_bytes(uint32_t(im.format), copy_block);
     const bool swizzled = !identity(v.comp);
-    if (!transfer || swizzled || !vb || vb != ib || block != copy_block) {
+    if (!transfer || (swizzled && !rp::block_compressed(pack_format)) || !vb || vb != ib || block != copy_block) {
       // Storage images (set 0 outputs) are only ever copied: the read needs SAMPLED usage.
       if (slot.kind == rp::kStorage)
         return transfer ? omit_format("storage format the pack does not carry") : omit(p.omit_transfer, "no TRANSFER_SRC usage");
@@ -547,7 +553,7 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
         ic.droppable = ic.droppable && droppable;
         ic.priority = (std::max)(ic.priority, priority);
         for (size_t k = 0; k < ic.copies; ++k) p.copies[ic.first_copy + k].droppable = ic.droppable;
-        p.uses.push_back({set, binding, element, idx, output, pack_format});
+        p.uses.push_back({set, binding, element, idx, output, pack_format, v.comp});
         return true;
       }
       if (same_range && shader && ic.shader) { own_read = true; continue; }
@@ -606,7 +612,7 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
   for (Copy& c : pieces) p.copies.push_back(std::move(c));
   p.image_index[v.image].push_back(p.images.size());
   p.images.push_back(ic);
-  p.uses.push_back({set, binding, element, p.images.size() - 1, output, pack_format});
+  p.uses.push_back({set, binding, element, p.images.size() - 1, output, pack_format, v.comp});
   return true;
 }
 
@@ -885,6 +891,7 @@ void write_pack(Job* job) {
   if (ok) {
     make_dirs(job->dir);
     SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_BELOW_NORMAL);
+    const uint64_t manifest_bytes=rp::serialize(job->m).size();
     uint64_t disk_bytes=0;
     bool disk_cap_exceeded=false;
     if(job->m.pass=="local_shadows") {
@@ -897,13 +904,14 @@ void write_pack(Job* job) {
         std::sort(pieces.begin(),pieces.end(),[](const Copy* a,const Copy* b){return a->file_offset<b->file_offset;});
         uint64_t decoded=0;for(auto* c:pieces)decoded=(std::max)(decoded,c->file_offset+c->bytes);
         std::ofstream file(job->dir+"\\"+name,std::ios::binary|std::ios::trunc);
-        rp::codec::Writer compressed(file,decoded);
+        const uint64_t remaining = disk_bytes+manifest_bytes <= job->disk_cap ? job->disk_cap-disk_bytes-manifest_bytes : 0;
+        rp::codec::Writer compressed(file,decoded,remaining);
         uint64_t at=0;
         auto append=[&](const uint8_t* src,uint64_t bytes) {
           while(bytes && ok) {
             const size_t n=size_t((std::min)(bytes,uint64_t(4u<<20)));
             const bool wrote=compressed.write(src,n);
-            disk_cap_exceeded=disk_bytes+compressed.encoded_bytes()>job->disk_cap;
+            disk_cap_exceeded=compressed.limit_exceeded();
             ok=wrote && !disk_cap_exceeded;
             src+=n;bytes-=n;
           }
@@ -922,7 +930,7 @@ void write_pack(Job* job) {
         file.flush();
         file.close();
         disk_bytes+=compressed.encoded_bytes();
-        disk_cap_exceeded=disk_cap_exceeded || disk_bytes>job->disk_cap;
+        disk_cap_exceeded=disk_cap_exceeded || compressed.limit_exceeded() || disk_bytes+manifest_bytes>job->disk_cap;
         ok=finished && bool(file) && !disk_cap_exceeded;
         if(!ok)break;
       }
@@ -1422,7 +1430,8 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     }
     else if(!(d->phase==1 && u.set==0 && is_output(u.binding)))   // mutable inputs are named by Output::initial
       m.images.push_back({u.set, u.binding, u.element, ic.shader ? ic.pack_format : u.format, ic.w, ic.h, ic.layers, ic.mips, file,
-                          ic.shader && uint32_t(ic.view_format) != ic.pack_format ? uint32_t(ic.view_format) : 0u});
+                          ic.shader && uint32_t(ic.view_format) != ic.pack_format ? uint32_t(ic.view_format) : 0u,
+                          ic.shader ? std::array<uint32_t,4>{} : std::array<uint32_t,4>{uint32_t(u.comp.r),uint32_t(u.comp.g),uint32_t(u.comp.b),uint32_t(u.comp.a)}});
   }
   const uint32_t omitted = uint32_t(m.omitted.size());
   char note[640];
@@ -1447,8 +1456,8 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
 
   if(d->phase==1) {
     if(!m.omitted.empty()){release_views(views);return fail("LS replay requires every sampled image; omission would change visibility");}
-    for(const auto& image:p.images)if(image.shader && uint32_t(image.view_format)>=139 && uint32_t(image.view_format)<=142)
-      {release_views(views);return fail("LS replay requires raw BC4/BC5 bytes; decoded fallback is not bit-exact");}
+    for(const auto& image:p.images)if(image.shader && rp::block_compressed(uint32_t(image.view_format)))
+      {release_views(views);return fail("LS replay requires raw BCn bytes; decoded fallback is not bit-exact");}
   }
 
   // ---- staging: chunks, placement ----
