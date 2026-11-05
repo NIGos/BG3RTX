@@ -19,6 +19,21 @@ HERE = ROOT / 'tools/live_batches/release_qual'
 
 
 class FinalReleaseTests(unittest.TestCase):
+    def test_energy_windows_cover_current_serialized_capture_model(self):
+        # The old frozen retime shortened 8 s to 3.8 s. These generated
+        # receipts retain the newer runner model and must pass in a fresh process.
+        with patch.dict(flow.TRACE_STALL, {}, clear=True), patch.dict(flow.TRACE_EXPORT, {}, clear=True):
+            for path in flow.job_files(HERE):
+                job, plan, _ = flow.load_job(path)
+                schedules = flow.trace_schedules(job, plan)
+                for phase in plan:
+                    if phase['label'].endswith('energy-static'):
+                        with self.subTest(job=path.name, window=phase['label']):
+                            self.assertEqual(phase['trace_at'], [1])
+                            self.assertGreater(phase['seconds'], schedules[phase['label']][-1])
+                            # A frozen-model 3.8 s regression must remain refused.
+                            self.assertGreater(schedules[phase['label']][-1], 3.8)
+
     def test_preset_reset_uses_resolved_values_and_target_pipelines(self):
         job, plan, _ = flow.load_job(HERE/'final/jobs/final-s8-ultra-high.json')
         reset = next(p for p in plan if p['label'].endswith('settings-reset'))

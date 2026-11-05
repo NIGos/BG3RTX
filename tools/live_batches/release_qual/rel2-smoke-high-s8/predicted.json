@@ -4,9 +4,9 @@
   "max_minutes": 5,
   "hard_timeout_seconds": 300,
   "load_allowance_seconds": 120,
-  "expected_minutes": 2.92,
-  "scheduled_seconds": 51.124,
-  "readiness_seconds": 4.354,
+  "expected_minutes": 3.12,
+  "scheduled_seconds": 61.64,
+  "readiness_seconds": 5.74,
   "captures": 1,
   "disk_estimate_mb": 70,
   "expect": [

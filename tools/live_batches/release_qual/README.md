@@ -6,7 +6,7 @@ Queue **only** the two files in `final/jobs`, never the three source receipts in
 
 | Launch | Coverage | Expected with 120 s load | Disk estimate |
 | --- | --- | --- | --- |
-| final-s8-ultra-high | Ultra rel1 then High rel2 at Water Queens House | 3.72 minutes | 130 MB |
+| final-s8-ultra-high | Ultra rel1 then High rel2 at Water Queens House | 4.12 minutes | 130 MB |
 | final-stock-hair-dialogue1 | Ultra stock cards, native hair/scalp | 3.32 minutes | 70 MB |
 
 Both launches have a 300-second hard timeout, including load, and max_minutes=5.
@@ -45,15 +45,19 @@ Regenerate (offline, from repository root):
 ```powershell
 & 'C:/Program Files/LLVM/bin/clang++.exe' -std=c++17 tools/live_batches/release_qual/profile.cpp -o "$env:TEMP/bg3rtx-final-profile.exe"
 python tools/live_batches/release_qual/make_final.py --profile-exe "$env:TEMP/bg3rtx-final-profile.exe"
-python tools/live_batches/live_flow.py tools/live_batches/release_qual --preflight --frozen --report tools/live_batches/release_qual/offline/final_lint.json
+python tools/live_batches/live_flow.py tools/live_batches/release_qual --preflight --report .scratch/relsmoke-preflight.json
 python tests/release_qual_test.py
 python tests/batch_jobs_lint_test.py
 ```
 
 The tests lint every source/final job against the frozen snapshot without reading live logs.
-Only six required readiness queries and missing regexes were appended; existing frozen entries
-and FPS/trace models were retained. Live-flow preflight also passed against 79 VALID logs. Final regeneration and CLI lint use
---frozen, retain no full-log cache, and create no file over 20 MB.
+Regeneration and runner preflight use the current VALID corpus (the main checkout's
+captures/queue/results.jsonl when run in a linked worktree). The older frozen stall p95
+shortened energy-static from 8 s to 3.8 s; current serialized capture scheduling needs
+more than 3.85 s, so the shared model now sizes it to 3.9 s. Preflight is unchanged.
+The relsmoke fix appended only three readiness queries to the snapshot, preserving all
+existing entries and models. Live-corpus preflight passed all four requested jobs against
+67 readable VALID logs. This is offline scheduling evidence, not a live quality pass.
 
 After coordinator commit, merge into the built test-main tree, explicit user steering and the
 normal frozen tree/build/job authorization receipt, queue from the main checkout with exactly:
