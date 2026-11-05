@@ -52,6 +52,27 @@ def load(path=PATH):
     return data
 
 
+def extend_readiness(paths, path=PATH):
+    """Add only previously unseen queries; preserve every frozen receipt.
+
+    New transitions without a VALID receipt remain explicitly unproven.
+    This never refreshes regex matches, FPS models or existing readiness data.
+    """
+    data = load(path)
+    flow.readiness_budget.FROZEN = False
+    before = set(flow.readiness_budget.CACHE)
+    for target in paths:
+        job, plan, _ = flow.load_job(target)
+        flow.duration_budget(job, plan)
+        flow.readiness_budget.timeouts(job, plan)
+    for key, estimate in flow.readiness_budget.CACHE.items():
+        if key not in before:
+            data['readiness'].append(dict(save=key[0], patterns=key[1], fresh=key[2],
+                changed=key[3], first=key[4], estimate=estimate))
+    flow.write(path, data)
+    return len(flow.readiness_budget.CACHE) - len(before)
+
+
 def main():
     index = flow.corpus(flow.default_results(), flow.ROOT / 'captures/.cache/live_flow_corpus.json', newest=100000)
     if not index['entries']:

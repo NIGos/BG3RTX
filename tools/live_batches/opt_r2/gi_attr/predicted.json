@@ -1,0 +1,83 @@
+{
+  "status": "READY_FOR_LIVE",
+  "diagnostic": true,
+  "launches": 1,
+  "static_camera": true,
+  "max_seconds": 300,
+  "shader_request_delta": 0,
+  "reference": "captures/queue/logs/opt-profile-inn.1.005111.log: Ultra GI trace about 13.6 ms",
+  "brackets": [
+    {
+      "feature": "direct",
+      "key": "gi_hit_direct",
+      "off": "0",
+      "on": "1",
+      "windows": [
+        "direct--off-a",
+        "direct--on",
+        "direct--off-b"
+      ]
+    },
+    {
+      "feature": "sun",
+      "key": "gi_hit_sun",
+      "off": "0",
+      "on": "1",
+      "windows": [
+        "sun--off-a",
+        "sun--on",
+        "sun--off-b"
+      ]
+    },
+    {
+      "feature": "emission",
+      "key": "rt_hit_emission",
+      "off": "0",
+      "on": "1",
+      "windows": [
+        "emission--off-a",
+        "emission--on",
+        "emission--off-b"
+      ]
+    },
+    {
+      "feature": "far",
+      "key": "gi_far",
+      "off": "0",
+      "on": "1",
+      "windows": [
+        "far--off-a",
+        "far--on",
+        "far--off-b"
+      ]
+    },
+    {
+      "feature": "second-ray",
+      "key": "gi_rr_rays",
+      "off": "1",
+      "on": "2",
+      "windows": [
+        "second-ray--off-a",
+        "second-ray--on",
+        "second-ray--off-b"
+      ]
+    },
+    {
+      "feature": "material",
+      "key": "rt_hit_material",
+      "off": "0",
+      "on": "1",
+      "windows": [
+        "material--off-a",
+        "material--on",
+        "material--off-b"
+      ]
+    }
+  ],
+  "attribution": "trace(on) minus mean(trace(off-a), trace(off-b)); report both signed bracket deltas and OFF drift.",
+  "baseline": "Pair-specific OFF: only the named feature differs from Ultra. Dependencies stay enabled; costs are conditional and not additive.",
+  "gates": "Only each measured window logging its GI trace GPU cost; no quality, energy or speedup gate.",
+  "pending": "Prepared offline only. No staging or launch authorized. No candidate qualification claimed.",
+  "captures": 0,
+  "disk_estimate_mb": 5
+}

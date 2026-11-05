@@ -1,0 +1,282 @@
+{
+  "name": "opt-gi-attr-inn",
+  "save": "The Blushing Mermaid - 96h 39m",
+  "session": false,
+  "traces": 0,
+  "repeat": 1,
+  "hold": 90,
+  "timeout": 300,
+  "max_minutes": 5,
+  "window_mode": "visible_unfocused_fg",
+  "live_batch": "opt-r2-gi-attr",
+  "fail_fast": true,
+  "stop_on_dump": false,
+  "set": "ab_hotkey=1,ab_off=0,ao_direct=1,census_dump=0,contact_shadows=1,core=1,cpu_timing=0,crash_dump=0,detailed_logging=1,dev=1,dump_images=0,dump_preview_f32=0,dump_raw=0,dump_shaders=0,experimental_options=0,fg=2,fg_current_destroy_only=1,fg_input_copy=1,fg_letterbox=1,fg_snap_full=0,fg_tag_hudless=1,fg_tag_ui=1,fg_ui_pq=0,fps_cap=58,geo_capture=0,geo_timing=0,gi=1,gi_ao=1.0,gi_debug=0,gi_far=1,gi_far_m=6,gi_history=0.1,gi_hit_direct=1,gi_hit_sun=1,gi_radius=0.15,gi_rays=4,gi_rr_rays=2,gi_rt=1,gi_rt_depth_k=1.0,gi_rt_fallback=0,gi_rt_radius=1.0,gi_steps=16,gi_strength=1.00,gi_thickness=0.03,headless=0,hit_ao_rays=2,hit_ls_policy=1,ls_box=2,ls_box_cascade_old=0,ls_box_honour_shadow=1,ls_check=0,ls_clear=0.2,ls_debug=0,ls_dyn_speed=8,ls_giveback_cap=1,ls_impl=1,ls_k=1,ls_lights=1,ls_lights_radius=80,ls_min_radius=0,ls_native_direct_validate=0,ls_noshadow=1,ls_owners=31,ls_rest_samples=1,ls_samples=0,ls_shadowed=3,ls_soft=-1,ls_source_radius=0.05,ls_stats=0,ls_strength=1.00,mat_classes=1,ngx_hook=1,pan_capture=0,pan_delay_ms=0,pan_edge=0,pan_inputs=0,pan_post=0,pan_prepare=0,pan_water=0,pan_water_frames=8,perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0,preset=ultra,qa_exposure_hold=1,qa_zero=0,reflex=1,replay_pack=0,replay_pack_cap_mb=2048,rf_debug=0,rf_depth_k=1.0,rf_edge=0.05,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.8,rf_max_rough_norr=0.3,rf_mirror_rough=0.1,rf_models=3,rf_rr=-1,rf_stats=0,rf_strength=1.00,rf_tmax=100,rf_validate=0,rr=1,rr_cbt=1,rr_dump_gbuffer=0,rr_guides_at=1,rr_guides_v2=1,rr_nov=0.5,rr_post=1,rr_post_check=0,rr_post_quantise=1,rr_post_temporal=1,rr_preset=6,rr_show=0,rr_spec_hit_distance=1,rr_test_fail=0,rt=1,rt_alpha=1,rt_alpha_auto=1,rt_alpha_cut=1,rt_alpha_fine_lod=1,rt_alpha_max_pct=60,rt_alpha_stochastic=1,rt_alpha_stream=1,rt_alpha_test=1,rt_alpha_unknown=1,rt_backlit=1,rt_bias=0.002,rt_build=1,rt_bvh_split=1,rt_capture_discard=1,rt_capture_elastic=1,rt_capture_state_log=0,rt_cascade_alpha=2,rt_cascade_alpha_dedupe=1,rt_cascade_casters=1,rt_cascade_index=2,rt_cascade_mb=160,rt_cascade_origin=1,rt_cascade_rebuild_frames=60,rt_cascade_refit=1,rt_debug=0,rt_dyn_hold=4,rt_dyn_hold_max_prims=8192,rt_em_backdrop=0,rt_em_calib=1,rt_em_check_frames=16,rt_em_check_slices=16,rt_em_dbg_fam_hi=0,rt_em_dbg_fam_lo=0,rt_em_decal=1,rt_em_fx_pulse=0,rt_em_fx_thr=0.05,rt_em_lava_heat=0.5,rt_em_log=0,rt_em_max_lights=65536,rt_em_overlap_check=0,rt_em_tol=0.01,rt_em_xfb_max_mb=512,rt_em_xfb_mb=32,rt_emissive=1,rt_hair_fibre=0,rt_hair_fibre_gi=0,rt_hair_groom=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary=0,rt_hair_groom_primary_order=0,rt_hair_groom_shadow_t=0,rt_hair_groom_tips=0,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hair_primary_passes=15,rt_hair_receiver_guard=0,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_capture_unlocked=1,rt_hit_material_instanced=1,rt_hit_material_lean_hooks=1,rt_hit_material_mask=0,rt_hit_material_pool_alpha=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_local_shadows=1,rt_max_candidates=0,rt_mesh_audit_frames=600,rt_mesh_audits=2,rt_mesh_budget_mb=2048,rt_mesh_capture=0,rt_mesh_compact=1,rt_mesh_content_id=0,rt_mesh_draw_log=0,rt_mesh_new_tris=4000000,rt_native_hair=1,rt_native_scalp=1,rt_native_tileset=0,rt_occ_stats=0,rt_occ_stats_frames=60,rt_omm=1,rt_omm_dyn=1,rt_omm_dyn_bake_tris=131072,rt_omm_dyn_mb=256,rt_omm_reference=0,rt_order_trace=0,rt_origin=1,rt_primary_check=0,rt_primary_epoch=0,rt_primary_fade_class=0,rt_primary_identity=0,rt_rebuild_frames=600,rt_refit=1,rt_reflections=1,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_shadows=1,rt_stability_log=0,rt_stats=0,rt_stats_period_frames=60,rt_stats_reset=0,rt_strength=1.0,rt_strips=1,rt_sun_margin=0.0,rt_sun_near=0,rt_sun_offscreen=1,rt_sun_radius=0.00459,rt_sun_ramp=0.75,rt_sun_replace=1,rt_sun_rise=6.0,rt_sun_roof_mode=0,rt_sun_roof_pad=3.0,rt_sun_roof_radius=0,rt_sun_roof_up=50.0,rt_sun_roofs=1,rt_timing_frames=60,rt_tlas_refit=1,rt_tmax=300,rt_vram_compact=1,rt_vram_guard=1,rt_vram_guard_budget_mb=0,rt_vt_alpha_masks=1,rt_vt_alpha_miss_log=0,rt_water_compose=1,rt_water_compose_mb=160,rt_water_compose_shift=1,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_shadows=1,rt_water_surface_fresnel=0,rt_water_xfb_max_mb=256,rt_water_xfb_mb=32,se_bridge=1,se_stale_ms=0,se_stale_periods=4,se_unhook=1,shader_debug=0,sharc=0,sharc_debug=0,sharc_device=1,sharc_em=1,sharc_fine_check=0,sharc_fine_scale=4,sharc_frames=16,sharc_gi_radius=4,sharc_inject_stride=2,sharc_leak_check=0,sharc_level_bias=0,sharc_log2=22,sharc_log_base=2,sharc_near=1,sharc_query=7,sharc_reject_occluded=1,sharc_reset_jump=50,sharc_rf_cone=1,sharc_rf_rough=0.2,sharc_scene_scale=50,sharc_stale=128,sharc_stats=0,sharc_stats_frames=300",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches/opt_r2/gi_attr/plans/opt-gi-attr-inn.json"
+  ],
+  "patterns": [
+    "gi: trace pass",
+    "\\[cfg\\]",
+    "\\[auto\\]"
+  ],
+  "expect": [
+    "gi: trace pass"
+  ],
+  "forbid": [],
+  "expect_every": [
+    {
+      "name": "direct--off-a trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "direct--off-a"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "direct--on trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "direct--on"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "direct--off-b trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "direct--off-b"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "sun--off-a trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "sun--off-a"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "sun--on trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "sun--on"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "sun--off-b trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "sun--off-b"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "emission--off-a trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "emission--off-a"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "emission--on trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "emission--on"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "emission--off-b trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "emission--off-b"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "far--off-a trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "far--off-a"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "far--on trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "far--on"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "far--off-b trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "far--off-b"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "second-ray--off-a trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "second-ray--off-a"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "second-ray--on trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "second-ray--on"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "second-ray--off-b trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "second-ray--off-b"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "material--off-a trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "material--off-a"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "material--on trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "material--on"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    },
+    {
+      "name": "material--off-b trace cost",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass .*GPU median [0-9.]+ ms",
+      "windows": [
+        "material--off-b"
+      ],
+      "min": 1,
+      "period_frames": 60,
+      "sample_frames": 60
+    }
+  ],
+  "expect_runner": [
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=38\\b"
+  ],
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 0,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 11.69134840218328,
+        "windows": 57
+      },
+      {
+        "state": [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 16.79731243001065,
+        "windows": 9
+      },
+      {
+        "state": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "fps": 14.48575567358825,
+        "windows": 3
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.2959999999948195,
+      "quantile": 0.95,
+      "samples": 361,
+      "maximum": 0.5
+    }
+  },
+  "estimated_phase_seconds": 141.8,
+  "purpose": "Diagnostic attribution only: each feature OFF / Ultra ON / OFF, other Ultra dependencies held on."
+}

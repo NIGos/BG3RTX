@@ -816,6 +816,12 @@ def frame_windows(job, plan):
 
 def retime(job, plan):
     """One regeneration path for generators and the offline CLI."""
+    # Runtime reports derived values, e.g. rt_build=auto as 0/1. Emit that
+    # resolved value so cfg acknowledgement cannot wait for the literal auto.
+    states = phase_states(job, plan)
+    for phase, state in zip(plan, states):
+        if str(state.get('rt_build', '')).lower() == 'auto':
+            phase['set'] = phase.get('set', '') + ',rt_build=' + pipeline_readiness.resolved(state)['rt_build']
     job.setdefault("live_flow", {})["fps_windows"] = [dict(state=list(sig), **v) for (save, sig),v in fps_windows.MODEL.items() if save == job.get("save")]
     if TRACE_EXPORT:
         job["live_flow"]["trace_export"] = dict(TRACE_EXPORT)

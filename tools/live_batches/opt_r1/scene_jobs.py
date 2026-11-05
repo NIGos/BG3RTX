@@ -121,14 +121,21 @@ def generate(results=None):
         flow.repair_known_forbids(job, plan)
         flow.write(job_path, job)
         flow.write(plan_path, plan)
-        flow.write(HERE/area/'predicted.json', dict(job=name, status='OFFLINE_PROOF_PENDING', key=key,
+        predicted_path = HERE/area/'predicted.json'
+        verified = flow.read(predicted_path) if predicted_path.exists() else {}
+        prediction = dict(job=name, status='OFFLINE_PROOF_PENDING', key=key,
             expected_saving_ms=[.05, .30], measured_saving_ms=None, scene=source['save'], preset=preset,
             device_startup='Ultra stride 88; High target only after warmup' if preset == 'high' else 'Ultra',
             limits='No game launch or staging authorized. Reject below 0.05 ms. Three OFF repeats derive energy noise; missing cost, export, QA or readiness invalidates.',
             offline_exactness='Required separately: identical converted geometry or hold-pack trace attributes.',
             energy='Float pre-post scene RGB and luminance; ON versus adjacent OFF bracket, band derived from all OFF repeats.',
             flicker='Existing QA temporal test, ON versus every OFF; geometry motion excluded from both windows.',
-            disk='No raw images; K8 edge bursts plus dumps.json means. Retain summaries; batch target below 2 GB.'))
+            disk='No raw images; K8 edge bursts plus dumps.json means. Retain summaries; batch target below 2 GB.')
+        # Regenerating readiness must not discard separately verified CPU proof.
+        if verified.get('offline_validation'):
+            for field in ('status', 'offline_exactness', 'offline_validation'):
+                prediction[field] = verified[field]
+        flow.write(predicted_path, prediction)
 
 
 if __name__ == '__main__':

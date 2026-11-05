@@ -504,14 +504,8 @@
           0,
           0
         ],
-        "fps": 8.720930232552236,
-        "windows": 33,
-        "logs": [
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn2-generated-inn-fg2.1.145500.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn2-generated-inn-fg2.1.162258.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr2-inn-fg2.1.044237.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\opt-profile-inn.1.001709.log"
-        ]
+        "fps": 11.69134840218328,
+        "windows": 57
       },
       {
         "state": [
@@ -522,11 +516,7 @@
           0
         ],
         "fps": 16.79731243001065,
-        "windows": 7,
-        "logs": [
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn2-generated-inn-fg2.1.145500.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn2-generated-inn-fg2.1.162258.log"
-        ]
+        "windows": 9
       },
       {
         "state": [
@@ -537,28 +527,25 @@
           0
         ],
         "fps": 14.48575567358825,
-        "windows": 3,
-        "logs": [
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr2-inn-fg2.1.044237.log"
-        ]
+        "windows": 3
       }
     ],
     "trace_export": {
-      "seconds": 0.3120000000017171,
+      "seconds": 0.2959999999948195,
       "quantile": 0.95,
-      "samples": 118,
+      "samples": 361,
       "maximum": 0.5
     },
     "trace_capture_stall": {
-      "seconds": 2.68501,
-      "source": "hgn1-generated-camp-fg2.1.161807.log",
+      "seconds": 2.6511199999999997,
+      "source": "hmm1-mask-s8-fg2.1.083713.log",
       "quantile": 0.95,
-      "samples": 118,
+      "samples": 361,
       "maximum": 3.36211,
-      "logs": 16
+      "logs": 60
     }
   },
-  "estimated_phase_seconds": 157.72,
+  "estimated_phase_seconds": 140.388,
   "post": "python tools/live_batches/opt_r1/scene_analyze.py --job tools/live_batches/opt_r1/scene_holds/jobs/opt-scene-compact-holds-inn.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.scene.json\"",
   "post_gate": true,
   "candidate": {
