@@ -1,5 +1,4 @@
 #include "../common/native_hit_gi_bindings.h"
-#include "../common/sun_wave.h"
 #include "../common/native_hit_records.h"
 #include <algorithm>
 #include <cstdio>
@@ -95,16 +94,7 @@ static std::vector<std::string> expand_args(int argc,char**argv){
  return out;
 }
 int main(int argc,char**argv){
- check(bg3::sun_wave::allocation_bytes(1,1,1)==244,"sun wave single-slot layout");
- check(bg3::sun_wave::allocation_bytes(2560,1067,2)==1158164496ull,"sun wave Ultra complete allocation");
- check(bg3::sun_wave::allocation_bytes(0,1,2)==0 && bg3::sun_wave::allocation_bytes(1,0,2)==0 && bg3::sun_wave::allocation_bytes(1,1,0)==0,"sun wave rejects empty dispatches");
- check(bg3::sun_wave::allocation_bytes(UINT32_MAX,UINT32_MAX,UINT32_MAX)==0,"sun wave rejects overflowing products before multiplication");
- check(bg3::sun_wave::allocation_bytes(1,1,UINT32_MAX)==0,"sun wave rejects byte-address overflow");
- constexpr uint32_t max_rays=uint32_t((uint64_t(UINT32_MAX)-48u)/196u);
- check(bg3::sun_wave::allocation_bytes(1,1,max_rays)>0 && bg3::sun_wave::allocation_bytes(1,1,max_rays+1u)==0,"sun wave maximum byte-address boundary");
-
- check(descriptor_count(false)==22 && descriptor_count(true)==22,"bounded plain/Hair union");
- check(find(51,true) && find(51,true)->type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,"device-local sun wave work buffer");
+ check(descriptor_count(false)==21 && descriptor_count(true)==21,"bounded plain/Hair union");
  check(!find(47,true),"roof volumes come from the sun set b8, not the push set");
  check(kSetSun==3 && sun.size()==8 && find_sun(0)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && find_sun(6)->type==VK_DESCRIPTOR_TYPE_SAMPLER && !find_sun(7)
        && find_sun(8)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,"gi_hit_sun sun set 0-6 and the roof volumes 8");

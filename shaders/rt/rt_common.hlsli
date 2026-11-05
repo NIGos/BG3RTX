@@ -43,9 +43,6 @@ static const uint kMaxCandidates = 4096u;
 static bool g_omm_reference_pass = false;
 #endif
 void guard_count(uint k) {
-#ifdef RT_COUNTERS_SILENT
-  return;
-#endif
 #ifdef RT_OMM_SCENE
   if (g_omm_reference_pass) return;
 #endif
@@ -85,9 +82,6 @@ bool rt_ray_valid(float3 o, float3 d, inout float tmax) {
 }
 
 void stat_add(uint index, bool cond, uint bin) {
-#ifdef RT_COUNTERS_SILENT
-  return;
-#endif
   uint n = WaveActiveCountBits(cond);
   uint b = WaveReadLaneFirst(bin) & 63u;
   if (WaveIsFirstLane() && n) rtStats.InterlockedAdd((index * 64 + b) * 4, n);

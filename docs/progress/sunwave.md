@@ -1,36 +1,30 @@
-## Deferred hidden-hit sun (branch sunwave, rejected: slower, 2026-11-05)
+## Sun wave rejected; far GI attribution (branch sunwave, offline, 2026-11-05)
 
-- Offline only; no game, queue or git writes. RTX 5090, original S8/camp/inn replay packs and generated sun trust.
-- Added paired replay: `--ab-spec ID=A,B`, optional `--ab-spv`, 40 balanced ABBA/BAAB samples after warmup.
-  Reports every B-A delta, median and exact binomial 95% median interval; checks every output byte and raw counter bin.
-  Corrected start timestamp to exclude preceding output clears. Earlier TOP_OF_PIPE timings are provisional only.
-- Attribution uses main shaders: far 0 -> 1 with sun enabled; direct -> sun with far disabled. Radius 6 m, two rays, stats off.
+- Removed wave code/key/settings/spec wiring, scratch buffers, two requests and feature tests; SpecId 1034 retired, never reuse.
+  Manifest requests 127 -> 125, no ABI change. Kept paired `--ab-spec` / `--ab-spv`, tests, CSV, equality checks and docs.
+- Rejection ON-OFF median [95% median CI], 40 pairs, ms: S8 +0.735776 [0.540272, 0.849120];
+  camp +3.114312 [2.451616, 3.897856]; inn +0.737392 [0.638336, 0.863264]. Outputs/counters were exact; all slower.
+- Cleanup release proof vs main `5b076d9`: 215/215 ordinary requests byte-identical; negative control passes.
+- Far attribution: original main shaders plus replay-only source snapshots, sun trust, radius 6 m, two rays, statistics off.
+  Each value below is its own 40-pair median [95% median CI], ms; conditional execution/compiler effects are not additive.
 
-| Pack | Far increment, ms [95% CI] | Sun increment with far off, ms [95% CI] |
-|---|---|---|
-| S8 | +2.429952 [2.312832, 2.456272] | +0.098344 [0.097520, 0.098976] |
-| Camp | +5.460104 [5.299728, 5.826256] | +0.427008 [0.122464, 0.703888] |
-| Inn | +2.447688 [2.013296, 3.750608] | +0.005360 [0.004672, 0.006176] |
+| Pack | Traversal | Extra far hidden shading | Matched GI roof loop | Other far policy/context |
+|---|---|---|---|---|
+| S8 | 0.325 [0.324, 0.326] | 1.562 [1.227, 2.396] | 0.465 [0.351, 0.772] | 0.562 [0.561, 0.563] |
+| Camp | 3.787 [3.641, 4.060] | 2.037 [1.500, 3.377] | 0.332 [-0.074, 1.362] | 3.217 [2.761, 3.822] |
+| Inn | 2.065 [1.973, 2.329] | 0.926 [0.512, 1.154] | 0.374 [-0.007, 0.650] | 1.711 [1.372, 2.074] |
 
-- S8 short rays trace no sun visibility queries (roof/normal suppression); far-enabled S8 traces seven lit rays.
-  Camp far-enabled traces 32,173 lit and 42,230 occluded sun rays, exercising the actual continuation.
-- Candidate `gi_sun_wave=0`, SpecId 1034: trace records full-precision operands, dense visibility, ordered resolve.
-  Preserve already-correct trace output when all queued rays are lit. Replay individual additions, never per-ray sums.
-  Statistics-on retains original-lane sun queries for identical raw bins; performance is measured with statistics off.
-  SHaRC/OMM fall back. Scratch at 2560 x 1067 x 2 is 1,158,164,496 bytes; includes queue and pixel tails.
-- Shader request delta +2 fixed passes: manifest 125 -> 127; all unique requests 215 -> 217. No define products or ABI change.
-- All three packs: 100% bit-equal giRaw, depth and all 512 x 64 raw counter bins, with rt_stats 0 and 1; validation clean.
-  Every dispatch in the following 40-sample statistics-off runs also matches exactly.
-
-| Pack | Wave ON-OFF median, ms | 95% median interval, ms |
-|---|---|---|
-| S8 | +0.735776 | [+0.540272, +0.849120] |
-| Camp | +3.114312 | [+2.451616, +3.897856] |
-| Inn | +0.737392 | [+0.638336, +0.863264] |
-
-- Rejected: all intervals exclude a gain. Keep the raw key off; no further tuning or live test requested.
-- Key-OFF release equivalence vs main `5b076d9`: 215/215 ordinary requests pass (203 byte-identical, 12 equivalent),
-  2,056 assignments, 12 universal certificates, 24 frozen checks; negative control passes.
-- `scripts/build.ps1 -Test` passed: full build plus all 191 CTests (217.09 s). Includes paired statistics,
-  ordinary replay/paired GPU control, settings, variants, allocation boundaries and host-atomics lint.
-- Reproduce with commands/provenance in `.scratch/sunwave/{attribution,exact,timing}/`; paired CLI in `tools/frame_replay.md`.
+- Fresh original far totals: 2.762 / 9.132 / 4.702 ms; historical 2.430 / 5.460 / 2.448 are a different context.
+  Exact frozen roof decisions preserve downstream work. Roof control retains both bodies/common cache load; only S8 excludes zero.
+  N/Q outputs and near shading counters match; all roof controls match every output/counter bit, with zero cache/mismatch guards.
+- Statistics atomics do no work at rt_stats=0; residual includes fade, screen/eligibility and static compiler context.
+  Original near/far driver registers 168 -> 255. No spill/occupancy inference from anomalous memory figures.
+- Memoized screen/hidden roof reuse has zero opportunities on all packs. Inn's extra hidden shading changes no stored output.
+- Two candidates only, NOT implemented: early exact inside-roof rejection after emission, before far hidden material shading,
+  planning 0.2-0.5 ms S8 / 0.4-0.7 ms inn (proportional qualified-hit model, less guard cost; camp could lose);
+  exact identity-quaternion roof path, planning 0.1-0.2 ms S8 / 0-0.2 ms camp/inn. These are estimates, not measured gains.
+- Cleanup `scripts/build.ps1 -Test` passed: full build and all 191 CTests (158.05 s).
+  No game, queue or git writes; builds BelowNormal, GPU used only without bg3.exe.
+- Design/proof caveats: TRACK_C_GI "Far GI cost split, 2026-11-05". Receipts: `.scratch/far-cost/summary.json`.
+  Cleanup proof: `.scratch/sunwave/cleanup-equivalence.json`; historical rejection: `.scratch/sunwave/summary.json`.
+- Analyzed image outputs removed safely; original packs, frozen input caches, shader hashes, counters, logs and CSV remain.

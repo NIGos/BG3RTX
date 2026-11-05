@@ -18,11 +18,6 @@ int main(int argc, char** argv) {
   const bool write = argc >= 3 && std::string(argv[2]) == "--write";
 
   // Fixed spellings: migrated keys share one request; the remaining defines keep their order.
-  CHECK(kSpecIdGiSunWave == 1034);
-  for (const char* file : {"gi/gi_sun_wave_visibility.hlsl", "gi/gi_sun_wave_resolve.hlsl"}) {
-    CHECK(request(file, 0) == file);
-    CHECK(request(file, kCascade | kTileset | kOmm | kScalp | kHitInstanced) == file);
-  }
   CHECK(request("gi/rt_shadow.hlsl", 0) == "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");  // spec only
   CHECK(request("probe.hlsl", kTileset | kOmm) == "probe.hlsl");
   CHECK(request("gi/gi_ao_apply.hlsl", kCascade | kHairOrigin) == "gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1");

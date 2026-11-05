@@ -222,35 +222,55 @@ core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
 - Live gate: as M4.1 at S3 Campsite; cost = `gi: trace pass` GPU median ON minus OFF (one more
   ray per supported hit, expected +0.1 ms).
 
-## Deferred hidden-hit sun visibility (`gi_sun_wave=0`, 2026-11-05)
+## Deferred hidden-hit sun visibility (rejected and removed, 2026-11-05)
 
-Developer raw key, specialization 1034; retired 1032-1033 remain unused. Rejected offline:
-slower in S8, camp and inn. The raw key remains off. No live qualification claimed.
-The existing trace records each original bounce-add event and eligible sun visibility tuple.
-A dense dispatch traces queued sun rays, then an 8x8 resolve replays each pixel's events in
-original ray order. Visible radiance and emission retain separate additions. Weighted events
-store the fp32 operands and weight so the resolve can retain the original multiply/add.
-The hidden continuation stores local/AO terms, the lit sun scatter and far-rule operands;
-resolve selects the cached visibility, applies the original guard/far rule and final encoding.
-Pixels with no deferred query or only lit answers retain the trace's exact stored output;
-they need no continuation replay. This also avoids changing fused arithmetic for unrelated rays.
-All three packs have 100% bit-equal stored outputs and raw counter bins with statistics on
-and off. Forty paired ABBA/BAAB samples per pack give ON-OFF medians (95% median intervals):
-S8 +0.736 ms [+0.540, +0.849], camp +3.114 ms [+2.452, +3.898], inn +0.737 ms
-[+0.638, +0.863]. All measured samples are bit-equal; none supports a performance gain.
-Main-shader far/sun attribution and full commands are in [sunwave](progress/sunwave.md).
-Key-OFF release equivalence passes all 215 ordinary requests against main (2,056 assignments).
-The full build and all 191 CTests pass. This is an exact rejected prototype, not a promoted effect.
+The `gi_sun_wave` prototype deferred eligible hidden-hit sun rays into a dense dispatch,
+then replayed individual additions in original ray order. It was 100% bit-equal in outputs
+and raw counters on S8/camp/inn, statistics on and off, but all paired timings were slower.
+Forty ABBA/BAAB samples per pack gave ON-OFF median [95% median interval], in ms:
+S8 +0.735776 [+0.540272, +0.849120], camp +3.114312 [+2.451616, +3.897856],
+inn +0.737392 [+0.638336, +0.863264]. The 1,158 MB scratch did not earn a speed gain.
+Code, key, settings, specialization wiring, two requests and feature tests are removed.
+SpecId 1034 is retired, never reuse. Requests return to 125. Paired replay remains.
+The cleaned ordinary shaders are byte-identical to main for all 215 unique requests.
+Cleanup full build and all 191 CTests pass (158.05 s).
+See [sunwave](progress/sunwave.md) for retained receipts and current checks.
 
-Scratch is device-local: 16-byte header, 4-byte queue index + 192-byte record per ray,
-and 32 bytes per pixel (1,158,164,496 bytes at 2560x1067 with two rays). Allocation rejects
-uint32 byte-address overflow and falls back to the ordinary trace while resources/pipelines
-are unavailable. There are two fixed new requests, visibility and resolve; capabilities
-specialize in the visibility request. SHaRC and OMM explicitly keep the ordinary path.
-When `rt_stats=1`, trace also issues the original sun queries solely to preserve diagnostic
-active-lane masks and raw counter bins. Dense traversal suppresses duplicate counters; the
-stored output still uses its visibility result. Performance is measured with `rt_stats=0`.
-Guard/unknown counters outside diagnostic mode need separate exceptional-case coverage.
+## Far GI cost split, 2026-11-05
+
+Offline RTX 5090, main `5b076d9`, S8/camp/inn, sun trust, radius 6 m, two rays, statistics off.
+Each entry is its own 40-sample ABBA/BAAB median [95% median interval], ms.
+N=near; Q=6 m query with extra hits discarded and near math retained; L=far/screens without extra hidden shading;
+Fc=full far with exact frozen GI roof answers; F=original far. These conditional program costs are not additive.
+N/Q outputs/near shading counters match; roof controls match all output/counter bits, with zero cache/mismatch guards.
+
+| Pack | (a) Traversal Q-N | (b) Extra hidden shading Fc-L | (c) Matched GI roof loop | (d) Other policy/context L-Q |
+|---|---|---|---|---|
+| S8 | 0.325 [0.324, 0.326] | 1.562 [1.227, 2.396] | 0.465 [0.351, 0.772] | 0.562 [0.561, 0.563] |
+| Camp | 3.787 [3.641, 4.060] | 2.037 [1.500, 3.377] | 0.332 [-0.074, 1.362] | 3.217 [2.761, 3.822] |
+| Inn | 2.065 [1.973, 2.329] | 0.926 [0.512, 1.154] | 0.374 [-0.007, 0.650] | 1.711 [1.372, 2.074] |
+
+(c) retains both bodies in one SPV, selects via runtime push comparison/SpecId 1900, and charges both for the same lookup;
+it measures the original loop plus verification comparison. Only S8 excludes zero. Simple real-minus-cached substitution
+was confounded (0.204 / -0.668 / -0.387 ms), so is not called a physical loop cost or combined with (c).
+Fresh F-N totals: 2.762 [2.555, 3.102] / 9.132 [8.331, 9.627] / 4.702 [4.350, 4.928] ms; historical
+2.430 / 5.460 / 2.448 ms are a different context. The original four-edge telescope closes within its intervals.
+(d) includes fade/base-fade, screen/near outside-froxel eligibility and compilation context. Statistics atomics do zero work;
+original near/far driver registers rise 168 -> 255. Anomalous memory figures support no spill/occupancy inference.
+Native sun roof work stays in (b); cascade casters bypass that loop in camp/inn. Screen/hidden memo overlap is zero everywhere.
+Inn's added hidden shading changes no stored output: all qualified far hidden hits are roof-vetoed.
+
+Two exact candidates, NOT implemented; targets are planning estimates, not measured gains:
+- Early inside-roof rejection after emission, before hidden shading, only t > RB: the ORIGINAL ray origin inside the first
+  padded roof proves the segment veto and zero base-fade fallback. Keep diagnostics and conservative unknown/non-finite handling.
+  Covered extra-qualified cohorts: 75,984/246,920 S8; 21,144/25,699 inn. Proportional-work targets less guard cost:
+  0.2-0.5 ms S8 / 0.4-0.7 ms inn; camp has no covered cohort and could lose.
+- Exact-bit (0,0,0,1) quaternion path: omit two rotations, retaining subtraction, slabs/order/boundaries and finite/subnormal
+  fallbacks. It covers 76.6% / 100% / 100% of GI roof volume visits. A 20-40% roof-work target suggests
+  0.1-0.2 ms S8 / 0-0.2 ms camp/inn, whose loop costs remain unresolved.
+
+Diagnostics exist only under `.scratch/far-cost/`; shipped shaders are unchanged. Full precision, source/module hashes,
+frozen inputs, commands and interpretation limits: `.scratch/far-cost/summary.json` and adjacent scripts/logs.
 
 ## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; live S8 energy gate failed, kept off)
 

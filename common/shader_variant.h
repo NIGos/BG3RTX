@@ -45,9 +45,9 @@ enum SpecId : unsigned {
   // Retired: 1022 alpha metadata cache, 1023 empty water tiles, 1024 compact hit state. Never reuse.
   kSpecIdWaterSurfaceFresnel = 1025, // M5.6 clean interface / column partition
   kSpecIdHairGroomShadowT = 1026,    // C2: strand shadow transmittance, default pre-C2 opaque query
-  kSpecIdGiSunWave = 1034,           // GI: defer hidden-hit sun visibility
   kSpecIdRfCompactProbeState = 1031, // RF: evaluate receiver probes after hit shading
   // Retired 2026-11-05: 1032 lane permutation (slower), 1033 aux AO R16F. Never reuse.
+  // Retired 2026-11-05: 1034 deferred hidden-hit sun wave (slower). Never reuse.
   kSpecIdCompactHitState = 1029,    // GI: retain the normal instead of the full hit across direct lighting
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
 };
@@ -58,7 +58,6 @@ inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;
 inline unsigned hair_groom_slot(const char* file, bool enabled) {
   return std::strncmp(file, "gi/", 3) == 0 && enabled ? kHairGroomSlot : 0u;
 }
-inline bool sun_wave_pass(const char* file) { return std::strcmp(file,"gi/gi_sun_wave_visibility.hlsl")==0 || std::strcmp(file,"gi/gi_sun_wave_resolve.hlsl")==0; }
 inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_local_shadows_full_box.hlsl") == 0; }
 
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
@@ -68,7 +67,6 @@ inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_
 // rt/native_hit_material.hlsli get RT_HIT_INSTANCED=1 (RtHit.dir, the two-sided N column of row word
 // 220). Without it they compile as before.
 inline bool hit_material_entry(const char* file) {
-  if (sun_wave_pass(file)) return true;
   static const char* const names[] = {
       "gi/gi_trace_rt_hit_direct.hlsl", "gi/gi_trace_rt_hit_direct_em.hlsl", "gi/gi_trace_rt_hit_sun.hlsl",
       "gi/gi_trace_rt_hit_sun_em.hlsl", "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/gi_trace_rt_sharc_hit_direct_em.hlsl",
@@ -105,7 +103,6 @@ inline bool rf_hit_gi_entry(const char* file) {
 // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the RT passes that trace the cascade's
 // instance masks. rt_sun_resolve traces nothing.
 inline bool cascade_entry(const char* file) {
-  if (sun_wave_pass(file)) return true;
   static const char* const names[] = {
       "gi/gi_trace_rt.hlsl", "gi/gi_trace_rt_sharc.hlsl", "gi/gi_trace_rt_hit_direct.hlsl",
       "gi/gi_trace_rt_sharc_hit_direct.hlsl", "gi/gi_trace_rt_hit_sun.hlsl", "gi/gi_trace_rt_sharc_hit_sun.hlsl",
@@ -136,7 +133,7 @@ inline bool cascade_entry(const char* file) {
 // with the 96-byte records and the local-light rays (WATER_LS on top of WATER_SHADOWS), and M5.5's with
 // the 104-byte records and the refraction ray (WATER_REFR on top of both); M5.4c's WATER_GSH on top of each
 // (the records + 8 bytes: the game's sun shadow replaced on the FS that sample it).
-inline constexpr const char* kFixedRequests[] = {"gi/gi_sun_wave_visibility.hlsl", "gi/gi_sun_wave_resolve.hlsl","rt/hair_primary_count.hlsl",
+inline constexpr const char* kFixedRequests[] = {"rt/hair_primary_count.hlsl",
                                                  "rt/hair_primary_gbuffer.hlsl",
                                                  "rt/hair_primary_velocity.hlsl",
                                                  // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance
@@ -203,7 +200,6 @@ inline constexpr std::array<NoVariant, 0> kWaterNoVariant{};
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
 // each name once: native markers, OMM, instanced, cascade, gi_far, then rf_hit_gi.
 inline std::string request(const char* file, unsigned flags) {
-  if (sun_wave_pass(file)) return file;
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
   if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb);

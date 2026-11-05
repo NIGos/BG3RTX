@@ -721,7 +721,6 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
     {"gi_hit_sun", "0"},
-    {"gi_sun_wave", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
     {"sharc", "0"},

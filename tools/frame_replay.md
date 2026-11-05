@@ -147,7 +147,7 @@ Both modules must use the same descriptor/push contract. Prefer cached SPIR-V fr
 `--repeat N` means N paired samples (default 40 in A/B mode). Four warmup dispatches
 (two per pipeline) are excluded. Each sample runs ABBA, then the next BAAB, and uses
 `mean(B) - mean(A)` timestamps: the symmetric sample cancels linear drift in dispatch
-order. Timings include the entire dispatch chain, excluding uploads, output readback
+order. Timings include the compute dispatch, excluding uploads, output readback
 and clears. A negative delta means B is faster. `ab.csv` retains every pair; the
 console and `ab_summary.txt` report the median delta and a distribution-free 95%
 interval for its population median, using binomial order statistics (conservative
@@ -163,15 +163,6 @@ raw counter index/bin and its values when counters differ. That quartet also sav
 same-pipeline mismatch uses `_repeat` for its second snapshot. Attribution can intentionally
 change outputs; add `--ab-require-equal` to return failure for any changed bit.
 Ordinary output files contain the final dispatch; use `ab.csv` for paired timings.
-
-For the deferred-sun candidate supply `--sun-wave-visibility <visibility.spv>` and
-`--sun-wave-resolve <resolve.spv>` with `--ab-spec 1034=0,1`. The harness binds the
-shared device-local scratch buffer at set 0 binding 51. Only the ON dispatch runs
-the extra passes. Its timestamp encloses the queue-header clear, trace, dense sun
-visibility and ordered resolve, including their barriers. The queue allocation uses
-`common/sun_wave.h`; a 2D visibility dispatch avoids the 65535-group X limit.
-Use `--ab-require-equal` and stats enabled for the raw-counter proof; use a separate
-stats-disabled paired run for cost because exact diagnostic replay adds work.
 
 `--ab-self-test` checks drift cancellation and confidence bounds without a GPU.
 

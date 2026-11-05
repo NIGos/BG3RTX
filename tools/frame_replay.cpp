@@ -31,7 +31,6 @@
 #include <vector>
 #include "../common/replay_pack.h"
 #include "replay_ab.h"
-#include "../common/sun_wave.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_gi_bindings.h"
 #include "../common/native_hit_rf_bindings.h"
@@ -76,7 +75,7 @@ bool g_pipeline_stats = false;
 fs::path g_reference_out;
 std::map<uint32_t, uint32_t> g_specs;
 std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_ab_specs;
-fs::path g_ab_spv, g_wave_visibility_spv, g_wave_resolve_spv;
+fs::path g_ab_spv;
 bool g_ab_require_equal = false;
 bool ab_mode() { return !g_ab_specs.empty() || !g_ab_spv.empty(); }
 bool g_reference_mismatch = false;
@@ -753,12 +752,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
   rp::Pass pass = *rp::find_pass(m.pass);
   static std::vector<rp::Slot> trust_slots;
-  const bool gi_trace_contract = std::string(pass.shader).rfind("gi/gi_trace_rt", 0) == 0;
-  if (!g_sun_trust.empty() || !g_wave_visibility_spv.empty() || gi_trace_contract) {
+  if (!g_sun_trust.empty()) {
     trust_slots.assign(pass.slots, pass.slots + pass.slot_count);
     if (!g_sun_trust.empty() && !rp::find_slot(pass, 3, 8)) trust_slots.push_back({3, 8, rp::kStorage, 1, VK_FORMAT_R32_UINT, "sunTrust"});
-    if ((gi_trace_contract || !g_wave_visibility_spv.empty()) && !rp::find_slot(pass, 0, 51)) trust_slots.push_back({0, 51, rp::kSsbo, 1, 0, "sunWave"});
-    if (!g_wave_visibility_spv.empty() && !rp::find_slot(pass, 1, 19)) trust_slots.push_back({1, 19, rp::kSampler, 16, 0, "nativeTilesetSamplers"});
     pass.slots = trust_slots.data(); pass.slot_count = uint32_t(trust_slots.size());
   }
   fs::create_directories(out);
@@ -824,21 +820,6 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     upload(it->second, r.offset, d.data() + r.file_offset, size_t(n));
   }
   Buf stats = make_buffer(kCounters * 64 * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true);
-  uint32_t wave_slots = 0;
-  Buf wave_buffer;
-  if (!g_wave_visibility_spv.empty()) {
-    auto wave_push = file(m.push); apply_push_set(wave_push);
-    uint32_t width, height, rays;
-    check(wave_push.size() >= 36, "sun wave push bytes");
-    std::memcpy(&width, wave_push.data() + 8, 4); std::memcpy(&height, wave_push.data() + 12, 4);
-    std::memcpy(&rays, wave_push.data() + 32, 4);
-    const uint64_t bytes = bg3::sun_wave::allocation_bytes(width, height, rays);
-    check(bytes != 0, "sun wave buffer size exceeds 32-bit shader offsets (or has zero dimensions/rays)");
-    wave_slots = uint32_t(uint64_t(width) * height * rays);
-    wave_buffer = make_buffer(bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false);
-    buffers[key(0, 51)] = wave_buffer;
-    std::printf("[replay] sun wave: %u slots, %.1f MB scratch\n", wave_slots, bytes / 1048576.0);
-  }
   // Images (inputs), outputs, dummies.
   std::map<uint64_t, std::map<uint32_t, Img>> images;   // slot -> element -> image
   // The writer stores each VkImage once and names its file from every descriptor element that binds
@@ -1046,7 +1027,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       if (slot.set == 0 && slot.binding == 20) bi = {stats.b, 0, VK_WHOLE_SIZE};
       else if (it != buffers.end()) bi = {it->second.b, 0, it->second.size};
       else {
-        if (!(slot.set == 0 && slot.binding == 51)) (slot.set < 2 ? missing : missing_lighting).push_back(slot.name);
+        (slot.set < 2 ? missing : missing_lighting).push_back(slot.name);
         dummies.push_back(make_buffer(256, slot.kind == rp::kUbo ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false));
         bi = {dummies.back().b, 0, 256};
       }
@@ -1117,22 +1098,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     }
     pipeline_b = make_pipeline(code_b, layout);
   }
-  VkPipeline wave_visibility{}, wave_resolve{};
-  if (!g_wave_visibility_spv.empty()) {
-    g_specs = common_specs; g_specs[GI_SUN_WAVE_SPEC_ID] = 1;
-    auto from_file = [&](const fs::path& name) {
-      auto bytes = read_file(name); check(!bytes.empty() && bytes.size() % 4 == 0, "sun wave SPIR-V size");
-      std::vector<uint32_t> code(bytes.size() / 4); std::memcpy(code.data(), bytes.data(), bytes.size());
-      return make_pipeline(code, layout);
-    };
-    wave_visibility = from_file(g_wave_visibility_spv); wave_resolve = from_file(g_wave_resolve_spv);
-  }
   g_specs = common_specs;
-  auto wave_enabled = [&](bool b) {
-    const auto it = g_ab_specs.find(GI_SUN_WAVE_SPEC_ID);
-    const uint32_t value = it == g_ab_specs.end() ? (g_specs.count(GI_SUN_WAVE_SPEC_ID) ? g_specs.at(GI_SUN_WAVE_SPEC_ID) : 0) : (b ? it->second.second : it->second.first);
-    return value != 0;
-  };
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; qi.queryType = VK_QUERY_TYPE_TIMESTAMP; qi.queryCount = 2;
   VkQueryPool queries; vkcheck(vkCreateQueryPool(g.dev, &qi, nullptr, &queries), "query pool");
   if (!quiet) {   // what the pack costs the GPU (a 2 GB VT cache included; host staging is kStageBytes)
@@ -1166,8 +1132,6 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     const uint32_t pair = ab_mode() && !warmup ? (run - 4) / 4 : 0;
     const uint32_t phase = ab_mode() ? run % 4 : 0;
     const bool use_b = ab_mode() && (warmup ? (run & 1) != 0 : ((phase == 1 || phase == 2) != ((pair & 1) != 0)));
-    const bool use_wave = wave_enabled(use_b);
-    check(!use_wave || wave_visibility, "spec1034=1 requires --sun-wave-visibility and --sun-wave-resolve");
     std::memset(stats.map, 0, size_t(stats.size));
     push = push_pack;
     if (hooks && hooks->patch) hooks->patch(run, push);
@@ -1186,25 +1150,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, use_b ? pipeline_b : pipeline);
       vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, pass.set_count, sets.data(), 0, nullptr);
       vkCmdPushConstants(c, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pass.push_bytes, push.data());
-      // Wait for preceding output clears/uploads; time only this dispatch chain.
+      // Wait for preceding output clears/uploads; time only this dispatch.
       vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queries, 0);
-      if (use_wave) {
-        vkCmdFillBuffer(c, wave_buffer.b, 0, GI_SUN_WAVE_HEADER_BYTES, 0);
-        barrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
-      }
       vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
-      if (use_wave) {
-        barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
-        vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, wave_visibility);
-        const uint32_t groups = (wave_slots + 63) / 64;
-        vkCmdDispatch(c, std::min(groups, 65535u), (groups + 65534u) / 65535u, 1);
-        barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
-        vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, wave_resolve);
-        vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
-      }
       vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, queries, 1);
       barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
               VK_ACCESS_HOST_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
@@ -2380,8 +2328,6 @@ int main(int argc, char** argv) {
     else if (args[i] == "--define") defines.push_back(next());
     else if (args[i] == "--repeat") { repeat = uint32_t(std::max(1, std::atoi(next().c_str()))); repeat_given = true; }
     else if (args[i] == "--ab-spv") g_ab_spv = next();
-    else if (args[i] == "--sun-wave-visibility") g_wave_visibility_spv = next();
-    else if (args[i] == "--sun-wave-resolve") g_wave_resolve_spv = next();
     else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
     else if (args[i] == "--ab-self-test") return bg3::replay::ab_self_test() ? 0 : 1;
     else if (args[i] == "--no-validation") validation = false;
@@ -2432,7 +2378,6 @@ int main(int argc, char** argv) {
     }
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
   }
-  check(g_wave_visibility_spv.empty() == g_wave_resolve_spv.empty(), "sun wave requires both --sun-wave-visibility and --sun-wave-resolve");
   if (ab_mode()) {
     check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--ab-spec/--ab-spv require ordinary pack replay");
     check(repeat <= (UINT32_MAX - 4) / 4, "paired repeat count too large");
