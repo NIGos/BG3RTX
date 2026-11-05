@@ -14,7 +14,6 @@
 | Inn | -1.361 [-2.429, -0.798] |
 
 - The 40-pair camp +0.495 [+0.103, +1.696] loss was not reproduced by the stability check below; no reproducible camp loss established.
-- Retained OFF per coordinator restoration. Prepared jobs require coordinator review and explicit authorization before staging/launch.
 - Camp identical OFF/OFF control, 40 pairs: +0.128 [-0.821, +0.323] ms, exact. All requested candidate results retained.
 - Registers unchanged: compact state 0, near 168 / far 255; production compact state 1, near 168 / far 243. ON/OFF match main.
 - Key-off release equivalence vs main 9b38f38c: all 215 requests / 2,048 assignments pass, negative control passes.
@@ -22,8 +21,6 @@
 - tools/live_batches/opt_r6/roof: copied compact_hit profile/schedule, inn + S8 Ultra, dev=1, OFF/ON/OFF/ON 600 frames, fresh QUIET.
 - Qualified rt_compact_hit_state=1 fixed throughout. GI trace decides; all six timers retained; JSON/stdout contain preceding-OFF pair deltas.
 - pipeline_readiness TABLE uses [GI_TRACE]; snapshot extends six queries only, preserving all original receipts/models. Both lints pass 2/2.
-- roof_jobs registered in the single CMake foreach. It needs no build, so merge_scope build-only exclusions are unchanged.
-- READY_FOR_LIVE is preparation status, not a quality pass or authorization. No game, queue or git writes; BelowNormal builds.
 - Main checkout .scratch/roofrej1038/summary.json: commands, modules, CSVs, raw counters, lints, timing/control receipts. Original packs unchanged.
 
 - Camp stability check: three 80-pair A/B runs, each preceded by its own 80-pair OFF/OFF control; idle GPU, no games:
