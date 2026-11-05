@@ -1,4 +1,4 @@
-# READY_FOR_LIVE ATTRIBUTION
+# BLOCKED_DURATION ATTRIBUTION
 
 Offline preparation only. Explicit live authorization is required before staging.
 Two jobs, one launch each: `jobs/opt-attr-inn.json` and `jobs/opt-attr-s8.json`.
@@ -6,11 +6,14 @@ Regenerate with `python tools/live_batches/opt_r6/attr/make_job.py`.
 Optional `--profile-exe` uses `observation_state(exe, 'ultra')`; otherwise the
 compact-hit frozen Ultra observation profile is reused. Both use `dev=1`.
 
-Each variant is warmed before measurement, with fresh QUIET after settings
-acknowledgement. Measured static windows are 360 frames, reset-aligned, with
+Immediately after scene-ready warmup, one block visits sun-off, direct-off,
+ao-off, near-only, then baseline. Each step requires fresh QUIET after settings
+acknowledgement with a 60 s timeout. Measured transitions retain the short 8 s
+QUIET wait. Measured static windows are 480 frames, reset-aligned, with
 three complete 120-frame periods required for each of eight timers.
 Sequence: base-a, sun-off, base-b, direct-off, base-c, ao-off, base-d,
 near-only, base-e, base-f. OMM is skipped; base-f remains a final drift receipt.
+S8 omits only the measured ao-off window; every baseline and prewarm state remains.
 Restore returns all four keys to Ultra baseline. No captures are requested.
 
 ## Live-key audit
@@ -27,7 +30,7 @@ The combined GUI hidden-surface choice includes restart-only capture keys;
 these jobs change only the audited live raw keys with capture already enabled.
 The separate sun trace timer measures screen-receiver shadows, not hit sun.
 Origin and sun trace log average dispatch costs; GI trace logs a GPU median.
-Analysis takes the median of each window's three logged values without mixing
+Analysis takes the median of each window's logged values (at least three) without mixing
 those producer definitions or subtracting unrelated pass summary medians.
 
 ## Receipts and limits
@@ -38,11 +41,12 @@ is following baseline minus preceding baseline. Only missing, insufficient or
 nonfinite evidence makes analysis exit nonzero. Image and energy changes are
 expected and allowed. Nothing ships, and ablation deltas must not be summed.
 
-At 30 rendered fps, including 120 s load: inn 277.5 s (4.63 min), S8 274.5 s
-(4.58 min). Both declare a 300 s timeout and a five-minute launch cap.
-Readiness is conditional and unproven. The conservative frozen FPS history
-predicts 464.42 s at inn and 294.74 s at S8, so completion within the cap is
-not guaranteed; a slow/occluded run must end INVALID, never extend the launch.
+At 30 rendered fps, including 120 s load: inn 318.6 s (5.31 min), S8 298.4 s
+(4.97 min), before conditional readiness waits. Both retain the 300 s timeout
+and five-minute launch cap. Inn cannot fit without a split or a further scope
+change. Both lint modes reject the timeout: scheduled time plus declared
+readiness allowances exceeds 300 s. These jobs are blocked, not ready to stage.
+The attr test retains its duration assertion and fails for inn; do not weaken it.
 GPU ms remain the observable in a covered `visible_unfocused_fg` window.
 
 Offline validation:

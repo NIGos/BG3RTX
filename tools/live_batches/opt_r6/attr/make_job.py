@@ -17,6 +17,15 @@ STATES = [('base-a', {}), ('sun-off', {'gi_hit_sun': '0'}), ('base-b', {}),
           ('ao-off', {'hit_ao_rays': '0'}), ('base-d', {}),
           ('near-only', {'gi_far': '0'}), ('base-e', {}), ('base-f', {})]
 # Keep base-f as a final drift receipt even though restart-only OMM is skipped.
+FRAMES = 480
+
+
+def states_for(slug):
+    # Drop only the S8 AO ablation; retain every baseline drift receipt.
+    return [(label, values) for label, values in STATES
+            if slug != 's8' or label != 'ao-off']
+
+
 TIMERS = [('GI', 'gi: GPU cost'), ('GI trace', 'gi: trace pass'),
           ('origin', 'gi: origin pass GPU cost'), ('sun trace', 'gi: sun trace pass GPU cost'),
           ('reflections', 'rf: reflection pass GPU median'),
@@ -43,16 +52,19 @@ def generate(exe=None):
         plan = [phase('warmup', flow.SCENE_SETTLE_SECONDS.get(save, 20), set=assignments(warm),
                       wait_log=[r'\[auto\] scene ready', r'\[cfg\] settings read', quiet],
                       wait_log_fresh=[quiet], wait_log_timeout=15)]
+        states = states_for(slug)
         for label, overrides in STATES:
             if overrides:
                 plan.append(phase('warmup-'+label, 1.1, set=assignments(dict(BASE, **overrides)),
-                                  wait_log=[quiet], wait_log_fresh=[quiet], wait_log_timeout=8))
-        labels = [label+'--static-a' for label, _ in STATES]
-        for (label, overrides), measured in zip(STATES, labels):
+                                  wait_log=[quiet], wait_log_fresh=[quiet], wait_log_timeout=60))
+        plan.append(phase('warmup-baseline', 1.1, set=assignments(BASE),
+                          wait_log=[quiet], wait_log_fresh=[quiet], wait_log_timeout=60))
+        labels = [label+'--static-a' for label, _ in states]
+        for (label, overrides), measured in zip(states, labels):
             setting = assignments(dict(BASE, **overrides))
             plan.append(phase('ready-'+label, 1.1, set=setting, wait_log=[quiet],
                               wait_log_fresh=[quiet], wait_log_timeout=8))
-            plan.append(phase(measured, 12.1, set=setting, frames=360, settle_frames=0,
+            plan.append(phase(measured, 16.1, set=setting, frames=FRAMES, settle_frames=0,
                               stats_reset=True, wait_stats=[rx for _, rx in TIMERS],
                               wait_log_timeout=10))
         plan.append(phase('restore', 1.1, set=assignments(BASE), wait_log=[quiet],
@@ -70,7 +82,7 @@ def generate(exe=None):
                    expect_runner=[r'\[window-mode\].*visible_unfocused', '^Run ended: done',
                                   rf'\[motion-plan\] complete phases={len(plan)}\b'],
                    live_flow=dict(expected_fps=30, settings_latency_s=1, trace_stall_s=0),
-                   purpose='READY_FOR_LIVE. ATTRIBUTION diagnostic: image changes expected and allowed; nothing ships; explicit authorization required before staging.',
+                   purpose='BLOCKED_DURATION. ATTRIBUTION diagnostic: duration/readiness budget unresolved; image changes expected and allowed; nothing ships; explicit authorization required before staging.',
                    post=(f'python tools/live_batches/opt_r6/attr/analyze.py --job {job_rel} '
                          '--log "{log}" --runner "{runner}" --out "{log}.attr.md"'), post_gate=True)
         job['estimated_phase_seconds'] = round(sum(p['seconds'] for p in plan), 3)
@@ -81,18 +93,19 @@ def generate(exe=None):
         estimates[slug] = dict(scheduled_seconds=round(budget['seconds'], 3), load_allowance_seconds=120,
                               expected_readiness_seconds=budget['expected_readiness_seconds'],
                               estimated_seconds=round(120+budget['seconds']+budget['expected_readiness_seconds'], 3),
-                              historical_frame_estimate_seconds=round(120+budget['seconds']-121+
-                                  3600/flow.fps_windows.expected(job, state)['fps'], 3),
+                              historical_frame_estimate_seconds=round(120+budget['seconds']-16.1*len(states)+
+                                  FRAMES*len(states)/flow.fps_windows.expected(job, state)['fps'], 3),
                               nominal_rendered_fps=30,
                               historical_p10_fps=flow.fps_windows.expected(job, state)['fps'],
                               readiness='Unproven: conditional fresh QUIET waits; hard stop 300 s.')
     # Add only new readiness queries; never refresh frozen evidence.
     lint_snapshot.extend_readiness(sorted((HERE/'jobs').glob('*.json')))
-    flow.write(HERE/'predicted.json', dict(status='READY_FOR_LIVE', kind='ATTRIBUTION',
+    flow.write(HERE/'predicted.json', dict(status='BLOCKED_DURATION', kind='ATTRIBUTION',
         shader_request_delta=0, launches=2, preset='Ultra observation_state, dev=1',
-        frames_per_window=360, timer_period_frames=120, jobs=estimates,
+        frames_per_window=FRAMES, timer_period_frames=120, jobs=estimates,
         reference_gi_trace_ms=dict(inn=12.8, s8=8.0),
-        live_keys=list(BASE), skipped={'rt_omm': 'Restart required: common/settings.h kRestart; '
+        live_keys=list(BASE), skipped={'s8_ao_off': 'Omitted to fit the five-minute nominal launch budget; all baselines retained.',
+            'rt_omm': 'Restart required: common/settings.h kRestart; '
             'layer/omm_backend.cpp device creation; layer/omm_content.cpp runtime off invalidates content proof until restart.'},
         prediction='Ablations should reduce GI trace; magnitude unknown. Report variant minus adjacent baseline mean, '
                    'and following minus preceding baseline drift, for all eight timers. Effects interact; deltas are not additive.',
@@ -100,7 +113,8 @@ def generate(exe=None):
                    'gi_hit_sun=0 is explicit, redundant for dispatch. This is not isolated local-light cost.',
         sun_off='Also disables far bounce (far_on requires sun). near-only isolates far distance with sun retained.',
         scope='Diagnostic only. Image and energy changes expected and allowed. Nothing ships; no quality or saving gate.',
-        pending='Offline only. No launch or queue writes. Explicit authorization required before staging.'))
+        pending='Offline only. Inn nominal duration exceeds 300 s including load; both jobs fail timeout allowance lint. '
+            'Resolve launch partition/readiness budget before staging. No launch or queue writes.'))
 
 
 

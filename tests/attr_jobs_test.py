@@ -71,7 +71,7 @@ class AttributionTests(unittest.TestCase):
             measured = self.receipts(missing)
             with tempfile.TemporaryDirectory() as directory, patch.object(analyze, 'costs', return_value=measured):
                 output = Path(directory)/'out.md'
-                self.assertEqual(analyze.main(['--job', str(next((make_job.HERE/'jobs').glob('*.json'))),
+                self.assertEqual(analyze.main(['--job', str(make_job.HERE/'jobs/opt-attr-inn.json'),
                     '--log', 'unused', '--runner', 'unused', '--out', str(output)]), expected)
                 self.assertIn('| Baseline mean | Delta | Drift |', output.read_text())
 
@@ -81,8 +81,10 @@ class AttributionTests(unittest.TestCase):
         self.assertIn('hit_ao_rays', pipeline_readiness.NO_PIPELINE)
         for path in paths:
             job, plan, _ = flow.load_job(path)
+            states = make_job.states_for(job['name'].removeprefix('opt-attr-'))
+            labels = [label+'--static-a' for label, _ in states]
             measured = [p for p in plan if p.get('frames')]
-            self.assertEqual([p['label'] for p in measured], analyze.LABELS)
+            self.assertEqual([p['label'] for p in measured], labels)
             self.assertEqual(job['window_mode'], 'visible_unfocused_fg')
             self.assertEqual(flow.settings(job['set'])['dev'], '1')
             self.assertEqual(job['repeat'], 1)
@@ -95,11 +97,17 @@ class AttributionTests(unittest.TestCase):
             self.assertTrue(job['expect'])
             self.assertEqual(len(job['expect_every']), 8)
             for gate in job['expect_every']:
-                self.assertEqual(gate['windows'], analyze.LABELS)
+                self.assertEqual(gate['windows'], labels)
                 self.assertEqual((gate['min'], gate['period_frames'], gate['sample_frames']), (3, 120, 120))
-            for p, (_, overrides) in zip(measured, make_job.STATES):
+            prewarm = plan[1:6]
+            self.assertEqual([p['label'] for p in prewarm],
+                ['warmup-sun-off', 'warmup-direct-off', 'warmup-ao-off',
+                 'warmup-near-only', 'warmup-baseline'])
+            self.assertEqual(flow.settings(prewarm[-1]['set']), make_job.BASE)
+            self.assertTrue(all(p['wait_log_timeout'] == 60 for p in prewarm))
+            for p, (_, overrides) in zip(measured, states):
                 self.assertEqual(flow.settings(p['set']), dict(make_job.BASE, **overrides))
-                self.assertEqual(p['frames'], 360)
+                self.assertEqual(p['frames'], 480)
                 self.assertTrue(p['stats_reset'])
                 self.assertEqual(p['kind'], 'static')
             for p in plan:
