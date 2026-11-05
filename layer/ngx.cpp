@@ -17,6 +17,7 @@
 // rr is read on every evaluate, so it switches without a restart; the first
 // evaluate after a switch carries Reset=1.
 #include "host.h"
+#include <algorithm>
 #include "dlss5.h"
 
 #include <nvsdk_ngx_vk.h>
@@ -263,7 +264,8 @@ struct Guide {
   VkDeviceMemory memory = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
   VkFormat format = VK_FORMAT_UNDEFINED;
-  bool initialized = false;
+  bool initialized = false; // published only by successful submit
+  std::vector<uint64_t> init_recordings;
   NVSDK_NGX_Resource_VK res{};
 };
 
@@ -831,14 +833,16 @@ static GuidePush guide_push(const SrFeature& f, uint32_t w, uint32_t h, const Gu
   return pc;
 }
 
-// Guide images go UNDEFINED -> GENERAL once, then stay GENERAL.
+// Every guide dispatch fully overwrites the images. Initialize independently
+// in each recording; a discarded or delayed producer cannot suppress the barrier.
 static void guides_init_barrier(DeviceData* dd, VkCommandBuffer cmd) {
   std::lock_guard lock(g_guide_mu);
   VkImageMemoryBarrier init[3];
   uint32_t n = 0;
   for (auto& g : g_guide)
-    if (!g.initialized) {
+    {
       init[n] = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+      init[n].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
       init[n].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
       init[n].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
       init[n].newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -846,10 +850,12 @@ static void guides_init_barrier(DeviceData* dd, VkCommandBuffer cmd) {
       init[n].image = g.image;
       init[n].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
       ++n;
-      g.initialized = true;
+      const auto recording = cmd_recording(cmd);
+      if (recording && std::find(g.init_recordings.begin(), g.init_recordings.end(), recording) == g.init_recordings.end())
+        g.init_recordings.push_back(recording);
     }
   if (n)
-    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
                               nullptr, 0, nullptr, n, init);
 }
 
@@ -1834,3 +1840,16 @@ void ngx_init() {
 }
 
 }  // namespace bg3
+
+namespace bg3 {
+void ngx_submit_recording(uint64_t recording) {
+  std::lock_guard lock(g_guide_mu);
+  for (auto& guide : g_guide)
+    if (recording && std::find(guide.init_recordings.begin(), guide.init_recordings.end(), recording) != guide.init_recordings.end())
+      guide.initialized = true;
+}
+void ngx_discard_recording(uint64_t recording) {
+  std::lock_guard lock(g_guide_mu);
+  for (auto& guide : g_guide) std::erase(guide.init_recordings, recording);
+}
+}
