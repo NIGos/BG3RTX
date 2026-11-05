@@ -30,31 +30,6 @@ int main() {
     CHECK(alt.data[2] == 0); // compose shift is developer-only
   }
   {
-    // Each optimisation has its own pass; prewarm the opposite of the startup
-    // value, retain unrelated specialization data, and never warm a release player.
-    const uint32_t ids[] = {kSpecIdGiRoofReject, kSpecIdOriginLazyNormal};
-    for (uint32_t c = 0; c < 2; ++c) {
-      for (uint32_t value = 0; value < 2; ++value) {
-        pa::PipelineSpecs candidate;
-        candidate.add(ids[c], value);
-        candidate.add(kSpecIdGiFar, 1);
-        CHECK(pa::experimental_specs(candidate, false).empty());
-        CHECK(pa::experimental_specs(candidate, false, false, 1u << (1u-c)).empty());
-        CHECK(pa::experimental_specs(candidate, false, false, 4).empty());
-        const auto dev = pa::experimental_specs(candidate, true);
-        const auto detailed = pa::experimental_specs(candidate, false, true);
-        const auto selected = pa::experimental_specs(candidate, false, false, 1u << c);
-        const auto all = pa::experimental_specs(candidate, true, true, 3);
-        CHECK(dev.size() == 1 && detailed.size() == 1 && selected.size() == 1 && all.size() == 1);
-        CHECK(dev[0].data[0] == 1u-value && dev[0].data[1] == 1);
-        CHECK(dev[0].entries[0].constantID == ids[c]);
-        CHECK(dev[0].key() == detailed[0].key() && dev[0].key() == selected[0].key());
-        CHECK(dev[0].key() == all[0].key());
-        CHECK(candidate.data[0] == value);
-      }
-    }
-  }
-  {
     pa::PipelineSpecs shadow;
     shadow.add(kSpecIdHairGroomShadowT, 0);
     const auto on = pa::experimental_specs(shadow, true);

@@ -518,3 +518,18 @@ lack hit-emission set 4 and the temporal/composite output chain, so they cannot 
 complete Ultra output equality. The current-sample temporal shortcut is also dropped:
 there is no production temporal format/motion/history/downstream equality fixture.
 Neither candidate has a retained key, qualified saving or prepared live A/B job.
+
+
+## Round 1 roof rejection outcome (2026-11-05, opt-apply1, rejected)
+
+The later `gi_roof_reject` trial skipped hidden far-hit shading discarded by the
+roof rule, retaining emission and the statistics path. Inn A/B GI enclosing total:
+OFF 21.75 / 21.58 ms, ON 21.87 / 21.95 ms. No saving; rejected.
+Evidence: `captures/queue/logs/opt-gi-roof-inn.1.021432.log`.
+The key, specialization branch, prewarm registration, helper, candidate-only tests
+and `tools/live_batches/opt_r1/gi_roof` were removed; ID 1028 stays reserved.
+The existing far-GI roof-leak fix remains enabled as before.
+The `tools/live_batches/opt_r2/gi_attr` attribution job was abandoned and removed:
+its readiness cannot observe cached pipelines. No attribution result is claimed.
+Release-path equivalence is checked against main with both retired IDs at their
+baseline release value 0; retained specialization domains remain exhaustive.

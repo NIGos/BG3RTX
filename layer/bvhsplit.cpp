@@ -1,4 +1,5 @@
 #include "../common/perf_hook_state.h"
+#include "../common/cpu_build_keys.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_pool.h"
 #include "mesh_content_id.h"
@@ -2140,6 +2141,19 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                BvhResult* out) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_on || g_failed || slot >= kSceneSlots || !ensure_pipeline()) return false;
+  const bool cpu_opt = cfg_hot(CfgHot::cpu_opt1) != 0;
+  // No pointers or GPU state. Only capacity survives a build, including failures.
+  struct CpuScratch {
+    cpu_opt::BuildKeys present, dynamic;
+    std::vector<uint32_t> cached, flags;
+    std::vector<uint64_t> refs;
+    std::vector<std::pair<uint32_t, uint64_t>> dyn;
+    void clear() { present.clear(); dynamic.clear(); cached.clear(); flags.clear(); refs.clear(); dyn.clear(); }
+  };
+  static CpuScratch retained;
+  CpuScratch local;
+  CpuScratch& scratch = cpu_opt ? retained : local;
+  scratch.clear();
   const DeviceData* dd = g_dd;
   const uint64_t now = frame_index();
   const uint32_t stride = cap.stride, tri_bytes = 3 * stride;
@@ -2147,7 +2161,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const bool moving = rt_camera_moving();
   const uint32_t hold_max_prims = uint32_t((std::max)(cfg_int("rt_dyn_hold_max_prims", 8192), 0));
   const bool compact_holds_requested = dyn_hold_compact_requested(geo_native_hair_enabled(),
-      cfg_int("rt_hair_pool_trim", 1) != 0, cfg_int("rt_scene_compact_holds", 0) != 0, hold_frames, moving);
+      cfg_int("rt_hair_pool_trim", 1) != 0, cfg_int("rt_scene_compact_holds", 1) != 0, hold_frames, moving);
   const bool compact_holds = compact_holds_requested && ensure_hold_pack_pipeline();
   if (compact_holds_requested && !compact_holds) ++g_st.hold_pack_unavailable;
   if (moving || !hold_frames) {
@@ -2235,8 +2249,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   struct HairBoundsWork {HairBoundsPush push;bool pool_source;};
   std::vector<HairBoundsWork> hair_bounds_work;
   struct Inst { uint32_t draw; uint64_t key; };      // static: draw index (instances follow); dynamic: slot key
-  std::vector<uint32_t> cached;   // draw indices
-  std::vector<std::pair<uint32_t, uint64_t>> dyn;   // draw index, slot key
+  auto& cached = scratch.cached;   // draw indices
+  auto& dyn = scratch.dyn;   // draw index, slot key
   uint32_t n_mats = 0;
   uint64_t new_tris = 0;
   std::unordered_set<uint64_t> new_keys;
@@ -2312,9 +2326,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // camera-relative coordinates retain exactly the same interpretation.
   if (hold_frames && !moving) {
     std::unordered_set<uint64_t> present;
-    for (const FrameDraw& fd : g_draws) present.insert(fd.dyn_key);
+    for (const FrameDraw& fd : g_draws) {
+      if (cpu_opt) scratch.present.insert(fd.dyn_key);
+      else present.insert(fd.dyn_key);
+    }
     for (auto& [key, s] : g_dyn) {
-      if (present.count(key)) continue;
+      if (cpu_opt ? scratch.present.contains(key) : present.count(key) != 0) continue;
       // Why an absent draw was not held (rt_stability_log): 0 aged out, 1 no snapshot,
       // 2 stride, 3 not submitted / newer record, 4 epoch, 5 alpha record not restorable, 6 held.
       int why = 6;
@@ -2495,7 +2512,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       continue;
     }
     key = fd.dyn_key;
-    if (!dyn_this_frame.insert(key).second) {
+    if (!(cpu_opt ? scratch.dynamic.insert(key) : dyn_this_frame.insert(key).second)) {
       key = 0;
       continue;
     }
@@ -2507,7 +2524,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     // The bounds were reserved before the decisions (the native pool pass above; the Vulkan AABB stride is 24).
     if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u)return false;
-    if(!hair && geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim",0) && s.hair_bounds_size){
+    if(!hair && geo_native_hair_enabled() &&
+       (cpu_opt ? cfg_hot(CfgHot::rt_hair_pool_trim) : cfg_int("rt_hair_pool_trim",0)) && s.hair_bounds_size){
       // A toggled-to-triangle slot can remain active indefinitely. Its old
       // procedural sidecar otherwise never expires with the inactive slot LRU.
       g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
@@ -2791,8 +2809,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   uint32_t n = 0;
   // Local copies of each instance's BLAS reference and flags for the TLAS signature and
   // the chunk guard below: reading them back from the mapped ring is uncached (P3).
-  std::vector<uint64_t> inst_ref;
-  std::vector<uint32_t> inst_flags;
+  auto& inst_ref = scratch.refs;
+  auto& inst_flags = scratch.flags;
   uint64_t static_tris = 0, dyn_tris = 0;
   struct OmmDrawRange {uint32_t draw,first,count;};
   std::vector<OmmDrawRange> omm_draws;

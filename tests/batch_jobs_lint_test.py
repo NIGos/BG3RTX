@@ -12,40 +12,16 @@ from tools.live_batches import live_flow as flow
 
 
 class BatchJobsLintTests(unittest.TestCase):
-    def test_opt_attr_jobs_are_static_bounded_and_ready_offline(self):
+    def test_opt_scene_job_is_bounded_and_ready_offline(self):
         from tools.live_batches import lint_snapshot
-        from tools.live_batches.opt_r2.gi_attr.make_job import FEATURES
         snapshot = lint_snapshot.load()
         self.addCleanup(flow.readiness_budget.configure, [])
-        for area in ('opt_r1/scene_holds', 'opt_r2/gi_attr'):
-            path = next((ROOT/'tools/live_batches'/area/'jobs').glob('*.json'))
-            job, plan, _ = flow.load_job(path)
-            self.assertEqual(flow.lint(job, plan, [], snapshot['matches'])['problems'], [])
-            self.assertLessEqual(job['timeout'], 600 if area.endswith('gi_attr') else 300)
-            if area.endswith('gi_attr'):
-                self.assertTrue(all(p['kind'] == 'static' and not p.get('trace_at') for p in plan))
-                self.assertEqual(len(job['expect_every']), 18)
-                from tools.live_batches import pipeline_readiness
-                warm = [p for p in plan if p['label'].startswith('warm-')]
-                self.assertEqual(len(warm), 2*len(FEATURES))
-                self.assertEqual(sum(p['wait_log_timeout'] for p in warm), 240)
-                first_cost = next(i for i,p in enumerate(plan) if p.get('stats_reset'))
-                self.assertTrue(all(plan.index(p)<first_cost for p in warm))
-                for p in warm:
-                    self.assertIn(pipeline_readiness.GI_TRACE, p['wait_log'])
-                    self.assertIn(pipeline_readiness.QUIET, p['wait_log_fresh'])
-                    self.assertGreaterEqual(p['wait_log_timeout'], 37 if p['label'].endswith('-off') else 3)
-                states = dict((p['label'], s) for p, s in zip(plan, flow.phase_states(job, plan)))
-                for name, key, off in FEATURES:
-                    a, on, b = [states[name+'--'+label] for label in ('off-a', 'on', 'off-b')]
-                    # stats_reset is observation policy; each rendering contrast
-                    # changes only the intended feature, including its dependencies.
-                    self.assertEqual({k for k in a if a[k] != on[k]}, {key})
-                    self.assertEqual(a, b)
-                    self.assertEqual(a[key], off)
-            else:
-                repeat = next(p for p in plan if p['label'] == 'warm-key-0')
-                self.assertFalse(repeat.get('wait_log'))
+        path = next((ROOT/'tools/live_batches/opt_r1/scene_holds/jobs').glob('*.json'))
+        job, plan, _ = flow.load_job(path)
+        self.assertEqual(flow.lint(job, plan, [], snapshot['matches'])['problems'], [])
+        self.assertLessEqual(job['timeout'], 300)
+        repeat = next(p for p in plan if p['label'] == 'warm-key-0')
+        self.assertFalse(repeat.get('wait_log'))
 
     def test_readiness_snapshot_extension_is_strictly_additive(self):
         from tools.live_batches import lint_snapshot

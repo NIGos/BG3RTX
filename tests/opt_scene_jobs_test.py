@@ -108,49 +108,18 @@ class MissingReceipts(unittest.TestCase):
 
 
 class TonightReceipts(unittest.TestCase):
-    def test_real_complete_period_text_contract_for_both_log_shapes(self):
+    def test_real_complete_period_text_contract(self):
         from scripts.queue_gates import stamped_lines
         from tools.live_batches.ab_receipts import gpu_samples
-        from tools.live_batches.opt_r2.origin.analyze import COST
         from tools.live_batches.opt_r1.scene_analyze import EXTRA
         # Reset ack plus real producer syntax; complete_period_lines yields strings.
         log = ("01:50:00.000 [stats] reset token=8 frame=3438\n"
                "01:50:02.000 scene build GPU (60 frames): median convert+extract 1.978 ms total median 3.090 ms\n"
                "01:50:04.000 scene build GPU (60 frames): median convert+extract 2.044 ms total median 3.110 ms\n"
-               "01:50:02.001 [core] gi: origin pass GPU cost 1.523 ms/frame (average of 60 dispatched frames)\n"
-               "01:50:04.001 [core] gi: origin pass GPU cost 1.495 ms/frame (average of 60 dispatched frames)\n")
+               )
         lines = sorted(stamped_lines(log))
         window = dict(applied=6600, stats_reset=6600, end=6605)
         self.assertEqual(gpu_samples(lines, window, EXTRA['convert']), [1.978, 2.044])
-        self.assertEqual(gpu_samples(lines, window, COST), [1.523, 1.495])
-
-    def test_origin_analyzer_uses_real_complete_period_reader(self):
-        from contextlib import ExitStack
-        from tools.live_batches.opt_r2.origin import analyze as origin
-        job, wins, lines = MissingReceipts().fixture()
-        labels = dict(zip(('off-a','off-b','on','off-c'), origin.LABELS))
-        for w in wins:
-            for old, new in labels.items():
-                if w['label'].startswith(old) or w['label'].endswith(old):
-                    w['label'] = w['label'].replace(old, new)
-                    break
-        lines = [(t, ('gi: origin pass GPU cost 0.8 ms/frame' if 30 <= t < 40 or 90 <= t < 100 else 'gi: origin pass GPU cost 1.0 ms/frame') if 'scene build' in text else text) for t, text in lines]
-        # Only test receipt transport here; detector math has its own fixtures.
-        colour = np.zeros((16,16,3), dtype='f4')
-        mocks = dict(energy=dict(mean_rgb=[1]*3,luminance=1,dimensions=[16,16]),
-                     burst=dict(codes=[colour]*8,albedo=[colour]*2))
-        with ExitStack() as stack:
-            for name, value in mocks.items():
-                stack.enter_context(patch.object(origin,name,return_value=value))
-            stack.enter_context(patch.object(origin.gates,'check',return_value=[]))
-            stack.enter_context(patch.object(origin.gates,'stamped_lines',return_value=lines))
-            stack.enter_context(patch.object(origin.gates,'windows',return_value=wins))
-            stack.enter_context(patch.object(origin.det,'view_shift',return_value=(0,0,1,1)))
-            stack.enter_context(patch.object(origin.det,'temporal',return_value={'pass':True}))
-            result = origin.analyze(job, [], '', '')
-        self.assertEqual(result['status'], 'PASS')
-        self.assertEqual(result['gpu_periods']['off-a'], [1.,1.])
-        self.assertEqual(result['receipt']['energy']['luminance']['off_repeat_spread'], 0)
 
     def test_post_diagnostics_are_optional_and_mask_is_scaled(self):
         import tempfile, json

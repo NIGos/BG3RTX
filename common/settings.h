@@ -385,13 +385,6 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_shadow_t", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
-  {"rt_origin_lazy_normal", "Origin normal load on demand",
-   "Experimental: loads the shading normal only when the ray-origin fallback or diagnostics use it. Identical origin values; GPU savings unmeasured.",
-   Kind::Choice, Apply::Live, "live", true,
-   {{"off", "Off", 0, {{"rt_origin_lazy_normal", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_origin_lazy_normal", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt", "1", "RT device setup"}, {"rt_origin", "1", "Primary origin matching"}}, true, "Performance", {}},
-
   {"exp_hair_primary_passes", "Strand passes that swap",
    "Diagnostic for on-screen strands: which passes may replace the cards (G-buffer, motion vectors, depth prepass). Unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -429,13 +422,6 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rt_hair_physical_origin", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage",1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}, true, "Developer", {}},
-
-  {"gi_roof_reject", "Skip blocked far bounce shading",
-   "Experimental performance option. Skips lighting work whose far bounce is blocked by a cut-away roof. Emission is preserved. Cost is unqualified.",
-   Kind::Choice, Apply::Hitch, "First use builds a pipeline; then live A/B is available.", false,
-   {{"off", "Off", 0, {{"gi_roof_reject", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"gi_roof_reject", "1"}}, {{"exp_hidden_surface", 2}}, {}, false, false, false, Apply::Hitch}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Performance", {}},
 
   {"detailed_logging", "Detailed logging",
    "Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.",
@@ -519,7 +505,9 @@ inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_
 // (rt_bvh_split=1, TRACK_D_RT.md 11) rt_rebuild_frames only paces the per-draw
 // BLAS of the captured (skinned, wind, per-draw matrix) draws, staggered per draw;
 // static meshes are built once for trace speed and never refit.
-inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_frames", "600"}}};
+inline constexpr KV kPresetExtra[kPresetCount][3] = {
+  {{"rt_scene_compact_holds", "1"}}, {{"rt_scene_compact_holds", "1"}},
+  {{"rt_scene_compact_holds", "1"}}, {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}}};
 
 // ---- defaults: one source (docs/SETTINGS_DESIGN.md "Defaults: one source") ----
 // kDefaults is every key bg3rtx.ini sets, with its value; kReleaseDefaults the developer
@@ -534,7 +522,6 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"detailed_logging", "0"},
-    {"opt_prewarm", "0"},
     {"ab_hotkey", "1"},
     {"ab_off", "0"},
     {"experimental_options", "0"},
@@ -590,7 +577,6 @@ inline constexpr KV kDefaults[] = {
     {"contact_shadows", "1"},
     {"rt_strength", "1.0"},
     {"rt_origin", "1"},
-    {"rt_origin_lazy_normal", "0"},
     {"rt_bias", "0.002"},
     {"rt_backlit", "1"},
     {"rt_tmax", "300"},
@@ -677,6 +663,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_lean_hooks", "1"},
     {"perf_hitmat_lists", "0"},
     {"perf_hook_state", "0"},
+    {"cpu_opt1", "0"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_mask", "0"},
     {"rt_hit_material_pool_alpha", "1"},
@@ -688,7 +675,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_omm_dyn_mb", "256"},
     {"rt_native_hair", "0"},
     {"rt_hair_pool_trim", "0"},
-    {"rt_scene_compact_holds", "0"},
+    {"rt_scene_compact_holds", "1"},
     {"rt_hair_groom", "0"},
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_groom_shadow_t", "0"},
@@ -715,7 +702,6 @@ inline constexpr KV kDefaults[] = {
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
-    {"gi_roof_reject", "0"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
@@ -1191,8 +1177,8 @@ inline void enforce_release_policy(Map& m) {
   const bool omm_enabled = map_int(m, "rt_omm", 1) != 0;
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
   m["rr_post"] = "1";
+  m["rt_scene_compact_holds"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
-       "rt_scene_compact_holds",
        "sharc",
        "rt_hair_receiver_guard"}) m[key] = "0";
   m.erase("rt_water_rf_edge"); m.erase("rt_water_rr_hitdist");

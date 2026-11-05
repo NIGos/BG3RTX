@@ -24,10 +24,7 @@ struct PipelineSpecs {
 };
 // Startup alternatives for the actual visible Experimental choices, not a Cartesian product.
 // Controls such as RR order, visibility and pool trim change data/dispatch, not specialization.
-// opt_prewarm is an explicit job set: bit 0 roof reject, bit 1 lazy origin normal.
-// Ordinary release startup (dev/detailed logging/mask all off) adds neither candidate.
-inline std::vector<PipelineSpecs> experimental_specs(const PipelineSpecs& base, bool dev,
-                                                    bool detailed_logging = false, uint32_t opt_prewarm = 0) {
+inline std::vector<PipelineSpecs> experimental_specs(const PipelineSpecs& base, bool dev) {
   using namespace shader_variant;
   struct Binding { const char* key; uint32_t id; };
   static constexpr Binding bindings[] = {
@@ -50,19 +47,6 @@ inline std::vector<PipelineSpecs> experimental_specs(const PipelineSpecs& base, 
             if (alt.entries[i].constantID == b.id) alt.data[i] = uint32_t(std::atoi(kv.value));
       }
       if (alt.key() == base.key()) continue;
-      bool seen = false;
-      for (const auto& prior : out) if (prior.key() == alt.key()) seen = true;
-      if (!seen) out.push_back(alt);
-    }
-  }
-  static constexpr Binding candidates[] = {
-      {"gi_roof_reject", kSpecIdGiRoofReject}, {"rt_origin_lazy_normal", kSpecIdOriginLazyNormal}};
-  for (uint32_t c = 0; c < 2; ++c) {
-    if (!dev && !detailed_logging && !(opt_prewarm & (1u << c))) continue;
-    for (uint32_t i = 0; i < base.count; ++i) {
-      if (base.entries[i].constantID != candidates[c].id) continue;
-      auto alt = base;
-      alt.data[i] = base.data[i] ? 0u : 1u;
       bool seen = false;
       for (const auto& prior : out) if (prior.key() == alt.key()) seen = true;
       if (!seen) out.push_back(alt);

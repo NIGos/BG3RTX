@@ -1,6 +1,7 @@
 # Optimization profiling, 2026-11-05
 
-Status: READY_FOR_LIVE. No measurements yet. Rendering and shader requests are unchanged.
+Status: Round 1 outcomes applied; historical profiling and candidate notes follow.
+
 Batch: `tools/live_batches/opt_profile/jobs/opt-profile-*.json` (four launches).
 Expected total 17.1 minutes including 120 s load per scene; 20 minutes total hard caps.
 
@@ -18,6 +19,27 @@ FG copy's first straddling line is discarded. Missing or disabled work is never 
 Pending measurements: scene build; GI total/trace/shared RR denoise; local shadows;
 reflections; water build/reflect/compose; RR; post chain/grade/temporal; FG copy;
 emissive build; CPU submit; watch driver time. See the batch README for units and gates.
+
+## Round 1 outcomes
+
+| Candidate | Decision | Same-launch inn evidence | Applied outcome |
+| --- | --- | --- | --- |
+| rt_scene_compact_holds | Qualified | High: saving 0.87 ms vs OFF spread 0.075 ms; float energy within OFF spread; identical BVH geometry fixtures | Layer-only, default and every preset 1; release policy forces 1; developer A/B key only |
+| gi_roof_reject | Rejected | GI total OFF 21.75 / 21.58 ms vs ON 21.87 / 21.95 ms; no saving | Code, key, prewarm, candidate tests/jobs removed; ID 1028 reserved |
+| rt_origin_lazy_normal | Rejected | Origin OFF 1.514 / 1.495 ms vs ON 1.634 / 1.520 ms; no saving | Code, key, prewarm, candidate tests/jobs removed; ID 1027 reserved |
+| GI attribution (opt_r2/gi_attr) | Abandoned | Readiness cannot see cached pipelines | Job removed; no attribution claim |
+
+Logs: `opt-scene-compact-holds-inn.1.014837.log`, `opt-gi-roof-inn.1.021432.log`,
+`opt-origin-inn.1.012845.log` under `captures/queue/logs`. Full historical design
+and evidence: TRACK_D_SCENE_BUILD, TRACK_C_GI and TRACK_D_ALPHA_GI respectively.
+The retained opt-tools2 scene report marks rendered flicker comparisons FAIL;
+qualification follows the coordinator's decision and geometry/energy evidence,
+not a claimed temporal-detector pass. Shader request delta 0, ABI unchanged.
+Validation: `scripts/build.ps1 -Test` passes 176/176 (150.24 s). Release equivalence
+against main f3d3c41a: 203 identical, 11 equivalent, 0 different; 1,041 assignments,
+11 universal certificates and negative control PASS (278.4 s). Receipt:
+`.scratch/release-equivalence.json`. No commit, game launch or queue staging.
+
 
 # Offline cost map and candidates
 
@@ -1155,10 +1177,13 @@ After separate explicit user steering, group by save into 2-5 minute sessions wi
 | Async compute or SER as an immediate saving estimate | No queue critical-path/driver occupancy evidence in these logs; current same-frame dependencies and GPU contention can prevent overlap. No defensible ms estimate, and this audit does not open a new scheduling research lane. |
 | Promote perf_submit_batch / perf_hook_state / perf_hitmat_lists solely from this map | Existing implementations are off in the measured release jobs; disabled CPU timing cannot qualify them. Use their existing offline tests and qualification plans, not duplicate implementations or invented CPU savings. |
 
-## Tooling round opt-tools2, 2026-11-05
+## Tooling round opt-tools2, 2026-11-05 (historical)
 
 Both cost analyzers now share the real complete-period text contract. Reports retain per-window GPU medians, OFF repeat spread, signed ON deltas, float pre-post RGB/luminance from rrpost slot 2 dumps.json, and rendered QA verdicts. Detailed captures include optional post histories; animation masks are resized to final-image resolution before the existing detector runs.
 
 Reanalysis of scene 014837 and origin 012845: valid FAIL receipts, not analysis exceptions. Scene convert saves 0.8703 ms versus 0.0750 ms OFF spread; origin ON costs increase by 0.1295/0.0155 ms versus 0.0190 ms OFF spread. Float luminance deltas fit OFF repeat spread for both runs. Every QA pair fails; no quality qualification is claimed. Full reports and retained run-era plans: `.scratch/opt-tools2/`.
 
-Startup alternatives now include roof reject (SpecId 1028) and lazy origin normal (1027) only for dev/detailed logging or explicit opt_prewarm mask 1/2/3. Release startup remains unchanged; layer-only compact holds has no specialization. GI attribution awaits each feature variant and fresh driver quiescence in dedicated warm phases, with 240 s total warm readiness budget before any measured window. No new shader requests or live runs.
+At that revision, startup alternatives included roof reject (SpecId 1028) and lazy origin normal (1027) only for dev/detailed logging or explicit opt_prewarm mask 1/2/3. Release startup remains unchanged; layer-only compact holds has no specialization. GI attribution then awaited each feature variant and fresh driver quiescence in dedicated warm phases, with 240 s total warm readiness budget before any measured window. No new shader requests or live runs.
+
+Round 1 supersedes that prewarm/readiness plan: both candidate registrations and
+`opt_prewarm` are removed, and the GI attribution job is abandoned.
