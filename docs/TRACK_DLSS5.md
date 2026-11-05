@@ -117,7 +117,14 @@ on failure, retaining RR colour. Unsupported/missing inputs, open render passes,
 secondary/simultaneous recordings and debug views are skipped with reason changes
 logged once. Creation/evaluation failure disables NR for the session with its code.
 
-Features recreate on output size/depth-convention changes. History resets on RR
+Features recreate on render/output size, source guide extents/subrects/scales,
+motion convention, HDR/format or depth-convention changes. A changed contract
+immediately stops NR recording. The existing per-submission lifetime helper
+polls completion, and retained executable recordings must also be discarded
+before ReleaseFeature. The replacement gets a fresh parameter block and private
+guide images, followed by a history reset; no per-frame device-wide wait.
+The boundary accepts only linear HDR RGBA16F pre-post colour and rejects other
+colour formats before recording. History resets on RR
 reset/camera cut, bypass resume, mode/geometry/scales change, shader reload or
 unsubmitted/discontinuous history. Recording resources stay immutable until the
 recording is discarded and its actual submitted work is known complete. Eight
@@ -245,3 +252,38 @@ prove pre-post linear-HDR energy equivalence. No quality, energy or FG interplay
 pass is claimed before an authorized live. See staged predicted.json for prior
 cost, limits and gates. Structural checks are offline; full corpus lint is pending
 because these new log lines have no historical live evidence.
+
+## 7. Render-resolution change regression (2026-11-05, dlss5-res)
+
+User report: Quality -> Balanced, render 2560 x 1067 -> 2227 x 928, fixed
+3840 x 1600 output; process exited inside the driver after the next NR evaluate.
+The old feature key covered only output size and inverted depth. The new exact
+CPU-tested key covers the complete immutable guide/format contract above.
+`[dlss5] NR recreated: render AxB -> CxD` logs successful replacement.
+
+Fixture: `--nr-core-vulkan --guide-switch reuse|recreate --frames 12` exercises
+three frames each at 2560 x 1067, 2227 x 928, 1920 x 800, 2560 x 1067 with
+fixed 3840 x 1600 colour. By default it directly changes NGX guide extents.
+Add `--converted-guides` for the layer-equivalent contract: CPU pixel-centre
+sampling converts source guides to fixed output-sized normalized guides.
+Both modes replace guide images at transitions; recreate mode uses the shared
+decision helper, waits the fixture fence, discards the old recording, releases
+the feature/parameters and creates a replacement before evaluate (four creates).
+Finite/changed HDR and unchanged alpha are checked on every frame. Every
+validation error is printed. Switch sequences continue through only the known
+named NGX resource VUID 09600, report its count, and retain exit 1 when present;
+other validation errors stop immediately. No validation pass is implied.
+
+Signed 310.8.0 fixture results: reuse and recreate both completed all 12 frames
+in direct and converted modes; every Create/Evaluate/Release returned 0x1,
+all output finite/changed with alpha preserved. The 48-frame converted recreate
+sequence also completed, with four feature creates. The user crash was **not
+reproduced** offline, so this is a conservative lifetime fix, not proof of the
+driver-exit cause. Validation has exactly one known internal VUID per feature:
+1 for reuse, 4 for recreate; zero other errors (validation runs intentionally
+exit 1). No game/queue run. Logs: `.scratch/dlss5-res-{reuse,recreate}-{raw,converted}.log`
+and `.scratch/dlss5-res-recreate-converted48.log`. NR median 7.118 ms in the
+48-frame diagnostic; not an in-game cost measurement. The reported installed
+`bg3rtx.prev.log` could not be independently read (access denied).
+Full `scripts/build.ps1 -Test`: 189/189 pass (CTest 266.03 s, build 21 s),
+including the expanded CPU recreate-decision test. Shader manifest delta 0.
