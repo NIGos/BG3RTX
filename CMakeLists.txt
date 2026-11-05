@@ -595,7 +595,7 @@ target_compile_definitions(frame_replay PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURC
 # Standalone DLSS5 external-memory/timeline fixture: never launched by CTest.
 # GPU runs are explicit and refuse while bg3.exe/bg3_dx11.exe is running.
 add_executable(dlss5_fixture tools/dlss5_fixture.cpp)
-target_include_directories(dlss5_fixture PRIVATE ${VULKAN_SDK}/Include ${CMAKE_SOURCE_DIR}/external/DLSS/include)
+target_include_directories(dlss5_fixture PRIVATE ${VULKAN_SDK}/Include ${BG3RTX_EXTERNAL}/DLSS/include)
 target_link_directories(dlss5_fixture PRIVATE ${VULKAN_SDK}/Lib)
 target_link_libraries(dlss5_fixture PRIVATE vulkan-1 d3d12 dxgi d3dcompiler wintrust crypt32 bcrypt version
   ${BG3RTX_EXTERNAL}/DLSS/lib/Windows_x86_64/x64/nvsdk_ngx_s.lib)
