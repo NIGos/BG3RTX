@@ -153,6 +153,13 @@ console and `ab_summary.txt` report the median delta and a distribution-free 95%
 interval for its population median, using binomial order statistics (conservative
 coverage for ties). Small samples can produce infinite bounds.
 
+`--ab-warmup N` (0..256, default 0) runs N additional untimed dispatches immediately
+before each measured dispatch in the same GPU submission. All mutable outputs and
+counters are restored before every warmup and again before timing. This avoids
+timing a cold GPU after CPU readback gaps; the selected count is printed in the
+receipt. It changes no production shader or global GPU setting. Check a same-module
+40-pair control before interpreting a candidate's interval.
+
 Every measured dispatch is compared byte for byte with the first dispatch in its
 quartet: all stored output components and every raw counter/bin. The summary requires
 all comparisons to match to print `100% bit-equal`. The first failed quartet reports

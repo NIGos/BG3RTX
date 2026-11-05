@@ -987,3 +987,39 @@ The 2048 MiB disk cap includes manifest/codec overhead and is enforced before
 each block write. ABI stays 27; shader request delta 0. Offline fixtures cover
 BC4 atlas and BC5 cookie controls plus byte/sampling identity. Actual inn size
 and live-reference equality remain unverified; no live batch ran for this fix.
+
+### Faithful inn replay and exact selector (ls-opt2, offline qualified, 2026-11-05)
+
+Real pack `replay-20261105-224451-1`, frame 1984, Ultra, now matches live:
+zero differing bytes in packed diffuse/specular/auxiliary outputs and every raw
+counter equal. The replay had appended unused cascade geometry beyond 2 GiB,
+making NVIDIA report a zero soup buffer size and causing 92,389 alpha guards.
+The harness preserves the captured range when both effective LS ray masks exclude
+the cascade. Common/paired specialization overrides retain their geometry needs.
+
+`frame_replay --ab-warmup 128` restores inputs and warms the GPU in the same
+submission before each timed dispatch. Default 0 leaves existing runs unchanged.
+The final same-module control (40 pairs) is -0.001752 ms, 95% CI
+[-0.004256, +0.001008]; every output/counter matches. Earlier cold measurements
+were confounded by idle clock transitions. No global GPU setting changed.
+
+Replay-only ablations (eight pairs, nonadditive): visibility traversal costs
+0.289352 ms [0.187392, 0.364032], the point/spot loop including selected rays
+0.536176 ms [0.438208, 0.658544], and boxes/projectors 0.232368 ms
+[0.083952, 0.324592]. Ownership, atlas, BRDF weighting and duplicate early tests
+are unresolved. The slot-matching join already ran before capture and is not timed.
+Full definitions, intervals and registers: `.scratch/ls-opt2/profile-summary.md`.
+
+Kept developer raw key `ls_fast=0`, SpecId 1040, forced off in release/presets.
+For K1/NR1 it skips the independent discarded second reservoir; all other modes
+keep the original selector. Forty paired samples save 0.011552 ms, 95% CI
+[0.004832, 0.015232], about 1.5% of the warmed 0.77 ms replay. This does not
+establish a saving against the inn's live cost of about 2.0 ms. Registers remain
+168; shared memory falls from 7,168 to 6,912 bytes. No 128-register claim.
+Outputs and counters are 100% bit-equal across 160 measured dispatches with
+rt_stats=0 and eight with rt_stats=1; final production SPIR-V equals the timed
+candidate bytes. Key-off release proof: 203 identical, 12 equivalent, 0 different,
+negative control PASS. Request delta 0, ABI unchanged. No live test ran.
+Recheck this inn pack with `--ab-spec 1040=0,1 --repeat 40 --ab-warmup 128
+--ab-require-equal`; receipts and build status are in `docs/progress/ls-opt2.md`.
+BelowNormal `scripts/build.ps1 -Test` passes all 195 CTests (173.56 s).

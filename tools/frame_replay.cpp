@@ -78,6 +78,7 @@ std::map<uint32_t, uint32_t> g_specs;
 std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_ab_specs;
 fs::path g_ab_spv;
 bool g_ab_require_equal = false;
+uint32_t g_ab_warmup = 0; // untimed GPU dispatches immediately before each A/B sample
 bool ab_mode() { return !g_ab_specs.empty() || !g_ab_spv.empty(); }
 bool g_reference_mismatch = false;
 std::atomic<unsigned> g_validation_errors{};
@@ -819,6 +820,19 @@ bool origin_self_test() {
   return true;
 }
 
+bool ls_masks_casters(const rp::Manifest& m) {
+  if (m.pass != "local_shadows" ||
+      (";" + m.defines + ";").find(";RT_SPEC_CASCADE=1;") == std::string::npos) return false;
+  uint32_t value = 0;
+  for (const auto& spec : m.specs) if (spec.id == 1000u) value = spec.value;
+  if (g_specs.count(1000u)) value = g_specs.at(1000u);
+  if (g_ab_specs.count(1000u)) {
+    const auto values = g_ab_specs.at(1000u);
+    return values.first != 0u && values.second != 0u;
+  }
+  return value != 0u;
+}
+
 Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const fs::path& hlsl_override,
               const std::vector<std::string>& extra_defines, const fs::path& out, uint32_t repeat, bool quiet,
               const ReplayHooks* hooks = nullptr) {
@@ -865,7 +879,13 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   // build below and rt_hit_normal see real triangles. The live entry had none (GI rays never read it).
   std::vector<uint8_t> casters, info_patched;
   uint64_t casters_base = 0;
-  if (!m.casters.file.empty() && !g_no_casters) {
+  // Production LS excludes mask 0x02. Keep its captured soup descriptor range:
+  // appending unused casters can cross 2 GiB and make NVIDIA GetDimensions return 0.
+  // Respect both pipelines' effective overrides before eliding any geometry.
+  const bool masked_casters = ls_masks_casters(m);
+  if (!m.casters.file.empty() && masked_casters)
+    result.warnings.push_back("casters: excluded by both LS pipelines' 0x01 ray mask; captured soup range preserved");
+  if (!m.casters.file.empty() && !g_no_casters && !masked_casters) {
     casters = file(m.casters.file);
     rp::Buffer* soup = nullptr; const rp::Buffer* info_b = nullptr;
     for (auto& b : m.buffers) { if (b.set == 1 && b.binding == 6) soup = &b; if (b.set == 1 && b.binding == 7) info_b = &b; }
@@ -1055,7 +1075,10 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     auto src = buffers.find(key(1, pool ? 8 : 6));
     const bool usable = tris && stride >= 12 && !(meta & (rp::kInfoLegacy | rp::kInfoHair)) && src != buffers.end() &&
                         uint64_t(base) + uint64_t(tris) * 3 * stride <= src->second.size;
-    if (!usable) { ++skipped; in.mask = 0; in.accelerationStructureReference = empty.address; continue; }
+    if (!usable) {
+      if (!(masked_casters && i == m.casters.instance)) ++skipped;
+      in.mask = 0; in.accelerationStructureReference = empty.address; continue;
+    }
     auto it = blas.find(k);
     // The cascade instance's BLAS is not opaque, as live (layer/bvhsplit.cpp: the sun's variant tests its candidates).
     const bool opaque = !(meta & rp::kInfoAlpha) && !(!casters.empty() && i == m.casters.instance);
@@ -1226,6 +1249,18 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     check(bytes.size() <= initial_stats.size() && bytes.size() % 4 == 0, "initial counter size");
     std::copy(bytes.begin(),bytes.end(),initial_stats.begin());
   }
+  // Keep restores on the GPU so the measured dispatch follows sustained work,
+  // rather than another CPU readback/upload gap that lets clocks fall to idle.
+  Buf warm_stats;
+  std::map<uint64_t, Buf> warm_counters;
+  if (g_ab_warmup) {
+    warm_stats = make_buffer(stats.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false);
+    upload(warm_stats,0,initial_stats.data(),initial_stats.size());
+    for (const auto& [binding,initial] : mutable_counters) {
+      auto source = make_buffer(initial.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false);
+      upload(source,0,initial.data(),initial.size()); warm_counters[binding] = source;
+    }
+  }
   ReplayProgress progress;
   std::vector<double> timings;
   const uint32_t dispatches = ab_mode() ? 4 + repeat * 4 : repeat;
@@ -1241,6 +1276,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     ab_csv.open(out / "ab.csv");
     ab_csv << "pair,A_ms,B_ms,delta_ms,outputs_equal,counters_equal\n";
     std::puts("[replay] paired A/B: 4 warmup dispatches excluded; each pair ABBA/BAAB, delta B-A (linear drift cancels)");
+    if (g_ab_warmup) std::printf("[replay] per-sample GPU warmup: %u untimed dispatches with complete input restoration, then one timed dispatch\n",g_ab_warmup);
   }
   for (uint32_t run = 0; run < dispatches; ++run) {
     if (run) progress.tick(run, dispatches, hooks && hooks->note ? hooks->note(run) : std::string());
@@ -1258,26 +1294,42 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       uint32_t lf; std::memcpy(&lf, push.data() + 188, 4); lf |= 1u << 25; std::memcpy(push.data() + 188, &lf, 4);
     }
     submit([&](VkCommandBuffer c) {
-      barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
-              VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
-      for (auto& o : outputs) {
-        if (o.initial.b) {
-          VkBufferImageCopy region{}; region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
-          region.imageExtent = {o.img.w,o.img.h,1};
-          vkCmdCopyBufferToImage(c,o.initial.b,o.img.image,VK_IMAGE_LAYOUT_GENERAL,1,&region);
-        } else clear_storage(c, o.img);
-      }
-      vkCmdResetQueryPool(c, queries, 0, 2);
-      barrier(c, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-              VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-              VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_UNIFORM_READ_BIT);
+      if (g_ab_warmup)
+        barrier(c,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
       vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, use_b ? pipeline_b : pipeline);
       vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, pass.set_count, sets.data(), 0, nullptr);
       vkCmdPushConstants(c, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pass.push_bytes, push.data());
-      // Wait for preceding output clears/uploads; time only this dispatch.
-      vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queries, 0);
-      vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
-      vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, queries, 1);
+      for (uint32_t pre = 0; pre <= g_ab_warmup; ++pre) {
+        barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+        if (g_ab_warmup) {
+          VkBufferCopy restore{0,0,stats.size}; vkCmdCopyBuffer(c,warm_stats.b,stats.b,1,&restore);
+          for (const auto& [binding,source] : warm_counters) {
+            restore.size = buffers.at(binding).size;
+            vkCmdCopyBuffer(c,source.b,buffers.at(binding).b,1,&restore);
+          }
+        }
+        for (auto& o : outputs) {
+          if (o.initial.b) {
+            VkBufferImageCopy region{}; region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
+            region.imageExtent = {o.img.w,o.img.h,1};
+            vkCmdCopyBufferToImage(c,o.initial.b,o.img.image,VK_IMAGE_LAYOUT_GENERAL,1,&region);
+          } else clear_storage(c, o.img);
+        }
+        if (pre == g_ab_warmup) vkCmdResetQueryPool(c, queries, 0, 2);
+        barrier(c, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+                VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_UNIFORM_READ_BIT);
+        if (pre < g_ab_warmup) {
+          vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
+          continue;
+        }
+        // Wait for preceding output clears/uploads; time only this dispatch.
+        vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queries, 0);
+        vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
+        vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, queries, 1);
+      }
       barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
               VK_ACCESS_HOST_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
     });
@@ -2333,6 +2385,21 @@ int ls_self_test(const fs::path& dir) {
   m.pass = "local_shadows";
   m.defines = "RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1";
   m.specs = {{1000,1},{1008,0},{1009,0},{1010,0},{1020,0},{1026,0}};
+  check(ls_masks_casters(m), "LS captured cascade mask excludes casters");
+  g_specs[1000u] = 0;
+  check(!ls_masks_casters(m), "LS common override retains casters");
+  g_ab_specs[1000u] = {1,0};
+  check(!ls_masks_casters(m), "LS either paired ray mask retains casters");
+  g_ab_specs[1000u] = {1,1};
+  check(ls_masks_casters(m), "LS paired overrides supersede common value");
+  g_ab_specs.clear(); g_specs.clear();
+  auto mask_control = m;
+  mask_control.pass = "gi_hit_direct";
+  check(!ls_masks_casters(mask_control), "non-LS replay retains casters");
+  mask_control = m; mask_control.defines.clear();
+  check(!ls_masks_casters(mask_control), "unspecialized LS retains casters");
+  mask_control = m; mask_control.specs.clear();
+  check(!ls_masks_casters(mask_control), "default cascade specialization retains casters");
   const auto& pass = *rp::find_pass(m.pass);
   m.buffers.erase(std::remove_if(m.buffers.begin(),m.buffers.end(),[&](const auto& b){return !rp::find_slot(pass,b.set,b.binding);}),m.buffers.end());
   m.images.erase(std::remove_if(m.images.begin(),m.images.end(),[&](const auto& i){return !rp::find_slot(pass,i.set,i.binding);}),m.images.end());
@@ -2421,6 +2488,10 @@ int ls_self_test(const fs::path& dir) {
   g_ab_specs[2147483647u]={0,1}; g_ab_require_equal=true;
   replay(pack,&code,{}, {},dir / "paired",2,true);
   check(!g_reference_mismatch,"LS paired restoration bit-equal");
+  g_ab_warmup = 2; g_reference_out = dir / "paired";
+  replay(pack,&code,{}, {},dir / "paired-warmed",2,true);
+  check(!g_reference_mismatch,"LS per-sample warmup preserves baseline outputs and counters");
+  g_ab_warmup = 0; g_reference_out.clear();
   g_ab_specs.clear();g_ab_require_equal=false;
   uint64_t disk_bytes=0;
   for(const auto& f:fs::directory_iterator(pack)) if(f.is_regular_file()) disk_bytes+=f.file_size();
@@ -2612,6 +2683,13 @@ int main(int argc, char** argv) {
     else if (args[i] == "--repeat") { repeat = uint32_t(std::max(1, std::atoi(next().c_str()))); repeat_given = true; }
     else if (args[i] == "--ab-spv") g_ab_spv = next();
     else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
+    else if (args[i] == "--ab-warmup") {
+      const auto text = next();
+      check(!text.empty() && text.find_first_not_of("0123456789") == std::string::npos && text.size() <= 3,
+            "--ab-warmup requires an integer 0..256");
+      g_ab_warmup = uint32_t(std::stoul(text));
+      check(g_ab_warmup <= 256, "--ab-warmup requires an integer 0..256");
+    }
     else if (args[i] == "--origin-self-test") return origin_self_test() ? 0 : 1;
     else if (args[i] == "--ab-self-test") return bg3::replay::ab_self_test() ? 0 : 1;
     else if (args[i] == "--no-validation") validation = false;
@@ -2670,6 +2748,7 @@ int main(int argc, char** argv) {
     check(repeat <= (UINT32_MAX - 4) / 4, "paired repeat count too large");
     if (!repeat_given) repeat = 40;
   }
+  check(!g_ab_warmup || ab_mode(), "--ab-warmup requires --ab-spec or --ab-spv");
   if (!ls_test.empty()) return ls_self_test(ls_test);
   if (!test.empty()) return self_test(test);
   if (!pt_test.empty()) return pt_self_test(pt_test);
