@@ -357,6 +357,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_shadow_t": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_shadow_t": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "rt_origin_lazy_normal", "label": "Origin normal load on demand",
+     "description": "Experimental: loads the shading normal only when the ray-origin fallback or diagnostics use it. Identical origin values; GPU savings unmeasured.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Performance", "summary": "Experimental: loads the shading normal only when the ray-origin fallback or diagnostics use it. Identical origin values; GPU savings unmeasured.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rt": "1", "rt_origin": "1"},
+     "required_from_choice": {"rt": 1, "rt_origin": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_origin_lazy_normal": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_origin_lazy_normal": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_primary_passes", "label": "Strand passes that swap",
      "description": "Diagnostic for on-screen strands: which passes may replace the cards (G-buffer, motion vectors, depth prepass). Unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,

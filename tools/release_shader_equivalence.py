@@ -45,7 +45,9 @@ REMOVED_KEYS = {1001: "gi_temporal_mv_sample", 1002: "gi_prev_radiance_guard",
                 1022: "rt_alpha_metadata_cache", 1023: "rt_water_empty_tiles",
                 1024: "rt_compact_hit_state"}
 # Reviewed candidate disabled-path contract. This does NOT certify key ON.
-FIXED_OFF_KEYS = {1027: "gi_roof_reject"}
+FIXED_OFF_KEYS = {1028: "gi_roof_reject"}
+# gi_roof_reject (1028) and rt_origin_lazy_normal (1027) are both release-off.
+ORIGIN_OFF_KEYS = {1027: "rt_origin_lazy_normal"}
 # The domain audit above is of bundle35's settings/release policy. A different
 # policy needs a fresh audit, rather than silently applying these assumptions.
 REVIEWED_POLICY_SHA256 = "6081e6b3682aeba6c2fe4bf3c51ad0d8d15b21823ea4303cc127262e6b4b9761"
@@ -90,13 +92,13 @@ def baseline_request(request, known):
     return guarded if guarded in known else request
 
 
-def assignments(ids, removed):
+def assignments(ids, removed, fixed=None):
     # Every other registered retained constant is an on/off uint. Crossing both
     # values is a conservative superset of release preset and opt-in states.
-    fixed = removed | (ids & set(FIXED_OFF_KEYS))
-    retained = sorted(ids - fixed)
+    fixed = (fixed or {}) | {i: 0 for i in ids & set(FIXED_OFF_KEYS)}
+    retained = sorted(ids - removed - fixed.keys())
     domains = [(0,) if i == 1008 else (0, 1) for i in retained]
-    return [dict(zip(retained, values)) | {i: 0 for i in sorted(fixed)}
+    return [dict(zip(retained, values)) | fixed | {i: 0 for i in sorted(removed)}
             for values in itertools.product(*domains)]
 
 
@@ -171,7 +173,8 @@ def check_request(item):
                 continue
             # Leave retained constants symbolic. Canonical equality is then
             # universal, not evidence inferred from a few sampled assignments.
-            universal_assign = {i: 0 for i in REMOVED_KEYS | FIXED_OFF_KEYS} | {1008: 0}
+            universal_assign = ((item[5] if len(item) > 5 else {}) |
+                                {i: 0 for i in REMOVED_KEYS | FIXED_OFF_KEYS} | {1008: 0})
             universal = (normalizer.get(a, universal_assign, temp, "old") ==
                          normalizer.get(b, universal_assign, temp, "new"))
             actual_checks += 1
@@ -216,6 +219,8 @@ def main(argv=None):
     ap.add_argument("--jobs", type=int, default=default_jobs())
     ap.add_argument("--filter")
     ap.add_argument("--json")
+    ap.add_argument("--freeze-spec", type=int, action="append", default=[], metavar="ID",
+                    help="explicit candidate OFF proof: fix a newly added registered Boolean spec ID to 0")
     ap.add_argument("--exhaustive", action="store_true",
                     help="check every Cartesian assignment even after universal symbolic equality")
     args = ap.parse_args(argv)
@@ -230,13 +235,18 @@ def main(argv=None):
             raise RuntimeError(f"unreviewed removed spec IDs: {sorted(removed)}")
         if removed:
             validate_policy(base.read("common/settings.h"))
-        for spec, key in FIXED_OFF_KEYS.items():
+        for spec, key in itertools.chain(FIXED_OFF_KEYS.items(), ORIGIN_OFF_KEYS.items()):
             if spec in shader_ids(new):
                 defaults = new.read("common/settings.h").decode().split("// BEGIN GENERATED DEFAULTS", 1)[1]
                 if not re.search(r'\{"' + re.escape(key) + r'", "0"\}', defaults):
                     raise RuntimeError(f"disabled-path key {key} must default to 0")
         print("candidate spec constants fixed OFF (ON is not certified): " +
               ", ".join(f"{i} {key}" for i, key in FIXED_OFF_KEYS.items()), flush=True)
+        fixed = {i: 0 for i in args.freeze_spec}
+        if not fixed.keys() <= registry_ids(new) - registry_ids(base):
+            raise RuntimeError("--freeze-spec must name newly added registered constants only")
+        fixed |= {i: 0 for i in FIXED_OFF_KEYS}
+        print(f"explicit candidate OFF constants: {fixed}", flush=True)
         print("removed spec constants (release value 0): " + ", ".join(f"{i} {REMOVED_KEYS[i]}" for i in sorted(removed)), flush=True)
         listed = new.requests()
         reqs = [r for r in dict.fromkeys(listed) if not args.filter or re.search(args.filter, r)]
@@ -268,10 +278,10 @@ def main(argv=None):
                 ids = live_ids(a) | live_ids(b)
                 unknown = ids - registry_ids(base) - registry_ids(new)
                 symbolic.update(unknown)
-                values = assignments(ids - unknown, removed) if a != b else []
+                values = assignments(ids - unknown, removed, fixed) if a != b else []
                 entries.append((e.name, a, b, values))
                 count += len(values)
-            comparisons.append((r, entries, count, sorted(symbolic), args.exhaustive))
+            comparisons.append((r, entries, count, sorted(symbolic), args.exhaustive, fixed))
         total = sum(item[2] for item in comparisons)
         print(f"{len(reqs)} requests, {total} specialized entry comparisons", flush=True)
         with Progress("release equivalence", total, every=30, verb="covered") as progress:
@@ -318,7 +328,7 @@ def main(argv=None):
               f"({universal_count} universal entry certificates); {elapsed:.1f} s", flush=True)
         if args.json:
             Path(args.json).parent.mkdir(parents=True, exist_ok=True)
-            Path(args.json).write_text(json.dumps({"baseline": base.rev, "removed": {i: 0 for i in sorted(removed)},
+            Path(args.json).write_text(json.dumps({"baseline": base.rev, "removed": {i: 0 for i in sorted(removed)}, "fixed": fixed,
                                                   "counts": counts, "control": control_ok, "seconds": elapsed,
                                                   "normalized_pair_checks": actual, "universal_certificates": universal_count,
                                                   "actual_frozen_checks": frozen, "symbolic_checks": symbolic_checks,

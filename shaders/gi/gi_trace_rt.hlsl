@@ -98,7 +98,7 @@ bool gi_hit_term_ok(float3 c, uint bin) {
 #error RT_SPEC_GI_FAR replaces RT_GI_FAR
 #endif
 [[vk::constant_id(1007)]] const uint kSpecGiFar = 0u;
-[[vk::constant_id(1027)]] const uint kSpecGiRoofReject = 0u;
+[[vk::constant_id(1028)]] const uint kSpecGiRoofReject = 0u;
 #include "gi_roof_reject.hlsli"
 #endif
 #if RT_GI_FAR || defined(RT_SPEC_GI_FAR)

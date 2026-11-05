@@ -385,6 +385,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_shadow_t", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
+  {"rt_origin_lazy_normal", "Origin normal load on demand",
+   "Experimental: loads the shading normal only when the ray-origin fallback or diagnostics use it. Identical origin values; GPU savings unmeasured.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_origin_lazy_normal", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_origin_lazy_normal", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt", "1", "RT device setup"}, {"rt_origin", "1", "Primary origin matching"}}, true, "Performance", {}},
+
   {"exp_hair_primary_passes", "Strand passes that swap",
    "Diagnostic for on-screen strands: which passes may replace the cards (G-buffer, motion vectors, depth prepass). Unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -582,6 +589,7 @@ inline constexpr KV kDefaults[] = {
     {"contact_shadows", "1"},
     {"rt_strength", "1.0"},
     {"rt_origin", "1"},
+    {"rt_origin_lazy_normal", "0"},
     {"rt_bias", "0.002"},
     {"rt_backlit", "1"},
     {"rt_tmax", "300"},

@@ -1219,6 +1219,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   if (p.active_layout != lay) { p.pipeline = VK_NULL_HANDLE; p.active_layout = lay; }
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
   PipelineSpecs specs;
+  if (std::strcmp(file, "gi/rt_origin.hlsl") == 0)
+    specs.add(sv::kSpecIdOriginLazyNormal, host->cfg_int("rt_origin_lazy_normal", 0) != 0 ? 1u : 0u);
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);

@@ -62,8 +62,8 @@ class RoofReject(unittest.TestCase):
         self.assertIn('sun_known ? local_state != kGiFarLocalUnknown : (local_state == kGiFarLocalKnown && t <= R0)', far)
 
     def test_disabled_equivalence_domain(self):
-        self.assertEqual(eq.assignments({1007, 1027}, set()), [{1007: 0, 1027: 0}, {1007: 1, 1027: 0}])
-        self.assertEqual(eq.FIXED_OFF_KEYS, {1027: 'gi_roof_reject'})
+        self.assertEqual(eq.assignments({1007, 1028}, set()), [{1007: 0, 1028: 0}, {1007: 1, 1028: 0}])
+        self.assertEqual(eq.FIXED_OFF_KEYS, {1028: 'gi_roof_reject'})
 
 
 class LiveGates(unittest.TestCase):

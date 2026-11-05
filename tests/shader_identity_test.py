@@ -545,6 +545,9 @@ check(len(values) == 4 and {(a[1000], a[1025]) for a in values} == {(0, 0), (0, 
       "release proof crosses both values of every retained Boolean constant")
 check(all(a[1008] == 0 and a[1001] == 0 and a[1021] == 0 for a in values),
       "release proof fixes hidden tilesets and all removed constants off, including absent ones")
+fixed_values = rse.assignments({1000, 1027}, set(), {1027: 0})
+check(fixed_values == [{1000: 0, 1027: 0}, {1000: 1, 1027: 0}],
+      "candidate OFF proof fixes only the explicit key while crossing retained constants")
 check(rse.baseline_request("a.hlsl?X=1", {"a.hlsl?X=1;GI_SPEC_GUARDS=1"}) == "a.hlsl?X=1;GI_SPEC_GUARDS=1",
       "baseline mapping restores removed guard marker")
 check(rse.baseline_request("a.hlsl", {"a.hlsl?GI_SPEC_GUARDS=1"}) == "a.hlsl?GI_SPEC_GUARDS=1",
