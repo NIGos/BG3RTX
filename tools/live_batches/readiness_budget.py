@@ -3,7 +3,7 @@ from statistics import median
 import re
 
 from scripts.queue_gates import stamped_lines, windows, _apply
-from tools.live_batches.pipeline_readiness import QUIET, conditional, reconciled
+from tools.live_batches.pipeline_readiness import QUIET, GI_QUIET, conditional, reconciled
 
 ENTRIES = []
 CACHE = {}
@@ -60,7 +60,7 @@ def estimate(job, phase, changed, first=False):
             delays = []
             observation_start = win.get('settings_applied', win['applied'])
             observation_index = -1
-            if fresh and any(conditional(p) for p in patterns):
+            if fresh and any(conditional(p) or p == GI_QUIET for p in patterns):
                 cfg = next((t for t, line in lines if win['start'] <= t < win['end']
                             and '[cfg] settings read' in line), None)
                 if cfg is None:
@@ -75,10 +75,10 @@ def estimate(job, phase, changed, first=False):
                     continue
                 observation_index, ack = acknowledgement
                 observation_start = ack
-                if patterns == [QUIET]:
+                if patterns in ([QUIET], [GI_QUIET]):
                     ready = next((t for index, (t, line) in enumerate(lines)
                                   if index > observation_index and t < win['end']
-                                  and re.search(QUIET, line, re.I)), None)
+                                  and re.search(patterns[0], line, re.I)), None)
                     if ready is not None:
                         samples.append(max(0, ready-win['start']))
                     continue

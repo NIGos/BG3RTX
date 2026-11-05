@@ -26,3 +26,18 @@
   lint: 2/2 pass; active frozen: 17/17 pass. Active current: 5/17 fail with 34
   existing trace-timing findings, identical to original HEAD; 0 new failures.
 - Reports: `.scratch/attr-readiness/`. READY_FOR_LIVE only; no game, queue or git writes.
+
+## Unconfounded far / sun batch (offline, 2026-11-05)
+
+- S8 prior run VALID: GI trace 8.0 -> 2.1 ms sun-off, 1.5 ms direct-off;
+  sun-off includes far removal. New sequence: base-a, near-only, base-b, sun-off,
+  base-c in both scenes; near-only and sun-off prewarmed first.
+- Inn failed at ready-base-a: watch 8 pipelines at 17:38:52.435 / 56.584;
+  earlier global QUIET still had 3 GI builds pending. Specific GI burst completed
+  at 17:38:57.358 (6 builds, 35534 ms). Use fresh GI idle period or burst done,
+  with cfg acknowledgement; keep unrelated keys' global QUIET contracts.
+- Nominal including 120 s load 230.4 / 227.4 s; strict launch cap 299 s.
+  Completion remains unproven; conservative frozen floors exceed the inn cap.
+- Validation: attr 5 tests, live-flow 74 tests, camera-plan 692 checks pass;
+  frozen/current attr lint 2/2 pass. No game, queue writes or git writes;
+  shader request delta 0.

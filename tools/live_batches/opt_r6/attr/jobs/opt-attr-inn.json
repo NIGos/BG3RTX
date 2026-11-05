@@ -5,8 +5,8 @@
   "traces": 0,
   "repeat": 1,
   "hold": 180,
-  "timeout": 354,
-  "max_minutes": 5,
+  "timeout": 396,
+  "max_minutes": 4.983333333333333,
   "window_mode": "visible_unfocused_fg",
   "live_batch": "opt-r6-attr",
   "fail_fast": true,
@@ -67,9 +67,9 @@
       "match": "gi: GPU cost",
       "windows": [
         "base-a--static-a",
-        "sun-off--static-a",
+        "near-only--static-a",
         "base-b--static-a",
-        "direct-off--static-a",
+        "sun-off--static-a",
         "base-c--static-a"
       ],
       "min": 3,
@@ -82,9 +82,9 @@
       "match": "gi: trace pass",
       "windows": [
         "base-a--static-a",
-        "sun-off--static-a",
+        "near-only--static-a",
         "base-b--static-a",
-        "direct-off--static-a",
+        "sun-off--static-a",
         "base-c--static-a"
       ],
       "min": 3,
@@ -97,9 +97,9 @@
       "match": "gi: origin pass GPU cost",
       "windows": [
         "base-a--static-a",
-        "sun-off--static-a",
+        "near-only--static-a",
         "base-b--static-a",
-        "direct-off--static-a",
+        "sun-off--static-a",
         "base-c--static-a"
       ],
       "min": 3,
@@ -112,9 +112,9 @@
       "match": "gi: sun trace pass GPU cost",
       "windows": [
         "base-a--static-a",
-        "sun-off--static-a",
+        "near-only--static-a",
         "base-b--static-a",
-        "direct-off--static-a",
+        "sun-off--static-a",
         "base-c--static-a"
       ],
       "min": 3,
@@ -127,9 +127,9 @@
       "match": "rf: reflection pass GPU median",
       "windows": [
         "base-a--static-a",
-        "sun-off--static-a",
+        "near-only--static-a",
         "base-b--static-a",
-        "direct-off--static-a",
+        "sun-off--static-a",
         "base-c--static-a"
       ],
       "min": 3,
@@ -142,9 +142,9 @@
       "match": "ls: local-light shadow pass GPU median",
       "windows": [
         "base-a--static-a",
-        "sun-off--static-a",
+        "near-only--static-a",
         "base-b--static-a",
-        "direct-off--static-a",
+        "sun-off--static-a",
         "base-c--static-a"
       ],
       "min": 3,
@@ -157,9 +157,9 @@
       "match": "\\[ngx\\] gpu RR:",
       "windows": [
         "base-a--static-a",
-        "sun-off--static-a",
+        "near-only--static-a",
         "base-b--static-a",
-        "direct-off--static-a",
+        "sun-off--static-a",
         "base-c--static-a"
       ],
       "min": 3,
@@ -172,9 +172,9 @@
       "match": "scene build GPU",
       "windows": [
         "base-a--static-a",
-        "sun-off--static-a",
+        "near-only--static-a",
         "base-b--static-a",
-        "direct-off--static-a",
+        "sun-off--static-a",
         "base-c--static-a"
       ],
       "min": 3,

@@ -16,12 +16,34 @@
     "wait_log": [
       "\\[auto\\] scene ready",
       "\\[cfg\\] settings read",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_timeout": 15
+  },
+  {
+    "label": "warmup-near-only",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far=0,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
+    "wait_log": [
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
+    ],
+    "wait_log_fresh": [
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
+    ],
+    "wait_log_timeout": 60
   },
   {
     "label": "warmup-sun-off",
@@ -38,32 +60,10 @@
     "direction": 0,
     "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=0,hit_ao_rays=2",
     "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 60
-  },
-  {
-    "label": "warmup-direct-off",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 1.1,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 0,
-    "motion_end": 1.1,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "gi_far=1,gi_hit_direct=0,gi_hit_sun=0,hit_ao_rays=2",
-    "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_timeout": 60
   },
@@ -82,10 +82,10 @@
     "direction": 0,
     "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
     "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_timeout": 60
   },
@@ -104,15 +104,117 @@
     "direction": 0,
     "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
     "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
-    "wait_log_timeout": 8
+    "wait_log_timeout": 15
   },
   {
     "label": "base-a--static-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 16.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 16.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
+    "frames": 480,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: GPU cost",
+      "gi: trace pass",
+      "gi: origin pass GPU cost",
+      "gi: sun trace pass GPU cost",
+      "rf: reflection pass GPU median",
+      "ls: local-light shadow pass GPU median",
+      "\\[ngx\\] gpu RR:",
+      "scene build GPU"
+    ],
+    "wait_log_timeout": 10
+  },
+  {
+    "label": "ready-near-only",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far=0,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
+    "wait_log": [
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
+    ],
+    "wait_log_fresh": [
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
+    ],
+    "wait_log_timeout": 15
+  },
+  {
+    "label": "near-only--static-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 16.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 16.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far=0,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
+    "frames": 480,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: GPU cost",
+      "gi: trace pass",
+      "gi: origin pass GPU cost",
+      "gi: sun trace pass GPU cost",
+      "rf: reflection pass GPU median",
+      "ls: local-light shadow pass GPU median",
+      "\\[ngx\\] gpu RR:",
+      "scene build GPU"
+    ],
+    "wait_log_timeout": 10
+  },
+  {
+    "label": "ready-base-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
+    "wait_log": [
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
+    ],
+    "wait_log_fresh": [
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
+    ],
+    "wait_log_timeout": 15
+  },
+  {
+    "label": "base-b--static-a",
     "kind": "static",
     "speed": "static",
     "seconds": 16.1,
@@ -155,12 +257,12 @@
     "direction": 0,
     "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=0,hit_ao_rays=2",
     "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
-    "wait_log_timeout": 8
+    "wait_log_timeout": 15
   },
   {
     "label": "sun-off--static-a",
@@ -192,108 +294,6 @@
     "wait_log_timeout": 10
   },
   {
-    "label": "ready-base-b",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 1.1,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 0,
-    "motion_end": 1.1,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
-    "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 8
-  },
-  {
-    "label": "base-b--static-a",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 16.1,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 0,
-    "motion_end": 16.1,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
-    "frames": 480,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "gi: GPU cost",
-      "gi: trace pass",
-      "gi: origin pass GPU cost",
-      "gi: sun trace pass GPU cost",
-      "rf: reflection pass GPU median",
-      "ls: local-light shadow pass GPU median",
-      "\\[ngx\\] gpu RR:",
-      "scene build GPU"
-    ],
-    "wait_log_timeout": 10
-  },
-  {
-    "label": "ready-direct-off",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 1.1,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 0,
-    "motion_end": 1.1,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "gi_far=1,gi_hit_direct=0,gi_hit_sun=0,hit_ao_rays=2",
-    "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 8
-  },
-  {
-    "label": "direct-off--static-a",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 16.1,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 0,
-    "motion_end": 16.1,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "gi_far=1,gi_hit_direct=0,gi_hit_sun=0,hit_ao_rays=2",
-    "frames": 480,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "gi: GPU cost",
-      "gi: trace pass",
-      "gi: origin pass GPU cost",
-      "gi: sun trace pass GPU cost",
-      "rf: reflection pass GPU median",
-      "ls: local-light shadow pass GPU median",
-      "\\[ngx\\] gpu RR:",
-      "scene build GPU"
-    ],
-    "wait_log_timeout": 10
-  },
-  {
     "label": "ready-base-c",
     "kind": "static",
     "speed": "static",
@@ -308,12 +308,12 @@
     "direction": 0,
     "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
     "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
-    "wait_log_timeout": 8
+    "wait_log_timeout": 15
   },
   {
     "label": "base-c--static-a",
@@ -359,11 +359,11 @@
     "direction": 0,
     "set": "gi_far=1,gi_hit_direct=1,gi_hit_sun=1,hit_ao_rays=2",
     "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: background builds (?:\\(\\d+ frames\\): 0 frames waiting, 0 pending, 0 started|done:)"
     ],
-    "wait_log_timeout": 8
+    "wait_log_timeout": 15
   }
 ]
