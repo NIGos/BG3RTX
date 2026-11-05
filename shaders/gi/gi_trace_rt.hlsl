@@ -32,7 +32,10 @@
 // cache's contribution split by the leak test (r occluded cell, g clean, b thin surface).
 #include "gi_common.hlsli"
 // Limit the experiment to GI closest rays; sun/local visibility stays unchanged.
+#define RT_COMPACT_HIT_STATE 1
 #include "../rt/rt_common.hlsli"
+// Retain the geometric normal, rather than the complete hit, across direct-light traversal.
+[[vk::constant_id(1029)]] const uint kRtCompactHitState = 0u;
 #if RT_HIT_GI_DIRECT
 #include "../rt/native_hit_material.hlsli"
 // No box-light binding in this pipeline: the projector term is left out (counted), not the hit.
@@ -418,7 +421,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
         // Counters 160-175 (native_hit_direct.hlsli g_hd_*; core/gi.cpp "GI hit direct lights").
         g_hd_stats=pc.rt_stats!=0u;g_hd_base=160u;g_hd_xbase=172u;g_hd_pbase=312u;g_hd_bin=hit_bin;g_hd_inst=hh.inst;g_hd_prim=hh.prim;
         const float3 hit_p=native_hit_position(hh,o+dir*t);
-        NativeHitDirect direct=native_hit_direct(material,hit_p,-dir,rt_hit_normal(hh),cone.f0+cone.spread*t);
+        // Only the normal and its diagnostic side effect survive the local-light queries.
+        // Replaying the guard preserves counters even for stale/out-of-range geometry.
+        float3 compact_n = 0.0.xxx;
+        bool compact_guard = false;
+        if (kRtCompactHitState != 0u) compact_n = rt_hit_normal(hh, compact_guard);
+        NativeHitDirect direct=native_hit_direct(material,hit_p,-dir,kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh),cone.f0+cone.spread*t);
 #if RT_GI_FAR
         // Off screen, outside the froxel volume (no light list exists there): the point/spot term is
         // declared 0 and the sun alone lights the hit (gi_far.hlsli kGiFarLocalOutside).
@@ -445,7 +453,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
           // bounce here, and the screen's prevRadiance / SHaRC paths above never reach this code),
           // so it is never counted twice. Unsupported (roof, unknown visibility, missing sun inputs:
           // Push::ao_direct bit 3) leaves the sun out: the point/spot term alone, as gi_hit_direct.
-          const float3 hit_n=rt_hit_normal(hh);const float hit_f=cone.f0+cone.spread*t;
+          if (kRtCompactHitState != 0u && compact_guard) guard_count(kGuardSet1);
+          const float3 hit_n=kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh);const float hit_f=cone.f0+cone.spread*t;
           g_hs_seed=pcg3d(uint3(fp,pc.frame*8u+r)^uint3(0x6a09e667u,0xbb67ae85u,0x3c6ef372u)).x;
           HdDirect sun;sun.radiance=0;sun.status=HdInvalid;
           if((pc.ao_direct&8u)!=0u)sun=native_hit_sun(material,hit_p,-dir,hit_n,hit_f);
@@ -467,8 +476,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #else
           // The screen's AO-on-direct factor (native_hit_ao_direct): its AO rays only where a
           // factor applies (lights at the game's visibility, or ao_direct != 1).
-          if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0)))
-            direct.radiance=native_hit_ao_direct(direct,native_hit_ao(hit_p,rt_hit_normal(hh),cone.f0+cone.spread*t,uint3(fp,pc.frame*8u+r)));
+          if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0))) {
+            if (kRtCompactHitState != 0u && compact_guard) guard_count(kGuardSet1);
+            direct.radiance=native_hit_ao_direct(direct,native_hit_ao(hit_p,kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh),cone.f0+cone.spread*t,uint3(fp,pc.frame*8u+r)));
+          }
 #endif
           if(pc.rt_stats!=0u){
             stat_add(285u,any(direct.radiance>0),hit_bin);

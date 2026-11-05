@@ -10,7 +10,8 @@ the probes, the sky cubes, the DFG LUT and the sun set, which `--native-ambient`
 ## Harness: `bin\frame_replay.exe` (tools/frame_replay.cpp)
 
 ```
-frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V]... [--repeat N] [--no-validation]
+frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V]... [--repeat N] [--pipeline-stats] [--spec ID=UINT]... [--reference-out <dir>] [--no-validation]
+frame_replay --compile-only (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
 frame_replay --synthesize <dir> [--dark] [--box] [--lighting] [--casters]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
 frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
@@ -50,6 +51,55 @@ frame_replay --pack <dir> --native-ambient [--pt-iters N] [--out <dir>]   (defau
   base without a record, row, other) in counters 448..511; `py -3 tools/hit_material_blockers.py --pack <dir>
   --stats <out>/rtstats.bin` ranks the blockers by capture class and instance (extent, area, distance, alpha FS).
   The outputs are bit-identical to the run without the define (S8 pack: same giRaw fnv1a).
+
+## Driver executable statistics and exact offline A/B
+
+`--pipeline-stats` enables `VK_KHR_pipeline_executable_properties` and its
+`pipelineExecutableInfo` feature when supported, and creates the measured compute pipeline
+with `VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR`. It prints every driver executable's
+name, description, stages and subgroup size, then every statistic with its name, typed value
+(boolean, signed/unsigned 64-bit integer or double) and description. NVIDIA can report register
+count and shared/local memory. Unsupported drivers print an explicit `unavailable` line and
+continue without capture. Statistics concern the specialized driver executable; SPIR-V instruction
+counts are a different measure. Capture is opt-in because it may affect pipeline creation cost.
+
+`--spec ID=UINT` (repeatable; decimal or `0x` integer) passes uint32 Vulkan specialization values
+to the measured pipeline. Unspecified IDs keep their shader defaults. It prints the chosen IDs.
+Use the same values as `core/gi.cpp` for a production comparison.
+
+`--compile-only` builds the production **non-SHaRC GI trace** pipeline without a pack, resources or dispatch.
+The fixed layout supports GI sets 0/1, the emission scene at set 2 and the sun at set 3, including
+sun trust and the native tileset sampler. This is not generic shader reflection: arbitrary passes
+with other descriptor contracts need their own layout. Give exactly one of `--hlsl` and `--spv`,
+no `--pack`. Default output: `.scratch/pipeline-stats`. Prefer `--spv` from
+`tools/shader_identity.py` for cached compilation and machine-wide DXC slot coordination.
+`--hlsl` uses the harness's existing compiler and the explicitly supplied `--define`s; compile-only
+has no pack from which to infer defines. Production Ultra (non-OMM) request example:
+
+```powershell
+frame_replay --compile-only --hlsl shaders/gi/gi_trace_rt_hit_sun_em.hlsl --pipeline-stats `
+  --define RT_SPEC_NATIVE=1 --define RT_SPEC_HIT_INST=1 --define RT_SPEC_CASCADE=1 --define RT_SPEC_GI_FAR=1 `
+  --spec 1000=1 --spec 1003=1 --spec 1004=1 --spec 1007=1 --spec 1008=0 --spec 1010=0
+```
+
+For `rt_compact_hit_state`, compare the same module with `--spec 1029=0` and
+`--spec 1029=1`. Keep all other production constants fixed. To replay a captured pass,
+compile its exact manifest `defines` (S8 has none; camp/inn have `RT_CASCADE_MASKS=1`);
+`--spv` supplies the complete module and cannot apply the manifest's defines afterward.
+The compile-only layout does not support SHaRC's set 4. Driver statistics are printed
+verbatim, including unexpected values; do not interpret them as measured occupancy or spills.
+
+With `--repeat N`, the summary prints the median, min, max and max-minus-min spread of **all**
+dispatch GPU timestamps, including the first dispatch. Retain the individual run lines to diagnose
+warm-up or outliers; compare at least two OFF repeats before attributing a small timing change.
+
+`--reference-out <OFF-output-dir>` compares the final replay's raw outputs component by component
+and its raw `rtstats.bin` counters against a previous replay. It prints `vs replay ...: bit-equal`
+lines and returns nonzero for any changed output bit or counter. This is separate from the pack's
+`vs live` comparison (reconstructed replay geometry can differ from the live frame). The reference
+and output directories must differ; use `--out` outside source packs to keep captures unchanged.
+For example, run OFF to `.scratch/gi-off`, then ON to `.scratch/gi-on` with
+`--reference-out .scratch/gi-off`, matching every other shader, specialization and push option.
 
 ## PT reference: `--pt-reference` (tools/pt_reference.hlsl, M6 offline)
 

@@ -25,6 +25,8 @@ TABLE = {
 # Completion records can be cached. Newly selected variants must additionally
 # clear the runner's outstanding build records after settings acknowledgement.
 GI_TRACE = r"gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\.hlsl[^ ]* generation "
+# Specialization 1029 in core/gi.cpp; cached selections still require fresh QUIET.
+TABLE["rt_compact_hit_state"] = [GI_TRACE]
 GI_QUERY = [GI_TRACE, r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation ",
             r"gi: gi/rt_reflections\.hlsl[^ ]* generation "]
 for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",

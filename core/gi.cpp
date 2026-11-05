@@ -1230,6 +1230,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
   // value keeps its own slot and pipeline, as the cascade constant does.
   if (sv::gi_far_entry(file)) specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+  if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
+    specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 0) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
     specs.add(sv::kSpecIdTileset, tileset ? 1u : 0u);
     specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
