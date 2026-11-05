@@ -9,7 +9,7 @@
   Streamline's NGX loads our `bin\sl` snippets (ReShade.log lists `bin\sl\nvngx_dlss.dll` and `nvngx_dlssd.dll`).
   The game-folder copies are NVIDIA-signed 310.9.16. A path-list hook of the game's NGX Init was not built: it
   matters only with fg=0, and the driver's Init exports take the static client's undocumented arguments.
-- Fix: `game_dlss_guard` (bg3rtx.ini, default 0). With it at 1 and rr=1, BG3RTX.exe sets
+- Fix: `game_dlss_guard` (bg3rtx.ini, default 1 since the user go of 2026-11-05; same rule as ensure-settings.py). With it at 1 and rr=1, BG3RTX.exe sets
   `ResolutionUpscaleType=3` before every game start, and `DLSS2Mode=2` only when absent (the player's DLSS mode is
   kept). It backs the file up to `graphicSettings.lsx.bg3rtx-bak` first, like `scripts/ensure-settings.py`.
   Launcher only: no layer, core, shader or ABI change.

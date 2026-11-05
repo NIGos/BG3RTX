@@ -771,8 +771,8 @@ does not exist there), so the hook could not be checked offline.
 `ResolutionUpscaleType=3` before every game start, and sets `DLSS2Mode=2` only when
 the entry is missing, so the player's own DLSS mode is kept. It backs the file up
 to `graphicSettings.lsx.bg3rtx-bak` first (`guard_game_upscaler`,
-`tools/launcher/launch.cpp`; tested in `launcher_launch_test`). Default 0 until
-a player start confirms it. To check: put the reset file in place, start the game
+`tools/launcher/launch.cpp`; tested in `launcher_launch_test`). Default 1 (2026-11-05, user go): the same rule as `scripts/ensure-settings.py`, which runs before every queue live. The first
+player start through BG3RTX.exe is the confirmation. To check: put the reset file in place, start the game
 from BG3RTX.exe and look for `[ngx] upscaler for feature ...: Ray Reconstruction`
 in `bg3rtx.log`. The launcher log should name the repair.
 
