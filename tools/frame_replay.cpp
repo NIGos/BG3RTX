@@ -530,7 +530,7 @@ VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout la
   return pipeline;
 }
 
-// Pack-free compiler for three explicit production contracts; this does not add replay passes.
+// Pack-free compiler for explicit production contracts; this does not dispatch.
 // GI: material 1, emission 2, sun 3. RF: material 1, game 2, sun 3, empty 4,
 // emission 5, hit-GI counters 6. LS box: material 1, sun 2, game 3, counters 4.
 void compile_production_pipeline(const std::vector<uint32_t>& spirv, const std::string& pass) {
@@ -559,7 +559,10 @@ void compile_production_pipeline(const std::vector<uint32_t>& spirv, const std::
         add(42, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER); add(43, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         add(44, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE); add(45, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
         add(46, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE); add(50, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-      } else table(bg3::native_hit_gi::bindings);
+      } else {
+        table(bg3::native_hit_gi::bindings);
+        if (pass == "origin") add(4, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
+      }
     }
     if (set == 1) {
       for (const auto& slot : rp::kGiHitDirect) if (slot.set == set) {
@@ -730,6 +733,7 @@ fs::path g_sun_trust;
 // --no-casters: leave a pack's rt_cascade_casters instance out of the TLAS (mask 0, as packs before the
 // "casters" directive), for an A/B against the replay with the cut-away roofs.
 bool g_no_casters = false;
+bool g_origin = false;
 // --push FIELD=VALUE (repeatable): overwrite one Push field of the pack's push before the dispatch, as the live
 // core sets it per pass (e.g. radius=6: core/gi.cpp hit_gi_dispatch's gi_far ray length; rt_stats=0 / 1).
 // Fields: radius (float, offset 24), rays (uint, offset 32), rt_stats (uint, offset 124), gi_rt_radius (float, offset 112).
@@ -744,6 +748,64 @@ void apply_push_set(std::vector<uint8_t>& push) {
   }
 }
 
+void origin_manifest(rp::Manifest& m, const std::vector<uint8_t>& push) {
+  for (const auto& image : m.images) if (image.set == 2 && image.binding == 3 && image.element == 0) {
+    auto material = image; material.set = 0; material.binding = 4;
+    m.images.push_back(material); break;
+  }
+  check(push.size() == 256, "origin push bytes");
+  uint32_t full[2]; std::memcpy(full, push.data(), sizeof(full));
+  check(full[0] && full[1] && full[0] <= UINT32_MAX - 7 && full[1] <= UINT32_MAX - 7, "origin full resolution");
+  for (uint32_t binding : {0u, 1u}) {
+    bool found = false;
+    for (const auto& buffer : m.buffers) found |= buffer.set == 0 && buffer.binding == binding && !buffer.file.empty();
+    check(found, "origin requires captured camera buffers");
+  }
+  std::string reference;
+  for (const auto& image : m.images)
+    if (image.set == 0 && image.binding == 40 && image.element == 0) reference = image.file;
+  for (uint32_t binding : {2u, 5u}) {
+    bool found = false;
+    for (const auto& image : m.images)
+      found |= image.set == 0 && image.binding == binding && image.element == 0 &&
+               image.w == full[0] && image.h == full[1];
+    check(found, "origin requires full-resolution depth and normal inputs");
+  }
+  m.images.erase(std::remove_if(m.images.begin(), m.images.end(), [](const auto& image) {
+    return image.set == 0 && image.binding == 40;
+  }), m.images.end());
+  m.outputs = {{0, 40, rp::kRgba16Sfloat, full[0], full[1], reference}};
+  m.groups[0] = (full[0] + 7) / 8; m.groups[1] = (full[1] + 7) / 8; m.groups[2] = 1;
+  m.pass = "rt_origin";
+}
+
+bool origin_self_test() {
+  for (uint32_t w : {1u, 7u, 8u, 9u, 2560u}) for (uint32_t h : {1u, 7u, 8u, 9u, 1067u}) {
+    rp::Manifest m; m.pass = "gi_hit_direct";
+    m.buffers = {{0,0,448,"cam"}, {0,1,176,"vp"}};
+    m.images = {{0,2,0,83,w,h,1,1,"normal"}, {0,5,0,100,w,h,1,1,"depth"},
+                {0,40,0,97,w,h,1,1,"origin"}, {2,3,0,37,w,h,1,1,"material"}};
+    m.outputs = {{0,8,97,w,h,"old-output"}};
+    const auto before = m;
+    std::vector<uint8_t> push(256); std::memcpy(push.data(), &w, 4); std::memcpy(push.data()+4, &h, 4);
+    origin_manifest(m, push);
+    check(m.pass == "rt_origin" && m.groups[0] == (w+7)/8 && m.groups[1] == (h+7)/8 && m.groups[2] == 1, "origin adapter dimensions");
+    check(m.outputs.size() == 1 && m.outputs[0].binding == 40 && m.outputs[0].format == 97 &&
+          m.outputs[0].w == w && m.outputs[0].h == h && m.outputs[0].reference == "origin", "origin adapter output");
+    check(m.images.size() == before.images.size() && before.images[2].binding == 40 && before.pass == "gi_hit_direct", "origin adapter source unchanged");
+    bool material = false, depth = false, normal = false;
+    for (const auto& i : m.images) {
+      check(i.set != 0 || i.binding != 40, "origin input must not alias output");
+      material |= i.set == 0 && i.binding == 4 && i.file == "material";
+      depth |= i.set == 0 && i.binding == 5 && i.file == "depth";
+      normal |= i.set == 0 && i.binding == 2 && i.file == "normal";
+    }
+    check(material && depth && normal, "origin adapter preserves input files");
+  }
+  std::puts("PASS origin adapter: 25 edge/resolution cases, output/reference, no input/output alias, preserved inputs");
+  return true;
+}
+
 Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const fs::path& hlsl_override,
               const std::vector<std::string>& extra_defines, const fs::path& out, uint32_t repeat, bool quiet,
               const ReplayHooks* hooks = nullptr) {
@@ -751,6 +813,25 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   rp::Manifest m; std::string error;
   { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
   rp::Pass pass = *rp::find_pass(m.pass);
+  std::vector<rp::Slot> origin_slots;
+  // Reuse the captured GI inputs and AS, but publish the primary-origin image.
+  // Keep the pack immutable. Its original origin input is a live reference only:
+  // reconstructed BLAS ordering need not reproduce the live AS bit for bit.
+  if (g_origin) {
+    check(m.pass == "gi_hit_direct", "--origin requires a gi_hit_direct pack");
+    origin_slots.assign(pass.slots, pass.slots + pass.slot_count);
+    origin_slots.push_back({0, 4, rp::kSampled2D, 1, 0, "gMaterial"});
+    origin_slots.push_back({0, 50, rp::kStorage, 1, rp::kRgba32Sfloat, "rtHairOrigin"});
+    origin_slots.push_back({1, 19, rp::kSampler, 16, 0, "gNativeTilesetSampler"});
+    pass.slots = origin_slots.data(); pass.slot_count = uint32_t(origin_slots.size());
+    // Physical/native hair AS replay is unsupported; stock hair uses alpha cards.
+    for (uint32_t id : {1008u, 1009u, 1010u, 1020u, 1026u}) {
+      check(!g_specs.count(id) || g_specs.at(id) == 0, "origin supports stock hair only");
+      check(!g_ab_specs.count(id) || (g_ab_specs.at(id).first == 0 && g_ab_specs.at(id).second == 0), "origin supports stock hair only");
+    }
+    origin_manifest(m, read_file(pack / m.push));
+    pass.shader = "gi/rt_origin.hlsl";
+  }
   static std::vector<rp::Slot> trust_slots;
   if (!g_sun_trust.empty()) {
     trust_slots.assign(pass.slots, pass.slots + pass.slot_count);
@@ -2329,6 +2410,7 @@ int main(int argc, char** argv) {
     else if (args[i] == "--repeat") { repeat = uint32_t(std::max(1, std::atoi(next().c_str()))); repeat_given = true; }
     else if (args[i] == "--ab-spv") g_ab_spv = next();
     else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
+    else if (args[i] == "--origin-self-test") return origin_self_test() ? 0 : 1;
     else if (args[i] == "--ab-self-test") return bg3::replay::ab_self_test() ? 0 : 1;
     else if (args[i] == "--no-validation") validation = false;
     else if (args[i] == "--pipeline-stats") g_pipeline_stats = true;
@@ -2371,6 +2453,7 @@ int main(int argc, char** argv) {
     else if (args[i] == "--native-ambient") native = true;
     else if (args[i] == "--sun-trust") g_sun_trust = next();
     else if (args[i] == "--no-casters") g_no_casters = true;
+    else if (args[i] == "--origin") g_origin = true;
     else if (args[i] == "--push") {
       const std::string kv = next(); const size_t eq = kv.find('=');
       check(eq != std::string::npos, "--push FIELD=VALUE");
@@ -2378,6 +2461,7 @@ int main(int argc, char** argv) {
     }
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
   }
+  if (g_origin) check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--origin requires ordinary pack replay");
   if (ab_mode()) {
     check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--ab-spec/--ab-spv require ordinary pack replay");
     check(repeat <= (UINT32_MAX - 4) / 4, "paired repeat count too large");
@@ -2388,7 +2472,7 @@ int main(int argc, char** argv) {
   if (!synth.empty()) { synthesize(synth, dark, synth_box || synth_casters, synth_lighting, synth_casters); std::printf("synthetic pack written to %s\n", synth.string().c_str()); return 0; }
   if (compile_only) {
     check(pack.empty() && (!hlsl.empty() != !spv.empty()), "--compile-only requires exactly one of --hlsl or --spv, no --pack (production layout)");
-    check(compile_pass == "gi" || compile_pass == "reflections" || compile_pass == "local-shadows", "--compile-pass gi|reflections|local-shadows");
+    check(compile_pass == "gi" || compile_pass == "origin" || compile_pass == "reflections" || compile_pass == "local-shadows", "--compile-pass gi|origin|reflections|local-shadows");
     if (int r = init_gpu(validation, false)) return r;
     if (out.empty()) out = fs::path(source_root()) / ".scratch" / "pipeline-stats";
     fs::create_directories(out);

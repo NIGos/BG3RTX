@@ -11,7 +11,7 @@ the probes, the sky cubes, the DFG LUT and the sun set, which `--native-ambient`
 
 ```
 frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V]... [--repeat N] [--pipeline-stats] [--spec ID=UINT]... [--reference-out <dir>] [--no-validation]
-frame_replay --compile-only [--compile-pass gi|reflections|local-shadows] (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
+frame_replay --compile-only [--compile-pass gi|origin|reflections|local-shadows] (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
 frame_replay --synthesize <dir> [--dark] [--box] [--lighting] [--casters]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
 frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
@@ -172,6 +172,35 @@ bin/frame_replay --pack <pack> --spv sun.spv --sun-trust trust.bin --push radius
 bin/frame_replay --pack <pack> --spv sun.spv --ab-spv direct.spv --spec 1007=0 `
   --sun-trust trust.bin --repeat 40 --out .scratch/sun-split
 ```
+
+## Origin replay (2026-11-05)
+
+`--origin` adapts an existing `gi_hit_direct` pack in memory. It reads `Push::full`,
+requires full-resolution depth/normal images and captured camera buffers, dispatches
+8 x 8 groups over the full image, and replaces GI outputs with `rtOrigin.raw`
+(RGBA16F) and `rtOrigin.pfm`. The captured origin input becomes the live reference;
+input and output never alias. Set 2 b3 supplies material at set 0 b4. Source packs
+are unchanged. `--origin-self-test` checks the adapter without a GPU (also a CTest).
+
+Use cached SPIR-V for the exact production request through `tools/shader_identity.py`.
+`--compile-only --compile-pass origin` includes the material binding missing from the
+GI compile-only layout. Stock Ultra request:
+`gi/rt_origin.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1`.
+Use `Result.path()` / `Result.blob()` from the helper: its CLI JSON digest identifies
+all request entries together, rather than naming an individual SPIR-V blob.
+
+```powershell
+bin/frame_replay --compile-only --compile-pass origin --spv origin.spv --pipeline-stats --spec 1000=1 --out .scratch/origin-stats
+bin/frame_replay --origin --pack <pack> --spv origin.spv --ab-spv candidate.spv --repeat 40 --ab-require-equal --spec 1000=1 --out .scratch/origin-ab
+```
+
+Paired A/B compares **every byte**, including raw counter bins. The rounded `vs live`
+percentage is only context: the S8 pack differed by at most 0.00006103516 in one
+component despite printing 100.0000%. Rebuilt AS order and unsupported/masked instances
+prevent a universal live-equivalence claim. This mode supports stock alpha-card hair;
+native/scalp/groom/physical-hair/tileset specialization values must remain 0. It shares
+the ordinary replay's missing-input/AS limitations. OMM is not reconstructed. Check no
+`bg3.exe` before each GPU command and serialize GPU lanes for useful timing intervals.
 
 ## PT reference: `--pt-reference` (tools/pt_reference.hlsl, M6 offline)
 
