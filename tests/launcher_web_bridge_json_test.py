@@ -12,7 +12,7 @@ assert isinstance(state["report"]["files"], list)
 assert isinstance(state["frameGeneration"], str)
 print(f"Parsed {len(state['settings'])} settings; JSON control characters retained.")
 
-assert state["version"] == "0.9.1.0"
+assert state["version"] == "0.9.2.0"
 assert state["modStatus"] == "Not checked"
 for setting in state["settings"]:
     assert "Unknown" not in setting["cost"]
