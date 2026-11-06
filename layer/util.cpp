@@ -135,6 +135,10 @@ void log(const char* fmt, ...) {
 static std::mutex g_cfg_mu;
 static std::mutex g_cfg_poll_mu;
 static std::unordered_map<std::string, std::string> g_cfg;
+// Cached at reload: validating developer fallback literals must not take a
+// second lock or format strings for every release settings lookup.
+static std::atomic<bool> g_cfg_literal_checks{false};
+static std::atomic<bool> g_cfg_hot_ready{false};
 
 struct CfgFile {
   std::string path;
@@ -221,11 +225,12 @@ static bool ab_overridden(const char* key) {
   return false;
 }
 
-static void ab_poll_hotkey() {
+static bool ab_poll_hotkey() {
   // Different Vulkan queues may present concurrently. Consume each key edge and
   // update its timing state as one operation, independently of the config lock.
   static std::mutex poll_mu;
   std::lock_guard<std::mutex> poll_lock(poll_mu);
+  bool changed=false;
   static bool was_master_down = false, was_target_down = false, was_nr_down = false;
   // The toggle's cost: the longest gap between presents in the 3 s after it (a shader fetched
   // or compiled on the render thread, a pipeline created) is logged once.
@@ -268,6 +273,7 @@ static void ab_poll_hotkey() {
   if(nr_down && !was_nr_down && nr_started && cfg_int("ab_hotkey",1)) {
     const bool bypass=cfg_int("dlss5_nr_bypass",0)==0;
     g_nr_bypass.store(bypass?1:0);
+    changed=true;
     log("[dlss5] hotkey: NR %s",bypass?"off":"on");
   }
   was_nr_down=nr_down;
@@ -287,7 +293,7 @@ static void ab_poll_hotkey() {
       std::string indicator;
       {
         std::lock_guard<std::mutex> lock(g_cfg_mu);
-        if (!experimental_ab::flip(g_cfg, indicator)) return;
+        if (!experimental_ab::flip(g_cfg, indicator)) return changed;
       }
       // There is no in-game text/notification renderer. Keep the requested line in the log.
       log("%s", indicator.c_str());
@@ -298,6 +304,7 @@ static void ab_poll_hotkey() {
           off ? "shown" : "replaced again");
       log("A/B: ab_off=%d",off ? 1 : 0);
     }
+    changed=true;
     since = now;
     longest_ms = 0;
     presents = 0;
@@ -305,19 +312,22 @@ static void ab_poll_hotkey() {
     toggle_t = now;
     latency_pending = true;
   }
+  return changed;
 }
 
-static void cfg_read_files();
+static bool cfg_read_files();
 static void cfg_hot_refresh();
 
 void cfg_poll() {
-  ab_poll_hotkey();
-  cfg_read_files();
-  cfg_hot_refresh();
+  // Serialize mutation and publication as one operation. Event-only refresh
+  // must not leave a mixed cache when different queues present concurrently.
+  std::lock_guard<std::mutex> poll_lock(g_cfg_poll_mu);
+  const bool hotkey_changed=ab_poll_hotkey();
+  const bool files_changed=cfg_read_files();
+  if (hotkey_changed || files_changed || !g_cfg_hot_ready.load(std::memory_order_acquire)) cfg_hot_refresh();
 }
 
-static void cfg_read_files() {
-  std::lock_guard<std::mutex> poll_lock(g_cfg_poll_mu);
+static bool cfg_read_files() {
   std::string user = env_str("BG3RTX_USER_INI");
   if (user.empty()) user = root_dir() + "\\bg3rtx_user.ini";
   else if (settings::lower(user) == "none" || user == "0") user.clear();
@@ -340,7 +350,7 @@ static void cfg_read_files() {
     f.keys.swap(keys);
     changed = true;
   }
-  if (!changed) return;
+  if (!changed) return false;
 
   // Layer 0: the defaults of common/settings.h, so a key no file sets has its table value
   // (and rt_build=auto resolves) exactly as if bg3rtx.ini had it.
@@ -357,6 +367,7 @@ static void cfg_read_files() {
   // Player diagnostics changes apply only on the next game start. Developer
   // statistics keys remain live so a queue session can toggle its windows.
   next["detailed_logging"] = startup.at("detailed_logging");
+  settings::enforce_release_policy(next); // Apply quiet-mode pins to the actual startup-latched state.
   {
     std::lock_guard<std::mutex> lock(g_cfg_mu);
     g_nr_startup = settings::map_int(startup,"dlss5_nr",0)!=0;
@@ -368,6 +379,7 @@ static void cfg_read_files() {
     const int bypass=settings::map_int(next,"dlss5_nr_bypass",0);
     if(bypass!=last_bypass)g_nr_bypass.store(-1);
     last_bypass=bypass;
+    g_cfg_literal_checks.store(settings::dev_mode(settings::lookup(next,"dev")),std::memory_order_relaxed);
     g_cfg.swap(next);
   }
   for (const std::string& n : notes) log("[cfg] WARNING %s", n.c_str());
@@ -377,6 +389,7 @@ static void cfg_read_files() {
     return true;
   }();
   (void)logged_detailed;
+  return true;
 }
 
 // The defaults of common/settings.h (settings::code_default) by key, parsed once.
@@ -447,7 +460,8 @@ int cfg_int(const char* key, int fallback) {
   std::string v;
   const CfgDefault* d = nullptr;
   bool have = cfg_raw(key, v, &d);
-  if (d && d->numeric && d->i != fallback) cfg_check_literal(key, *d, std::to_string(fallback));
+  if (g_cfg_literal_checks.load(std::memory_order_relaxed) && d && d->numeric && d->i != fallback)
+    cfg_check_literal(key, *d, std::to_string(fallback));
   const int value = have ? std::atoi(v.c_str()) : fallback;
   return value;
 }
@@ -456,7 +470,7 @@ float cfg_float(const char* key, float fallback) {
   std::string v;
   const CfgDefault* d = nullptr;
   bool have = cfg_raw(key, v, &d);
-  if (d && d->numeric && d->f != fallback) {
+  if (g_cfg_literal_checks.load(std::memory_order_relaxed) && d && d->numeric && d->f != fallback) {
     char lit[32];
     snprintf(lit, sizeof lit, "%g", double(fallback));
     cfg_check_literal(key, *d, lit);
@@ -490,7 +504,6 @@ static const CfgHotKey kCfgHot[] = {
 };
 static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
 static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];
-static std::atomic<bool> g_cfg_hot_ready{false};
 
 static void cfg_hot_refresh() {
   for (size_t i = 0; i < size_t(CfgHot::Count); ++i)

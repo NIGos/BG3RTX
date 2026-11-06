@@ -1331,6 +1331,38 @@ static void test_stats_window() {
   CHECK_EQ(code_default("rt_stats_reset"), "0");
 }
 
+static void test_release_fg_diagnostics() {
+  const char* const captures[] = {"fg_snap", "fg_snap_any", "fg_snap_full", "pan_capture", "pan_prepare", "pan_inputs", "pan_edge",
+    "replay_pack", "fg_log_presents", "fg_log_camera", "sl_log_barriers", "log_presents", "log_procs",
+    "sl_verbose", "sl_dev", "fg_only_interpolated"};
+  const char* const statistics[] = {"rt_stats", "ls_stats", "rf_stats", "cpu_timing", "rt_stats_period_frames", "rt_stats_reset"};
+  for (int detailed=0; detailed<=1; ++detailed) {
+    Map stale=code_defaults(); stale["dev"]="0"; stale["detailed_logging"]=std::to_string(detailed);
+    stale["fg"]="3"; stale["fps_cap"]="58"; stale["reflex"]="2"; stale["fg_input_copy"]="1";
+    stale["geo_capture"]="1"; stale["rt_primary_check"]="1"; stale["rt_primary_epoch"]="1";
+    stale["rt_primary_identity"]="1"; stale["rt_primary_fade_class"]="1"; stale["rr_post_check"]="1";
+    for (const char* key:captures) stale[key]="120";
+    for (const char* key:statistics) stale[key]="120";
+    Map release=stale; enforce_release_policy(release);
+    for (const char* key:captures) CHECK_EQ(get(release,key),"0");
+    for (const char* key:statistics) CHECK_EQ(get(release,key), detailed ? "120" : "0");
+    CHECK_EQ(get(release,"fg"),"3"); CHECK_EQ(get(release,"fps_cap"),"58");
+    CHECK_EQ(get(release,"reflex"),"2"); CHECK_EQ(get(release,"fg_input_copy"),"1");
+    CHECK_EQ(get(release,"geo_capture"),"1");
+    for (const char* key:{"rt_primary_check","rt_primary_epoch","rt_primary_identity","rt_primary_fade_class","rr_post_check"})
+      CHECK_EQ(get(release,key),"0");
+    if (detailed) {
+      // Saving Detailed logging On for the next start cannot enable statistics
+      // in a running process whose startup-latched value remains Off.
+      release["detailed_logging"]="0"; enforce_release_policy(release);
+      for (const char* key:statistics) CHECK_EQ(get(release,key),"0");
+    }
+    Map developer=stale; developer["dev"]="1"; enforce_release_policy(developer);
+    for (const char* key:captures) CHECK_EQ(get(developer,key),"120");
+    for (const char* key:statistics) CHECK_EQ(get(developer,key),"120");
+  }
+}
+
 static void test_detailed_logging() {
   const auto* k = find_knob("detailed_logging");
   CHECK(k && !k->dev_only && k->apply == Apply::Restart);
@@ -1404,6 +1436,7 @@ int main(int argc, char** argv) {
   }
   test_dlss5_native_setting();
   test_detailed_logging();
+  test_release_fg_diagnostics();
   test_consolidation_policy();
   test_stats_window();
   test_release_migration();

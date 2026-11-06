@@ -1,39 +1,35 @@
-## FG x3 in-game pacing (branch fgx3, READY_FOR_LIVE, 2026-11-06)
+## FG release audit, Round 3 (branch fgx3, offline verified, 2026-11-06)
 
-- Round 1 commit 4ddec20f fixes state sampling and failed tag/constants readiness.
-  Round 2 takes enabled x3 periods as the case, per the user's focus clarification.
-- Proven symptom: uninterrupted x3 15:07:12.105-15:07:34.117 has 21.48 rendered
-  fps, seven >100 ms gaps and 276 destroy-wait calls. Neighboring enabled x2
-  sections give 27.31-33.02 fps. Scene/motion are uncontrolled; no GPU-ms/p99
-  or scanout measurements exist in that supplied release session.
-- Scanned 220 retained main queue logs (519.9 MB), 1,024 result rows, TRACK
-  history and FG evidence. No retained queue x3/x4 marker; historical x3 is
-  TV-standby functionality with dropped frames, not smoothness qualification.
-- Proven broad retirement policy: old tagged game images wait on the newest
-  global input fence. Actual serialization cost is unmeasured. SDK default
-  blocks the client's presenting queue until FG GPU processing completes;
-  Vulkan FG VSync is unsupported. Both are plausible x3 cost/pacing factors.
-- Public Vulkan metering extension/feature enablement was absent despite SDK
-  availability. New fg_present_metering=0 is support-checked, restart-required;
-  SDK private fallback/cadence impact is unknown. Off in all presets.
-- Both candidates require experimental_options=1; metering applies at restart.
-- Candidate fg_destroy_wait_exact=0: Advanced, Experimental options, live,
-  Off in all presets. Track each game input's actual tagged consumption fence;
-  incomplete destruction polls through the existing deferred route, preserving
-  view/image/allocation lifetime. Unknown/pending use stays conservative.
-- Swapchain boundary invalidates SDK semaphore caches; candidate-only successful
-  idle establishes completion there. No per-frame idle or parallelism override.
-- Foreground log: executable basename + class only, sampled at 250 ms; no titles.
-  Cadence reports exact/global/pending attempts, blocking/polls, wait ms, metering
-  batches/feedback and SDK proxy-present/GetState/ReflexSleep CPU timing.
-- Full analysis, scene table, requirements and stall bounds:
-  [fgx3-analysis](../evidence/fgx3-analysis.md); all retained runs are indexed.
-- No wrong x3 generated count, NR-after-hudless stage or Boost necessity proved.
-  Camera-cut/reset, real simulation markers and x3 input/pacing QA remain gaps.
-- Validation: build.ps1 -Test PASS 206/206 (CTest 138.61 s); settings 4352/4352.
-  Shader request delta 0; ABI unchanged. No game, queue writes or push.
-- Live 2026-11-06 (fx1/fx2, S8 Ultra + NR 6.5 ms, unfocused run, rendered capped 30 fps,
-  rotate windows): x3 exact 3.00, no SDK pauses, p99 35.8-40.3 ms vs x2 36.2-38.2 ms; 0 destroy
-  waits in every window, so fg_destroy_wait_exact is unmeasured (kept off). Metering on: proxy
-  present CPU max 24-26 ms in 3 windows (off: 0.4-3.8 ms) and 1-7 non-focus pauses in a static
-  run: REJECTED. User's x3 stutter not reproduced; focus pauses (launcher) remain the proven cause.
+- Baseline da6ffdf8; full checklist and exact references:
+  [analysis](../evidence/fgx3-analysis.md), Round 3 audit and linked live/release tables.
+- Warmed S8 x3 gives SDK/proxy ratio 3 at ~30 rendered fps, p99 comparable to x2.
+  This does not qualify uncapped foreground throughput. Metering stays rejected/off;
+  exact retirement is unmeasured because every new window has 0 FG destroy waits.
+- Lead 1 is real at first x2 enable in 4/4 initial loads: proxy mean 34-46 ms,
+  up to 108 ms with metering, then ~0.2-0.4 ms. GPU intervals also inflate.
+  GetState <=0.002 ms max, ReflexSleep ~0.02 ms mean and zero FG waits exclude
+  those operations there. SDK-vs-raw-driver/WSI backpressure remains OPEN.
+- Fixed release leaks: raw capture/trace/dev SDK/reference/stat overrides now
+  respect packaged zero pins after layering and startup Detailed logging latch.
+  Explicit support statistics work with Detailed On; correctness inputs remain.
+- Quiet release skips FG/tracker timers/counters/cadence formatting, per-frame
+  pace sampling/sorting and premature VRAM driver queries. Required fences stay.
+- Routine HUD/UI identity logs are stats-only and de-duplicated: 764 menu UI
+  lines represent 8 handle changes. Fault/state/input-decision lines remain.
+- Developer fallback checks no longer format/lock per release lookup. Hot cache
+  refreshes on startup/files/hotkey changes: 100 unchanged CPU-test polls ->0
+  refreshes of the 47-key cache. No measured ms saving is claimed.
+- Fixed phase-reset contamination; SDK/CPU/raw/wait counts and ratio baselines
+  reset together. Detailed-only rawPresent host/worker timers target the open stall.
+- Missing mandatory SDK exports fail closed; generated count respects adapter max.
+  Current 5090 x3 still requests 2 generated, max 5. No valid-path default change.
+- fps_cap 58 remains a rendered 17,241 us interval, not divided for MFG.
+  New lives cap 0; their 30 fps ceiling is not either explicit layer limiter.
+- Copy remains default 1 for correctness: median GPU 0.026 ms. NR 6.2-7.1 ms
+  is external ownership; no ngx.cpp/dlss5.cpp edit. Camera-cut reset/synthetic
+  simulation markers remain integration gaps; exact SDK startup wait is unproved.
+- Release values: captures/trace/verboseSDK/stats/timing 0 with dev=0/detail=0;
+  fg_input_copy/current_destroy_only/letterbox 1; UI PQ/exact/metering 0 by default.
+- Validation: build.ps1 -Test PASS 206/206 (CTest 139.14 s), 4,480 settings checks.
+  Lean -ReleaseLayer PASS 15 s, BG3RTX_DIAGNOSTICS=OFF; defaults/diff checks pass.
+  Shader request delta 0; ABI unchanged; no new key, game, queue write or push.

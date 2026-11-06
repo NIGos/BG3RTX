@@ -638,11 +638,11 @@ static bool query_memory_budget(DeviceData* dd, uint64_t* used, uint64_t* avail,
 }
 
 static void log_memory_budget(DeviceData* dd) {
-  uint64_t used = 0, avail = 0, size = 0;
-  if (!query_memory_budget(dd, &used, &avail, &size)) return;
   static ULONGLONG last_summary = 0;
   const ULONGLONG now = GetTickCount64();
   if (!logging::stats_enabled(cfg_int) && last_summary && now - last_summary < 60000) return;
+  uint64_t used = 0, avail = 0, size = 0;
+  if (!query_memory_budget(dd, &used, &avail, &size)) return;
   last_summary = now;
   log("[mem] device-local VRAM of this process: used %.0f MB, budget %.0f MB, heaps %.0f MB", used / 1048576.0,
       avail / 1048576.0, size / 1048576.0);
@@ -805,24 +805,30 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     // median and 99th-percentile frame time and the 1% low, every 600 frames.
     static LARGE_INTEGER freq{}, last{};
     static std::vector<float> ft;
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
-    if (last.QuadPart) ft.push_back(float(double(now.QuadPart - last.QuadPart) * 1000.0 / double(freq.QuadPart)));
-    last = now;
-    static int pace_reset_token = 0;
-    if (stats_window::reset(cfg_int, pace_reset_token)) { ft.clear(); last = now; }
-    if (ft.size() >= stats_period(600)) {
-      std::vector<float> s = ft;
-      std::sort(s.begin(), s.end());
-      float med = s[s.size() / 2], p99 = s[s.size() * 99 / 100];
-      double worst = 0;
-      for (size_t i = s.size() * 99 / 100; i < s.size(); ++i) worst += s[i];
-      worst /= double(s.size() - s.size() * 99 / 100);
-      log_stats("[pace] rendered frame time over %zu frames: median %.2f ms (%.1f fps), p99 %.2f ms, 1%% low %.1f fps, max %.2f ms",
-          s.size(), med, 1000.0 / med, p99, 1000.0 / worst, s.back());
-      ft.clear();
-      log_memory_budget(dd);
+    if (logging::stats_enabled(cfg_int)) {
+      LARGE_INTEGER now;
+      QueryPerformanceCounter(&now);
+      if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
+      if (last.QuadPart) ft.push_back(float(double(now.QuadPart - last.QuadPart) * 1000.0 / double(freq.QuadPart)));
+      last = now;
+      static int pace_reset_token = 0;
+      if (stats_window::reset(cfg_int, pace_reset_token)) { ft.clear(); last = now; }
+      if (ft.size() >= stats_period(600)) {
+        std::vector<float> s = ft;
+        std::sort(s.begin(), s.end());
+        float med = s[s.size() / 2], p99 = s[s.size() * 99 / 100];
+        double worst = 0;
+        for (size_t i = s.size() * 99 / 100; i < s.size(); ++i) worst += s[i];
+        worst /= double(s.size() - s.size() * 99 / 100);
+        log_stats("[pace] rendered frame time over %zu frames: median %.2f ms (%.1f fps), p99 %.2f ms, 1%% low %.1f fps, max %.2f ms",
+            s.size(), med, 1000.0 / med, p99, 1000.0 / worst, s.back());
+        ft.clear();
+        log_memory_budget(dd);
+      }
+    } else {
+      // Skipping only log_stats would still collect, allocate and sort in play.
+      ft.clear(); last = {};
+      if ((frame & 63) == 0) log_memory_budget(dd); // Keep the once/minute health summary.
     }
     if (!g_core_started) {
       g_core_started = true;

@@ -640,6 +640,16 @@ inline constexpr KV kDefaults[] = {
     {"pan_edge", "0"},
     {"pan_post", "0"},
     {"fg_snap_full", "0"},
+    {"fg_snap", "0"},
+    {"fg_snap_any", "0"},
+    {"fg_log_presents", "6"},
+    {"fg_log_camera", "0"},
+    {"sl_log_barriers", "0"},
+    {"sl_verbose", "0"},
+    {"sl_dev", "0"},
+    {"log_presents", "0"},
+    {"log_procs", "0"},
+    {"fg_only_interpolated", "0"},
     {"pan_water_frames", "8"},
     {"pan_delay_ms", "0"},
     {"pan_prepare", "0"},
@@ -887,6 +897,20 @@ inline constexpr KV kReleaseDefaults[] = {
     {"ls_check", "0"},
     {"rt_em_log", "0"},
     {"rt_hit_reference", "0"},
+    {"fg_snap", "0"},
+    {"fg_snap_any", "0"},
+    {"fg_snap_full", "0"},
+    {"fg_log_presents", "0"},
+    {"fg_log_camera", "0"},
+    {"sl_log_barriers", "0"},
+    {"sl_verbose", "0"},
+    {"sl_dev", "0"},
+    {"log_presents", "0"},
+    {"log_procs", "0"},
+    {"fg_only_interpolated", "0"},
+    {"pan_edge", "0"},
+    {"rt_stats_period_frames", "0"},
+    {"rt_stats_reset", "0"},
 };
 // END GENERATED DEFAULTS
 // clang-format on
@@ -1229,6 +1253,17 @@ inline void enforce_release_policy(Map& m) {
   const bool opt_in = map_int(m, "experimental_options", 0) == 1;
   const bool omm_enabled = map_int(m, "rt_omm", 1) != 0;
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
+  // Player files can override the packaged defaults. Keep diagnostic pins
+  // effective after layering too. geo_capture is an RT input, not a capture
+  // dump; Detailed logging permits support statistics, not reference passes.
+  const bool detailed=map_int(m,"detailed_logging",0)!=0;
+  for (const KV& pin:kReleaseDefaults) {
+    const std::string key=pin.key;
+    if (key=="dev" || key=="detailed_logging" || key=="geo_capture" || std::string(pin.value)!="0") continue;
+    const bool support_stats=key=="rt_stats" || key=="ls_stats" || key=="rf_stats" || key=="sharc_stats" ||
+      key=="cpu_timing" || key=="geo_timing" || key=="rt_stats_period_frames" || key=="rt_stats_reset";
+    if (!detailed || !support_stats) m[key]="0";
+  }
   m["rr_post"] = "1";
   m["rt_scene_compact_holds"] = "1";
   m["rt_compact_hit_state"] = "1";

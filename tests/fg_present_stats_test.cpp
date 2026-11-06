@@ -19,5 +19,12 @@ int main() {
   if (timing.calls!=3 || timing.mean_ms()!=3 || timing.maximum_ms()!=6) return 8;
   timing={}; timing.add(1000);
   if (timing.calls!=1 || timing.total_us!=1000 || timing.mean_ms()!=1 || timing.maximum_ms()!=1) return 9;
+  if (fg_supported_generated(3,0)!=0 || fg_supported_generated(0,5)!=0) return 10;
+  if (fg_supported_generated(3,1)!=1 || fg_supported_generated(3,5)!=2) return 11;
+  if (fg_supported_generated(4,5)!=3 || fg_supported_generated(9,2)!=2) return 12;
+  // A phase reset discards all preceding warmup timings and presentation counts.
+  s={}; timing={};
+  s.add(3); timing.add(500);
+  if (s.ratio()!=3 || s.rendered!=1 || timing.mean_ms()!=0.5 || timing.calls!=1) return 13;
   return 0;
 }
