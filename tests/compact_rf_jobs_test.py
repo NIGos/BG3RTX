@@ -89,8 +89,9 @@ class CompactRfTests(unittest.TestCase):
             job, plan, _ = flow.load_job(path)
             state = flow.settings(job['set'])
             self.assertEqual(state['dev'], '1')
-            self.assertEqual(state['rf_hit_shade'], '1')
-            self.assertEqual(state['rf_hit_gi'], '1')
+            self.assertEqual(state['rf_hit_shade'], '0')
+            self.assertEqual(state['rf_hit_gi'], '0')
+            self.assertIs(job['keep_reshade'], False)
             self.assertEqual(len([p for p in plan if p.get('trace_at') == [1]]), 4)
             self.assertEqual(job['window_mode'], 'visible_unfocused_fg')
             self.assertTrue(job['fail_fast'])
@@ -99,6 +100,8 @@ class CompactRfTests(unittest.TestCase):
             measured = [p for p in plan if p.get('frames')]
             self.assertEqual([p['label'] for p in measured], analyze.LABELS)
             self.assertEqual([flow.settings(p['set'])[make_job.KEY] for p in measured], ['0','1','0','1'])
+            energy_indices = [i for i, p in enumerate(plan) if p.get('trace_at') == [1]]
+            self.assertGreater(min(energy_indices), max(i for i, p in enumerate(plan) if p.get('frames')))
             for p in measured:
                 self.assertEqual(p['frames'], 600)
                 self.assertTrue(p['stats_reset'])

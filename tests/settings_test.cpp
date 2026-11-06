@@ -1102,6 +1102,16 @@ static void test_retired_rejected_controls() {
   enforce_release_policy(release); CHECK_EQ(get(release,"gi_far_roof_early"),"1");
   developer=release; developer["dev"]="1"; developer["gi_far_roof_early"]="0";
   enforce_release_policy(developer); CHECK_EQ(get(developer,"gi_far_roof_early"),"0");
+  CHECK(find_knob("rf_compact_probe_state") == nullptr);
+  CHECK_EQ(code_default("rf_compact_probe_state"), "1");
+  for (int p=0; p<kPresetCount; ++p) {
+    Map preset; for (const auto& kv : expand_preset(p)) preset[kv.first]=kv.second;
+    CHECK_EQ(get(preset,"rf_compact_probe_state"),"1");
+  }
+  release=code_defaults(); release["rf_compact_probe_state"]="0";
+  enforce_release_policy(release); CHECK_EQ(get(release,"rf_compact_probe_state"),"1");
+  developer=release; developer["dev"]="1"; developer["rf_compact_probe_state"]="0";
+  enforce_release_policy(developer); CHECK_EQ(get(developer,"rf_compact_probe_state"),"0");
   const Map defaults=code_defaults();
   const Map legacy=parse_ini("rr_hair_resolve=1\nrt_cascade_static_only=1\nperf_hitmat_lists=1\nperf_hook_state=1\nperf_submit_batch=1\n");
   CHECK(knob_values(merge_layers({&defaults,&legacy})) == knob_values(merge_layers({&defaults})));

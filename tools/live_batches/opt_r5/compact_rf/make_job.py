@@ -25,9 +25,8 @@ def generate(exe=None):
     state = (observation_state(str(Path(exe).resolve()), 'ultra') if exe else
              flow.settings(flow.read(HERE.parent/'compact_hit/jobs/opt-compact-hit-inn.json')['set']))
     state[KEY] = '0'
-    # Raw key, no knob. Preserve the compact-hit developer observation profile.
-    # Hit shading and hit GI must remain ON in every window or core disables 1031.
-    state.update(dev='1', rf_hit_shade='1', rf_hit_gi='1', qa_exposure_hold='1')
+    # Raw key, no knob. Exercise receiver probes in the default Ultra RF request.
+    state.update(dev='1', rf_hit_shade='0', rf_hit_gi='0', qa_exposure_hold='1')
     # The trace writes the float pre-post export only with the pan capture path prepared (as opt_r1 scene_holds).
     state.update(pan_prepare='1', pan_edge='1', pan_post='1', pan_capture='0')
     estimates = {}
@@ -62,7 +61,7 @@ def generate(exe=None):
         job.update(name=name, save=save, live_batch='opt-r5-compact-rf', set=assignments(state),
                    args=['-RealPresent', '-Move', '-MovePlan', plan_rel],
                    hold=180, timeout=300, max_minutes=5, fail_fast=True,
-                   window_mode='visible_unfocused_fg', stop_on_dump=False,
+                   window_mode='visible_unfocused_fg', stop_on_dump=False, keep_reshade=False,
                    patterns=list(dict.fromkeys([rx for _, rx in TIMERS]+[r'\[trace\]', r'\[dump\]', r'\[watch\]', r'\[cfg\]',
                        r'\[auto\]', r'\[stats\]', 'gi: background builds'])),
                    expect_every=[dict(name=title+' cost', select=rx, match=rx, windows=labels,
@@ -73,7 +72,7 @@ def generate(exe=None):
                    expect_runner=[r'\[window-mode\].*visible_unfocused', '^Run ended: done',
                                   rf'\[motion-plan\] complete phases={len(plan)}\b'],
                    live_flow=dict(expected_fps=30, settings_latency_s=1, trace_stall_s=1),
-                   purpose='READY_FOR_LIVE. Static Ultra GPU A/B and four pre-post float means; explicit authorization required before staging.',
+                   purpose='PREPARED_ONLY / NOT_QUALIFIED: statistical offline replay gate failed. Default Ultra reflections (hit shading/GI OFF), static GPU A/B and four pre-post float means; explicit authorization required before staging.',
                    post=(f'python tools/live_batches/opt_r5/compact_rf/analyze.py --job {job_rel} '
                          '--log "{log}" --runner "{runner}" --out "{log}.compact-rf.json"'), post_gate=True)
         job['estimated_phase_seconds'] = round(sum(p['seconds'] for p in plan), 3)
@@ -89,12 +88,13 @@ def generate(exe=None):
                               historical_frame_estimate_seconds=round(120+budget['seconds']-80.4+
                                   2400/flow.fps_windows.expected(job, state)['fps']+.4, 3),
                               readiness='Unproven: conditional fresh QUIET waits; hard stop 300 s.')
-    flow.write(HERE/'predicted.json', dict(status='READY_FOR_LIVE', key=KEY, spec_constant=1031,
+    flow.write(HERE/'predicted.json', dict(status='PREPARED_ONLY', qualification='NOT_QUALIFIED', key=KEY, spec_constant=1031,
         shader_request_delta=0, launches=2, preset='Ultra release', frames_per_window=600,
         timer_period_frames=120, jobs=estimates,
-        prediction='Reflections lower by 0-0.2 ms at inn/S8; registers 255 -> 245, driver shared bytes 800 -> 32. '
-                   'Other passes unchanged within OFF repeat spread. Image identical (construction/SPIR-V proof only).' ,
-        offline_proof='docs/progress/rf-ls-regs.md',
+        prediction='Prior rf-opt2 exploratory paired replay: -0.126 ms. Current paired replay: -0.122904 ms, CI [-0.157664, +0.019344] ms; noisy, live delta unmeasured. '
+                   'Registers 128 -> 96. Other passes unchanged within OFF repeat spread; energy within OFF-repeat noise.',
+        offline_gate='FAILED: inn pack 61 balanced adjacent OFF/OFF controls are zero over 40 pairs; candidate differs in 4/40 pairs, up to 63 specular pixels and 9 hit-distance pixels. No statistical exactness qualification.',
+        offline_proof='docs/progress/rf-default.md',
         decision='SAVING only when both ON reflection medians beat both OFF medians by more than the OFF repeat spread; otherwise NO_SAVING. Energy outside OFF-derived noise is ENERGY_CHANGE; missing evidence is INVALID.',
         energy='One trace per separate energy phase; reusable rrpost slot-2 float reader. Two OFF repeats derive Student noise band (df=1); both ON versus preceding OFF, RGB and luminance.',
         pairs='Every ON minus preceding OFF and per-window medians retained; aggregate saving requires every ON beat every OFF beyond OFF spread.',
