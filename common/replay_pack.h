@@ -204,7 +204,27 @@ inline constexpr auto kLocalShadows = [] {
   if (n!=v.size()) throw "local-shadow replay contract size";
   return v;
 }();
+// Default Ultra RF, without hidden-hit shading or SHaRC. Retain validation/debug
+// reads too; mutable packed colours and hit distance use two-phase snapshots.
+inline constexpr auto kReflections = [] {
+  std::array<Slot,43> v{}; size_t n=0;
+  for (const auto& s:kGiHitDirect) {
+    if ((s.set==0 && s.binding!=8 && s.binding!=13 && s.binding!=46) ||
+        (s.set==1 && s.binding<=9) ||
+        (s.set==2 && s.binding!=2 && s.binding!=3 && s.binding!=34 && s.binding!=36)) v[n++]=s;
+  }
+  const Slot extra[]={
+    {0,3,kSampled2D,1,0,"gAlbedo"},{0,4,kSampled2D,1,0,"gMaterial"},
+    {0,6,kStorage,1,122,"diffuse"},{0,7,kStorage,1,122,"specular"},
+    {0,27,kSsbo,1,0,"lShadows"},{0,28,kSampled2D,1,0,"lAtlas"},
+    {0,30,kStorage,1,76,"rfHitDist"},{0,50,kStorage,1,kRgba32Sfloat,"rtHairOrigin"},
+    {1,19,kSampler,16,0,"gNativeTilesetSampler"}};
+  for(const auto& s:extra)v[n++]=s;
+  if(n!=v.size())throw "reflection replay contract size";
+  return v;
+}();
 inline constexpr Pass kPasses[] = {
+    {"reflections", "gi/rt_reflections.hlsl", kReflections.data(), uint32_t(kReflections.size()), 3, 256},
     {"local_shadows", "gi/rt_local_shadows_box_k.hlsl", kLocalShadows.data(), uint32_t(kLocalShadows.size()), 5, 256},
     {"gi_hit_direct", "gi/gi_trace_rt_hit_direct.hlsl", kGiHitDirect, uint32_t(std::size(kGiHitDirect)), 4, 256},
     {"water_compose_fixture", "rt/water_compose_fixture.hlsl", kWaterComposeFixture.data(), uint32_t(kWaterComposeFixture.size()), 4, 256},

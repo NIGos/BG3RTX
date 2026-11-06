@@ -894,7 +894,7 @@ void write_pack(Job* job) {
     const uint64_t manifest_bytes=rp::serialize(job->m).size();
     uint64_t disk_bytes=0;
     bool disk_cap_exceeded=false;
-    if(job->m.pass=="local_shadows") {
+    if((job->m.pass=="local_shadows" || job->m.pass=="reflections")) {
       // Sort a view, keeping image-copy indices intact for the post-dispatch snapshot.
       std::map<std::string,std::vector<const Copy*>> files;
       for(const auto& c:job->copies)if(!c.dropped)files[c.file].push_back(&c);
@@ -957,7 +957,7 @@ void write_pack(Job* job) {
     rp::Manifest back;
     std::string error;
     if (!rp::parse(text, back, error)) { ok = false; log("[replay] pack %s failed: manifest does not parse (%s)", job->label.c_str(), error.c_str()); }
-    if(job->m.pass=="local_shadows" && disk_bytes+text.size()>job->disk_cap){disk_cap_exceeded=true;ok=false;}
+    if((job->m.pass=="local_shadows" || job->m.pass=="reflections") && disk_bytes+text.size()>job->disk_cap){disk_cap_exceeded=true;ok=false;}
     ok = ok && write_file(job->dir + "\\manifest.txt", text.data(), text.size());
     if (ok)
       log("[replay] pack %s written: %s MB (%u images omitted, %u read by shader), frame %llu, pass %s, instances %u -> %s", job->label.c_str(),
@@ -1187,26 +1187,35 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     bool projector_records=false,cookie_sampler=false;
     for(const auto& [key,e]:game) {
       const uint32_t binding=uint32_t(key>>32),element=uint32_t(key);
-      const auto* slot=rp::find_slot(*pass,3,binding);if(!slot)continue;
+      const uint32_t native_set=m.pass=="reflections"?2u:3u;
+      const auto* slot=rp::find_slot(*pass,native_set,binding);if(!slot)continue;
+      if(m.pass=="reflections" && is_dynamic_type(e.type))return fail("RF sampled lighting buffer has an unsupported dynamic offset");
       // Native b45 mixes cubes and 2D projector cookies; LS reads only 2D views.
       if(binding==45) {
         if(!e.view)continue;
         std::shared_lock<std::shared_mutex> lock(g_obj_mu);auto it=g_views.find(e.view);
         if(it==g_views.end())return fail("LS cookie has a nonnull view that is not recorded");
-        if(it->second.type==VK_IMAGE_VIEW_TYPE_CUBE || it->second.type==VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)continue;
-        if(it->second.type!=VK_IMAGE_VIEW_TYPE_2D)return fail("LS cookie view is neither 2D nor a cube");
+        const bool cube=it->second.type==VK_IMAGE_VIEW_TYPE_CUBE;
+        if(m.pass=="reflections") { if(!cube)continue; }
+        else if(cube || it->second.type==VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)continue;
+        if(m.pass!="reflections" && it->second.type!=VK_IMAGE_VIEW_TYPE_2D)return fail("LS cookie view is neither 2D nor a cube");
       }
       if(element>=slot->count)return fail("LS native element exceeds replay descriptor capacity");
       VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};w.dstBinding=binding;w.dstArrayElement=element;w.descriptorCount=1;
       VkDescriptorBufferInfo bi{e.buffer,e.offset,e.range};VkDescriptorImageInfo ii{e.sampler,e.view,e.layout};
       w.pBufferInfo=&bi;w.pImageInfo=&ii;
       w.descriptorType=slot->kind==rp::kSsbo?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:slot->kind==rp::kUbo?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:slot->kind==rp::kSampler?VK_DESCRIPTOR_TYPE_SAMPLER:VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-      if(!capture(3,w))return fail(p.why);
+      if(!capture(native_set,w))return fail(p.why);
       if(binding==29)projector_records=true;
       if(binding==16)cookie_sampler=true;
     }
-    if(!projector_records)return fail("LS projector records (s3 b29) are not recorded");
-    if(!cookie_sampler)return fail("LS cookie sampler (s3 b16) is not recorded");
+    if(m.pass=="reflections")for(uint32_t i=0;i<pass->slot_count;++i) {
+      const auto& slot=pass->slots[i];if(slot.set!=2 || slot.count!=1)continue;
+      bool found=false;for(const auto& [key,e]:game)if(uint32_t(key>>32)==slot.binding && uint32_t(key)==0)found=true;
+      if(!found)return fail(std::string("RF lighting input missing: ")+slot.name);
+    }
+    if(m.pass!="reflections" && !projector_records)return fail("LS projector records (s3 b29) are not recorded");
+    if(m.pass!="reflections" && !cookie_sampler)return fail("LS cookie sampler (s3 b16) is not recorded");
   }
   // The TLAS instance array (InstInfo order) of the same ring region.
   m.instances = "instances.bin";
@@ -1455,9 +1464,9 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   }
 
   if(d->phase==1) {
-    if(!m.omitted.empty()){release_views(views);return fail("LS replay requires every sampled image; omission would change visibility");}
+    if(!m.omitted.empty()){release_views(views);return fail("two-phase replay requires every sampled image; omission would change visibility");}
     for(const auto& image:p.images)if(image.shader && rp::block_compressed(uint32_t(image.view_format)))
-      {release_views(views);return fail("LS replay requires raw BCn bytes; decoded fallback is not bit-exact");}
+      {release_views(views);return fail("two-phase replay requires raw BCn bytes; decoded fallback is not bit-exact");}
   }
 
   // ---- staging: chunks, placement ----

@@ -997,7 +997,26 @@ The driver Local Memory Size is anomalous, 68719476752 in every run: no reliable
 At 245 registers this does not cross the next occupancy step. GPU time is unmeasured.
 ON/OFF specialized SPIR-V retains the stored-result logic and identical operation counts
 (4 image writes, 8 ray-query sites, 378 integer atomic adds; float add/multiply/ext-inst counts match).
-No RF replay pass exists: construction/SPIR-V review is the offline evidence, not a rendered exactness test.
+At that point no RF replay pass existed: construction/SPIR-V review was the offline evidence, not a rendered exactness test.
 Pending: a separately authorized live in-run OFF/ON/OFF energy/image/cost A/B at the inn with hit GI on,
 and the combined Ultra smoke. No qualification or default promotion from register statistics alone.
 See docs/progress/rf-ls-regs.md for gates and tools/frame_replay.md for reproduction.
+
+
+## Default Ultra RF replay (rf-replay, READY_FOR_LIVE, 2026-11-06)
+
+The default `rt_reflections` request now has a dedicated two-phase replay
+contract, separate from optional hit shading. Diagnostic `replay_pack_pass=1`
+with a positive `replay_pack` serial selects it; both default to 0. ABI remains 27,
+shader request delta 0. Initial packed diffuse/specular, R16 hit distance and raw
+counter bins are restored before each dispatch; all outputs and counters can be
+compared live versus replay and in strict paired A/B. Raw BCn, probe cubes,
+lighting inputs and geometry reuse the LS writer/codec. See tools/frame_replay.md.
+
+The synthetic default-request test exercises screen reflections, raw BC1 probes,
+history controls, finite outputs, zero guards and repeat/paired byte identity.
+Prepared inn Ultra job: tools/live_batches/rf_pack/jobs/rf-pack-inn.json,
+visible_unfocused_fg, 45 s static plan, compressed cap 2048 MiB. Frozen and
+non-frozen lint pass. Prepared only; no live authorization, game or queue action.
+Actual pack size, reconstructed-TLAS agreement and GPU capture cost await the
+coordinator's capture. No saving is claimed; stop here before optimisation.

@@ -74,6 +74,22 @@ int main() {
           "LS unique descriptor contract, 2D cookies and native packed colour");
   }
 
+  {
+    const auto* pass=rp::find_pass("reflections");
+    bool unique=pass && pass->set_count==3;
+    for(uint32_t i=0;pass && i<pass->slot_count;++i)for(uint32_t j=0;j<i;++j)
+      unique &= pass->slots[i].set!=pass->slots[j].set || pass->slots[i].binding!=pass->slots[j].binding;
+    check(unique && rp::find_slot(*pass,2,45)->kind==rp::kSampledCube &&
+          rp::find_slot(*pass,0,30)->storage_format==76 && rp::find_slot(*pass,0,7)->storage_format==122,
+          "RF unique contract, cube probes, R16 hit distance and packed colour");
+    check(!rp::find_slot(*pass,1,14) && !rp::find_slot(*pass,3,0),"default RF excludes hit caches and hit sun set");
+    rp::Manifest rf=m;rf.pass="reflections";rf.specs={{1000,1}};
+    rf.outputs={{0,7,122,128,128,"live.bin","initial.bin"},{0,30,76,128,128,"hit.live","hit.initial"}};
+    rf.counter_initial="before.bin";rf.counters="after.bin";rp::Manifest back;
+    const auto text=rp::serialize(rf);
+    check(rp::parse(text,back,error) && rp::serialize(back)==text,"RF initial/reference/spec/counter round trip");
+  }
+
   // 2. InstInfo spans: soup vs pool, legacy / hair / empty entries name nothing.
   const uint32_t info[] = {
       0, 64, 0, 2,                                   // soup, 2 tris of stride 64: [0, 384)

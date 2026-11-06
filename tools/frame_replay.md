@@ -1,4 +1,4 @@
-# Offline frame replay (GI and production Ultra local shadows)
+# Offline frame replay (GI, Ultra local shadows and default reflections)
 
 Re-run one production pass on one captured frame without the game (docs/OFFLINE_OPPORTUNITIES.md A).
 Pass: `gi_hit_direct` (`shaders/gi/gi_trace_rt_hit_direct.hlsl`, base variant). It was chosen over
@@ -120,8 +120,8 @@ compare `--spec 1031=0` / `--spec 1031=1` on the same module. Core keeps it OFF 
 `rf_hit_gi=0`: that trial gained a register. No shader requests are added.
 
 These compile-only selectors only create pipelines and print driver statistics. Ordinary
-`--pack` replay also supports production Ultra local shadows as described below. RF output
-replay remains unsupported. Compile-only statistics cannot establish image exactness.
+`--pack` replay also supports production Ultra local shadows and default reflections as
+described below. Compile-only statistics cannot establish image exactness.
 
 With `--repeat N`, the summary prints the median, min, max and max-minus-min spread of **all**
 dispatch GPU timestamps, including the first dispatch. Retain the individual run lines to diagnose
@@ -603,3 +603,47 @@ headers. Each codec block is checked before writing, so even a failed pack
 cannot overrun the cap. Synthetic tests cover raw BC4/BC5 atlas/cookie controls,
 odd block extents, nonzero mip/layer bases, multiple mips/layers, codec byte
 identity and sampled-value identity; no real inn size is inferred from fixtures.
+
+
+## Default Ultra reflections replay
+
+`pass reflections` runs `gi/rt_reflections.hlsl`, with the captured request defines,
+all specialization values and 256 push bytes. It supports ordinary replay,
+`--ab-spec`, `--ab-warmup`, `--ab-require-equal` and `--pipeline-stats`.
+The contract is default Ultra: `rf_hit_shade=0`, `sharc=0`, stock hair,
+non-OMM. It excludes the unused hit-material caches and hit-lighting sets.
+
+Arm `replay_pack_pass=1,replay_pack=N` (N positive) for one RF dispatch per
+serial; selector 0 keeps legacy GI/LS behavior. RF capture uses ABI 27's existing
+two-phase API: snapshot after LS and before RF, rebind the production pipeline
+and descriptors, dispatch, then snapshot references. Both diagnostic DLLs must
+be rebuilt; sampled compressed images need the existing raw-BCn host build.
+No ABI bump or shader request was added.
+
+Inputs include the G-buffer, velocity, previous radiance, geometric/physical
+origin images, light lists/constants, shadow records/atlas, alpha geometry/TLAS,
+AO, DFG, global specular cubes, local probe records and every bound cube element
+(the mixed native b45's 2D cookies are not read by default RF). The game's
+unrelated dynamic descriptors are ignored; a captured lighting buffer with a
+dynamic descriptor is refused rather than copied from the wrong offset.
+
+Initial native R11G11B10 diffuse/specular, R16 hit distance and primary raw counter
+bins are restored before every dispatch, outside timestamps. Live output/counter
+differences are reported separately from strict paired offline equality.
+The shared LS lossless codec and 2048 MiB compressed disk cap apply; missing
+required singleton lighting resources, omitted images and decoded BCn fail capture.
+The cascade exclusion proof also applies to default RF: when both effective
+pipelines trace mask 0x01, preserve the captured soup range instead of appending
+unused cascade triangles across the driver's 2 GiB GetDimensions limit.
+
+`frame_replay --rf-self-test DIR` (CTest `frame_replay_rf_test`) builds a tilted
+slab reflecting the visible back plane, nonzero packed colours/history, a
+specular local probe pair and raw BC1 cubes. It requires eligible screen hits,
+zero range/ray guards, finite outputs, colour and hit-distance writes, changed
+results for dark-history/black-probe controls, repeat identity and exact paired
+output/counter restoration through compressed files under Vulkan validation.
+
+Prepared capture only: `tools/live_batches/rf_pack/jobs/rf-pack-inn.json`.
+The coordinator must capture the real pack before any savings investigation;
+synthetic results do not establish real inn pack size, live-reference identity,
+production GPU cost or an optimisation result.
