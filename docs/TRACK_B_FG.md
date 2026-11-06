@@ -1,5 +1,24 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Release audit and load-time present cost - 2026-11-06 (fgx3, Round 3)
+
+See [Round 3 audit](evidence/fgx3-analysis.md) and its four-run/release appendices.
+Warmed S8 x3 reaches ratio 3 at roughly 30 rendered fps; metering is rejected,
+not promoted. All four launches have a slow first **x2** enable before final
+scene readiness: outer SDK present means 34-108 ms, inflated GPU intervals,
+zero FG destruction waits, negligible GetState/ReflexSleep. Exact SDK/driver/WSI
+backpressure remains unproved; this does not qualify uncapped foreground x3.
+
+Quiet release no longer runs routine FG/lifetime timers, cadence formatting,
+UI-handle log churn or pace-vector sorting. Release pins survive raw overrides
+and the Detailed logging startup latch; support statistics remain explicit.
+The 47-key hot cache refreshes on actual changes, not every present. Required
+fences and the 0.026 ms median correctness copy remain. Phase resets clear all
+statistics/baselines; detailed raw-present host/worker timing targets the open
+stall. Mandatory SDK exports and adapter generation limits are checked.
+No new key, ABI or shader variant; no dlss5.cpp/ngx.cpp edits. Full tests pass
+206/206, plus lean diagnostic-off layer compilation. No new live is claimed.
+
 ## FG x3 retirement candidate - 2026-11-06 (fgx3, offline only)
 
 `fg_destroy_wait_exact=0` preserves the global-latest-fence policy by default.

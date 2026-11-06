@@ -28,3 +28,10 @@ struct FgCpuTiming {
   double mean_ms() const { return calls ? double(total_us)/double(calls)/1000.0 : 0.0; }
   double maximum_ms() const { return double(max_us)/1000.0; }
 };
+
+// Never send a multiplier unsupported by the queried adapter. Unknown support
+// (zero) leaves generation off until a successful state query supplies it.
+inline uint32_t fg_supported_generated(int multiplier,uint32_t maximum) {
+  const uint32_t wanted=multiplier<2 ? 0u : multiplier>4 ? 3u : uint32_t(multiplier-1);
+  return wanted<maximum ? wanted : maximum;
+}

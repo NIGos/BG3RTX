@@ -391,3 +391,157 @@ the earlier unrelated Get-FileHash failures. Final log:
 `C:/Users/quali/Documents/Code Projects/BG3RTX/.scratch/coord/fgx3/round2-pass-build-test.log`.
 No game was launched, no queue files were written, no runtime GPU cost or
 smoothness improvement is claimed.
+
+## Round 3 audit
+
+This pass audits `da6ffdf8` and the Round 3 fixes, not a new game session.
+[The four-run appendix](fgx3-round3-lives.md) records complete source hashes,
+runner context, timestamps and per-phase numbers. [The release appendix](fgx3-round3-release.md)
+records the full pinned-value table. Neither DLSS5 nor NGX source was edited.
+The user session at 15:03 remains evidence of enabled x3 long gaps; today's
+warmed 30 fps runs do not reproduce or disprove uncapped foreground stutter.
+
+### Checklist verdicts
+
+| Item | Verdict | Evidence, number and action |
+|---|---|---|
+| 1. Present/submit/destroy blocking | COST; diagnostic BUGs fixed | First-enable SDK proxy CPU is 34.347-46.333 ms in early-off (:4129-4663), up to mean 108.001/max 148.704 ms in later-on (:2869/:2707), **at x2**. These samples have zero FG destroy waits, GetState max <=0.002 ms and ReflexSleep mean ~0.02 ms. `streamline.cpp` retains one mandatory post-present state query and input-consumption fences; `tracker.cpp:304-307` keeps the timeout-0 poll and optional 2 s lifetime wait. Only timing/count bookkeeping is gated away. |
+| 2. Logging, formatting, counters, mutexes | BUG fixed; residual COST | The first later-off UI discovery prints 764 lines for only 8 consecutive handle changes. `streamline.cpp:2383-2392` now de-duplicates against last logged state and routes routine handle identities through stats logging. Normal FG timers/cadence/counters are gated before QPC/formatting. `util.cpp:463-476` removes repeated fallback-string construction plus a second mutex/map lookup from release. Event-only `cfg_poll` (:321-327) eliminates 47 hot-cache lookups/refreshes on unchanged presents: actual CPU fixture checks 100 unchanged polls ->0 refreshes. Logging still flushes emitted fault/state lines; no ms saving was measured. |
+| 3. Release diagnostics and overrides | BUG fixed | `settings.h:1246-1267` applies shipped zero diagnostic pins after all player layers; `util.cpp:370` reapplies after restoring startup-latched Detailed logging. Before this, stale raw overrides could arm captures/reference passes, or next-launch Detailed On could leak rt_stats into the currently quiet process. Capture/trace/dev SDK/generated-only output are 0 for dev=0; ordinary release stats/timings are 0. Detailed On deliberately permits support stats/period/reset. `fg_input_copy=1` stays a correctness copy, not a diagnostic to disable. |
+| 4. SDK API, constants, markers, options | OK for observed path; latent BUGs fixed; integration gaps remain | `streamline.cpp:83-96,1430-1432,2731-2740,2979-2989`. New logs have valid tags/constants and no query failures or missing-constants errors. Options change only on host decisions, not every frame; same token identifies constants and PresentStart/End. Mandatory export validation now fails closed and names the missing export; generated-frame counts respect queried maximum (5 here, x3 requests 2). Window stats reset now clears CPU/SDK/raw/destroy accumulators and ratio baselines; earlier first reports could contain prior-phase samples. Camera-cut reset remains hard false and simulation markers are synthetic: quality/latency gaps, not proved throughput causes, requiring coordination with the game/NGX owner rather than editing its files here. |
+| 5. Swapchain, copies and presentation | OK / COST; VSync constraint remains | `streamline.cpp:2034-2042,795-798,851` and letterbox discovery/tagging in `sl_note_draw`/`sl_present`. All four runs ask for 3 buffers, SDK uses 6, FIFO mode 2 remains before/after proxy (two startup recreations only). No recreation occurs in the slow phase. Letterbox passes a subrect, not a new GPU blit. The game already performs the observed UI/hudless composite; our default extra work is the preserved depth/MV pair. Later off :10041 and later on :10134 give GPU copy median **0.026 ms**. `fg_ui_pq=0` means no optional conversion dispatch. Vulkan FG VSync remains unsupported by the SDK; no unqualified present-mode override was added. |
+| 6. Correct work with measurable cost | COST, no unsupported optimization | Proxy and input-copy paths in `streamline.cpp`; exact live log lines are in the appendix. Warmed SDK proxy is normally ~0.2-0.4 ms; NR is ~6.2-7.1 ms GPU in the listed windows (owned elsewhere). Slow startup GPU intervals also inflate: early-off GI 45.922 ms (:4336), later-on RT passes 88.071 ms (:2808), LS 13.836 (:2811). These are overlapping/different timestamp windows, not a sum or exclusive kernel cost. Generation itself has no GPU timer here. Metering adds no warmed ratio gain and has 24-26 ms proxy maxima in x3 plus severe startup stalls: rejected, still off. |
+
+### Every relevant wait and hot ownership boundary
+
+- `streamline.cpp` private-copy reuse polls at most eight consumption leases with
+  `vkWaitSemaphores(...,0)`; written slots without a valid fence are not reused.
+  Timestamp queries use availability without WAIT and only with statistics.
+- The default game image/view destruction policy may wait up to 1 s on the
+  latest FG consumption semaphore. Exact-retirement mode polls instead and
+  delegates incomplete objects to the existing tracker route. All four new
+  lives report 0 calls; this candidate was not exercised or qualified there.
+- `tracker.cpp:159,180` status polls are timeout 0. `:304-307` waits up to 2 s
+  only after an incomplete lifetime fence and a blocking caller request.
+  Unfenced submissions and unsuccessful polls remain deferred. Sequence/ref
+  tables, queue completion, waiter counts and allocation ownership are unchanged.
+- `life_on_present` submits a zero-work fence on the presenting game queue.
+  This is lifetime coverage, not diagnostic timing; removing it would make
+  destruction unsafe. Its driver/queue call time is not separately measured.
+- SDK `QueuePresentKHR` and `AcquireNextImageKHR` can block; acquire preserves
+  the game's timeout and synchronization parameters. ReflexSleep is called
+  once per native frame, regardless of low-latency mode, as required by SDK.
+- The global queue mutex covers game QueueSubmit/2 (`layer.cpp:514,580`) and
+  `sl_present` (`:873-874`), including SDK present and the following ReflexSleep.
+  SDK latency can therefore hold up other submitting game threads. External
+  queue ownership requires synchronization; it was not speculatively unlocked.
+- `g_mu` snapshots FG resources/camera and is shared with recording threads;
+  SDK tags/constants/present are called outside it. Tracker lookup locks are
+  shared reads in input discovery. Fence->copy locking publishes at most eight
+  private slots; private-copy allocation is cold/resize work under its own lock.
+  No logged mutex duration or established lock cycle isolates a millisecond cost.
+- DeviceWaitIdle and SDK shutdown are device/swapchain lifecycle operations;
+  the exact-retirement candidate's extra idle is at swapchain teardown only.
+  There is no steady per-frame device/queue idle in the FG default path.
+- `fg_snap` readback has a 2 s fence wait and PNG IO, but dev=0 now forces all
+  capture keys to 0 even after user overrides. Pan/replay callbacks are also
+  compiled out of the lean host and pinned off in normal release.
+- Normal watch/frame/lifetime atomics and required maps remain. Diagnostic FG
+  CPU counters/timers, vector sorting, pipeline-independent stats collection and
+  raw-present profiling do not run in quiet mode. `tracer.cpp:34-37` still has
+  general watchdog atomics outside the FG-specific patch; their ms cost is not
+  measured. A counter is neither a fixed frame cap nor evidence of zero cost.
+
+### Release values
+
+With `dev=0,detailed_logging=0`, the enforced values are:
+
+- 0: `fg_snap`, `fg_snap_any`, `fg_snap_full`, `fg_log_presents`, `fg_log_camera`,
+  `sl_log_barriers`, `sl_verbose`, `sl_dev`, `fg_only_interpolated`, `pan_inputs`,
+  `pan_capture`, `pan_prepare`, `pan_edge`, `replay_pack`, `log_presents`, `log_procs`.
+- 0: support stats/CPU timing/period/reset and all packaged debug/reference pins,
+  including `rt_primary_check`, epoch, identity and fade-class. The historical
+  ~80 ms reference-diagnostic cost in AGENTS must not be enabled by stale files.
+- 1 by default: `fg_input_copy`, `fg_current_destroy_only`, `fg_letterbox`.
+  Copy remains selected unless the user explicitly changes it. Letterbox is an
+  extent selection; these keys are not blanket-disabled as diagnostics.
+- 0 by default: `fg_ui_pq`, `fg_destroy_wait_exact`, `fg_present_metering`.
+  The two experimental controls retain their explicit opt-in, with metering
+  rejected by the available live evidence. No new runtime key was introduced.
+- User selections of `fg`, `fps_cap`, `reflex` and correctness `geo_capture` are
+  preserved. Detailed On is startup-latched and permits support statistics,
+  not developer GPU captures, reference passes or development SDK binaries.
+
+`enforce_release_policy` is a runtime setting guard, not merely an installer
+append. `BG3RTX_DIAGNOSTICS=0` separately removes diagnostic host hooks at
+compile time; both are checked, rather than assuming a lean binary suppresses
+all dynamically selected diagnostics. Rare startup/setting/SDK state changes,
+faults and a one-minute VRAM health summary still use synchronous logging.
+`log()` (`util.cpp:101-123`) formats once, holds a log mutex, writes/flushes and
+calls OutputDebugString. Its residual per-line latency is unmeasured; this patch
+removes hot callers instead of adding a new logging thread/framework.
+
+### Lead 1: what is and is not established after loading
+
+All four first-enable episodes are **x2**, after NR feature creation and before
+the final post-chain/scene-ready transition. The slowdown therefore reproduces
+on the initial test load in 4/4 launches, not just on the rejected metering path
+and not just at x3. It has not been measured on every subsequent in-process save
+load or a normal foreground load, so “every load” is not proved.
+
+The outer SDK proxy timer includes our wrapped downstream present and the raw
+Vulkan driver call. The measured FG fences, state queries and Reflex sleeps
+cannot explain its tens-of-ms duration in those windows. No swapchain recreate
+occurs there, and tracked game pipeline creation drops to 0 while slow calls
+persist. The public hook counters cannot rule out SDK-private driver work/JIT.
+The inflated GPU timestamps also leave GPU/WSI backpressure as a live cause.
+There is no logged full-screen-menu decision, CPU-pacer timeout/fallback or
+common-constants error identifying an SDK branch. `WAR4639162` and FC feedback
+are timing context, not a publicly documented causal explanation.
+
+Detailed logging now splits **rawPresent host** and **rawPresent worker** timing
+from the outer proxy call. Complete-call aggregates are coherently snapshotted;
+a 2-producer CPU fixture conserves 20,000 calls / 40,000 us. That targeted next
+observable can distinguish raw-driver/WSI time on the calling thread from SDK
+work or waiting before it. It is off in ordinary release. The global queue lock
+remains visible as a propagation cost, not an alleged reason to remove required
+synchronization. The precise internal startup wait is **OPEN**, not “fixed”.
+
+### Lead 2: cap arithmetic and marker contract
+
+`fps_cap=58` gives `1000000/58 = 17241 us` once per rendered frame in
+`reflex_apply`; x2/x3/x4 do not divide this interval. The bundled SDK forwards
+`ReflexOptions.frameLimitUs` unchanged to `minimumIntervalUs`
+(`source/platforms/sl.chi/nvllvk.cpp:110-118`, `vknvll2.cpp:209-224`), and
+NvLowLatencyVk.h:225-230 describes the native-frame interval limiter. At a full
+58 rendered fps, ideal x3 is 174 presentation frames/s before display limits;
+it is not a 58 displayed-fps ceiling to divide by 3. The original session
+rendered ~25 fps, below that ceiling. All four new lives have cap 0, no fallback
+present limiter and negligible ReflexSleep, excluding those explicit cap routes
+as their warmed 30 fps bound. The exact game/unfocused/FIFO/DWM source of that
+bound is not distinguished by these logs.
+
+Common constants and PresentStart/End use the same native token, including x3.
+No extra simulation markers or calls per generated frame are required. PCL
+simulation start/end are synthetic at our frame boundary, not actual engine
+simulation brackets; reset remains false instead of forwarding NGX camera cuts.
+SDK auto scene-change detection supplies a fallback, but it is not a substitute
+for qualifying this integration. These are reported for the DLSS5/NGX owner;
+no speculative camera/reset heuristic or owned-file change was made here.
+
+### Validation
+
+Final `scripts/build.ps1 -Test`: **206/206 PASS**, CTest 139.14 s. Direct
+settings checks: **4,480/4,480 PASS**. Separate `-ReleaseLayer` compilation:
+**PASS in 15 s**, CMakeCache confirms BG3RTX_DIAGNOSTICS=OFF. Defaults/schema
+regenerated and `git diff --check` passes. The hotkey concurrency fixture was
+updated for the real change-result API. The frozen QA corpus gained only 8 new
+regex receipts and 9 readiness queries for the existing fx1/fx2 jobs; every
+prior frozen receipt/model was preserved. No job behavior or queue file changed.
+Final logs are `.scratch/coord/fgx3/round3-pass-build-test.log` and
+`round3-release-build.log` under the main checkout.
+
+CPU tests cover quiet release pins, startup latch,
+change-driven hot-cache refresh, window reset, concurrent timing snapshots,
+mandatory SDK exports and generated-count limits. No ABI or shader request
+change; no new live run, queue write or push.
