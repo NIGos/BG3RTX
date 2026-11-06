@@ -41,6 +41,23 @@ int main() {
   if (!check(cancel_recorded_copy(true, lease, previous) && lease.value == 12 && lease.written)) return 1;
   lease.write();
   if (!check(!cancel_recorded_copy(false, lease, previous) && !lease.reusable(true))) return 1;
+  // Swapchain teardown expires SL's semaphore, but an idle drain covers only
+  // submitted work. Keep unsubmitted private writes pinned and preserve layout.
+  lease.write(); lease.presented(90); lease.boundary(false,true);
+  if (!check(lease.written && !lease.reusable(true) && !lease.value)) return 2;
+  lease.presented(91); // A new semaphore cannot prove the expired epoch complete.
+  if (!check(!lease.reusable(true) && lease.invalidated)) return 2;
+  lease.write(); lease.presented(92);
+  if (!check(!lease.reusable(true) && lease.invalidated)) return 2;
+  lease.boundary(true,false);
+  if (!check(!lease.reusable(true))) return 2;
+  lease.boundary(true,true);
+  if (!check(lease.written && lease.reusable(false) && !lease.value)) return 2;
+  lease.boundary(false,false); // A normal resize after successful idle keeps its proof.
+  if (!check(lease.reusable(false) && !lease.invalidated)) return 2;
+  previous=lease; lease.write();
+  if (!check(!lease.consumed_by_idle && !lease.reusable(true))) return 2;
+  if (!check(cancel_recorded_copy(true,lease,previous) && lease.reusable(false))) return 2;
   RecordingInit init;
   if (!check(init.needed(1) && init.available(1))) return 1;
   init.record(1);

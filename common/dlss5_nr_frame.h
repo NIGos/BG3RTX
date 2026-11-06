@@ -4,6 +4,12 @@
 #include <cmath>
 #include <cstdint>
 namespace bg3::dlss5_frame {
+// CreateFeature records GPU initialization. A handle is usable by later
+// recordings only after that initialization was actually submitted.
+enum class Creation { Ready, AwaitSubmit, Discarded };
+constexpr Creation creation(bool submitted,bool recording_retained) {
+  return submitted?Creation::Ready:recording_retained?Creation::AwaitSubmit:Creation::Discarded;
+}
 enum class Boundary { Off, Bypass, RrFailed, PostFallback, InsidePass, Secondary, MissingGuides, Debug, Ready };
 inline Boundary boundary(bool enabled,bool bypass,bool rr_success,bool use_post,bool in_pass,bool primary,bool guides,bool debug) {
   if(!enabled)return Boundary::Off;if(bypass)return Boundary::Bypass;if(!rr_success)return Boundary::RrFailed;

@@ -72211,6 +72211,388 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[shaders\\] cache: prefetched ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "dlss5_nr",
+          "1"
+        ],
+        [
+          "dlss5_nr_bypass",
+          "0"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_preview_f32",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "experimental_options",
+          "1"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "fg_destroy_wait_exact",
+          "0"
+        ],
+        [
+          "fg_game_ngx",
+          "2"
+        ],
+        [
+          "fg_present_metering",
+          "0"
+        ],
+        [
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "rr",
+          "1"
+        ],
+        [
+          "rr_post",
+          "1"
+        ],
+        [
+          "rt_order_trace",
+          "0"
+        ],
+        [
+          "rt_scene_wait",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0.016,
+        "samples": 8,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "fg",
+          "3"
+        ],
+        [
+          "fg_destroy_wait_exact",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "fg_destroy_wait_exact",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "fg",
+          "3"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "fg_destroy_wait_exact",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "fg",
+          "2"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 7.888,
+        "samples": 7,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "fg_destroy_wait_exact",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[shaders\\] cache: prefetched ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [],
+      "first": true,
+      "estimate": {
+        "seconds": 0.018,
+        "samples": 23,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[shaders\\] cache: prefetched ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "dlss5_nr",
+          "1"
+        ],
+        [
+          "dlss5_nr_bypass",
+          "0"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_preview_f32",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "experimental_options",
+          "1"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "fg_destroy_wait_exact",
+          "0"
+        ],
+        [
+          "fg_game_ngx",
+          "2"
+        ],
+        [
+          "fg_present_metering",
+          "1"
+        ],
+        [
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "rr",
+          "1"
+        ],
+        [
+          "rr_post",
+          "1"
+        ],
+        [
+          "rt_order_trace",
+          "0"
+        ],
+        [
+          "rt_scene_wait",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0.016,
+        "samples": 8,
+        "source": "VALID same-save/key median"
+      }
     }
   ],
   "matches": {
@@ -74416,6 +74798,41 @@
       null
     ],
     "\\[replay\\] pack 62 written: .*pass reflections": [
+      0,
+      null
+    ],
+    "\\[dlss5\\] NR (?:disabled|failed|failure)": [
+      0,
+      null
+    ],
+    "\\[dlss5\\] NR created": [
+      0,
+      null
+    ],
+    "\\[pace\\] rendered frame time over \\d+ frames": [
+      491,
+      [
+        "opt-compact-rf-s8.1.102848.log",
+        "frozen VALID match"
+      ]
+    ],
+    "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3": [
+      0,
+      null
+    ],
+    "\\[sl\\] FG cadence frame \\d+: requested 2 host 2 fg_destroy_wait_exact=0": [
+      0,
+      null
+    ],
+    "\\[sl\\] FG cadence frame \\d+: requested 3 host 3 fg_destroy_wait_exact=1": [
+      0,
+      null
+    ],
+    "\\[sl\\] present metering device: requested 0 ": [
+      0,
+      null
+    ],
+    "\\[sl\\] present metering device: requested 1 ": [
       0,
       null
     ]

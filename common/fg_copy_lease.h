@@ -4,11 +4,18 @@
 // A written private FG input cannot be overwritten until its present has
 // published a nonzero SDK completion value and that value has completed.
 struct FgCopyLease {
-  bool written = false;
+  bool written = false, consumed_by_idle = false, invalidated = false;
   uint64_t value = 0;
-  bool reusable(bool completed) const { return !written || (value != 0 && completed); }
-  void write() { written = true; value = 0; }
-  void presented(uint64_t completion) { value = completion; }
+  bool reusable(bool completed) const { return !invalidated && (!written || consumed_by_idle || (value != 0 && completed)); }
+  void write() { written = true; value = 0; consumed_by_idle = false; }
+  void presented(uint64_t completion) { value = completion; consumed_by_idle = false; }
+  void boundary(bool completed, bool submitted) {
+    // The SDK semaphore is about to expire. Preserve written/layout state;
+    // successful device idle covers submitted writes only, never future work.
+    const bool proven=consumed_by_idle || (completed && submitted);
+    value=0; consumed_by_idle=written && proven;
+    invalidated=written && !completed && !proven;
+  }
 };
 
 // QueuePresentKHR increments the host counter before tagging the work that

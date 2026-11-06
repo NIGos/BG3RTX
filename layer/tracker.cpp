@@ -84,16 +84,19 @@ void life_note(VkCommandBuffer cmd, uint64_t h) { life_note(cmd_state(cmd), h); 
 void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds) {
   const uint64_t seq = ++g_submit_seq;
   const uint64_t frame = frame_index();
-  LARGE_INTEGER t0, t1;
-  QueryPerformanceCounter(&t0);
+  const bool sample_stats=logging::stats_enabled(cfg_int);
+  LARGE_INTEGER t0{},t1{};
+  if (sample_stats) QueryPerformanceCounter(&t0);
   struct Tick {
+    bool enabled;
     LARGE_INTEGER& t0;
     LARGE_INTEGER& t1;
     ~Tick() {
+      if (!enabled) return;
       QueryPerformanceCounter(&t1);
       g_life_submit_ticks += uint64_t(t1.QuadPart - t0.QuadPart);
     }
-  } tick{t0, t1};
+  } tick{sample_stats,t0,t1};
   std::lock_guard<std::mutex> lock(g_life_mu);
   static VkQueue seen[4] = {};
   bool any = false;
@@ -101,7 +104,7 @@ void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds) {
     CmdState* s = cmd_state(c);
     if (!s) continue;
     any |= !s->refs.empty();
-    g_life_noted += s->refs.size();
+    if (sample_stats) g_life_noted += s->refs.size();
     for (uint64_t h : s->refs) g_life[h] = LifeRef{frame, seq, queue};
   }
   if (any) {
@@ -212,29 +215,31 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
     for (auto it = g_life.begin(); it != g_life.end();)
       it = (resource_retirement::complete(it->second.seq, idle, it->second.frame, g_queue_done[it->second.queue], true)) ? g_life.erase(it) : std::next(it);
   }
-  static ULONGLONG last = 0, last_cost = 0;
-  static uint64_t last_waits = 0, last_unfenced = 0, cost_frame = 0;
-  ULONGLONG now = GetTickCount64();
-  if (!last_cost) last_cost = now, cost_frame = frame;
-  if (now - last_cost >= 60000 && frame > cost_frame) {
-    LARGE_INTEGER fq;
-    QueryPerformanceFrequency(&fq);
-    const double frames = double(frame - cost_frame);
-    log_stats("[life] bookkeeping: %.1f references noted and %.3f ms CPU at submit per frame (over %.0f frames); %zu objects "
-        "tracked, %zu present fences pending",
-        double(g_life_noted.exchange(0)) / frames, double(g_life_submit_ticks.exchange(0)) * 1000.0 / double(fq.QuadPart) / frames,
-        frames, g_life.size(), g_fences.size());
-    last_cost = now;
-    cost_frame = frame;
-  }
-  if ((g_life_waits != last_waits || g_life_unfenced != last_unfenced) && now - last > 10000) {
-    last = now;
-    last_waits = g_life_waits;
-    last_unfenced = g_life_unfenced;
-    log_stats("[life] so far: %llu destroys waited for in-flight work (%.3f ms total, max %.3f ms, %llu timeouts), %llu "
-        "found it already complete, %llu with no fence yet (submitted this frame); %zu objects tracked",
-        (unsigned long long)g_life_waits, g_life_wait_ms, g_life_wait_max, (unsigned long long)g_life_timeouts,
-        (unsigned long long)g_life_noop, (unsigned long long)g_life_unfenced, g_life.size());
+  if (logging::stats_enabled(cfg_int)) {
+    static ULONGLONG last = 0, last_cost = 0;
+    static uint64_t last_waits = 0, last_unfenced = 0, cost_frame = 0;
+    ULONGLONG now = GetTickCount64();
+    if (!last_cost) last_cost = now, cost_frame = frame;
+    if (now - last_cost >= 60000 && frame > cost_frame) {
+      LARGE_INTEGER fq;
+      QueryPerformanceFrequency(&fq);
+      const double frames = double(frame - cost_frame);
+      log_stats("[life] bookkeeping: %.1f references noted and %.3f ms CPU at submit per frame (over %.0f frames); %zu objects "
+          "tracked, %zu present fences pending",
+          double(g_life_noted.exchange(0)) / frames, double(g_life_submit_ticks.exchange(0)) * 1000.0 / double(fq.QuadPart) / frames,
+          frames, g_life.size(), g_fences.size());
+      last_cost = now;
+      cost_frame = frame;
+    }
+    if ((g_life_waits != last_waits || g_life_unfenced != last_unfenced) && now - last > 10000) {
+      last = now;
+      last_waits = g_life_waits;
+      last_unfenced = g_life_unfenced;
+      log_stats("[life] so far: %llu destroys waited for in-flight work (%.3f ms total, max %.3f ms, %llu timeouts), %llu "
+          "found it already complete, %llu with no fence yet (submitted this frame); %zu objects tracked",
+          (unsigned long long)g_life_waits, g_life_wait_ms, g_life_wait_max, (unsigned long long)g_life_timeouts,
+          (unsigned long long)g_life_noop, (unsigned long long)g_life_unfenced, g_life.size());
+    }
   }
   lock.unlock();
   if (lost) fault_on_result(dd, VK_ERROR_DEVICE_LOST, "the present fence poll/submission");
@@ -259,6 +264,7 @@ bool life_before_destroy(uint64_t h, const char* what, bool wait) {
   if (!h) return true;
   DeviceData* dd = main_device();
   if (!dd) return true;
+  const bool sample_stats=logging::stats_enabled(cfg_int);
   FrameFence* f = nullptr;
   LifeRef r{};
   {
@@ -285,7 +291,7 @@ bool life_before_destroy(uint64_t h, const char* what, bool wait) {
     if (!f) {
       // Submitted in this frame (no present since) or on a queue that never
       // presents: there is no fence of ours to wait on.
-      ++g_life_unfenced;
+      if (sample_stats) ++g_life_unfenced;
       if (g_life_logged++ < 64)
         log("[life] the game destroys %s %p last used by our work in frame %llu (now %llu, queue %p): no fence covers "
             "it yet, destruction deferred",
@@ -294,14 +300,17 @@ bool life_before_destroy(uint64_t h, const char* what, bool wait) {
     }
     ++f->waiters;
   }
-  LARGE_INTEGER t0, t1, fq;
-  QueryPerformanceCounter(&t0);
+  LARGE_INTEGER t0{},t1{},fq{};
+  if (sample_stats) QueryPerformanceCounter(&t0);
   VkResult st = dd->vk.WaitForFences(dd->device, 1, &f->fence, VK_TRUE, 0);   // a status poll
   VkResult res = st;
   if (wait && st == VK_TIMEOUT) res = dd->vk.WaitForFences(dd->device, 1, &f->fence, VK_TRUE, 2000000000ull);
-  QueryPerformanceCounter(&t1);
-  QueryPerformanceFrequency(&fq);
-  const double ms = double(t1.QuadPart - t0.QuadPart) * 1000.0 / double(fq.QuadPart);
+  double ms=0.0;
+  if (sample_stats) {
+    QueryPerformanceCounter(&t1);
+    QueryPerformanceFrequency(&fq);
+    ms=double(t1.QuadPart-t0.QuadPart)*1000.0/double(fq.QuadPart);
+  }
   std::unique_lock<std::mutex> lock(g_life_mu);
   const uint64_t fframe = f->frame;
   --f->waiters;
@@ -311,20 +320,22 @@ bool life_before_destroy(uint64_t h, const char* what, bool wait) {
     if (f->queue == g_present_queue) g_life_done = done;
   }
   if (st == VK_SUCCESS) {
-    ++g_life_noop;
+    if (sample_stats) ++g_life_noop;
     g_life.erase(h);
     return true;
   }
   if (!wait && res == VK_TIMEOUT) return false;
-  ++g_life_waits;
-  if (res == VK_TIMEOUT) ++g_life_timeouts;
-  g_life_wait_ms += ms;
-  g_life_wait_max = (std::max)(g_life_wait_max, ms);
+  if (sample_stats) {
+    ++g_life_waits;
+    if (res==VK_TIMEOUT) ++g_life_timeouts;
+    g_life_wait_ms+=ms;
+    g_life_wait_max=(std::max)(g_life_wait_max,ms);
+  }
   if (g_life_logged++ < 64)
     log("[life] the game destroys %s %p that our work of frame %llu may still use (now frame %llu): waited %.3f ms for "
-        "present %llu's fence (%s)",
+        "present %llu's fence (%s), timed %u",
         what, (void*)h, (unsigned long long)r.frame, (unsigned long long)frame_index(), ms, (unsigned long long)fframe,
-        res == VK_SUCCESS ? "complete" : res == VK_TIMEOUT ? "TIMEOUT, destruction deferred" : "error");
+        res == VK_SUCCESS ? "complete" : res == VK_TIMEOUT ? "TIMEOUT, destruction deferred" : "error",unsigned(sample_stats));
   lock.unlock();   // fault reporting reads life_gpu_done under g_life_mu
   fault_on_result(dd, res, "resource lifetime fence wait");
   if (res == VK_SUCCESS || res == VK_ERROR_DEVICE_LOST) {

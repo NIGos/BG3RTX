@@ -11,21 +11,21 @@ ROOT = Path(__file__).resolve().parents[1]
 class HotkeyPollTest(unittest.TestCase):
     def test_concurrent_presents_consume_one_nr_edge(self):
         text = (ROOT / 'layer/util.cpp').read_text(encoding='utf-8')
-        start = text.index('static void ab_poll_hotkey() {')
-        end = text.index('\nstatic void cfg_read_files();', start)
+        start = text.index('static bool ab_poll_hotkey() {')
+        end = text.index('\nstatic bool cfg_read_files();', start)
         source = FIXTURE + text[start:end] + r'''
 int main() {
   std::barrier start(3);
-  auto present = [&] { start.arrive_and_wait(); ab_poll_hotkey(); };
+  std::atomic<int> changed_polls{0};
+  auto present = [&] { start.arrive_and_wait(); if (ab_poll_hotkey()) ++changed_polls; };
   std::thread a(present), b(present);
   start.arrive_and_wait(); a.join(); b.join();
   // The same held key on two queues must produce exactly one bypass transition.
-  if (nr_toggles != 1 || g_nr_bypass != 1) return 1;
-  ab_poll_hotkey();
-  if (nr_toggles != 1) return 2;
-  held = false; ab_poll_hotkey();
-  held = true; ab_poll_hotkey();
-  return nr_toggles == 2 && g_nr_bypass == 0 ? 0 : 3;
+  if (nr_toggles != 1 || g_nr_bypass != 1 || changed_polls != 1) return 1;
+  if (ab_poll_hotkey() || nr_toggles != 1) return 2;
+  held = false; if (ab_poll_hotkey()) return 3;
+  held = true; if (!ab_poll_hotkey()) return 4;
+  return nr_toggles == 2 && g_nr_bypass == 0 ? 0 : 5;
 }
 '''
         compiler = shutil.which('cl.exe')

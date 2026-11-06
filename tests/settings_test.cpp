@@ -742,7 +742,10 @@ static void test_rendering_experiments() {
       auto values=preset_values(kHigh);values[knob_index(k.id)]=c;
       auto parsed=parse_ini(render_user_ini("# preserved\ncustom_key=7\n",kHigh,values));
       CHECK_EQ(get(parsed,"custom_key"),"7");CHECK(knob_value(k,parsed)==c);
-      CHECK(!unmet_need(k,c,preset_values(kLow)).empty());
+      if (std::string(k.id)=="fg_destroy_wait_exact" || std::string(k.id)=="fg_present_metering") {
+        auto no_fg=preset_values(kLow); no_fg[knob_index("frame_generation")]=0;
+        CHECK(!unmet_need(k,c,no_fg).empty()); // Low itself legitimately enables FG.
+      } else CHECK(!unmet_need(k,c,preset_values(kLow)).empty());
     }
   }
   // ls_k (TRACK_D_LOCAL_LIGHTS 9.11), developer only: needs Local light shadows Full.
@@ -1168,10 +1171,10 @@ static void test_consolidation_policy() {
   CHECK(!ab::flip(m, indicator)); // A stale Fresnel target must not bypass restart safety.
   m["experimental_options"] = "0"; CHECK(!ab::flip(m, indicator));
   CHECK(!ab::eligible(*find_knob("exp_omm"), 1, true));
-  // Release: Ctrl+Shift+F10 flips live Experimental choices only. Water surface reflections need a
-  // restart and strand hair is post-release, so the release has no eligible target (launcher and docs say so).
+  // Only the live FG pacing candidate can be selected as an opt-in A/B target.
   for (const char* id : kOptInKnobs)
-    for (int c = 1; c < choice_count(*find_knob(id)); ++c) CHECK(!ab::eligible(*find_knob(id), c, true));
+    for (int c = 1; c < choice_count(*find_knob(id)); ++c)
+      CHECK(ab::eligible(*find_knob(id), c, true) == (std::string(id)=="fg_destroy_wait_exact"));
   const auto& live = *find_knob("exp_hair_groom");
   selection.touch(live, 1, true); CHECK(!selection.pending);
   CHECK(!opt_in_knob(live) && !knob_visible(live, false, true));
@@ -1328,6 +1331,38 @@ static void test_stats_window() {
   CHECK_EQ(code_default("rt_stats_reset"), "0");
 }
 
+static void test_release_fg_diagnostics() {
+  const char* const captures[] = {"fg_snap", "fg_snap_any", "fg_snap_full", "pan_capture", "pan_prepare", "pan_inputs", "pan_edge",
+    "replay_pack", "fg_log_presents", "fg_log_camera", "sl_log_barriers", "log_presents", "log_procs",
+    "sl_verbose", "sl_dev", "fg_only_interpolated"};
+  const char* const statistics[] = {"rt_stats", "ls_stats", "rf_stats", "cpu_timing", "rt_stats_period_frames", "rt_stats_reset"};
+  for (int detailed=0; detailed<=1; ++detailed) {
+    Map stale=code_defaults(); stale["dev"]="0"; stale["detailed_logging"]=std::to_string(detailed);
+    stale["fg"]="3"; stale["fps_cap"]="58"; stale["reflex"]="2"; stale["fg_input_copy"]="1";
+    stale["geo_capture"]="1"; stale["rt_primary_check"]="1"; stale["rt_primary_epoch"]="1";
+    stale["rt_primary_identity"]="1"; stale["rt_primary_fade_class"]="1"; stale["rr_post_check"]="1";
+    for (const char* key:captures) stale[key]="120";
+    for (const char* key:statistics) stale[key]="120";
+    Map release=stale; enforce_release_policy(release);
+    for (const char* key:captures) CHECK_EQ(get(release,key),"0");
+    for (const char* key:statistics) CHECK_EQ(get(release,key), detailed ? "120" : "0");
+    CHECK_EQ(get(release,"fg"),"3"); CHECK_EQ(get(release,"fps_cap"),"58");
+    CHECK_EQ(get(release,"reflex"),"2"); CHECK_EQ(get(release,"fg_input_copy"),"1");
+    CHECK_EQ(get(release,"geo_capture"),"1");
+    for (const char* key:{"rt_primary_check","rt_primary_epoch","rt_primary_identity","rt_primary_fade_class","rr_post_check"})
+      CHECK_EQ(get(release,key),"0");
+    if (detailed) {
+      // Saving Detailed logging On for the next start cannot enable statistics
+      // in a running process whose startup-latched value remains Off.
+      release["detailed_logging"]="0"; enforce_release_policy(release);
+      for (const char* key:statistics) CHECK_EQ(get(release,key),"0");
+    }
+    Map developer=stale; developer["dev"]="1"; enforce_release_policy(developer);
+    for (const char* key:captures) CHECK_EQ(get(developer,key),"120");
+    for (const char* key:statistics) CHECK_EQ(get(developer,key),"120");
+  }
+}
+
 static void test_detailed_logging() {
   const auto* k = find_knob("detailed_logging");
   CHECK(k && !k->dev_only && k->apply == Apply::Restart);
@@ -1378,8 +1413,30 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  {
+    const auto* pacing=find_knob("fg_destroy_wait_exact");
+    CHECK(pacing && pacing->experimental && pacing->apply==Apply::Live);
+    CHECK(pacing && std::string(pacing->category)=="Advanced" && opt_in_knob(*pacing));
+    CHECK_EQ(code_default("fg_destroy_wait_exact"),"0");
+    for (int p=0;p<kPresetCount;++p) CHECK(preset_values(p)[knob_index("fg_destroy_wait_exact")]==0);
+    Map fgtest=code_defaults();
+    apply_layer(fgtest,parse_ini("preset=ultra\nexperimental_options=1\nfg_destroy_wait_exact=1\n"));
+    CHECK_EQ(get(fgtest,"fg_destroy_wait_exact"),"1");
+    apply_layer(fgtest,parse_ini("experimental_options=0\n"));
+    CHECK_EQ(get(fgtest,"fg_destroy_wait_exact"),"0");
+  }
+  {
+    const auto* metering=find_knob("fg_present_metering");
+    CHECK(metering && metering->experimental && metering->apply==Apply::Restart);
+    CHECK(metering && opt_in_knob(*metering) && std::string(metering->category)=="Advanced");
+    CHECK_EQ(code_default("fg_present_metering"),"0");
+    for (int p=0;p<kPresetCount;++p) CHECK(preset_values(p)[knob_index("fg_present_metering")]==0);
+    CHECK(key_change_needs_restart("fg_present_metering","0","1"));
+    CHECK(key_change_needs_restart("fg_present_metering","1","0"));
+  }
   test_dlss5_native_setting();
   test_detailed_logging();
+  test_release_fg_diagnostics();
   test_consolidation_policy();
   test_stats_window();
   test_release_migration();

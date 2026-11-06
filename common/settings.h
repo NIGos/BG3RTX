@@ -269,6 +269,20 @@ inline constexpr Knob kKnobs[] = {
      {"rt_water_surface_fresnel"}, false, true, true, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Needs Water lighting. Turning it on needs a game restart; turning it off applies after saving. Compare the reflections on shallow pools."},
 
+  {"fg_destroy_wait_exact", "Frame generation pacing test",
+   "Experimental: may reduce frame generation stutter when the game replaces temporary images. Cost and smoothness are unqualified.",
+   Kind::Choice, Apply::Live, "Applies after saving.", false,
+   {{"off", "Standard", 0, {{"fg_destroy_wait_exact", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "Deferred", kCapFg, {{"fg_destroy_wait_exact", "1"}}, {{"frame_generation", 1}}, {}, false, true, true, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Compare smoothness while turning in the same scene. Experimental; disabled in every preset."},
+
+  {"fg_present_metering", "Multi-frame presentation test",
+   "Experimental: enables an optional driver presentation capability for frame generation. Smoothness and cost are unqualified.",
+   Kind::Choice, Apply::Restart, "Restart to apply.", false,
+   {{"off", "Standard", 0, {{"fg_present_metering", "0"}}, {}, {}, false, false, false, Apply::Restart},
+    {"on", "Driver metering", kCapMfg, {{"fg_present_metering", "1"}}, {{"frame_generation", 1}}, {}, false, true, true, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Requires Frame generation and a game restart. Compare 3x smoothness in the same scene. Disabled in every preset."},
+
   // om3 qualified the fine-LOD policy; om4 qualified the dynamic micromap bake (2026-11-03).
   // Keep the legacy ids for saved GUI selections. Hardware and local masks remain prerequisites.
   {"exp_omm", "Opacity micromaps",
@@ -626,6 +640,16 @@ inline constexpr KV kDefaults[] = {
     {"pan_edge", "0"},
     {"pan_post", "0"},
     {"fg_snap_full", "0"},
+    {"fg_snap", "0"},
+    {"fg_snap_any", "0"},
+    {"fg_log_presents", "6"},
+    {"fg_log_camera", "0"},
+    {"sl_log_barriers", "0"},
+    {"sl_verbose", "0"},
+    {"sl_dev", "0"},
+    {"log_presents", "0"},
+    {"log_procs", "0"},
+    {"fg_only_interpolated", "0"},
     {"pan_water_frames", "8"},
     {"pan_delay_ms", "0"},
     {"pan_prepare", "0"},
@@ -818,6 +842,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_primary_fade_class", "0"},
     {"crash_dump", "0"},
     {"fg_current_destroy_only", "1"},
+    {"fg_destroy_wait_exact", "0"},
+    {"fg_present_metering", "0"},
     {"fg_tag_hudless", "1"},
     {"fg_tag_ui", "1"},
     {"fg_letterbox", "1"},
@@ -871,6 +897,20 @@ inline constexpr KV kReleaseDefaults[] = {
     {"ls_check", "0"},
     {"rt_em_log", "0"},
     {"rt_hit_reference", "0"},
+    {"fg_snap", "0"},
+    {"fg_snap_any", "0"},
+    {"fg_snap_full", "0"},
+    {"fg_log_presents", "0"},
+    {"fg_log_camera", "0"},
+    {"sl_log_barriers", "0"},
+    {"sl_verbose", "0"},
+    {"sl_dev", "0"},
+    {"log_presents", "0"},
+    {"log_procs", "0"},
+    {"fg_only_interpolated", "0"},
+    {"pan_edge", "0"},
+    {"rt_stats_period_frames", "0"},
+    {"rt_stats_reset", "0"},
 };
 // END GENERATED DEFAULTS
 // clang-format on
@@ -896,6 +936,8 @@ inline Map code_defaults() {
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (from == to) return false;
   if (key == "dlss5_nr" || key == "dlss5_nr_runtime") return true;
+  // Vulkan extension/feature enablement is immutable for the device lifetime.
+  if (key == "fg_present_metering") return true;
   // core/gi.cpp initialize_hair_origin persists the startup reservation across core reloads.
   if (key == "rt_hair_physical_origin") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   if (key == "rt_hair_groom_primary") return true; // Safety gate until hot activation is verified.
@@ -989,7 +1031,7 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 // Release 2026-11: Water surface reflections only. Strand hair (exp_hair_*) is a post-release
 // update and returns to this list with it; until then release resets its keys.
 inline constexpr const char* kOptInKnobs[] = {
-  "water_surface_fresnel"};
+  "water_surface_fresnel", "fg_destroy_wait_exact", "fg_present_metering"};
 inline bool opt_in_knob(const Knob& k) {
   for (const char* id : kOptInKnobs) if (std::string(id) == k.id) return true;
   return false;
@@ -1211,6 +1253,17 @@ inline void enforce_release_policy(Map& m) {
   const bool opt_in = map_int(m, "experimental_options", 0) == 1;
   const bool omm_enabled = map_int(m, "rt_omm", 1) != 0;
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
+  // Player files can override the packaged defaults. Keep diagnostic pins
+  // effective after layering too. geo_capture is an RT input, not a capture
+  // dump; Detailed logging permits support statistics, not reference passes.
+  const bool detailed=map_int(m,"detailed_logging",0)!=0;
+  for (const KV& pin:kReleaseDefaults) {
+    const std::string key=pin.key;
+    if (key=="dev" || key=="detailed_logging" || key=="geo_capture" || std::string(pin.value)!="0") continue;
+    const bool support_stats=key=="rt_stats" || key=="ls_stats" || key=="rf_stats" || key=="sharc_stats" ||
+      key=="cpu_timing" || key=="geo_timing" || key=="rt_stats_period_frames" || key=="rt_stats_reset";
+    if (!detailed || !support_stats) m[key]="0";
+  }
   m["rr_post"] = "1";
   m["rt_scene_compact_holds"] = "1";
   m["rt_compact_hit_state"] = "1";

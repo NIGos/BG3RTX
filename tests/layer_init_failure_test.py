@@ -57,6 +57,63 @@ int main() {
             result = subprocess.run([str(path / 'test.exe')], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_streamline_worker_timing_snapshots_are_coherent(self):
+        compiler = shutil.which('cl.exe')
+        self.assertIsNotNone(compiler, 'run scripts/build.ps1 -Test')
+        source = '#include <mutex>\n#include <thread>\n#include <atomic>\n#include "fg_present_stats.h"\n'
+        source += function('layer/streamline.cpp', 'struct FgSharedCpuTiming {') + ';\n'
+        source += r"""
+int main() {
+  FgSharedCpuTiming timing;
+  std::atomic<int> done{0};
+  uint64_t calls=0,sum=0,maximum=0; bool invalid=false;
+  std::thread reader([&] {
+    while(done.load()!=2) {
+      const auto s=timing.take();
+      invalid |= !s.calls ? s.total_us || s.max_us :
+          s.total_us<s.calls || s.total_us>3*s.calls || s.max_us<1 || s.max_us>3;
+      calls+=s.calls; sum+=s.total_us; if(s.max_us>maximum) maximum=s.max_us;
+    }
+  });
+  std::thread first([&] {for(int i=0;i<10000;++i)timing.add(1); ++done;});
+  std::thread second([&] {for(int i=0;i<10000;++i)timing.add(3); ++done;});
+  first.join(); second.join(); reader.join();
+  const auto last=timing.take(); calls+=last.calls; sum+=last.total_us;
+  if(last.max_us>maximum)maximum=last.max_us;
+  return invalid || calls!=20000 || sum!=40000 || maximum!=3;
+}
+"""
+        with tempfile.TemporaryDirectory(prefix='sl-worker-timing-') as temp:
+            path = Path(temp)
+            (path / 'test.cpp').write_text(source, encoding='utf-8')
+            result = subprocess.run([compiler, '/nologo', '/EHsc', '/std:c++20', '/MT',
+                                     '/I'+str(ROOT / 'common'), 'test.cpp', '/Fe:test.exe'],
+                                    cwd=path, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(path / 'test.exe')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_streamline_missing_required_exports_fail_closed(self):
+        compiler = shutil.which('cl.exe')
+        self.assertIsNotNone(compiler, 'run scripts/build.ps1 -Test')
+        fields = ['Init', 'IsFeatureSupported', 'IsFeatureLoaded', 'GetFeatureRequirements',
+                  'GetFeatureFunction', 'GetNewFrameToken', 'SetTagForFrame', 'SetConstants',
+                  'SetVulkanInfo', 'gdpa']
+        source = 'struct SlFns { ' + ''.join('void* '+name+'=(void*)1;' for name in fields) + '};\n'
+        source += function('layer/streamline.cpp', 'const char* missing_sl_export(')
+        source += '\nint main(){ SlFns f; if(missing_sl_export(f))return 1;\n'
+        for name in fields:
+            source += '{f.'+name+'=nullptr; if(!missing_sl_export(f))return 2; f.'+name+'=(void*)1;}\n'
+        source += 'return 0;}'
+        with tempfile.TemporaryDirectory(prefix='sl-exports-') as temp:
+            path = Path(temp)
+            (path / 'test.cpp').write_text(source, encoding='utf-8')
+            result = subprocess.run([compiler, '/nologo', '/EHsc', '/std:c++20', '/MT',
+                                     'test.cpp', '/Fe:test.exe'], cwd=path, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(path / 'test.exe')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_streamline_teardown_clears_deferred_init(self):
         compiler = shutil.which('cl.exe')
         self.assertIsNotNone(compiler, 'run through scripts/build.ps1 -Test (MSVC environment)')
@@ -92,7 +149,7 @@ int main() {
         sdk = os.environ['VULKAN_SDK']
         sl = (ROOT / 'layer/streamline.cpp').read_text(encoding='utf-8')
         start = sl.index('    sl::Result r = g_sl.DLSSGSetOptions(0, o);')
-        end = sl.index('\n  }\n\n  if (g_token', start)
+        end = sl.index('\n  }\n\n  {\n    std::lock_guard<std::mutex> lock(g_fence_mu);', start)
         fg_apply = 'void apply(int want, uint32_t flags, uint64_t frame) { Options o{};\n' + sl[start:end] + '\n}'
         source = (FIXTURE + '\n' + function('layer/rrpost.cpp', 'bool ensure_layout(DeviceData* dd)') + '\n'
                   + function('layer/hotreload.cpp', 'bool alloc_image(') + '\n'
@@ -166,6 +223,8 @@ void* proc(const char* name) {
 '''
 
 SL_TEARDOWN_FIXTURE = r'''
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -186,12 +245,16 @@ struct DeviceData { int device = 1; Dispatch vk; };
 DeviceData* g_dd;
 bool g_active, g_sl_init, g_have_of_queue;
 int g_sl_instance, g_depth_only_view, g_mv_copy_queries;
+uint32_t g_max_generated=0;
 struct { int queues; } g_req;
 struct Image { int image, view; } g_preserved_mvec, g_preserved_depth;
 struct Copy { Image image, depth; int memory, depth_memory; };
 std::vector<Copy> g_mv_copies(1);
 std::vector<int> g_mv_copy_ms;
 std::unique_ptr<int> g_pending;
+std::mutex g_fence_mu;
+std::map<int,int> g_tag_uses,g_tag_prior,g_tag_views;
+int g_inputs_fence=0; uint64_t g_inputs_value=0,g_returned_present_frame=0;
 std::mutex g_pending_mu;
 const char* res_str(sl::Result) { return "ok"; }
 template<class... T> void log(const char*, T...) {}

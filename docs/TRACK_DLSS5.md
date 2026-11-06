@@ -298,3 +298,89 @@ and `.scratch/dlss5-res-recreate-converted48.log`. NR median 7.118 ms in the
 `bg3rtx.prev.log` could not be independently read (access denied).
 Full `scripts/build.ps1 -Test`: 189/189 pass (CTest 266.03 s, build 21 s),
 including the expanded CPU recreate-decision test. Shader manifest delta 0.
+
+## 8. FG x3 session correlation (2026-11-06, offline only)
+
+[Session evidence](evidence/fgx3-analysis.md) finds no consistent NR-skip precursor
+to SDK interpolation pauses. Most pauses explicitly report focus loss. The three
+persistent NR slot allocations do not explain repeated tagged-image destruction:
+FG tags the later RR/post colour and UI, not the provider private images. Destroy
+wait success codes are not timings; the FG cadence summary now measures CPU wait
+cost without weakening input lifetime protection. No NR behaviour change or
+in-game performance claim follows from this log-only investigation.
+
+## 9. Release NR audit (2026-11-06, dlss5-audit, offline only)
+
+Audited da6ffdf8 and the fixes below. No game, queue writes, runtime staging or
+push. Evidence is the main checkout's `.scratch/coord/fgx3/bg3rtx.log` and
+`bg3rtx.dlss5-runtime.log`, plus `captures/queue/logs/` files
+`fx1-s8-fgx3-metering0.1.163530.log` and `fx2-s8-fgx3-metering1.1.163841.log`.
+The user runtime is signed NVIDIA 310.8.0, SHA e16bcf15...6e1fc8e; staging
+copies it once, then reports unchanged hashes. That launcher work is not per frame.
+
+| Checklist | Verdict and evidence |
+|---|---|
+| 1. CPU waits | OK / COST: `layer/dlss5.cpp:151` polls lifetime with `wait=false`; no blocking fence/queue wait in evaluate, reserve or retirement. `:280`, `:352`, `:359` serialize recording, submit notification and present with one mutex. NGX Evaluate is synchronous CPU work (`:343`); the earlier fixture median/p90 was 0.328/0.343 ms, not a measurement of these game sessions. Cold shader/feature creation can block (`:108`, `:269`); cached shader_get can contend on its mutex, but does not read/compile every frame (`layer/shaders.cpp:445`). Only device teardown drains (`:371`). Fixed unnecessary NR mutex acquisition on empty submits and before any NR recording exists. |
+| 2. Release IO/timing | BUG fixed / OK: a retained query pool previously kept recording six timestamps after developer statistics were switched off. `layer/dlss5.cpp:152`, `:333` now gate both collection and recording. No WAIT query flag; only completed slots are read. With dev/stats/detailed logging off, zero NR query commands/readbacks. Startup/refusal/resume/failure logs remain. Fixed the watchdog overwriting a specific refusal after 120 presents (`:363`), which caused reason ping-pong and extra flushed log IO. |
+| 3. Release policy | OK: no NR-specific key is forcibly zeroed. NR is user-facing and Off in all presets; `dlss5_nr_bypass=0` is deliberately still usable by Ctrl+Shift+F8 and raw INI (`layer/util.cpp:268`, `:421`). `common/settings.h:1222` forces rr_post=1 and hides unrelated developer knobs. `detailed_logging=0` alone does not disable statistics if dev, rt_stats, ls_stats or rt_stats_period_frames is enabled (`common/log_stats.h:4`). The lean build switch does not remove support logging/timing; the runtime statistics gate does. |
+| 4. History | OK: `layer/dlss5.cpp:308` resets on upstream RR reset, skip/bypass, absent/unsubmitted history, guide signature change or a gap of more than one present. Shader/feature replacement also resets. An actual skipped real frame breaks one-frame MV reprojection; keeping that older history is unsafe even for one skipped frame. RR also resets when switching graded/pre-post modes (`layer/ngx.cpp:1323`, `:1483`). No evidence supports suppressing these resets. |
+| 5. Lifetime | BUG fixed / COST: CreateFeature initialization was retained even when its command recording was discarded without successful submission. `layer/dlss5.cpp:224`, `:254`, `:354` now defer later uses until initial submission and recreate after discarded initialization, with resources retained through ReleaseFeature. CPU tests execute the production retirement function. Slots are lazily allocated and reused (`:163`); bypass/reset does not release/reallocate them. Five images total 36 bytes/pixel: 210.9375 MiB/slot, 632.8125 MiB for the three observed slots, maximum 1687.5 MiB (1.648 GiB) for eight, before allocation padding and NGX memory. Bound resources release only after recording disposal and completion; device teardown releases all. |
+| 6. FG ordering | OK / COST: `layer/ngx.cpp:1507` evaluates NR before temporal/post final (`:1528`). Decode writes the same RR pre-post image; the normal later HUD composite is tagged by Streamline (`layer/streamline.cpp:2339`, `:2477`). No NR CmdCopy, cross-API transport, extra submit or FG-specific wait. Three compute dispatches, 400 uniform bytes and 27 descriptor writes per recording remain (`layer/dlss5.cpp:201`, `:321`). These are implementation costs, not a frame cap. |
+
+### Skip/reset evidence and limits
+
+The user log contains 18 NR chain-unavailable transitions. Their nearest rrpost
+refusal is unknown compute effect `4681b95ef9f2e54d` in 14 cases, bloom composite
+out of order in three, and chain start failure in one. Reason logs are deduplicated,
+so these are transitions, not a skipped-frame count. There are three watchdog
+messages and 17 active/resume messages, all reset=1. The active log prints only
+on state change: it does **not** show that every steady-state evaluate resets.
+There is one feature create, three slot creates near 15:03:45 and zero recreates.
+No evidence of RR resolution changes or an rr_post setting toggle in this session.
+The logs do not identify the unknown effect as a menu or camera cut. Modelling it
+belongs to rrpost, outside this audit's file ownership; it remains an open quality
+coverage item. Reset suppression would hide the discontinuity, not repair it.
+
+The source path contains one NGX NR evaluate per accepted real RR evaluation;
+the trampoline's Nest prevents recursive interception (`layer/ngx.cpp:1759`).
+Same-command-recording duplicates are rejected (`layer/dlss5.cpp:163`). Generated
+FG frames do not execute the game's SR/RR hook or advance the layer present counter.
+There is no global per-present deduplication across distinct real RR recordings;
+these logs cannot prove such a caller never exists. Do not add an arbitrary
+present-number guard: it can suppress the final colour's processing after another
+RR evaluation overwrites it. No doubled NR work is established by this evidence.
+
+### Evaluate contract and measured cost
+
+NR is post-upscale enhancement: input/output 3840 x 1600, scaling ratio 1,
+not a second upscaler at 2560 x 1067. Source flags 0x2b mean HDR, low-resolution
+MV, inverted depth and auto-exposure, without MVJittered. Source MV scales are
+-1/-1; normalized guide scales are -1/2560 and -1/1067, matching the log.
+Converted RG32F MV and R32F depth are output-sized; NGX MVecScale is 3840/1600.
+Jitter removal applies only to jittered source motion, using current/previous
+jitter in render-pixel UV units (`common/dlss5_nr_frame.h:67`). Colour is pre-exposed
+linear RGBA16F, exposure 1; codec scale/strength 1, alpha retained. No extra
+exposure or jitter parameter is applied on top of the converted guides.
+
+Across all 49 timing windows in each provided live (including transitions),
+fx1 has 2898 samples: weighted total/evaluate/encode+guides/decode
+6.438/6.241/0.123/0.071 ms. Fx2 has 2885 samples:
+6.524/6.325/0.126/0.070 ms. Window medians are 6.440 and 6.475 ms total;
+ranges 6.122-6.849 and 6.158-7.117 ms. The cited 6.6-6.85 ms cost windows
+are consistent with these broader populations; they do not identify a CPU FPS limiter.
+There are 16 conservative image barriers per successful NR recording; eight
+precede its first timestamp, so the NR timing is not exhaustive boundary overhead.
+No numerical FPS gain from these offline fixes is claimed. In-game vendor CPU
+latency, total NGX VRAM and boundary barrier cost remain unmeasured.
+Fixture waits/readback (`tools/dlss5_fixture.cpp:618`, `:757`) are intentionally
+diagnostic and are not linked into the layer. The known NGX internal validation
+VUID and process-lifetime Shutdown workaround in section 5 remain open.
+
+Validation: full build/Test and lean Release build results recorded in
+`docs/progress/dlss5-audit.md`. Full suite 205/206 passes: only inherited
+batch_jobs_lint fails because its frozen snapshot omits fx1/fx2 regexes.
+The affected snapshot, jobs and test are unchanged from da6ffdf8. Initial
+installer failures were an MSVC shell PSModulePath problem; both pass with
+Windows PowerShell's module directories set explicitly. Shader request delta 0; no shader, ABI, defaults,
+Streamline or FG common-header changes. Candidate is offline verified only;
+visual history, energy and FPS changes require separately authorized evidence.

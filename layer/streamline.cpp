@@ -26,10 +26,13 @@
 #include "host.h"
 #include "../common/fg_stability.h"
 #include "../common/fg_copy_lease.h"
+#include "../common/fg_present_stats.h"
+#include "../common/fg_input_retirement.h"
 #include "recording_init.h"
 #include "../common/fg_extent.h"
 #include "../common/async_capture_queue.h"
 #include "../common/sl_init_trigger.h"
+#include "../common/sl_present_metering.h"
 
 #include <psapi.h>
 #include <dbghelp.h>
@@ -75,6 +78,24 @@ struct SlFns {
   PFN_vkGetInstanceProcAddr gipa = nullptr;
 };
 
+// Required by initialization or the per-frame tagging protocol. Report the
+// exact absent entry point before enabling a partially loaded integration.
+const char* missing_sl_export(const SlFns& f) {
+#define REQUIRED_SL(n) if (!f.n) return "sl" #n
+  REQUIRED_SL(Init);
+  REQUIRED_SL(IsFeatureSupported);
+  REQUIRED_SL(IsFeatureLoaded);
+  REQUIRED_SL(GetFeatureRequirements);
+  REQUIRED_SL(GetFeatureFunction);
+  REQUIRED_SL(GetNewFrameToken);
+  REQUIRED_SL(SetTagForFrame);
+  REQUIRED_SL(SetConstants);
+  REQUIRED_SL(SetVulkanInfo);
+#undef REQUIRED_SL
+  if (!f.gdpa) return "vkGetDeviceProcAddr";
+  return nullptr;
+}
+
 struct Proxies {
   PFN_vkCreateSwapchainKHR CreateSwapchainKHR = nullptr;
   PFN_vkDestroySwapchainKHR DestroySwapchainKHR = nullptr;
@@ -103,8 +124,49 @@ struct Reqs {
   uint32_t gfx_queues = 0, compute_queues = 0, of_queues = 0;
 } g_req;
 
+std::atomic<uint64_t> g_sdk_pauses{0}, g_sdk_focus_pauses{0};
+std::atomic<uint64_t> g_destroy_wait_calls{0}, g_destroy_wait_us{0}, g_destroy_wait_max_us{0};
+std::atomic<uint64_t> g_destroy_blocking{0},g_destroy_polls{0},g_destroy_exact{0},g_destroy_global{0},g_destroy_pending{0};
+std::atomic<uint64_t> g_feedback_notices{0},g_feedback_good{0};
+std::atomic<int> g_feedback_last{-1};
+
+// These accumulators are written only by the presenting thread.
+FgCpuTiming g_present_cpu,g_state_cpu,g_reflex_cpu;
+// Detailed-only completed-call samples. A single snapshot owns count, sum and
+// maximum together; worker completion cannot split them across windows.
+struct FgSharedCpuTiming {
+  std::mutex mutex;
+  FgCpuTiming sample;
+  void add(uint64_t us) {
+    std::lock_guard<std::mutex> lock(mutex); sample.add(us);
+  }
+  FgCpuTiming take() {
+    std::lock_guard<std::mutex> lock(mutex);
+    const auto result=sample; sample={}; return result;
+  }
+};
+FgSharedCpuTiming g_raw_present_host,g_raw_present_worker;
+std::atomic<DWORD> g_host_present_thread{0}; // detailed-only attribution, never synchronization
+uint64_t fg_cpu_stamp() {
+  LARGE_INTEGER value{}; QueryPerformanceCounter(&value); return uint64_t(value.QuadPart);
+}
+uint64_t fg_cpu_us(uint64_t started) {
+  static const uint64_t frequency=[] { LARGE_INTEGER f{}; QueryPerformanceFrequency(&f); return uint64_t(f.QuadPart); }();
+  return (fg_cpu_stamp()-started)*1000000/frequency;
+}
+
 void sl_logcb(sl::LogType type, const char* msg) {
-  if (type != sl::LogType::eError && type != sl::LogType::eWarn &&
+  const bool transition=strstr(msg,"DLSS-G interpolation state changed") ||
+                        strstr(msg,"DLSS-G disabled: window not focused");
+  if (logging::stats_enabled(cfg_int)) {
+    if (strstr(msg,"interpolation state changed from enabled to disabled")) ++g_sdk_pauses;
+    if (strstr(msg,"DLSS-G disabled: window not focused")) ++g_sdk_focus_pauses;
+    if (const char* feedback=strstr(msg,"FC feedback:")) {
+      ++g_feedback_notices; g_feedback_last=atoi(feedback+12);
+    }
+    if (strstr(msg,"Achieved 'good' FC feedback state")) ++g_feedback_good;
+  }
+  if (!transition && type != sl::LogType::eError && type != sl::LogType::eWarn &&
       !logging::sdk_info_enabled(cfg_int)) return;
   size_t n = strlen(msg);
   while (n && (msg[n - 1] == '\n' || msg[n - 1] == '\r')) --n;
@@ -178,6 +240,7 @@ struct InSl {
 };
 
 std::atomic<uint64_t> g_displayed{0};
+std::atomic<uint32_t> g_largest_batch{0};
 std::atomic<uint64_t> g_batched{0};   // presents carrying VkSetPresentConfigNV with more than one frame per batch
 std::mutex g_queue_mu;
 std::unordered_map<VkQueue, uint32_t> g_queue_family;   // queues Streamline took
@@ -187,17 +250,32 @@ void snap_finish(DeviceData* dd);
 bool snap_last();   // the capture's last present is in flight
 bool g_fg_running_flag();
 
+VkResult raw_present(DeviceData* dd,VkQueue queue,const VkPresentInfoKHR* info,bool sample_stats) {
+  if (!sample_stats) return dd->vk.QueuePresentKHR(queue,info);
+  const bool host=GetCurrentThreadId()==g_host_present_thread.load(std::memory_order_relaxed);
+  const uint64_t started=fg_cpu_stamp();
+  const VkResult result=dd->vk.QueuePresentKHR(queue,info);
+  (host ? g_raw_present_host : g_raw_present_worker).add(fg_cpu_us(started));
+  return result;
+}
+
 // Every present Streamline makes (real and generated frames) passes here.
 VKAPI_ATTR VkResult VKAPI_CALL w_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
   diag(DIAG_DISPLAYED);
-  g_displayed.fetch_add(1, std::memory_order_relaxed);
-  for (auto p = static_cast<const VkBaseInStructure*>(info->pNext); p; p = p->pNext)
-    if (p->sType == VK_STRUCTURE_TYPE_SET_PRESENT_CONFIG_NV &&
-        reinterpret_cast<const VkSetPresentConfigNV*>(p)->numFramesPerBatch > 1)
-      g_batched.fetch_add(1, std::memory_order_relaxed);
+  const bool sample_stats=logging::stats_enabled(cfg_int);
+  if (sample_stats) {
+    g_displayed.fetch_add(1, std::memory_order_relaxed);
+    for (auto p = static_cast<const VkBaseInStructure*>(info->pNext); p; p = p->pNext)
+    if (p->sType == VK_STRUCTURE_TYPE_SET_PRESENT_CONFIG_NV) {
+      const uint32_t size=reinterpret_cast<const VkSetPresentConfigNV*>(p)->numFramesPerBatch;
+      if (size>1) g_batched.fetch_add(1, std::memory_order_relaxed);
+      uint32_t previous=g_largest_batch.load();
+      while (previous<size && !g_largest_batch.compare_exchange_weak(previous,size)) {}
+    }
+  }
   DeviceData* dd = device_of(queue);
   static std::atomic<int> logged{0};
-  if (g_fg_running_flag() && logged < cfg_int("fg_log_presents", 6)) {
+  if (sample_stats && g_fg_running_flag() && logged < cfg_int("fg_log_presents", 0)) {
     ++logged;
     std::string chain;
     for (auto p = static_cast<const VkBaseInStructure*>(info->pNext); p; p = p->pNext) {
@@ -213,14 +291,14 @@ VKAPI_ATTR VkResult VKAPI_CALL w_QueuePresentKHR(VkQueue queue, const VkPresentI
   VkPresentInfoKHR copy;
   VkSemaphore wait = VK_NULL_HANDLE;
   if (snap_present(dd, queue, info, copy, wait)) {
-    VkResult r = dd->vk.QueuePresentKHR(queue, &copy);
+    VkResult r = raw_present(dd,queue,&copy,sample_stats);
     // The readback is finished at the NEXT present (snap_present), when the GPU is usually done with it: waiting
     // here stalled every captured present (wf5-s8-fg2 160335: one present per ~180 ms, 16-19 of 32 captured).
     // The last one of a capture is finished here.
     if (snap_last()) snap_finish(dd);
     return r;
   }
-  return dd->vk.QueuePresentKHR(queue, info);
+  return raw_present(dd,queue,info,sample_stats);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL w_AllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* ai,
@@ -694,6 +772,12 @@ bool g_fg_running_flag() { return g_fg_running.load(); }
 std::mutex g_fence_mu;
 VkSemaphore g_inputs_fence = VK_NULL_HANDLE;
 uint64_t g_inputs_value = 0;
+uint64_t g_returned_present_frame = 0; // g_fence_mu; excludes future tag reservations
+// Last actual tagged use, including while the candidate is off. Views resolve
+// through their image so every view shares the image's most recent FG use.
+std::unordered_map<VkImage,FgInputUse> g_tag_uses; // g_fence_mu
+std::unordered_map<VkImage,FgInputUse> g_tag_prior; // pending snapshot until mode is known
+std::unordered_map<VkImageView,VkImage> g_tag_views; // g_fence_mu
 PFN_vkWaitSemaphores g_wait_semaphores = nullptr;
 int g_watch_next = 0;
 
@@ -720,6 +804,21 @@ VkQueryPool g_mv_copy_queries = VK_NULL_HANDLE;
 float g_mv_copy_period = 1;
 std::vector<double> g_mv_copy_ms;
 
+// A successful proxy idle flushes SDK work too. Future tags/writes have no
+// completion proof: only uses covered by a returned present can inherit it.
+void fg_inputs_idle() {
+  std::lock_guard<std::mutex> lock(g_fence_mu);
+  for (auto& use:g_tag_uses)
+    if (use.second.frame<=g_returned_present_frame) use.second.boundary(true);
+  for (auto& use:g_tag_prior)
+    if (use.second.frame<=g_returned_present_frame) use.second.boundary(true);
+  std::lock_guard<std::mutex> copy_lock(g_mv_copy_mu);
+  for (auto& slot:g_mv_copies) {
+    slot.lease.boundary(true,fg_copy_precedes_present(slot.submitted,g_returned_present_frame));
+    slot.previous_lease.boundary(true,true); // Already reusable before replacement recording.
+  }
+}
+
 void preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Binding& depth) {
   if (!g_active || !g_fg_running || !source.image || source.format != VK_FORMAT_R16G16_SFLOAT ||
       !depth.image || depth.format != VK_FORMAT_D24_UNORM_S8_UINT ||
@@ -738,7 +837,8 @@ void preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Bin
   auto& vk = dd->vk;
   for (unsigned index = 0; index < 8; ++index) {
     auto& slot = g_mv_copies[index];
-    if (slot.lease.written) {
+    if (slot.lease.invalidated) continue;
+    if (slot.lease.written && !slot.lease.consumed_by_idle) {
       if (!slot.fence || !slot.lease.value || !g_wait_semaphores) continue;
       VkSemaphoreWaitInfo wait{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
       wait.semaphoreCount = 1; wait.pSemaphores = &slot.fence; wait.pValues = &slot.lease.value;
@@ -986,6 +1086,7 @@ sl::FrameToken* g_token = nullptr;
 uint32_t g_token_index = 0;
 int g_fg_applied = -1;                 // fg value last passed to slDLSSGSetOptions
 uint32_t g_flags_applied = 0xffffffff;
+uint32_t g_max_generated = 0; // queried adapter limit; zero is not yet known
 uint64_t g_last_state_log = 0;
 std::atomic<uint32_t> g_api_errors{0};
 std::atomic<int> g_last_api_error{0};
@@ -1020,7 +1121,12 @@ void new_frame() {
   ++g_token_index;
   if (g_sl.GetNewFrameToken(g_token, &g_token_index) != sl::Result::eOk) g_token = nullptr;
   if (!g_token) return;
-  if (g_sl.ReflexSleep) g_sl.ReflexSleep(*g_token);
+  if (g_sl.ReflexSleep) {
+    const bool sample_stats=logging::stats_enabled(cfg_int);
+    const uint64_t started=sample_stats ? fg_cpu_stamp() : 0;
+    g_sl.ReflexSleep(*g_token);
+    if (sample_stats) g_reflex_cpu.add(fg_cpu_us(started));
+  }
   if (g_sl.PCLSetMarker) {
     g_sl.PCLSetMarker(sl::PCLMarker::eSimulationStart, *g_token);
     g_sl.PCLSetMarker(sl::PCLMarker::eSimulationEnd, *g_token);
@@ -1321,8 +1427,8 @@ void sl_instance_pre(const VkInstanceCreateInfo* in, VkInstanceCreateInfo& out) 
 #undef SLF
   g_sl.gdpa = reinterpret_cast<PFN_vkGetDeviceProcAddr>(GetProcAddress(g_interposer, "vkGetDeviceProcAddr"));
   g_sl.gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(GetProcAddress(g_interposer, "vkGetInstanceProcAddr"));
-  if (!g_sl.Init || !g_sl.SetVulkanInfo || !g_sl.gdpa) {
-    log("[sl] sl.interposer.dll lacks expected exports");
+  if (const char* missing=missing_sl_export(g_sl)) {
+    log("[sl] sl.interposer.dll lacks required export %s; integration disabled",missing);
     return;
   }
 
@@ -1435,7 +1541,31 @@ namespace {
 std::mutex g_surf_mu;
 std::unordered_map<VkSurfaceKHR, HWND> g_surfaces;
 std::set<VkSurfaceKHR> g_registered;
+std::atomic<HWND> g_game_window{nullptr};
 thread_local VkSurfaceKHR t_fake_surface = VK_NULL_HANDLE;
+
+void observe_foreground() {
+  static ULONGLONG next_check=0;
+  static HWND previous=nullptr;
+  static bool first=true;
+  const ULONGLONG now=GetTickCount64();
+  if (now<next_check) return;
+  next_check=now+250; // At most four cheap window checks/second; query process only on change.
+  const HWND foreground=GetForegroundWindow();
+  if (!first && foreground==previous) return;
+  first=false; previous=foreground;
+  char window_class[256]="unavailable", executable[MAX_PATH]="unavailable";
+  if (foreground) GetClassNameA(foreground,window_class,sizeof window_class);
+  DWORD pid=0; GetWindowThreadProcessId(foreground,&pid);
+  if (HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid)) {
+    DWORD size=sizeof executable;
+    if (!QueryFullProcessImageNameA(process,0,executable,&size)) strcpy_s(executable,"unavailable");
+    CloseHandle(process);
+  }
+  const char* basename=strrchr(executable,'\\');
+  log("[sl] foreground change: game window %u, exe %s, class %s (sampled every 250 ms)",
+      unsigned(foreground && foreground==g_game_window.load()),basename ? basename+1 : executable,window_class);
+}
 
 void register_surface(VkInstance inst, VkSurfaceKHR surface) {
   HWND hwnd = nullptr;
@@ -1445,6 +1575,7 @@ void register_surface(VkInstance inst, VkSurfaceKHR surface) {
     auto it = g_surfaces.find(surface);
     if (it != g_surfaces.end()) hwnd = it->second;
   }
+  if (hwnd) g_game_window=hwnd;
   if (!hwnd || !g_sl.gipa) {
     log("[sl] surface %p: no window known", (void*)surface);
     return;
@@ -1506,6 +1637,8 @@ struct SlDeviceScratch {
   VkPhysicalDeviceDynamicRenderingFeatures dynr{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES};
   VkPhysicalDeviceMaintenance4Features m4{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES};
   VkPhysicalDeviceHostQueryResetFeatures hqr{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES};
+  VkPhysicalDevicePresentMeteringFeaturesNV metering{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_METERING_FEATURES_NV};
+  SlMeteringOverride metering_restore;
   uint32_t gfx_family = UINT32_MAX, gfx_index = 0, compute_family = UINT32_MAX, compute_index = 0;
   uint32_t of_family = UINT32_MAX;
   bool active = false;
@@ -1585,7 +1718,17 @@ SlDeviceScratch* sl_device_pre(InstanceData* id, VkPhysicalDevice phys, const Vk
       if (n == e) return true;
     return false;
   };
+  const bool metering_requested=cfg_int("fg_present_metering",0)!=0;
+  const bool metering_extension=available(VK_NV_PRESENT_METERING_EXTENSION_NAME);
+  VkPhysicalDevicePresentMeteringFeaturesNV metering_supported{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_METERING_FEATURES_NV};
+  const bool metering_queried=metering_requested && metering_extension && id->GetPhysicalDeviceFeatures2;
+  if (metering_queried) {
+    VkPhysicalDeviceFeatures2 query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,&metering_supported};
+    id->GetPhysicalDeviceFeatures2(phys,&query);
+  }
+  const bool enable_metering=sl_enable_present_metering(metering_requested,metering_extension,metering_supported.presentMetering!=VK_FALSE);
   std::vector<std::string> want = g_req.dev_ext;
+  if (enable_metering) want.push_back(VK_NV_PRESENT_METERING_EXTENSION_NAME);
   want.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
   want.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
   if (native_of) {
@@ -1644,6 +1787,17 @@ SlDeviceScratch* sl_device_pre(InstanceData* id, VkPhysicalDevice phys, const Vk
     log("[sl] + feature %s", f.c_str());
   }
   if (native_of) want_feature(out, chained, s->of, &VkPhysicalDeviceOpticalFlowFeaturesNV::opticalFlow);
+  auto* caller_metering=reinterpret_cast<VkPhysicalDevicePresentMeteringFeaturesNV*>(
+      find_struct(in->pNext,VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_METERING_FEATURES_NV));
+  if (enable_metering) {
+    if (caller_metering) s->metering_restore.capture(caller_metering->presentMetering);
+    want_feature(out,chained,s->metering,&VkPhysicalDevicePresentMeteringFeaturesNV::presentMetering);
+  }
+  const bool metering_field=caller_metering ? caller_metering->presentMetering!=VK_FALSE : s->metering.presentMetering!=VK_FALSE;
+  log("[sl] present metering device: requested %u extension supported %u feature queried %u supported %u; "
+      "extension enabled %u feature enabled %u (cold setting)",unsigned(metering_requested),unsigned(metering_extension),
+      unsigned(metering_queried),unsigned(metering_supported.presentMetering),
+      unsigned(has(VK_NV_PRESENT_METERING_EXTENSION_NAME)),unsigned(metering_field));
 
   // queues: Streamline's graphics/compute queues go after the game's in the
   // same families; the optical-flow queue is index 0 of its own family.
@@ -1733,6 +1887,7 @@ static void finish_device(SlDeviceScratch* s, DeviceData* dd);
 
 void sl_device_post(SlDeviceScratch* s, DeviceData* dd, VkResult r) {
   if (!s) return;
+  s->metering_restore.restore(); // Caller pNext storage is valid only until CreateDevice returns.
   std::unique_ptr<SlDeviceScratch> own(s);
   if (r != VK_SUCCESS) {
     log("[sl] vkCreateDevice failed (%d) with Streamline's requirements", r);
@@ -1836,6 +1991,7 @@ static void finish_device(SlDeviceScratch* s, DeviceData* dd) {
   if (g_sl.DLSSGGetState) {
     sl::DLSSGState st{};
     sl::Result gr = g_sl.DLSSGGetState(0, st, nullptr);
+    if (gr==sl::Result::eOk) g_max_generated=st.numFramesToGenerateMax;
     log("[sl] DLSS-G state: %s, max frames to generate %u, status 0x%x, min size %u, vsync support %d", res_str(gr),
         st.numFramesToGenerateMax, uint32_t(st.status), st.minWidthOrHeight, int(st.bIsVsyncSupportAvailable));
   }
@@ -1858,6 +2014,11 @@ void sl_device_destroy(DeviceData* dd) {
   bool have_copies = g_mv_copy_queries != VK_NULL_HANDLE;
   for (const auto& slot : g_mv_copies) have_copies |= slot.image.image != VK_NULL_HANDLE;
   if (have_copies) dd->vk.DeviceWaitIdle(dd->device);
+  {
+    std::lock_guard<std::mutex> lock(g_fence_mu);
+    g_tag_uses.clear(); g_tag_prior.clear(); g_tag_views.clear();
+    g_inputs_fence=VK_NULL_HANDLE; g_inputs_value=0; g_returned_present_frame=0;
+  }
   if (g_mv_copy_queries) dd->vk.DestroyQueryPool(dd->device, g_mv_copy_queries, nullptr);
   g_mv_copy_queries = VK_NULL_HANDLE;
   g_preserved_mvec = {};
@@ -1874,6 +2035,7 @@ void sl_device_destroy(DeviceData* dd) {
   }
   g_sl = {};
   g_px = {};
+  g_max_generated=0;
   // A replacement device must not use the cleared SDK table. A fresh instance
   // may initialize Streamline again and gather a fresh set of requirements.
   g_sl_init = false;
@@ -1897,15 +2059,43 @@ bool sl_create_swapchain(VkDevice d, const VkSwapchainCreateInfoKHR* ci, const V
   if (!g_active || !g_dd || d != g_dd->device) return false;
   g_sc_extent = ci->imageExtent;
   g_sc_format = ci->imageFormat;
+  const auto requested_mode=ci->presentMode;
+  const uint32_t requested_buffers=ci->minImageCount;
   InSl guard;
   *r = g_px.CreateSwapchainKHR(d, ci, a, out);
-  log("[sl] swapchain created through Streamline: %d", *r);
+  log("[sl] swapchain created through Streamline: %d, game presentMode %d minImageCount %u; "
+      "after proxy mode %d minImageCount %u (Vulkan FG does not support VSync)",
+      *r,int(requested_mode),requested_buffers,int(ci->presentMode),ci->minImageCount);
   return true;
 }
 bool sl_destroy_swapchain(VkDevice d, VkSwapchainKHR sc, const VkAllocationCallbacks* a) {
   if (!g_active || !g_dd || d != g_dd->device) return false;
   InSl guard;
+  const bool exact=cfg_int("fg_destroy_wait_exact",0)!=0;
+  VkResult drained=VK_NOT_READY;
+  if (exact) {
+    // A cached SDK semaphore belongs to its swapchain. Drain only at this rare
+    // ownership boundary, before SL may destroy it; never in the frame loop.
+    drained=g_px.DeviceWaitIdle(d);
+    log("[sl] FG exact retirement swapchain drain: %d",drained);
+    fault_on_result(g_dd,drained,"FG exact retirement swapchain drain");
+    if (drained==VK_SUCCESS) fg_inputs_idle();
+  }
   g_px.DestroySwapchainKHR(d, sc, a);
+  {
+    std::lock_guard<std::mutex> lock(g_fence_mu);
+    g_inputs_fence=VK_NULL_HANDLE; g_inputs_value=0;
+    for (auto& use:g_tag_uses) use.second.boundary(false);
+    g_tag_prior.clear();
+    std::lock_guard<std::mutex> copy_lock(g_mv_copy_mu);
+    for (auto& slot:g_mv_copies) {
+      slot.lease.boundary(false,false);
+      // A rollback snapshot was already proven reusable before recording its
+      // replacement; it never needs to poll the expired SDK semaphore again.
+      slot.previous_lease.boundary(true,true);
+      slot.fence=slot.previous_fence=VK_NULL_HANDLE;
+    }
+  }
   return true;
 }
 bool sl_get_swapchain_images(VkDevice d, VkSwapchainKHR sc, uint32_t* n, VkImage* imgs, VkResult* r) {
@@ -1926,6 +2116,7 @@ bool sl_device_wait_idle(VkDevice d, VkResult* r) {
   if (!g_active || !g_dd || d != g_dd->device || t_in_sl) return false;
   InSl guard;
   *r = g_px.DeviceWaitIdle(d);
+  if (*r==VK_SUCCESS) fg_inputs_idle();
   return true;
 }
 
@@ -2188,10 +2379,17 @@ void sl_note_draw(VkCommandBuffer cmd, CmdState* s) {
             out_ext.h, p.width, p.height, r.x, r.y, r.w, r.h);
       g_bb_rect = r;
     }
-    if (i_h && i_h != g_hudless.image)
-      log("[sl] hudless = image %p (composite fs %016llx)", (void*)i_h, (unsigned long long)p.first_fs_hash);
-    if (i_u && i_u != g_ui.image)
-      log("[sl] UI color+alpha = image %p (composite fs %016llx)", (void*)i_u, (unsigned long long)p.first_fs_hash);
+    // Submit publication can lag recording (and menus may never publish a
+    // hudless pair). Log handle changes, not every repeat against that lag.
+    static VkImage logged_hudless=VK_NULL_HANDLE,logged_ui=VK_NULL_HANDLE;
+    if (i_h && i_h != logged_hudless) {
+      logged_hudless=i_h;
+      log_stats("[sl] hudless = image %p (composite fs %016llx)", (void*)i_h, (unsigned long long)p.first_fs_hash);
+    }
+    if (i_u && i_u != logged_ui) {
+      logged_ui=i_u;
+      log_stats("[sl] UI color+alpha = image %p (composite fs %016llx)", (void*)i_u, (unsigned long long)p.first_fs_hash);
+    }
     auto remember = [&](Bg3Binding& b, VkImage image, VkImageView view) {
       Img im{}; fill_img(im, image, view);
       b.image = im.image; b.view = im.view; b.format = im.format; b.width = im.w; b.height = im.h;
@@ -2352,23 +2550,73 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
 // Streamline does not keep tagged Vulkan images (or the views it was given)
 // alive: wait until DLSS-G has consumed the last presented frame's inputs (its
 // documented fence), so its queued work never touches a destroyed object.
-static bool wait_inputs_consumed(const char* what, uint64_t handle, bool wait) {
+static bool wait_inputs_consumed(const char* what, uint64_t handle, bool wait,
+                                 VkImage image, uint32_t roles) {
+  if (t_in_sl) return true; // SDK-owned nested calls retain their existing bypass.
   VkSemaphore fence;
   uint64_t value;
+  const bool exact=cfg_int("fg_destroy_wait_exact",0)!=0;
+  const bool sample_stats=logging::stats_enabled(cfg_int);
+  FgInputUse selected{};
+  bool known_use=false;
+  FgRetirePolicy policy=FgRetirePolicy::Global;
   {
     std::lock_guard<std::mutex> lock(g_fence_mu);
     fence = g_inputs_fence;
     value = g_inputs_value;
+    auto it=g_tag_uses.find(image);
+    known_use=it!=g_tag_uses.end();
+    if (known_use) selected=it->second;
+    policy=fg_retire_policy(exact,known_use ? &selected : nullptr,fence && value);
+    if (policy==FgRetirePolicy::Defer) { if (sample_stats) ++g_destroy_pending; return false; }
+    if (policy==FgRetirePolicy::Complete) return true;
+    if (policy==FgRetirePolicy::Exact) {
+      fence=reinterpret_cast<VkSemaphore>(selected.fence); value=selected.value;
+    }
   }
-  if (!fence || !value || !g_wait_semaphores || !g_dd || t_in_sl) return true;
+  // Exact mode never blocks a game destruction call: tracker.cpp retains the
+  // object and polls it later, including its allocation callbacks and memory.
+  if (exact) wait=false;
+  if (sample_stats) {
+    if (wait) ++g_destroy_blocking; else ++g_destroy_polls;
+    if (policy==FgRetirePolicy::Exact) ++g_destroy_exact; else ++g_destroy_global;
+  }
+  if (exact && (!g_wait_semaphores || !g_dd)) return false;
+  if (!fence || !value || !g_wait_semaphores || !g_dd) return true;
   VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
   wi.semaphoreCount = 1;
   wi.pSemaphores = &fence;
   wi.pValues = &value;
+  const uint64_t started=sample_stats ? fg_cpu_stamp() : 0;
   VkResult r = g_wait_semaphores(g_dd->device, &wi, wait ? 1000000000ull : 0);
-  if (wait || r != VK_TIMEOUT) log("[sl] tagged %s %p destroyed while frame generation runs: waited for DLSS-G inputs fence value %llu (%d)", what,
-      (void*)handle, (unsigned long long)value, r);
+  const uint64_t us=sample_stats ? fg_cpu_us(started) : 0;
+  static uint64_t lifetime_calls=0; // g_fence_mu below protects detailed-only sampling
+  uint64_t call=0;
+  if (sample_stats) {
+    { std::lock_guard<std::mutex> lock(g_fence_mu); call=++lifetime_calls; }
+    ++g_destroy_wait_calls;
+    g_destroy_wait_us.fetch_add(us,std::memory_order_relaxed);
+    uint64_t previous=g_destroy_wait_max_us.load();
+    while (previous<us && !g_destroy_wait_max_us.compare_exchange_weak(previous,us)) {}
+  }
+  if (r<0 || (sample_stats && (call<=4 || call%120==0))) {
+    uint32_t w=0,h=0;
+    { std::shared_lock<std::shared_mutex> lock(tracker().mu);
+      auto it=tracker().images.find(image);
+      if (it!=tracker().images.end()) { w=it->second.ci.extent.width; h=it->second.ci.extent.height; }
+    }
+    log("[sl] tagged %s %p destroyed: image %p extent %ux%u current roles 0x%x; "
+        "DLSS-G inputs fence %llu result %d wait %.3f ms timed %u blocking %u policy %s tag frame %llu (sample %llu)",
+        what,(void*)handle,(void*)image,w,h,roles,(unsigned long long)value,r,
+        double(us)/1000.0,unsigned(sample_stats),unsigned(wait),policy==FgRetirePolicy::Exact ? "exact" : "global",
+        (unsigned long long)selected.frame,(unsigned long long)call);
+  }
   fault_on_result(g_dd, r, "DLSS-G inputs consumption wait");
+  if (exact && r==VK_SUCCESS) {
+    std::lock_guard<std::mutex> lock(g_fence_mu);
+    auto it=g_tag_uses.find(image);
+    if (it!=g_tag_uses.end() && (!known_use || !it->second.same(selected))) return false;
+  }
   return r == VK_SUCCESS || r == VK_ERROR_DEVICE_LOST;
 }
 
@@ -2376,24 +2624,59 @@ static bool wait_inputs_consumed(const char* what, uint64_t handle, bool wait) {
 // that view, so the wait must happen here already.
 bool sl_note_view_destroyed(VkImageView view, bool wait) {
   if (!g_active || !view) return true;
-  bool current = false;
+  uint32_t roles = 0;
+  VkImage image = VK_NULL_HANDLE;
   {
     std::lock_guard<std::mutex> lock(g_mu);
-    for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui}) current |= i->view == view;
+    const Img* inputs[] = {&g_depth, &g_mvec, &g_hudless, &g_ui};
+    for (uint32_t i=0; i<4; ++i)
+      if (inputs[i]->view == view) { roles |= 1u << i; image=inputs[i]->image; }
+  }
+  const bool current = roles != 0;
+  const bool exact=cfg_int("fg_destroy_wait_exact",0)!=0;
+  bool recorded=false;
+  {
+    std::lock_guard<std::mutex> lock(g_fence_mu);
+    auto it=g_tag_views.find(view);
+    if (it!=g_tag_views.end()) {
+      auto use=g_tag_uses.find(it->second);
+      if (exact || (use!=g_tag_uses.end() && use->second.invalidated)) {
+        image=it->second; recorded=true;
+      }
+    }
   }
   bool retired = false;
   if (!current && cfg_int("fg_current_destroy_only",1)) {
     std::shared_lock<std::shared_mutex> lock(tracker().mu);
     auto it=tracker().views.find(view);
-    retired=it!=tracker().views.end() && sl_watched(it->second.image);
+    if (it!=tracker().views.end()) { image=it->second.image; retired=sl_watched(image); }
   }
   // A rotated-out tag can still belong to the last presented GPU frame.
   // Ignoring its stability reset must never skip the consumption fence.
-  return !(current || retired) || wait_inputs_consumed("view", (uint64_t)view, wait);
+  const bool done=!(current || retired || recorded) || wait_inputs_consumed("view", (uint64_t)view, wait, image, roles);
+  if (done) { std::lock_guard<std::mutex> lock(g_fence_mu); g_tag_views.erase(view); }
+  return done;
 }
 
 bool sl_note_image_destroyed(VkImage image, bool wait) {
-  if (!g_active || !sl_watched(image)) return true;
+  if (!g_active) return true;
+  bool recorded=false,invalidated=false;
+  {
+    std::lock_guard<std::mutex> lock(g_fence_mu);
+    auto use=g_tag_uses.find(image); recorded=use!=g_tag_uses.end();
+    invalidated=recorded && use->second.invalidated;
+  }
+  if (!sl_watched(image) && !(cfg_int("fg_destroy_wait_exact",0) && recorded) && !invalidated) {
+    // Legacy waiting ignores images rotated beyond the watch list. Actual
+    // destruction must still drop metadata before Vulkan can reuse the handle.
+    if (recorded) {
+      std::lock_guard<std::mutex> lock(g_fence_mu);
+      g_tag_uses.erase(image); g_tag_prior.erase(image);
+      for (auto it=g_tag_views.begin();it!=g_tag_views.end();)
+        if (it->second==image) it=g_tag_views.erase(it); else ++it;
+    }
+    return true;
+  }
   uint32_t current_roles = 0;
   {
     std::lock_guard<std::mutex> lock(g_mu);
@@ -2406,7 +2689,13 @@ bool sl_note_image_destroyed(VkImage image, bool wait) {
   // rotation of the same target does not invalidate its live replacement.
   const uint64_t frame = frame_index();
   const bool current_only = cfg_int("fg_current_destroy_only",1) != 0;
-  if ((current_roles || current_only) && !wait_inputs_consumed("image", (uint64_t)image, wait)) return false;
+  if ((current_roles || current_only || cfg_int("fg_destroy_wait_exact",0) || invalidated) && !wait_inputs_consumed("image", (uint64_t)image, wait, image, current_roles)) return false;
+  {
+    std::lock_guard<std::mutex> lock(g_fence_mu);
+    g_tag_uses.erase(image); g_tag_prior.erase(image);
+    for (auto it=g_tag_views.begin();it!=g_tag_views.end();)
+      if (it->second==image) it=g_tag_views.erase(it); else ++it;
+  }
   const bool reset = g_fg_stability.destroyed(frame,current_roles,current_only);
   std::lock_guard<std::mutex> lock(g_mu);
   g_last_destroy_event = {frame,image,current_roles,reset};
@@ -2416,6 +2705,10 @@ bool sl_note_image_destroyed(VkImage image, bool wait) {
   g_input_layout.erase(image);
   for (auto& w : g_watch)
     if (w.load() == image) w = VK_NULL_HANDLE;
+  static uint64_t retired_events=0; // g_mu
+  const bool sample_stats=logging::stats_enabled(cfg_int);
+  const uint64_t retired_event=sample_stats && !current_roles && !reset ? ++retired_events : 0;
+  if (current_roles || reset || (sample_stats && (retired_event<=4 || retired_event%120==0)))
   log("[sl] a tagged image was destroyed; image %p frame %llu current roles 0x%x "
       "(depth=1 MV=2 hudless=4 UI=8), stability reset %u, current-only %u",
       (void*)image,(unsigned long long)frame,current_roles,unsigned(reset),unsigned(current_only));
@@ -2430,9 +2723,20 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     diag(DIAG_DISPLAYED);
     return dd->vk.QueuePresentKHR(queue, info);
   }
+  observe_foreground();
+  const bool sample_stats=logging::stats_enabled(cfg_int);
+  if (sample_stats) g_host_present_thread.store(GetCurrentThreadId(),std::memory_order_relaxed);
   uint64_t frame = frame_index();
   int fg = cfg_int("fg", 2);
-  uint32_t gen = fg >= 2 ? uint32_t(std::min(fg, 4) - 1) : 0;
+  const uint32_t gen=fg_supported_generated(fg,g_max_generated);
+  static int clamped_request=0;
+  static uint32_t clamped_maximum=0;
+  if (fg>=2 && g_max_generated && uint32_t(fg)!=gen+1) {
+    if (clamped_request!=fg || clamped_maximum!=g_max_generated)
+      log("[sl] requested FG %dx limited to %ux: adapter supports at most %u generated frames",
+          fg,gen+1,g_max_generated);
+    clamped_request=fg; clamped_maximum=g_max_generated;
+  } else clamped_request=0;
 
   bool ready = false;
   Img input_snapshot[4]{};
@@ -2455,7 +2759,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
                           fg_copy_pair_for_present(g_preserved_mvec.seen, g_cam_frame, g_color_submit, frame) &&
                           g_preserved_depth.seen == g_preserved_mvec.seen;
       if (copied) { input_snapshot[1] = g_preserved_mvec; input_snapshot[0] = g_preserved_depth; }
-      if (cfg_int("fg_input_copy", 0) && frame % 30 == 0)
+      if (sample_stats && cfg_int("fg_input_copy", 0) && frame % 30 == 0)
         log("[sl] input copy frame %llu: selected %u, submit age %llu, image %p",
             (unsigned long long)frame, unsigned(copied), (unsigned long long)(frame - g_preserved_mvec.seen),
             (void*)input_snapshot[1].image);
@@ -2484,6 +2788,29 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
         lh = layout_of(h.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         lu = layout_of(u.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         input_layouts[0]=ld; input_layouts[1]=lm; input_layouts[2]=lh; input_layouts[3]=lu;
+        {
+          const Img inputs[]={d,m,h,u};
+          bool game_image[4]{},game_view[4]{};
+          {
+            std::shared_lock<std::shared_mutex> tracker_lock(tracker().mu);
+            for (unsigned i=0;i<4;++i) {
+              game_image[i]=tracker().images.count(inputs[i].image)!=0;
+              game_view[i]=tracker().views.count(i==0 ? dview : inputs[i].view)!=0;
+            }
+          }
+          std::lock_guard<std::mutex> fence_lock(g_fence_mu);
+          for (unsigned i=0;i<4;++i) {
+            // Private MV/depth copies retain their existing slot lease; owned
+            // views/PQ images use defer_destroy. Only game hooks retire here.
+            if (!game_image[i]) continue;
+            if (i==2 && !cfg_int("fg_tag_hudless",1)) continue;
+            if (i==3 && !cfg_int("fg_tag_ui",1)) continue;
+            if (!g_tag_prior.count(inputs[i].image)) g_tag_prior[inputs[i].image]=g_tag_uses[inputs[i].image];
+            g_tag_uses[inputs[i].image].tag(frame);
+            const VkImageView view=i==0 ? dview : inputs[i].view;
+            if (game_view[i]) g_tag_views[view]=inputs[i].image;
+          }
+        }
         if (cfg_int("pan_inputs", 0) && frame % 30 == 0) {
           auto observed = [&](VkImage image, VkImageLayout fallback) {
             auto it = g_input_layout.find(image);
@@ -2524,7 +2851,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
       sl::Result cr = g_sl.SetConstants(c, *g_token, 0);
       tag_result=tr; constants_result=cr; tagged=true;
       static uint32_t logged = 0;
-      if (((tr != sl::Result::eOk || cr != sl::Result::eOk) && logged < 20) || frame % 600 == 0) {
+      if (((tr != sl::Result::eOk || cr != sl::Result::eOk) && logged < 20) || (sample_stats && frame % 600 == 0)) {
         ++logged;
         log("[sl] frame %u: tags %s, constants %s | layouts depth %d mvec %d hudless %d ui %d", uint32_t(*g_token),
             res_str(tr), res_str(cr), int(depth.state), int(mvec.state), int(hud.state), int(ui.state));
@@ -2538,15 +2865,17 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
   if (cfg_int("fg_menu_detect", 1)) flags |= uint32_t(sl::DLSSGFlags::eEnableFullscreenMenuDetection);
   // Frame generation only once the inputs have been stable for a while.
   uint64_t stable_n = uint64_t(cfg_int("fg_stable_frames", 30));
+  ready = fg_present_inputs_usable(ready, g_token != nullptr, tagged,
+                                   tag_result == sl::Result::eOk, constants_result == sl::Result::eOk);
   bool stable = g_fg_stability.update(frame,ready,stable_n);
-  int want = stable ? fg : 0;
+  int want = stable && gen ? int(gen+1) : 0;
   if (g_sl.DLSSGSetOptions && (want != g_fg_applied || flags != g_flags_applied)) {
     uint32_t missing=0, stale=0;
     for (uint32_t i=0; i<4; ++i) {
       if (!input_snapshot[i].image) missing |= 1u << i;
       if ((i==1 || i==3) && frame>input_snapshot[i].seen+3) stale |= 1u << i;
     }
-    const char* reason = fg<2 ? "requested-off" : !g_token ? "no-token" : !ready ? "missing-or-stale-input" :
+    const char* reason = fg<2 ? "requested-off" : !g_max_generated ? "capability-not-ready" : !g_token ? "no-token" : tagged && (tag_result!=sl::Result::eOk || constants_result!=sl::Result::eOk) ? "input-api-failure" : !ready ? "missing-or-stale-input" :
                          !stable ? "stability-cooldown" : flags!=g_flags_applied && want==g_fg_applied ? "flags-only" : "stable-inputs";
     log("[sl] FG decision frame %llu: applied %d -> want %d requested %d; reason %s; ready %u stable %u "
         "missing 0x%x stale 0x%x (depth=1 MV=2 hudless=4 UI=8); tag API %s constants %s; "
@@ -2582,6 +2911,13 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     }
   }
 
+  {
+    std::lock_guard<std::mutex> lock(g_fence_mu);
+    // Tags published for a host-off present have no new FG use. Preserve their
+    // previous lease instead of pinning never-consumed warmup/menu frames.
+    if (!g_fg_running) for (const auto& previous:g_tag_prior) g_tag_uses[previous.first]=previous.second;
+    g_tag_prior.clear();
+  }
   if (g_token && g_sl.PCLSetMarker) {
     g_sl.PCLSetMarker(sl::PCLMarker::eRenderSubmitEnd, *g_token);
     g_sl.PCLSetMarker(sl::PCLMarker::ePresentStart, *g_token);
@@ -2589,16 +2925,35 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
   VkResult r;
   {
     InSl guard;
+    const uint64_t started=sample_stats ? fg_cpu_stamp() : 0;
     r = g_px.QueuePresentKHR(queue, info);
+    if (sample_stats) g_present_cpu.add(fg_cpu_us(started));
   }
+  { std::lock_guard<std::mutex> lock(g_fence_mu); g_returned_present_frame=frame; }
   if (g_token && g_sl.PCLSetMarker) g_sl.PCLSetMarker(sl::PCLMarker::ePresentEnd, *g_token);
-  if (g_fg_running && g_sl.DLSSGGetState) {
-    sl::DLSSGState st{};
-    if (g_sl.DLSSGGetState(0, st, nullptr) == sl::Result::eOk) {
+  // One query per present: GetState drains numFramesActuallyPresented.
+  // Reuse this exact sample for fence publication and periodic diagnostics.
+  sl::DLSSGState st{};
+  sl::Result state_result=sl::Result::eErrorNotInitialized;
+  if (g_sl.DLSSGGetState) {
+    const uint64_t started=sample_stats ? fg_cpu_stamp() : 0;
+    state_result=g_sl.DLSSGGetState(0,st,nullptr);
+    if (sample_stats) g_state_cpu.add(fg_cpu_us(started));
+  }
+  static FgPresentStats sdk_stats;
+  if (sample_stats) sdk_stats.add(st.numFramesActuallyPresented, state_result == sl::Result::eOk);
+  if (state_result == sl::Result::eOk) {
+    if (st.numFramesToGenerateMax) g_max_generated=st.numFramesToGenerateMax;
+    {
       std::lock_guard<std::mutex> lock(g_fence_mu);
-      g_inputs_fence = reinterpret_cast<VkSemaphore>(st.inputsProcessingCompletionFence);
-      g_inputs_value = st.lastPresentInputsProcessingCompletionFenceValue;
-      if (tagged) {
+      if (g_fg_running) {
+        g_inputs_fence = reinterpret_cast<VkSemaphore>(st.inputsProcessingCompletionFence);
+        g_inputs_value = st.lastPresentInputsProcessingCompletionFenceValue;
+      }
+      for (auto& use:g_tag_uses)
+        use.second.publish(frame,reinterpret_cast<uint64_t>(st.inputsProcessingCompletionFence),
+                           st.lastPresentInputsProcessingCompletionFenceValue);
+      if (g_fg_running && tagged) {
         std::lock_guard<std::mutex> copy_lock(g_mv_copy_mu);
         for (auto& slot : g_mv_copies)
           if (slot.image.image == input_snapshot[1].image ||
@@ -2609,26 +2964,67 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     }
   }
 
-  static int stats_reset_token = 0;
-  if (stats_window::reset(cfg_int, stats_reset_token)) g_last_state_log = frame;
-  if (g_sl.DLSSGGetState && frame >= g_last_state_log + uint64_t(stats_period(unsigned(g_fg_running ? cfg_int("fg_state_every", 60) : 600)))) {
-    sl::DLSSGState st{};
-    g_sl.DLSSGGetState(0, st, nullptr);
+  static int stats_reset_token=0;
+  static uint64_t prev_batched=0,last_errors=0;
+  static uint32_t last_status=0;
+  static sl::Result last_query=sl::Result::eOk;
+  static bool sampled=false;
+  const uint64_t errors=g_api_errors.load();
+  if (state_result!=last_query || uint32_t(st.status)!=last_status || errors!=last_errors) {
+    log("[sl] DLSS-G status frame %llu: state %s status 0x%x api errors %llu (last %d)",
+        (unsigned long long)frame,res_str(state_result),uint32_t(st.status),
+        (unsigned long long)errors,g_last_api_error.load());
+    last_query=state_result; last_status=uint32_t(st.status); last_errors=errors;
+  }
+  if ((sample_stats && stats_window::reset(cfg_int,stats_reset_token)) || sampled!=sample_stats) {
+    // Reset after this present: the next complete interval must contain no
+    // timing/count samples from a preceding phase or startup warmup.
+    sdk_stats={}; g_present_cpu={}; g_state_cpu={}; g_reflex_cpu={};
+    g_raw_present_host.take(); g_raw_present_worker.take();
+    g_destroy_wait_calls=0; g_destroy_wait_us=0; g_destroy_wait_max_us=0;
+    g_destroy_blocking=0; g_destroy_polls=0; g_destroy_exact=0; g_destroy_global=0; g_destroy_pending=0;
+    g_largest_batch=0;
+    g_prev_frame=frame; g_prev_displayed=g_displayed.load(); prev_batched=g_batched.load();
+    g_last_state_log=frame; sampled=sample_stats;
+  }
+  if (sample_stats && g_sl.DLSSGGetState && frame >= g_last_state_log + uint64_t(stats_period(unsigned(g_fg_running ? cfg_int("fg_state_every", 60) : 600)))) {
     uint64_t shown = g_displayed.load();
     uint64_t batched = g_batched.load();
-    static uint64_t prev_batched = 0;
     double ratio = frame > g_prev_frame ? double(shown - g_prev_displayed) / double(frame - g_prev_frame) : 0.0;
-    static uint32_t last_status = 0;
-    static uint64_t last_errors = 0;
-    const uint64_t errors = g_api_errors.load();
-    // Keep faults and recovery transitions even with periodic reporting disabled.
-    if (logging::stats_enabled(cfg_int) || uint32_t(st.status) != last_status || errors != last_errors) {
+    {
       log("[sl] DLSS-G frame %llu: status 0x%x, presented per app frame %u, displayed/rendered over the last %llu frames "
-        "%.2f (batch-of-2 presents %llu), api errors %u (last %d), camera %s",
+        "%.2f (batched presents %llu), api errors %u (last %d), camera %s",
         (unsigned long long)frame, uint32_t(st.status), st.numFramesActuallyPresented,
         (unsigned long long)(frame - g_prev_frame), ratio, (unsigned long long)(batched - prev_batched),
         g_api_errors.load(), g_last_api_error.load(), g_cam_valid ? "from uniforms" : "identity");
     }
+    const uint64_t waits=g_destroy_wait_calls.exchange(0), wait_us=g_destroy_wait_us.exchange(0);
+    const uint64_t max_us=g_destroy_wait_max_us.exchange(0);
+    const FgCpuTiming raw_host=g_raw_present_host.take(),raw_worker=g_raw_present_worker.take();
+    log("[sl] FG cadence frame %llu: requested %d host %d fg_destroy_wait_exact=%d state %s; SDK presented/rendered %.2f "
+        "(%llu/%llu, query failures %llu), proxy ratio %.2f; SDK pause notices %llu focus notices %llu; destroy waits %llu "
+        "total %.3f ms max %.3f ms; blocking %llu polls %llu exact %llu global %llu pending %llu; "
+        "batched presents %llu largest batch %u feedback notices %llu last numeric %d good notices %llu; "
+        "CPU mean/max ms proxyPresent %.3f/%.3f (%llu) GetState %.3f/%.3f (%llu) ReflexSleep %.3f/%.3f (%llu); "
+        "rawPresent host %.3f/%.3f (%llu) worker %.3f/%.3f (%llu); tag %s constants %s",
+        (unsigned long long)frame,fg,g_fg_applied,cfg_int("fg_destroy_wait_exact",0)!=0 ? 1 : 0,res_str(state_result),sdk_stats.ratio(),
+        (unsigned long long)sdk_stats.presented,(unsigned long long)sdk_stats.rendered,
+        (unsigned long long)sdk_stats.failures,ratio,
+        (unsigned long long)g_sdk_pauses.load(),(unsigned long long)g_sdk_focus_pauses.load(),
+        (unsigned long long)waits,double(wait_us)/1000.0,double(max_us)/1000.0,
+        (unsigned long long)g_destroy_blocking.exchange(0),(unsigned long long)g_destroy_polls.exchange(0),
+        (unsigned long long)g_destroy_exact.exchange(0),(unsigned long long)g_destroy_global.exchange(0),
+        (unsigned long long)g_destroy_pending.exchange(0),(unsigned long long)(batched-prev_batched),
+        g_largest_batch.exchange(0),(unsigned long long)g_feedback_notices.load(),g_feedback_last.load(),
+        (unsigned long long)g_feedback_good.load(),
+        g_present_cpu.mean_ms(),g_present_cpu.maximum_ms(),(unsigned long long)g_present_cpu.calls,
+        g_state_cpu.mean_ms(),g_state_cpu.maximum_ms(),(unsigned long long)g_state_cpu.calls,
+        g_reflex_cpu.mean_ms(),g_reflex_cpu.maximum_ms(),(unsigned long long)g_reflex_cpu.calls,
+        raw_host.mean_ms(),raw_host.maximum_ms(),(unsigned long long)raw_host.calls,
+        raw_worker.mean_ms(),raw_worker.maximum_ms(),(unsigned long long)raw_worker.calls,
+        tagged ? res_str(tag_result) : "not-called",tagged ? res_str(constants_result) : "not-called");
+    sdk_stats = {};
+    g_present_cpu={}; g_state_cpu={}; g_reflex_cpu={};
     last_status = uint32_t(st.status);
     last_errors = errors;
     prev_batched = batched;

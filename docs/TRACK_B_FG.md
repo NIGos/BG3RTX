@@ -1,5 +1,93 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Release audit and load-time present cost - 2026-11-06 (fgx3, Round 3)
+
+See [Round 3 audit](evidence/fgx3-analysis.md) and its four-run/release appendices.
+Warmed S8 x3 reaches ratio 3 at roughly 30 rendered fps; metering is rejected,
+not promoted. All four launches have a slow first **x2** enable before final
+scene readiness: outer SDK present means 34-108 ms, inflated GPU intervals,
+zero FG destruction waits, negligible GetState/ReflexSleep. Exact SDK/driver/WSI
+backpressure remains unproved; this does not qualify uncapped foreground x3.
+
+Quiet release no longer runs routine FG/lifetime timers, cadence formatting,
+UI-handle log churn or pace-vector sorting. Release pins survive raw overrides
+and the Detailed logging startup latch; support statistics remain explicit.
+The 47-key hot cache refreshes on actual changes, not every present. Required
+fences and the 0.026 ms median correctness copy remain. Phase resets clear all
+statistics/baselines; detailed raw-present host/worker timing targets the open
+stall. Mandatory SDK exports and adapter generation limits are checked.
+No new key, ABI or shader variant; no dlss5.cpp/ngx.cpp edits. Full tests pass
+206/206, plus lean diagnostic-off layer compilation. No new live is claimed.
+
+## FG x3 retirement candidate - 2026-11-06 (fgx3, offline only)
+
+`fg_destroy_wait_exact=0` preserves the global-latest-fence policy by default.
+With 1, each actually tagged game image retains its own last present's
+input-consumption fence; private depth/MV copies keep their existing slot leases. Tagged game views resolve to the same image lease.
+Disabled optional tags create no new lease. Tracking remains active while the
+candidate is off so a live policy switch can use historical tags safely.
+
+A tag reserves the image before SDK publication. A pending or unpublished use
+cannot retire against an earlier global fence. A later valid SDK state may
+conservatively cover an earlier failed query; zero/missing semaphore values do
+not establish completion. Host-off presents restore the prior lease because
+they introduce no new FG consumption. Unknown uses fall back conservatively;
+without a valid fence they remain deferred. Completed snapshots are rechecked
+against a concurrent retag before destruction is permitted.
+
+The candidate polls with timeout zero and delegates incomplete destruction to
+the existing tracker pending-destroy queue, which retains callbacks and memory.
+It introduces no per-frame device idle. At swapchain destruction only, it drains
+SL's device proxy before the SDK may release its semaphore. Only successful
+idle establishes completion; cached semaphore pairs expire at this boundary.
+The game's successful proxy idle also records proof for already-returned
+presents; future tags and unsubmitted copies do not inherit that proof. Normal
+resize preserves a prior idle proof until another actual use invalidates it.
+Without a successful drain, a new SDK semaphore cannot retire an expired-epoch
+use. Such images and private copies stay pinned until a later successful drain
+or device teardown, including when the experimental policy is switched off.
+Private input-copy leases preserve written/layout state and keep unsubmitted
+writes reserved. Device teardown clears all association maps.
+
+SDK guide section 15.1 defines the fence as **input consumption**. It does not
+say that both generated x3 frames have reached the screen. The old per-frame
+log cadence and Vulkan success result do not measure time blocked. This is a
+safe pacing hypothesis, not a measured stutter fix or a GPU cost claim.
+
+The existing cadence line now distinguishes blocking waits, polls, exact/global
+selection and unpublished deferrals, plus CPU mean/max times for proxy present,
+GetState and ReflexSleep (all calls, including API failures). It also reports metered presents, largest
+batch and separate numeric/good feedback notices. These are observations, not
+extra display-frame counts. Foreground transitions sample at 250 ms and log
+only executable basename/window class, never titles. Swapchain logging snapshots
+the game's requested present mode/count before the SDK proxy can modify them.
+
+CPU tests cover pending/zero/later publication, aliasing views, policy switching,
+semaphore changes, idle failure/success and reuse. Experimental options exposes
+"Frame generation pacing test" on Advanced; every preset leaves it off. A later
+one-run x2/x3 A/B must show no blocking FG destruction waits with the key on,
+stable SDK output count and improved cadence without resource/API faults.
+No runtime qualification, ABI change or shader request delta (0).
+
+### Optional Vulkan presentation capability
+
+`fg_present_metering=0` is a separate cold candidate, "Multi-frame presentation
+test" under experimental Advanced options. Key on queries physical support and
+requests both `VK_NV_present_metering` and `presentMetering=VK_TRUE` only when
+both are supported. The existing feature-chain helper is used; a caller-owned
+feature field is restored before vkCreateDevice returns, including failure and
+retry. Key off preserves any application-provided extension/feature choice.
+
+This fills an omitted optional capability, not proof of the reported stutter's
+cause. The SDK log saying metering is available does not prove that the host
+enabled the Vulkan extension and feature. No SDK DLL is patched, and no
+VkSetPresentConfigNV batches are synthesized by the layer. Startup logs report
+requested, supported, queried and enabled state; subsequent cadence logs expose
+actual observed metered presents, maximum batch and feedback notices.
+CPU tests cover unavailable extension/feature, key off, enable and restoration
+of caller-owned false/true feature fields. Both candidates stay off in every
+preset; metering changes require restart. No live pacing or cost pass is claimed.
+
 ## Character-edge attribution prepared - 2026-11-03 (edge-flicker, offline only)
 
 `tools/live_batches/edge_flicker` prepares one static Test Dialogue3 run: independent
@@ -538,3 +626,20 @@ No live FG/HDR or recreation qualification is claimed.
 4. **Track A.** RR should go through the shared NGX instance by hooking the same `NVSDK_NGX_VULKAN_*` imports that `streamline.cpp` already patches, and swap SR for DLSS-D (RR) there.
 5. **Dynamic MFG.** Streamline does not support it on Vulkan yet (driver says "missing components"). Revisit when it does.
 6. **Clean up.** Drop the `sl_log_barriers` diagnostics once they are no longer useful. Consider `slFreeResources` when fg is set to 0 at runtime.
+
+## FG x3 pacing review - 2026-11-06 (offline only)
+
+See [the session analysis](evidence/fgx3-analysis.md) for the exact log timestamps,
+code pointers and ranked proven/plausible causes. Most SDK interpolation pauses
+explicitly follow focus loss; SyncInterval 0/1 accompanies the state transition
+and does not establish its cause. Vulkan FG VSync is unsupported by this SDK.
+The existing rendered-frame Reflex ceiling is correct for static MFG.
+
+The present path now samples DLSSGState once per app present and reuses it for
+input retirement and reporting. SDK counts accumulate over reporting windows;
+they are not inferred by multiplying batched present calls. Failed tag/constants
+publication invalidates FG readiness. These repair code defects; the supplied
+session does not establish either defect as the cause of the reported stutter.
+Release cadence summaries include SDK/proxy ratios, pause/focus log notices and
+CPU destroy-wait total/max ms. Required consumption fences remain intact.
+No new settings, shader variants or ABI changes. Runtime qualification is pending.
