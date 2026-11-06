@@ -22,7 +22,8 @@
 //                                           R G B A: optional VkComponentSwizzle values (default identity).
 //   omitted S B E                           an image left out (budget, format): bound NaN, so a
 //                                           material lookup that needs it fails as "sampling" (6)
-//   sampler S B E MAG MIN MIPMODE AU AV AW ANISO MAXLOD   (Vk enums as numbers; ANISO 0 = off)
+//   sampler S B E MAG MIN MIPMODE AU AV AW ANISO MAXLOD [STATE1 BIAS MINLOD COMPARE OP BORDER UNNORMALIZED FLAGS ANISO_ENABLE]
+//                                           Legacy samplers omit ordinary state and cannot certify exact replay.
 //   instances FILE COUNT                    VkAccelerationStructureInstanceKHR x COUNT, TLAS order
 //                                           (= InstInfo order); accelerationStructureReference is an
 //                                           opaque BLAS key, the geometry comes from InstInfo
@@ -42,6 +43,7 @@
 // (sparse ranges) and the instance array as read at submit.
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iterator>
@@ -379,7 +381,14 @@ struct Buffer { uint32_t set, binding; uint64_t bytes; std::string file; };
 struct Range { uint32_t set, binding; uint64_t offset; std::string file; uint64_t file_offset = 0, bytes = 0; };   // bytes 0: whole file
 struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; uint32_t source_format = 0; std::array<uint32_t,4> components{}; };   // 0: copied as is
 struct Omitted { uint32_t set, binding, element; };
-struct Sampler { uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod; };
+struct Sampler {
+  uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod;
+  // Version 0 is the legacy partial snapshot. Version 1 carries all ordinary
+  // VkSamplerCreateInfo state; extension chains are refused by the live writer.
+  uint32_t state_version = 0;
+  float lod_bias = 0, min_lod = 0;
+  uint32_t compare_enable = 0, compare_op = 0, border = 0, unnormalized = 0, flags = 0, aniso_enable = 0;
+};
 struct Output { uint32_t set, binding, format, w, h; std::string reference, initial; };
 struct Casters { std::string file; uint32_t instance = 0, tris = 0, stride = 0; };   // file empty: none
 struct Spec { uint32_t id, value; };
@@ -398,6 +407,39 @@ struct Manifest {
   Casters casters;
   std::vector<std::string> notes;
 };
+
+// Two-phase writer contract. Storage outputs have already passed add_image's
+// raw-format/view checks; this validates the manifest's initial/reference pairs
+// and the complete, unique sampler descriptors needed to reproduce the pass.
+struct TwoPhaseContract { uint32_t raw_output_pairs = 0, complete_samplers = 0; std::string error; };
+inline TwoPhaseContract two_phase_contract(const Pass& pass, const Manifest& m, const uint32_t* outputs, uint32_t output_count) {
+  TwoPhaseContract result;
+  for (const auto& s : m.samplers) result.complete_samplers += s.state_version == 1;
+  if (result.complete_samplers != m.samplers.size()) { result.error = "two-phase replay requires complete STATE1 samplers"; return result; }
+  for (const auto& s : m.samplers) {
+    const auto* slot = find_slot(pass,s.set,s.binding);
+    if (!slot || slot->kind != kSampler || s.element >= slot->count) { result.error = "two-phase replay sampler descriptor is unsupported"; return result; }
+  }
+  for (uint32_t i=0; i<pass.slot_count; ++i) if (pass.slots[i].kind == kSampler) {
+    const auto& slot = pass.slots[i];
+    for (uint32_t e=0; e<slot.count; ++e)
+      if (std::count_if(m.samplers.begin(),m.samplers.end(),[&](const auto& s){return s.set==slot.set && s.binding==slot.binding && s.element==e;}) != 1) {
+        result.error = "two-phase replay sampler descriptor is missing or duplicated"; return result;
+      }
+  }
+  if (!outputs || !output_count) { result.error = "two-phase replay requires output bindings"; return result; }
+  for (uint32_t i=0; i<output_count; ++i) {
+    const auto* slot = find_slot(pass,0,outputs[i]);
+    if (std::count(outputs,outputs+output_count,outputs[i]) != 1) { result.error = "two-phase replay output binding is duplicated"; return result; }
+    if (slot && slot->kind==kStorage && std::count_if(m.outputs.begin(),m.outputs.end(),[&](const auto& o){
+      return o.set==0 && o.binding==slot->binding && o.format==slot->storage_format &&
+        !o.initial.empty() && !o.reference.empty() && o.initial!=o.reference;
+    })==1) ++result.raw_output_pairs;
+  }
+  if (result.raw_output_pairs!=output_count || m.outputs.size()!=output_count)
+    result.error = "two-phase replay requires distinct raw initial/reference output pairs";
+  return result;
+}
 
 // The variant defines a pack records (the live request's "A=1;B=2", core/gi.cpp pipe_defines): only those
 // the pass contract carries the bindings for. RT_CASCADE_MASKS (rt_cascade_casters: GI rays trace 0x01, so
@@ -515,6 +557,16 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
     } else if (k == "omitted") { Omitted o{}; ok = bool(t >> o.set >> o.binding >> o.element); m.omitted.push_back(o); }
     else if (k == "sampler") {
       Sampler s{}; ok = bool(t >> s.set >> s.binding >> s.element >> s.mag >> s.min >> s.mip >> s.au >> s.av >> s.aw >> s.aniso >> s.max_lod);
+      std::string state;
+      if (ok && (t >> state)) {
+        s.state_version = 1;
+        ok = state == "STATE1" && bool(t >> s.lod_bias >> s.min_lod >> s.compare_enable >> s.compare_op >> s.border >> s.unnormalized >> s.flags >> s.aniso_enable);
+        std::string extra; if (t >> extra) ok = false;
+        ok = ok && s.compare_enable <= 1 && s.compare_op <= 7 && s.border <= 5 && s.unnormalized <= 1 && s.aniso_enable <= 1 &&
+          std::isfinite(s.lod_bias) && std::isfinite(s.min_lod) && std::isfinite(s.max_lod) && std::isfinite(s.aniso) &&
+          s.min_lod <= s.max_lod && (!s.aniso_enable || s.aniso >= 1);
+      }
+      ok = ok && s.mag <= 1 && s.min <= 1 && s.mip <= 1 && s.au <= 4 && s.av <= 4 && s.aw <= 4;
       m.samplers.push_back(s);
     } else if (k == "output") { Output o{}; ok = bool(t >> o.set >> o.binding >> o.format >> o.w >> o.h); t >> o.reference; t >> o.initial; if (o.reference == "-") o.reference.clear(); m.outputs.push_back(o); }
     else if (k == "casters") ok = m.casters.file.empty() && bool(t >> m.casters.file >> m.casters.instance >> m.casters.tris >> m.casters.stride) && m.casters.tris;
@@ -558,9 +610,13 @@ inline std::string serialize(const Manifest& m) {
     o << "\n";
   }
   for (const auto& x : m.omitted) o << "omitted " << x.set << " " << x.binding << " " << x.element << "\n";
-  for (const auto& s : m.samplers)
+  for (const auto& s : m.samplers) {
     o << "sampler " << s.set << " " << s.binding << " " << s.element << " " << s.mag << " " << s.min << " " << s.mip << " " << s.au << " "
-      << s.av << " " << s.aw << " " << s.aniso << " " << s.max_lod << "\n";
+      << s.av << " " << s.aw << " " << s.aniso << " " << s.max_lod;
+    if (s.state_version) o << " STATE1 " << s.lod_bias << " " << s.min_lod << " " << s.compare_enable << " " << s.compare_op << " "
+      << s.border << " " << s.unnormalized << " " << s.flags << " " << s.aniso_enable;
+    o << "\n";
+  }
   if (!m.instances.empty()) o << "instances " << m.instances << " " << m.instance_count << "\n";
   if (!m.casters.file.empty())
     o << "casters " << m.casters.file << " " << m.casters.instance << " " << m.casters.tris << " " << m.casters.stride << "\n";

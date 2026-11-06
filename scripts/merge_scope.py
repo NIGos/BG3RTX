@@ -58,7 +58,8 @@ def shader_test_regex(root):
         seen[path] = hit
         return hit
 
-    names = {'native_hit_gpu_fixture', 'frame_replay_test', 'frame_replay_ls_test', 'pt_reference_test'}
+    names = {'native_hit_gpu_fixture', 'frame_replay_test', 'frame_replay_ls_test',
+             'frame_replay_rf_test', 'pt_reference_test'}
     for path in (root / 'tests').glob('*_test.*'):
         if path.suffix not in ('.py', '.cpp'):
             continue

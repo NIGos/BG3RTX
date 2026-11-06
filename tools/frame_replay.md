@@ -115,9 +115,15 @@ bin/frame_replay --compile-only --compile-pass local-shadows --spv .scratch/rf-l
   --spec 1000=1 --spec 1008=0 --spec 1009=0 --spec 1010=0 --spec 1020=0 --spec 1026=0
 ```
 
-`rf_compact_probe_state=0` is a developer raw key, specialization 1031. With hit GI enabled,
-compare `--spec 1031=0` / `--spec 1031=1` on the same module. Core keeps it OFF when
-`rf_hit_gi=0`: that trial gained a register. No shader requests are added.
+`rf_compact_probe_state=0` is a developer raw key, specialization 1031. Compare
+`--spec 1031=0` / `--spec 1031=1` on the same module. Core permits it on every
+`rt_reflections` request, including default Ultra with hit shading and hit GI OFF.
+No shader requests are added. Default Ultra's request is
+`gi/rt_reflections.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1`;
+use the compile-only reflections command above with its cached module and omit
+the unused hit-instancing, wind RGB and hit-GI constants. On RTX 5090, 1031 OFF/ON
+uses 128/96 registers and 0/1536 shared bytes (2026-11-06). These are driver
+pipeline statistics, not a live timing or quality qualification.
 
 These compile-only selectors only create pipelines and print driver statistics. Ordinary
 `--pack` replay also supports production Ultra local shadows and default reflections as
@@ -607,6 +613,30 @@ identity and sampled-value identity; no real inn size is inferred from fixtures.
 
 ## Default Ultra reflections replay
 
+For qualification, add `--require-live-equal` to the ordinary pack replay before
+profiling. It requires live references for every output and the raw counters,
+and returns failure for any changed byte or missing reference. Ordinary diagnostic
+replay still prints comparisons without enforcing this gate. Paired A/B equality
+is a separate requirement and cannot replace agreement with the captured live frame.
+
+Sampler lines with `STATE1` preserve LOD bias/minimum, comparison, border,
+unnormalized-coordinate, flags and anisotropy-enable state in addition to the
+legacy fields. Legacy sampler lines load with an incomplete-state warning;
+their missing values cannot be recovered from the image bytes. The writer refuses
+unsupported sampler/view extension state rather than silently dropping it.
+
+The real inn pack `replay-20261106-084948-1` fails live specular agreement
+(1,270,225 differing bytes); diffuse, hit distance and counters match exactly.
+The module matches the runtime cache and repeat output is deterministic.
+Sampler-state loss is a known contract gap, not an established explanation of
+that difference. Do not use this pack to qualify an optimization yet.
+Follow-up checked distinct raw pre/post specular snapshots, their restoration,
+and the consecutive RF capture/dispatch/capture bracket. No other pass intervenes;
+2,234,064 depth-valid no-hit pixels round-trip exactly. Prepared replacement
+capture: `tools/live_batches/rf_pack_state1` (not staged or authorized), with a
+required fixed-writer marker and separate statistics OFF/ON packs. See its README
+for the strict post-capture commands and the remaining record-time UBO limitation.
+
 `pass reflections` runs `gi/rt_reflections.hlsl`, with the captured request defines,
 all specialization values and 256 push bytes. It supports ordinary replay,
 `--ab-spec`, `--ab-warmup`, `--ab-require-equal` and `--pipeline-stats`.
@@ -647,3 +677,29 @@ Prepared capture only: `tools/live_batches/rf_pack/jobs/rf-pack-inn.json`.
 The coordinator must capture the real pack before any savings investigation;
 synthetic results do not establish real inn pack size, live-reference identity,
 production GPU cost or an optimisation result.
+
+## Numeric paired replay against a control
+
+`--ab-numeric` writes `ab_numeric.csv`: one phase 0/1 cross-state comparison
+per ABBA/BAAB quartet. The balanced order reverses subtraction in BAAB so
+signed means always mean B minus A. The native R11G11B10/R16 values are decoded
+before subtraction. Every output/channel reports differing pixel count, maximum
+absolute difference, signed mean difference, mean absolute difference and
+nonfinite count. Means include unchanged pixels. GPU timing still uses all four
+dispatches, with restoration/readback/numeric analysis outside timestamps.
+
+Run matching `--repeat 40 --ab-warmup 8 --spv MODULE --ab-numeric` experiments
+with `--ab-spec 1031=0,0` (control) and `--ab-spec 1031=0,1` (candidate), without
+`--ab-require-equal`. Then run:
+
+```powershell
+python tools/replay_numeric.py --control CONTROL_DIR --candidate CANDIDATE_DIR --out summary.json
+```
+
+The gate requires every candidate pair's differing-pixel count, maximum absolute
+difference, absolute signed mean and mean absolute difference to fit the control's
+empirical nearest-rank 99th percentile for each output/channel. With 40 pairs this
+is the largest observed control value; there is no fitted tolerance. Nonfinite
+values, missing/duplicate pairs or output/channel mismatch fail. The summary also
+reports the existing distribution-free 95% median timing interval. This is a
+noise-relative offline gate; live confirmation remains separate.

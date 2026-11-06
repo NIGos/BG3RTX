@@ -50,8 +50,51 @@ int main() {
   check(lists, "buffers, sparse ranges (file slices), images, omitted, samplers, outputs");
   check(rp::serialize(b) == text, "serialize(parse(text)) == text");
   {
+    // Legacy snapshots remain loadable but never acquire an invented completeness marker.
+    check(b.samplers[0].state_version == 0, "legacy sampler state remains explicitly incomplete");
+    rp::Manifest complete=m;
+    auto& s=complete.samplers[0]; s.state_version=1; s.lod_bias=-0.375f; s.min_lod=2.25f;
+    s.compare_enable=1; s.compare_op=6; s.border=4; s.unnormalized=1; s.flags=0; s.aniso_enable=1;
+    const auto state=rp::serialize(complete); rp::Manifest back;
+    check(rp::parse(state,back,error) && rp::serialize(back)==state && back.samplers[0].state_version==1 &&
+      back.samplers[0].lod_bias==-0.375f && back.samplers[0].min_lod==2.25f && back.samplers[0].compare_enable==1 &&
+      back.samplers[0].compare_op==6 && back.samplers[0].border==4 && back.samplers[0].unnormalized==1 &&
+      back.samplers[0].aniso_enable==1, "complete ordinary sampler state round-trip");
+    const std::string prefix="bg3rtx_replay_pack 1\npass reflections\npush p\ndispatch 1 1 1\nsampler 2 32 0 1 1 0 2 2 2 1 16 ";
+    for(const char* tail : {"STATE2 0 0 0 0 0 0 0 0", "STATE1 0 0", "STATE1 0 0 2 0 0 0 0 0",
+        "STATE1 0 0 0 8 0 0 0 0", "STATE1 0 0 0 0 6 0 0 0", "STATE1 0 17 0 0 0 0 0 0",
+        "STATE1 0 0 0 0 0 0 0 0 extra"}) {
+      rp::Manifest bad; check(!rp::parse(prefix+tail+"\n",bad,error), "malformed complete sampler state rejected");
+    }
+  }
+  {
     rp::Manifest bad;
     check(!rp::parse("bg3rtx_replay_pack 1\npass gi_hit_direct\npush p\ndispatch 1 1 1\nrange 1 6 0 f 0\n", bad, error), "a range slice without BYTES is rejected");
+  }
+  {
+    const auto& pass=*rp::find_pass("reflections"); const uint32_t outputs[]={6,7,30};
+    rp::Manifest rf;rf.pass=pass.name;
+    for(uint32_t i=0;i<pass.slot_count;++i)if(pass.slots[i].kind==rp::kSampler) {
+      const auto& slot=pass.slots[i];
+      for(uint32_t e=0;e<slot.count;++e) {rp::Sampler s{};s.set=slot.set;s.binding=slot.binding;s.element=e;s.state_version=1;rf.samplers.push_back(s);}
+    }
+    for(uint32_t binding:outputs)rf.outputs.push_back({0,binding,rp::find_slot(pass,0,binding)->storage_format,128,128,
+      "live"+std::to_string(binding),"initial"+std::to_string(binding)});
+    auto contract=[&](const rp::Manifest& manifest){return rp::two_phase_contract(pass,manifest,outputs,3);};
+    const auto valid=contract(rf);
+    check(valid.error.empty() && valid.raw_output_pairs==3 && valid.complete_samplers==20,"complete RF two-phase contract has 3 raw pairs and 20 samplers");
+    auto bad=rf;bad.samplers.erase(bad.samplers.begin());check(!contract(bad).error.empty(),"two-phase contract rejects missing sampler");
+    bad=rf;bad.samplers[0].state_version=0;check(!contract(bad).error.empty(),"two-phase contract rejects legacy sampler");
+    bad=rf;bad.samplers.push_back(bad.samplers[0]);check(!contract(bad).error.empty(),"two-phase contract rejects duplicate sampler");
+    bad=rf;bad.samplers[0].binding=999;check(!contract(bad).error.empty(),"two-phase contract rejects unsupported sampler");
+    bad=rf;bad.outputs[0].initial=bad.outputs[0].reference;check(!contract(bad).error.empty(),"two-phase contract rejects identical initial/reference file");
+    bad=rf;bad.outputs[0].initial.clear();check(!contract(bad).error.empty(),"two-phase contract rejects missing initial output");
+    bad=rf;bad.outputs[0].reference.clear();check(!contract(bad).error.empty(),"two-phase contract rejects missing reference output");
+    bad=rf;bad.outputs.erase(bad.outputs.begin());check(!contract(bad).error.empty(),"two-phase contract rejects missing output pair");
+    bad=rf;bad.outputs.push_back(bad.outputs[0]);check(!contract(bad).error.empty(),"two-phase contract rejects duplicate output pair");
+    bad=rf;bad.outputs[0].format=97;check(!contract(bad).error.empty(),"two-phase contract rejects unsupported raw output format");
+    const uint32_t duplicate[]={6,6,30};
+    check(!rp::two_phase_contract(pass,rf,duplicate,3).error.empty(),"two-phase contract rejects duplicate expected binding");
   }
 
   {

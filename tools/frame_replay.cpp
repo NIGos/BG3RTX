@@ -78,6 +78,8 @@ std::map<uint32_t, uint32_t> g_specs;
 std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_ab_specs;
 fs::path g_ab_spv;
 bool g_ab_require_equal = false;
+bool g_ab_numeric = false;
+bool g_require_live_equal = false;
 uint32_t g_ab_warmup = 0; // untimed GPU dispatches immediately before each A/B sample
 bool g_ab_blas = false, g_blas_control = false;
 // Explicit class policies: legacy preserves the historical replay; layer matches Ultra.
@@ -699,6 +701,17 @@ struct ImageResult { std::string name; uint32_t format, w, h; std::vector<uint8_
 struct RunResult { std::vector<ImageResult> outputs; Stats stats; double gpu_ms; std::vector<uint8_t> raw_stats; };
 struct Replay { std::vector<RunResult> runs; std::vector<std::string> warnings; };
 
+float image_component(const std::vector<uint8_t>& raw, uint32_t format, size_t p, uint32_t k, uint32_t comps) {
+      auto ufloat = [](uint32_t x, uint32_t mantissa) {
+        const uint32_t e = x >> mantissa, m = x & ((1u << mantissa)-1);
+        return e == 31 ? (m ? std::nanf("") : INFINITY) : std::ldexp(float(e ? (1u << mantissa) + m : m), int(e ? e : 1)-15-int(mantissa));
+      };
+      const uint32_t packed = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? reinterpret_cast<const uint32_t*>(raw.data())[p] : 0;
+      return format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? ufloat((packed >> (k == 0 ? 0 : k == 1 ? 11 : 22)) & (k == 2 ? 1023u : 2047u),k == 2 ? 5 : 6) :
+                (format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R16_SFLOAT) ? half_to_float(reinterpret_cast<const uint16_t*>(raw.data())[p * comps + k])
+                                                       : reinterpret_cast<const float*>(raw.data())[p * comps + k];
+}
+
 ImageResult summarize(const std::string& name, uint32_t format, uint32_t w, uint32_t h, std::vector<uint8_t> raw) {
   ImageResult r{name, format, w, h, std::move(raw), 0, {0, 0, 0, 0}, 0};
   r.hash = fnv1a(r.raw);
@@ -706,14 +719,7 @@ ImageResult summarize(const std::string& name, uint32_t format, uint32_t w, uint
   uint32_t comps = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? 3 : format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
   for (uint64_t i = 0; i < px; ++i)
     for (uint32_t k = 0; k < comps; ++k) {
-      auto ufloat = [](uint32_t x, uint32_t mantissa) {
-        const uint32_t e = x >> mantissa, m = x & ((1u << mantissa)-1);
-        return e == 31 ? (m ? std::nanf("") : INFINITY) : std::ldexp(float(e ? (1u << mantissa) + m : m), int(e ? e : 1)-15-int(mantissa));
-      };
-      const uint32_t packed = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? reinterpret_cast<const uint32_t*>(r.raw.data())[i] : 0;
-      float v = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? ufloat((packed >> (k == 0 ? 0 : k == 1 ? 11 : 22)) & (k == 2 ? 1023u : 2047u),k == 2 ? 5 : 6) :
-                (format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R16_SFLOAT) ? half_to_float(reinterpret_cast<const uint16_t*>(r.raw.data())[i * comps + k])
-                                                       : reinterpret_cast<const float*>(r.raw.data())[i * comps + k];
+      float v = image_component(r.raw, format, i, k, comps);
       if (!std::isfinite(v)) { ++r.nonfinite; continue; }
       r.mean[k] += v / double(px);
     }
@@ -1038,6 +1044,16 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     si.magFilter = VkFilter(s.mag); si.minFilter = VkFilter(s.min); si.mipmapMode = VkSamplerMipmapMode(s.mip);
     si.addressModeU = VkSamplerAddressMode(s.au); si.addressModeV = VkSamplerAddressMode(s.av); si.addressModeW = VkSamplerAddressMode(s.aw);
     si.anisotropyEnable = s.aniso > 1 ? VK_TRUE : VK_FALSE; si.maxAnisotropy = std::max(s.aniso, 1.0f); si.maxLod = s.max_lod;
+    if (s.state_version) {
+      check(s.flags == 0, "sampler extension flags are not supported by replay");
+      si.flags = s.flags; si.mipLodBias = s.lod_bias; si.minLod = s.min_lod;
+      si.compareEnable = s.compare_enable; si.compareOp = VkCompareOp(s.compare_op);
+      si.borderColor = VkBorderColor(s.border); si.unnormalizedCoordinates = s.unnormalized;
+      si.anisotropyEnable = s.aniso_enable; si.maxAnisotropy = s.aniso;
+    } else {
+      result.warnings.push_back("legacy sampler s" + std::to_string(s.set) + "b" + std::to_string(s.binding) +
+        "[" + std::to_string(s.element) + "]: bias/minLod/compare/border/coordinate state was not captured; exactness is unproven");
+    }
     VkSampler x; vkcheck(vkCreateSampler(g.dev, &si, nullptr, &x), "pack sampler");
     samplers[key(s.set, s.binding)][s.element] = x;
   }
@@ -1324,9 +1340,27 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     }
   }
   ReplayProgress progress;
+  // Decode captured references once. A/B retains only its last RunResult, so
+  // strict validation must inspect each readback before that result is dropped.
+  std::vector<std::vector<uint8_t>> live_output_references;
+  std::vector<uint8_t> live_counter_reference;
+  bool live_equal = true;
+  uint32_t live_checked = 0;
+  if (!hooks && g_require_live_equal) {
+    live_equal = !outputs.empty() && !m.counters.empty();
+    for (const auto& output : outputs) {
+      live_output_references.push_back(output.reference.empty() ? std::vector<uint8_t>{} : file(output.reference));
+      live_equal &= !live_output_references.back().empty();
+    }
+    if (!m.counters.empty()) live_counter_reference = file(m.counters);
+    live_equal &= !live_counter_reference.empty() && live_counter_reference.size() <= stats.size &&
+                  live_counter_reference.size() % 4 == 0;
+    if (!live_counter_reference.empty() && live_counter_reference.size() <= stats.size)
+      live_counter_reference.resize(size_t(stats.size), 0);
+  }
   std::vector<double> timings;
   const uint32_t dispatches = ab_mode() ? 4 + repeat * 4 : repeat;
-  std::ofstream ab_csv;
+  std::ofstream ab_csv, numeric_csv;
   std::vector<double> ab_deltas;
   RunResult pair_reference;
   double quartet_ms[4]{};
@@ -1335,6 +1369,11 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   uint32_t first_failed_pair = UINT32_MAX;
   bool explained_outputs = false, explained_counters = false, saved_failed_pair = false;
   if (ab_mode()) {
+    if (g_ab_numeric) {
+      numeric_csv.open(out / "ab_numeric.csv");
+      numeric_csv << "pair,output,channel,pixels,different_pixels,max_abs,mean_diff,mean_abs_diff,nonfinite\n";
+      numeric_csv.precision(17);
+    }
     ab_csv.open(out / "ab.csv");
     ab_csv << "pair,A_ms,B_ms,delta_ms,outputs_equal,counters_equal\n";
     std::puts("[replay] paired A/B: 4 warmup dispatches excluded; each pair ABBA/BAAB, delta B-A (linear drift cancels)");
@@ -1423,6 +1462,16 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       }
     }
     for (auto& o : outputs) rr.outputs.push_back(summarize(o.name, o.img.format, o.img.w, o.img.h, read_image(o.img)));
+    if (!hooks && g_require_live_equal) {
+      live_equal &= rr.outputs.size() == live_output_references.size();
+      for (size_t i = 0; i < rr.outputs.size() && i < live_output_references.size(); ++i)
+        live_equal &= rr.outputs[i].raw == live_output_references[i];
+      // LS appends extra diagnostic buffers to raw_stats. The captured primary
+      // reference names precisely the original rtStats range (zero-padded above).
+      live_equal &= !live_counter_reference.empty() && rr.raw_stats.size() >= live_counter_reference.size() &&
+                    std::equal(live_counter_reference.begin(), live_counter_reference.end(), rr.raw_stats.begin());
+      ++live_checked;
+    }
     if ((!quiet && !ab_mode()) || run == 0) {
       std::printf("[replay] %s run %u: dispatch %u x %u x %u, GPU %.3f ms\n", m.pass.c_str(), run, m.groups[0], m.groups[1], m.groups[2], rr.gpu_ms);
       for (auto& l : gi_hit_direct_lines(rr.stats)) std::printf("  %s\n", l.c_str());
@@ -1431,6 +1480,25 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                     r.mean[2], r.mean[3], (unsigned long long)r.nonfinite, (unsigned long long)r.hash);
     }
     if (ab_mode() && !warmup) {
+      // One balanced, adjacent cross-state comparison per quartet: phase 0/1.
+      // BAAB reverses operand order so signed output differences remain B-A.
+      if (g_ab_numeric && phase == 1) {
+        check(rr.outputs.size() == pair_reference.outputs.size(), "numeric output count");
+        for (size_t i = 0; i < rr.outputs.size(); ++i) {
+          const auto& a = use_b ? pair_reference.outputs[i] : rr.outputs[i];
+          const auto& b = use_b ? rr.outputs[i] : pair_reference.outputs[i];
+          const unsigned channels = a.format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? 3 :
+            a.format == VK_FORMAT_R16G16B16A16_SFLOAT || a.format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
+          check(a.format == b.format && a.w == b.w && a.h == b.h, "numeric image shape");
+          const size_t pixel_bytes = size_t(rp::image_bytes(a.format,a.w,a.h,1,1)) / (size_t(a.w)*a.h);
+          const auto diff = bg3::replay::numeric_difference(a.raw,b.raw,pixel_bytes,channels,
+            [&](const std::vector<uint8_t>& raw, size_t p, unsigned k) { return image_component(raw,a.format,p,k,channels); });
+          for (unsigned k = 0; k < channels; ++k)
+            numeric_csv << pair + 1 << ',' << a.name << ',' << k << ',' << diff.pixels << ',' << diff.different_pixels << ','
+              << diff.max_abs[k] << ',' << diff.mean[k] << ',' << diff.mean_abs[k] << ',' << diff.nonfinite << '\n';
+        }
+        numeric_csv.flush();
+      }
       quartet_ms[phase] = rr.gpu_ms;
       if (phase == 0) {
         pair_reference = rr;
@@ -1627,6 +1695,12 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     const bool same = std::equal(live.begin(),live.end(),raw.begin());
     std::printf("  vs live counters: %s\n",same ? "bit-equal" : "DIFFER");
     if (!same) result.warnings.push_back("live counters differ");
+  }
+  if (!hooks && g_require_live_equal) {
+    live_equal &= live_checked == dispatches;
+    std::printf("[replay] required live outputs/counters: %s (%u/%u readback dispatches; complete nonempty references required)\n",
+                live_equal ? "100% bit-equal" : "FAIL", live_checked, dispatches);
+    g_reference_mismatch |= !live_equal;
   }
   if (!hooks && !g_reference_out.empty()) {
     g_reference_mismatch |= !reference_equal(g_reference_out / "rtstats.bin", result.runs.back().raw_stats, 4, "counters");
@@ -2682,6 +2756,16 @@ int rf_self_test(const fs::path& dir) {
   write_vec(pack/"raw-bc1.cube",cube);
   for(auto& i:m.images)if(i.set==2 && (i.binding==35 || i.binding==37 || (i.binding==45 && i.element==0)))
     {i.format=131;i.w=i.h=4;i.file="raw-bc1.cube";}
+  // A sampler state regression that uniform one-mip probes cannot expose:
+  // SampleLevel(0) of DFG must clamp to the captured minLod, not invented zero.
+  std::vector<float> mip_dfg;
+  for(int i=0;i<4;++i)mip_dfg.insert(mip_dfg.end(),{1.0f,0.0f,0.0f,1.0f});
+  mip_dfg.insert(mip_dfg.end(),{0.25f,0.125f,0.0f,1.0f});
+  write_vec(pack/"mip-dfg.bin",mip_dfg);
+  for(auto& i:m.images)if(i.set==2 && i.binding==38)
+    {i.format=rp::kRgba32Sfloat;i.w=i.h=2;i.mips=2;i.file="mip-dfg.bin";}
+  for(auto& s:m.samplers)if(s.set==2 && s.binding==32)
+    {s.state_version=1;s.min_lod=1.0f;s.lod_bias=-0.375f;}
   auto raw=[](const auto& v){const auto* b=reinterpret_cast<const uint8_t*>(v.data());return std::vector<uint8_t>(b,b+v.size()*sizeof(v[0]));};
   auto normal=read_file(pack/"normal.rg32f");auto depth=read_file(pack/"depth.r32f");
   for(size_t i=0;i<size_t(W)*H;++i){float d;std::memcpy(&d,depth.data()+i*4,4);if(d<4.4f){const float rg[2]={(0.5f+1.7777f)/3.5554f,0.5f};std::memcpy(normal.data()+i*8,rg,8);}}
@@ -2707,6 +2791,12 @@ int rf_self_test(const fs::path& dir) {
     check(x.raw==a.runs[1].outputs[i].raw && x.nonfinite==0,"RF repeat identity and finite outputs");
     m.outputs[i].reference="reference"+std::to_string(i)+".bin";write_vec(pack/m.outputs[i].reference,x.raw);}
   auto bytes=read_file(dir/"first"/"pass.spv");std::vector<uint32_t> code(bytes.size()/4);std::memcpy(code.data(),bytes.data(),bytes.size());
+  for(auto& s:m.samplers)if(s.set==2 && s.binding==32)s.min_lod=0.0f;
+  save();
+  const auto zero_lod=replay(pack,&code,{}, {},dir/"zero-min-lod",1,true);
+  check(zero_lod.runs[0].outputs[1].raw!=a.runs[0].outputs[1].raw,"RF captured minLod changes nonuniform-mip DFG sampling");
+  for(auto& s:m.samplers)if(s.set==2 && s.binding==32)s.min_lod=1.0f;
+  save();
   const auto zero_history=std::vector<uint16_t>(history.size(),0);write_vec(pack/"prev.rgba16f",zero_history);
   const auto dark=replay(pack,&code,{}, {},dir/"dark-history",1,true);write_vec(pack/"prev.rgba16f",history);
   check(dark.runs[0].outputs[1].raw!=a.runs[0].outputs[1].raw,"RF reads previous radiance");
@@ -2719,10 +2809,26 @@ int rf_self_test(const fs::path& dir) {
   for(const char* name:{"colour.bin","hit.bin","raw-bc1.cube","initial-counters.bin"}){
     const auto data=read_file(pack/name);std::ofstream output(pack/name,std::ios::binary);
     rp::codec::Writer writer(output,data.size());check(writer.write(data.data(),data.size()) && writer.finish(),"RF compressed fixture");}
-  g_ab_specs[2147483647u]={0,1};g_ab_require_equal=true;g_ab_warmup=2;
+  g_ab_specs[2147483647u]={0,1};g_ab_require_equal=true;g_ab_warmup=2;g_require_live_equal=true;
   replay(pack,&code,{}, {},dir/"paired",2,true);
   check(!g_reference_mismatch,"RF paired output/counter restoration");
   g_ab_specs.clear();g_ab_require_equal=false;g_ab_warmup=0;
+  // A printed difference is not a validation gate unless the process fails.
+  auto changed=a.runs[0].outputs[1].raw;changed[0]^=1u;
+  write_vec(pack/m.outputs[1].reference,changed);
+  replay(pack,&code,{}, {},dir/"bad-live-output",1,true);
+  check(g_reference_mismatch,"RF required live gate rejects an output bit mismatch");
+  write_vec(pack/m.outputs[1].reference,a.runs[0].outputs[1].raw);g_reference_mismatch=false;
+  changed=a.runs[0].raw_stats;changed[0]^=1u;write_vec(pack/m.counters,changed);
+  replay(pack,&code,{}, {},dir/"bad-live-counters",1,true);
+  check(g_reference_mismatch,"RF required live gate rejects a counter bit mismatch");
+  write_vec(pack/m.counters,a.runs[0].raw_stats);g_reference_mismatch=false;
+  const auto counter_reference=m.counters,output_reference=m.outputs[1].reference;
+  m.counters.clear();m.outputs[1].reference.clear();save();
+  replay(pack,&code,{}, {},dir/"missing-live-reference",1,true);
+  check(g_reference_mismatch,"RF required live gate rejects missing references");
+  m.counters=counter_reference;m.outputs[1].reference=output_reference;save();
+  g_require_live_equal=false;g_reference_mismatch=false;
   std::puts("RF synthetic pack: default production shader, packed colours, R16 hit distance, raw BCn probes, repeat and paired equality PASS");
   return g_validation_errors.load()?1:0;
 }
@@ -2914,7 +3020,9 @@ int main(int argc, char** argv) {
       check(g_blas_policy == "legacy" || g_blas_policy == "layer" || g_blas_policy == "trace", "--blas-policy legacy|layer|trace");
     }
     else if (args[i] == "--ab-spv") g_ab_spv = next();
+    else if (args[i] == "--ab-numeric") g_ab_numeric = true;
     else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
+    else if (args[i] == "--require-live-equal") g_require_live_equal = true;
     else if (args[i] == "--ab-warmup") {
       const auto text = next();
       check(!text.empty() && text.find_first_not_of("0123456789") == std::string::npos && text.size() <= 3,
@@ -2983,7 +3091,11 @@ int main(int argc, char** argv) {
     check(repeat <= (UINT32_MAX - 4) / 4, "paired repeat count too large");
     if (!repeat_given) repeat = 40;
   }
+  check(!g_ab_numeric || ab_mode(), "--ab-numeric requires paired A/B mode");
   check(!g_ab_warmup || ab_mode(), "--ab-warmup requires --ab-spec or --ab-spv");
+  if (g_require_live_equal)
+    check(!compile_only && !pt && !native && !pt_cost_only && !g_origin && !pack.empty(),
+          "--require-live-equal requires ordinary pack replay with live outputs and counters");
   if (!rf_test.empty()) return rf_self_test(rf_test);
   if (!ls_test.empty()) return ls_self_test(ls_test);
   if (!test.empty()) return self_test(test);

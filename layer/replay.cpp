@@ -57,8 +57,8 @@ namespace rp = bg3::replay;
 
 // ---- object records (every image, view, sampler and buffer created on the device) ----
 struct ImgRec { VkImageType type; VkFormat format; uint32_t w, h, d, mips, layers; VkImageUsageFlags usage; };
-struct ViewInfo { VkImage image; VkFormat format; VkImageViewType type; VkImageSubresourceRange range; VkComponentMapping comp; };
-struct SamplerRec { uint32_t mag, min, mip, au, av, aw; float aniso, max_lod; };
+struct ViewInfo { VkImage image; VkFormat format; VkImageViewType type; VkImageSubresourceRange range; VkComponentMapping comp; bool supported = false; };
+struct SamplerRec { VkSamplerCreateInfo info{}; bool supported = false; };
 struct BufRec { VkDeviceSize size; VkBufferUsageFlags usage; };
 struct Desc {
   VkDescriptorType type;
@@ -114,7 +114,12 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice d, const VkImageViewCrea
   const VkResult r = g_next.CreateImageView(d, ci, a, out);
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(g_obj_mu);
-    g_views[*out] = {ci->image, ci->format, ci->viewType, ci->subresourceRange, ci->components};
+    bool supported = ci->flags == 0;
+    for (auto* p = static_cast<const VkBaseInStructure*>(ci->pNext); p; p = p->pNext)
+      // Usage restricts legal operations, not sampled values. Other chains (in
+      // particular image-view min LOD) need an explicit replay representation.
+      supported = supported && p->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO;
+    g_views[*out] = {ci->image, ci->format, ci->viewType, ci->subresourceRange, ci->components, supported};
   }
   return r;
 }
@@ -126,8 +131,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSampler(VkDevice d, const VkSamplerCreateIn
   const VkResult r = g_next.CreateSampler(d, ci, a, out);
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(g_obj_mu);
-    g_samplers[*out] = {uint32_t(ci->magFilter), uint32_t(ci->minFilter), uint32_t(ci->mipmapMode), uint32_t(ci->addressModeU),
-                        uint32_t(ci->addressModeV), uint32_t(ci->addressModeW), ci->anisotropyEnable ? ci->maxAnisotropy : 0.0f, ci->maxLod};
+    // Ordinary state is copied exactly; never retain a caller-owned pNext.
+    auto& rec = g_samplers[*out]; rec.info = *ci; rec.info.pNext = nullptr;
+    rec.supported = ci->pNext == nullptr && ci->flags == 0;
   }
   return r;
 }
@@ -495,6 +501,7 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
     im = ii->second;
   }
   auto omit_format = [&](const char* why) { ++p.omit_formats[uint32_t(v.format)]; return omit(p.omit_format, why); };
+  if (!v.supported) return omit(p.omit_view, "view has unsupported extension state or flags");
   if (im.type != VK_IMAGE_TYPE_2D || im.d != 1) return omit_format("not a 2D image");
   const bool depth = depth_format(im.format), transfer = (im.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
   uint32_t pack_format = uint32_t(v.format);
@@ -624,7 +631,18 @@ bool add_sampler(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkSa
     if (it == g_samplers.end()) return false;
     r = it->second;
   }
-  p.m.samplers.push_back({set, binding, element, r.mag, r.min, r.mip, r.au, r.av, r.aw, r.aniso, r.max_lod});
+  if (!r.supported) {
+    p.why = "sampler s" + std::to_string(set) + "b" + std::to_string(binding) + "[" + std::to_string(element) + "]: unsupported extension state or flags";
+    return false;
+  }
+  const auto& c = r.info;
+  rp::Sampler state{set,binding,element,uint32_t(c.magFilter),uint32_t(c.minFilter),uint32_t(c.mipmapMode),
+    uint32_t(c.addressModeU),uint32_t(c.addressModeV),uint32_t(c.addressModeW),c.maxAnisotropy,c.maxLod};
+  state.state_version=1; state.lod_bias=c.mipLodBias; state.min_lod=c.minLod;
+  state.compare_enable=c.compareEnable; state.compare_op=uint32_t(c.compareOp);
+  state.border=uint32_t(c.borderColor); state.unnormalized=c.unnormalizedCoordinates;
+  state.flags=c.flags; state.aniso_enable=c.anisotropyEnable;
+  p.m.samplers.push_back(state);
   return true;
 }
 void add_sampler(Plan& p, uint32_t binding, uint32_t element, VkSampler s) { add_sampler(p, 1, binding, element, s); }
@@ -704,6 +722,7 @@ LightingStats add_lighting(Plan& p, VkCommandBuffer cmd, const rp::Pass& pass) {
         }
       }
       if (add_sampler(p, s.set, s.binding, 0, sampler)) { ++st.bound; ++st.samplers_game; continue; }
+      if (!p.why.empty()) return st; // Unsupported state must not become a guessed fallback.
       // Not recorded (immutable in the game's layout): declared trilinear clamp, the state the
       // probes' cube sampling and the LUT lookups assume (tools/frame_replay.md "Lighting inputs").
       m.samplers.push_back({s.set, s.binding, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
@@ -1163,8 +1182,10 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     }
   }
   // ---- sets 2-3: the deferred lighting's inputs (add_lighting; tools/frame_replay.md "Lighting inputs") ----
+  if (!p.why.empty()) return fail(p.why);
   LightingStats lighting;
   if (d->phase!=1 && pass->set_count > 2) lighting = add_lighting(p, cmd, *pass);
+  if (!p.why.empty()) return fail(p.why);
   if(d->phase==1) {
     auto capture=[&](uint32_t set,const VkWriteDescriptorSet& w)->bool {
       const rp::Slot* slot=rp::find_slot(*pass,set,w.dstBinding);if(!slot)return true;
@@ -1174,7 +1195,7 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
       }
       if(slot->kind==rp::kSampler) {
         if(w.pImageInfo && add_sampler(p,set,w.dstBinding,w.dstArrayElement,w.pImageInfo[0].sampler))return true;
-        p.why=std::string(slot->name)+": LS sampler is not recorded";return false;
+        if(p.why.empty())p.why=std::string(slot->name)+": sampler is not recorded";return false;
       }
       return w.pImageInfo && add_image(p,set,w.dstBinding,w.dstArrayElement,w.pImageInfo[0].imageView,w.pImageInfo[0].imageLayout,*slot,false,false);
     };
@@ -1463,10 +1484,16 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     log("[replay] pack %s%s", label.c_str(), lighting_line.c_str());
   }
 
+  uint32_t raw_output_pairs=0,complete_samplers=0,record_time_ubos=0;
+  for(const auto& sampler:m.samplers)complete_samplers+=sampler.state_version==1;
+  for(const auto& copy:p.copies)if(!copy.dropped && copy.kind==Copy::kCpu && copy.file!=m.push)++record_time_ubos;
   if(d->phase==1) {
     if(!m.omitted.empty()){release_views(views);return fail("two-phase replay requires every sampled image; omission would change visibility");}
     for(const auto& image:p.images)if(image.shader && rp::block_compressed(uint32_t(image.view_format)))
       {release_views(views);return fail("two-phase replay requires raw BCn bytes; decoded fallback is not bit-exact");}
+    const auto contract=rp::two_phase_contract(*pass,m,d->outputs,d->output_count);
+    raw_output_pairs=contract.raw_output_pairs;complete_samplers=contract.complete_samplers;
+    if(!contract.error.empty()){release_views(views);return fail(contract.error);}
   }
 
   // ---- staging: chunks, placement ----
@@ -1523,6 +1550,11 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   for (const Copy& c : p.copies) if (!c.dropped) total += c.bytes;
   const std::string by_slot = slot_sizes(p, *pass, false);
   p.m.notes.push_back(" by slot: " + by_slot);
+  char contract[256];
+  snprintf(contract,sizeof contract,"contract: pass %s, two-phase %u, raw output pairs %u/%u, sampler STATE1 %u/%zu, record-time UBOs %u",
+    pass->name,unsigned(d->phase==1),raw_output_pairs,d->output_count,complete_samplers,p.m.samplers.size(),record_time_ubos);
+  p.m.notes.push_back(contract);
+  log("[replay] pack %s %s",label.c_str(),contract);
   job->label = label;
   job->dir = root_dir() + "\\captures\\replay-" + capture_stamp() + "-" + label;
   job->record_frame = frame_index();
