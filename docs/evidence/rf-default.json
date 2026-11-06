@@ -1,0 +1,478 @@
+{
+  "status": "NOT_QUALIFIED",
+  "date": "2026-11-06",
+  "key": "rf_compact_probe_state",
+  "spec_constant": 1031,
+  "default": 0,
+  "construction": "Same receiver-probe expressions and accumulation order; inputs unchanged, outputs unread and no caller early exit between blocks, including default rt_closest path.",
+  "shader_request_delta": 0,
+  "key_off": {
+    "requests": 218,
+    "equivalent": 218,
+    "method": "identical compiler inputs",
+    "receipt": ".scratch/rf-default/key-off-identity.json"
+  },
+  "driver_default": {
+    "request": "gi/rt_reflections.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1",
+    "OFF": {
+      "registers": 128,
+      "shared_bytes": 0,
+      "binary_bytes": 109312
+    },
+    "ON": {
+      "registers": 96,
+      "shared_bytes": 1536,
+      "binary_bytes": 110592
+    },
+    "receipts": [
+      ".scratch/rf-default/compile-off.log",
+      ".scratch/rf-default/compile-on.log"
+    ]
+  },
+  "protocol": {
+    "validation": true,
+    "per_sample_warmups": 8,
+    "timing_pairs": 40,
+    "dispatches_per_timing_pair": 4,
+    "numeric_observations": 40,
+    "numeric_sampling": "Predetermined adjacent phases 0/1 per ABBA/BAAB quartet; signed differences B-A, means include every pixel.",
+    "limitation": "Whole-quartet OFF/OFF equality detects variation in later phases outside selected numeric observations; finite control samples do not prove deterministic replay.",
+    "reruns": 0
+  },
+  "packs": [
+    {
+      "passed": false,
+      "channels": [
+        {
+          "output": "diffuse",
+          "channel": 0,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "exceeded_pairs": {
+            "different_pixels": 0,
+            "max_abs": 0,
+            "mean_abs_diff": 0,
+            "abs_mean_diff": 0
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 0.0,
+          "passed": true
+        },
+        {
+          "output": "diffuse",
+          "channel": 1,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "exceeded_pairs": {
+            "different_pixels": 0,
+            "max_abs": 0,
+            "mean_abs_diff": 0,
+            "abs_mean_diff": 0
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 0.0,
+          "passed": true
+        },
+        {
+          "output": "diffuse",
+          "channel": 2,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "exceeded_pairs": {
+            "different_pixels": 0,
+            "max_abs": 0,
+            "mean_abs_diff": 0,
+            "abs_mean_diff": 0
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 0.0,
+          "passed": true
+        },
+        {
+          "output": "specular",
+          "channel": 0,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 63.0,
+            "max_abs": 0.0234375,
+            "mean_abs_diff": 2.973703379483567e-08,
+            "abs_mean_diff": 3.607631176570474e-09
+          },
+          "exceeded_pairs": {
+            "different_pixels": 4,
+            "max_abs": 4,
+            "mean_abs_diff": 4,
+            "abs_mean_diff": 4
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 3.607631176570474e-10,
+          "passed": false
+        },
+        {
+          "output": "specular",
+          "channel": 1,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 63.0,
+            "max_abs": 0.015625,
+            "mean_abs_diff": 1.5320125426102043e-08,
+            "abs_mean_diff": 4.963329604773624e-09
+          },
+          "exceeded_pairs": {
+            "different_pixels": 4,
+            "max_abs": 4,
+            "mean_abs_diff": 4,
+            "abs_mean_diff": 4
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 4.963329604773625e-10,
+          "passed": false
+        },
+        {
+          "output": "specular",
+          "channel": 2,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 63.0,
+            "max_abs": 0.015625,
+            "mean_abs_diff": 1.1552240430694266e-08,
+            "abs_mean_diff": 6.256532534998828e-09
+          },
+          "exceeded_pairs": {
+            "different_pixels": 4,
+            "max_abs": 4,
+            "mean_abs_diff": 4,
+            "abs_mean_diff": 4
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 6.256532534998829e-10,
+          "passed": false
+        },
+        {
+          "output": "rfHitDist",
+          "channel": 0,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 9.0,
+            "max_abs": 65503.992012023926,
+            "mean_abs_diff": 0.21582396541841697,
+            "abs_mean_diff": 0.07194207498093241
+          },
+          "exceeded_pairs": {
+            "different_pixels": 4,
+            "max_abs": 4,
+            "mean_abs_diff": 4,
+            "abs_mean_diff": 4
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 0.007194207498093241,
+          "passed": false
+        }
+      ],
+      "control": ".scratch\\rf-default\\control61",
+      "candidate": ".scratch\\rf-default\\candidate61",
+      "pairs": 40,
+      "bound": "empirical nearest-rank control p99 (maximum for 40 pairs); every candidate pair must fit each bound",
+      "comparison": "phase 0 vs phase 1 per ABBA/BAAB quartet; signed differences B-A; means over all pixels",
+      "control_timing": {
+        "pairs": 40,
+        "median_ms": -0.000104,
+        "ci95_ms": [
+          -0.125696,
+          0.203392
+        ],
+        "A_median_ms": 1.029776,
+        "B_median_ms": 1.122768,
+        "counters_equal": true
+      },
+      "candidate_timing": {
+        "pairs": 40,
+        "median_ms": -0.122904,
+        "ci95_ms": [
+          -0.157664,
+          0.019344
+        ],
+        "A_median_ms": 1.08,
+        "B_median_ms": 0.998536,
+        "counters_equal": true
+      },
+      "pack": ".claude/worktrees/test-main/captures/replay-20261106-093603-61",
+      "stats_enabled": false,
+      "logs": [
+        ".scratch/rf-default/control61.log",
+        ".scratch/rf-default/candidate61.log"
+      ]
+    },
+    {
+      "passed": false,
+      "channels": [
+        {
+          "output": "diffuse",
+          "channel": 0,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "exceeded_pairs": {
+            "different_pixels": 0,
+            "max_abs": 0,
+            "mean_abs_diff": 0,
+            "abs_mean_diff": 0
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 0.0,
+          "passed": true
+        },
+        {
+          "output": "diffuse",
+          "channel": 1,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "exceeded_pairs": {
+            "different_pixels": 0,
+            "max_abs": 0,
+            "mean_abs_diff": 0,
+            "abs_mean_diff": 0
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 0.0,
+          "passed": true
+        },
+        {
+          "output": "diffuse",
+          "channel": 2,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "exceeded_pairs": {
+            "different_pixels": 0,
+            "max_abs": 0,
+            "mean_abs_diff": 0,
+            "abs_mean_diff": 0
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": 0.0,
+          "passed": true
+        },
+        {
+          "output": "specular",
+          "channel": 0,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 63.0,
+            "max_abs": 0.00604248046875,
+            "mean_abs_diff": 1.3938241733382993e-08,
+            "abs_mean_diff": 2.3860013026887272e-09
+          },
+          "exceeded_pairs": {
+            "different_pixels": 40,
+            "max_abs": 40,
+            "mean_abs_diff": 40,
+            "abs_mean_diff": 7
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": -5.965003256721818e-11,
+          "passed": false
+        },
+        {
+          "output": "specular",
+          "channel": 1,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 63.0,
+            "max_abs": 0.003173828125,
+            "mean_abs_diff": 7.907251610081108e-09,
+            "abs_mean_diff": 2.069683307336666e-09
+          },
+          "exceeded_pairs": {
+            "different_pixels": 40,
+            "max_abs": 7,
+            "mean_abs_diff": 7,
+            "abs_mean_diff": 7
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": -5.1742082683416655e-11,
+          "passed": false
+        },
+        {
+          "output": "specular",
+          "channel": 2,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 63.0,
+            "max_abs": 0.00244140625,
+            "mean_abs_diff": 6.479980125534501e-09,
+            "abs_mean_diff": 2.256820664410292e-09
+          },
+          "exceeded_pairs": {
+            "different_pixels": 40,
+            "max_abs": 7,
+            "mean_abs_diff": 7,
+            "abs_mean_diff": 7
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": -5.6420516610257297e-11,
+          "passed": false
+        },
+        {
+          "output": "rfHitDist",
+          "channel": 0,
+          "control_p99": {
+            "different_pixels": 0.0,
+            "max_abs": 0.0,
+            "mean_abs_diff": 0.0,
+            "abs_mean_diff": 0.0
+          },
+          "candidate_max": {
+            "different_pixels": 3.0,
+            "max_abs": 65503.97346496582,
+            "mean_abs_diff": 0.07194200494407825,
+            "abs_mean_diff": 0.02398044986487999
+          },
+          "exceeded_pairs": {
+            "different_pixels": 7,
+            "max_abs": 7,
+            "mean_abs_diff": 7,
+            "abs_mean_diff": 7
+          },
+          "control_mean_signed": 0.0,
+          "candidate_mean_signed": -0.0005995112466219998,
+          "passed": false
+        }
+      ],
+      "control": ".scratch\\rf-default\\control62",
+      "candidate": ".scratch\\rf-default\\candidate62",
+      "pairs": 40,
+      "bound": "empirical nearest-rank control p99 (maximum for 40 pairs); every candidate pair must fit each bound",
+      "comparison": "phase 0 vs phase 1 per ABBA/BAAB quartet; signed differences B-A; means over all pixels",
+      "control_timing": {
+        "pairs": 40,
+        "median_ms": -0.000432,
+        "ci95_ms": [
+          -0.000976,
+          0.015328
+        ],
+        "A_median_ms": 0.8864639999999999,
+        "B_median_ms": 0.885888,
+        "counters_equal": false
+      },
+      "candidate_timing": {
+        "pairs": 40,
+        "median_ms": -0.12875999999999999,
+        "ci95_ms": [
+          -0.228944,
+          -0.016736
+        ],
+        "A_median_ms": 1.133224,
+        "B_median_ms": 0.8353759999999999,
+        "counters_equal": false
+      },
+      "pack": ".claude/worktrees/test-main/captures/replay-20261106-093623-62",
+      "stats_enabled": true,
+      "logs": [
+        ".scratch/rf-default/control62.log",
+        ".scratch/rf-default/candidate62.log"
+      ]
+    }
+  ],
+  "build_test": {
+    "command": "scripts/build.ps1 -Test",
+    "passed": 203,
+    "total": 203,
+    "test_seconds": 174.65,
+    "build_seconds": 2,
+    "receipt": ".scratch/rf-default/build-test-final.log"
+  }
+}
