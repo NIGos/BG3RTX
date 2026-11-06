@@ -30,6 +30,8 @@ std::mutex mutex;
 bool failed{},history{},capabilities_checked{},need_reset=true;
 std::set<VkDevice> enabled_devices;
 std::atomic<bool> retired_owner{};
+std::atomic<bool> has_recordings{};
+bool collect_stats{};
 uint64_t last_recorded_frame{},guide_signature{},history_recording{};
 VkCommandBuffer history_cmd{};bool history_submitted{};
 float previous_jitter[2]{};
@@ -46,6 +48,7 @@ void fail(const char* operation,unsigned result=0) {
   failed=true;need_reset=true;history=false;
 }
 void config_state() {
+  collect_stats=logging::stats_enabled(cfg_int);
   int bypass=cfg_int("dlss5_nr_bypass",0)!=0;
   if(last_bypass!=bypass){last_bypass=bypass;log("[dlss5] NR bypass=%d",bypass);need_reset=true;history=false;}
   if(stats_window::reset(cfg_int,reset_seen)) {
@@ -127,6 +130,7 @@ bool get_pipelines() {
 }
 struct Feature {
   NVSDK_NGX_Handle* handle{};NVSDK_NGX_Parameter* parameters{};dlss5_frame::FeatureKey key{};
+  VkCommandBuffer creation_cmd{};uint64_t creation_recording{};bool creation_submitted{};
   ~Feature(){if(handle&&ngx.release)ngx.release(handle);if(parameters&&ngx.destroy)ngx.destroy(parameters);}
 };
 auto& feature=*new std::shared_ptr<Feature>;
@@ -146,7 +150,7 @@ void slot_destroy(Slot& s) {
 }
 bool complete(const Slot& s){return s.submitted && life_before_destroy(uint64_t(s.original.image),"NR recording slot completion",false);}
 void harvest(Slot& s) {
-  if(!s.query || !s.query_valid || s.measured || !complete(s))return;
+  if(!collect_stats || !s.query || !s.query_valid || s.measured || !complete(s))return;
   uint64_t values[12]{};
   auto r=device->vk.GetQueryPoolResults(device->device,s.query,0,6,sizeof values,values,2*sizeof(uint64_t),VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
   if(r!=VK_SUCCESS)return;for(unsigned i=0;i<6;++i)if(!values[i*2+1])return;s.measured=true;
@@ -178,7 +182,7 @@ Slot* reserve(VkCommandBuffer cmd,uint64_t recording,uint32_t w,uint32_t h,const
     VkDescriptorSetAllocateInfo a{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};a.descriptorPool=s.pool;a.descriptorSetCount=3;a.pSetLayouts=layouts;
     if((old_pipelines!=pipelines || !s.sets[0]) && device->vk.AllocateDescriptorSets(device->device,&a,s.sets)!=VK_SUCCESS){fail("descriptor sets");return nullptr;}
     s.pipelines=pipelines;
-    if(logging::stats_enabled(cfg_int) && !s.query){VkQueryPoolCreateInfo q{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};q.queryType=VK_QUERY_TYPE_TIMESTAMP;q.queryCount=6;
+    if(collect_stats && !s.query){VkQueryPoolCreateInfo q{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};q.queryType=VK_QUERY_TYPE_TIMESTAMP;q.queryCount=6;
       if(device->vk.CreateQueryPool(device->device,&q,nullptr,&s.query)!=VK_SUCCESS)s.query=VK_NULL_HANDLE;}
     return &s;
   }
@@ -218,7 +222,16 @@ unsigned scaling(NVSDK_NGX_Parameter* p){p->Set("DLSSNR.ScalingRatio",1.0f);retu
 // buffers can still be resubmitted, so completion alone cannot release them.
 // Poll the existing per-submission lifetime helper; never stall the device.
 bool retire_feature(const dlss5_frame::FeatureKey& key) {
-  if(!feature || (!retiring && !dlss5_frame::recreate(feature->key,key)))return true;
+  if(!feature)return true;
+  // Once submitted, initialization outlives its CPU recording. Avoid querying
+  // command-buffer metadata (and taking its shared mutex) on every later frame.
+  const bool retained=!feature->creation_submitted && cmd_recording(feature->creation_cmd)==feature->creation_recording;
+  const auto initialized=dlss5_frame::creation(feature->creation_submitted,
+    retained);
+  if(initialized==dlss5_frame::Creation::AwaitSubmit){
+    state("awaiting feature initialization submission");return false;
+  }
+  if(!retiring && initialized!=dlss5_frame::Creation::Discarded && !dlss5_frame::recreate(feature->key,key))return true;
   retiring=true;
   need_reset=true;history=false;
   for(auto& s:slots)if(s.feature==feature) {
@@ -239,6 +252,7 @@ bool retire_feature(const dlss5_frame::FeatureKey& key) {
 bool create_feature(VkCommandBuffer cmd,Slot& slot) {
   if(feature){slot.feature=feature;return true;} // retire_feature checked the complete key.
   auto next=std::make_shared<Feature>();next->key=slot.key;
+  next->creation_cmd=slot.cmd;next->creation_recording=slot.recording;
   if(ngx.allocate(&next->parameters)!=NVSDK_NGX_Result_Success || !next->parameters){fail("AllocateParameters");return false;}
   auto* p=next->parameters;for(auto key:{"Width","OutWidth","DLSSNR.Width","DLSSNR.InputWidth","DLSSNR.OutputWidth","DLSSNR.Output.Width"})p->Set(key,slot.w);
   for(auto key:{"Height","OutHeight","DLSSNR.Height","DLSSNR.InputHeight","DLSSNR.OutputHeight","DLSSNR.Output.Height"})p->Set(key,slot.h);
@@ -307,6 +321,7 @@ void dlss5_evaluate(DeviceData* dd,VkCommandBuffer cmd,const Dlss5Frame& frame) 
   std::memcpy(s.constants[0].map,&codec,sizeof codec);std::memcpy(s.constants[1].map,&codec,sizeof codec);std::memcpy(s.constants[2].map,&guide,sizeof guide);
   for(unsigned i=0;i<3;++i)descriptors(s,i,frame);
   life_note(cmd,uint64_t(s.original.image)); // per-queue/submit-sequence completion marker, including failed creates
+  has_recordings.store(true);
   life_note(cmd,uint64_t(frame.color.image));life_note(cmd,uint64_t(frame.color.view));
   for(const auto* b:{&frame.depth,&frame.motion}){life_note(cmd,uint64_t(b->image));life_note(cmd,uint64_t(b->view));}
   if(!create_feature(cmd,s)){restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);cs->ours_since_event=true;return;}
@@ -315,8 +330,9 @@ void dlss5_evaluate(DeviceData* dd,VkCommandBuffer cmd,const Dlss5Frame& frame) 
   s.layout.record_transition();
   barrier(cmd,frame.color.image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
   barrier(cmd,frame.depth.image,old_depth,VK_IMAGE_LAYOUT_GENERAL,aspect(frame.depth.format));barrier(cmd,frame.motion.image,old_motion,VK_IMAGE_LAYOUT_GENERAL);
-  auto stamp=[&](unsigned i){if(s.query)device->vk.CmdWriteTimestamp(cmd,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,s.query,i);};
-  if(s.query){device->vk.CmdResetQueryPool(cmd,s.query,0,6);s.query_valid=true;}stamp(0);dispatch(cmd,s,2);dispatch(cmd,s,0);
+  const bool measured=collect_stats && s.query!=VK_NULL_HANDLE;
+  auto stamp=[&](unsigned i){if(measured)device->vk.CmdWriteTimestamp(cmd,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,s.query,i);};
+  if(measured){device->vk.CmdResetQueryPool(cmd,s.query,0,6);s.query_valid=true;}stamp(0);dispatch(cmd,s,2);dispatch(cmd,s,0);
   for(auto* image:{&s.original,&s.proxy,&s.motion,&s.depth})barrier(cmd,image->image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);stamp(1);
   barrier(cmd,frame.depth.image,VK_IMAGE_LAYOUT_GENERAL,old_depth,aspect(frame.depth.format));barrier(cmd,frame.motion.image,VK_IMAGE_LAYOUT_GENERAL,old_motion);
   auto* p=s.feature->parameters;p->Set("DLSSNR.Color",static_cast<void*>(&s.proxy.ngx));p->Set("DLSSNR.Output",static_cast<void*>(&s.neural.ngx));
@@ -333,15 +349,18 @@ void dlss5_evaluate(DeviceData* dd,VkCommandBuffer cmd,const Dlss5Frame& frame) 
   stamp(5);restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);cs->ours_since_event=true;
 }
 void dlss5_note_submit(VkQueue queue,const std::vector<VkCommandBuffer>& cmds,bool success){
-  if(!success)return;std::lock_guard<std::mutex> lock(mutex);if(!device)return;
+  if(!success || cmds.empty() || !has_recordings.load())return;std::lock_guard<std::mutex> lock(mutex);if(!device)return;
   for(auto cmd:cmds)for(auto& s:slots)if(s.cmd==cmd&&s.recording&&s.recording==cmd_recording(cmd)){
+    if(s.feature && s.feature->creation_cmd==cmd && s.feature->creation_recording==s.recording)s.feature->creation_submitted=true;
     s.submitted=true;s.layout.submitted(true);if(history_recording==s.recording && history_cmd==cmd)history_submitted=true;s.submitted_frame=frame_index();s.queue=queue;
     if(device&&queue!=device->graphics_queue)fail("NR submitted on another queue (session stopped)");}
 }
 void dlss5_on_present(){
   if(!cfg_int("dlss5_nr",0))return;std::lock_guard<std::mutex> lock(mutex);config_state();if(!device)return;
   for(auto& s:slots)harvest(s);
-  if(!last_bypass && !failed && frame_index()>last_recorded_frame+120)state("no usable pre-post RR evaluation in recent frames");
+  // Keep a specific refusal reason; the watchdog must not alternate it with a
+  // generic timeout on every present while the same unavailable chain persists.
+  if(!last_bypass && !failed && why=="active" && frame_index()>last_recorded_frame+120)state("no usable pre-post RR evaluation in recent frames");
   const auto now=frame_index();if(now-stats_start<stats_period(120))return;stats_start=now;
   if(measurements){log_stats("[dlss5] gpu NR: %.3f ms/frame (codec+guides+evaluate), evaluate %.3f, encode+guides %.3f, decode %.3f ms/frame; frames %u, bypass %d",
     sums[3]/measurements,sums[0]/measurements,sums[1]/measurements,sums[2]/measurements,measurements,last_bypass);}
@@ -355,6 +374,7 @@ void dlss5_device_destroy(DeviceData* dd){
   for(auto& s:slots)s.feature.reset();
   feature.reset();
   for(auto& s:slots)slot_destroy(s);pipelines.reset();device=nullptr;history=false;capabilities_checked=false;need_reset=true;
+  has_recordings.store(false);
 }
 
 VkResult dlss5_create_device(InstanceData* id,PFN_vkCreateDevice create,VkPhysicalDevice physical,const VkDeviceCreateInfo* ci,const VkAllocationCallbacks* alloc,VkDevice* out){

@@ -5,6 +5,10 @@
 using namespace bg3::dlss5_frame;
 #define CHECK(x) do{if(!(x)){std::fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#x);return 1;}}while(0)
 int main(){
+  CHECK(creation(false,true)==Creation::AwaitSubmit); // later recording cannot race initialization
+  CHECK(creation(false,false)==Creation::Discarded); // discarded create must be recreated
+  CHECK(creation(true,true)==Creation::Ready);
+  CHECK(creation(true,false)==Creation::Ready); // submitted initialization survives reset/free
   CHECK(boundary(true,false,true,true,false,true,true,false)==Boundary::Ready);
   CHECK(boundary(false,false,true,true,false,true,true,false)==Boundary::Off);
   CHECK(boundary(true,true,true,true,false,true,true,false)==Boundary::Bypass);

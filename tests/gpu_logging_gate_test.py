@@ -24,6 +24,15 @@ def body(path, name):
 
 
 class GpuLoggingGateTest(unittest.TestCase):
+    def test_nr_retained_pool_stops_when_statistics_stop(self):
+        evaluate = body("layer/dlss5.cpp", "dlss5_evaluate")
+        self.assertIn("const bool measured=collect_stats && s.query!=VK_NULL_HANDLE", evaluate)
+        self.assertIn("if(measured)device->vk.CmdWriteTimestamp", evaluate)
+        self.assertIn("if(measured){device->vk.CmdResetQueryPool", evaluate)
+        harvest = body("layer/dlss5.cpp", "harvest")
+        self.assertIn("!collect_stats", harvest.split(";", 1)[0])
+        self.assertNotIn("VK_QUERY_RESULT_WAIT_BIT", harvest)
+
     def test_timestamp_helpers_require_statistics(self):
         helpers = {
             "core/gi.cpp": ["timing_init", "timestamp", "timing_collect", "rt_timestamp", "rt_timing_collect", "trace_timestamp", "trace_timing_collect", "rf_timestamp", "rf_timing_collect", "ls_timestamp", "ls_timing_collect"],
