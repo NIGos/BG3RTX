@@ -29,12 +29,14 @@
 #include <chrono>
 #include "../common/ls_exact_k.h"
 #include "../common/occ_stats.h"
+#include "../common/recording_history.h"
 #include "../common/native_hit_capability.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "core.h"
+#include "completion_lease.h"
 #include "../common/camera_motion.h"
 #include "../common/hair_primary.h"
 #include "../common/native_scalp_capability.h"
@@ -59,6 +61,7 @@
 namespace {
 
 struct Snapshot {
+  uint64_t recording = 0;
   uint64_t omm_identity=0;
   Bg3Binding cam, vp, nrm, alb, mat, dep, ao, shadow, dif, spe;
   // D-LS: the lighting's light list (set 1 b0, b13, b23, b24, b25, b39, b40, b41; set 0 b2).
@@ -100,7 +103,7 @@ struct Pipe {
   VkPipelineLayout active_layout = VK_NULL_HANDLE;
   // Cache by complete request, specialization values and layout. Live toggles retain both states,
   // including values which previously collided in the same bit-indexed variant slot.
-  struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; };
+  struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; std::string request; bg3::pipe_async::PipelineSpecs specs; };
   std::unordered_map<std::string, Variant> variants;
 };
 
@@ -338,6 +341,7 @@ VkBuffer g_occ_buf = VK_NULL_HANDLE, g_occ_host = VK_NULL_HANDLE;
 VkDeviceMemory g_occ_mem = VK_NULL_HANDLE, g_occ_host_mem = VK_NULL_HANDLE;
 const uint32_t* g_occ_map = nullptr;
 uint64_t g_occ_frame[kOccRing] = {};
+CoreCompletionLease g_occ_lease[kOccRing];
 uint32_t g_occ_slot = 0;
 uint64_t g_occ_armed = 0;   // the frame whose counters the D-LS pass adds to (0: none)
 occ::OccWindow g_occ_win;
@@ -419,7 +423,7 @@ Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F; full resol
 Bg3Image g_origin{}, g_aux{};   // extras 40 and 44 (full resolution, RGBA16F)
 Bg3Image g_ls_nodata{};          // extra 46 when there is no per-light data: 1x1 RGBA32UI (the shaders' type)
 bool g_x_logged = false;
-uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0, g_shift = 1;
+uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_shift = 1;
 
 // RR mode (docs/QUALITY.md fix 3): with Ray Reconstruction denoising the frame,
 // the GI uses the preset's ray count and keeps no history of its own, the
@@ -429,8 +433,20 @@ uint32_t gi_res_shift() {
   bool rr = m < 0 ? host->rr_active() : m != 0;
   return rr ? 0u : 1u;
 }
-bool g_images_ready = false, g_logged = false;
+bg3::RecordingHistory g_history;
+bool g_logged = false;
 uint64_t g_last_pre_frame = 0;
+void history_resolve() {
+  if (!g_history.owner) return;
+  const auto owner = g_history.owner;
+  const auto state = host->recording_state(owner);
+  g_history.resolve((state.flags & BG3_RECORDING_SUBMITTED) != 0,
+                    (state.flags & BG3_RECORDING_COMPLETE) != 0 && (state.flags & BG3_RECORDING_EXECUTABLE) == 0);
+  if (!g_history.owner) {
+    host->release_recording(owner);
+    if (!(state.flags & BG3_RECORDING_SUBMITTED)) g_last_pre_frame = 0;
+  }
+}
 
 // Motion vectors (from the NGX hook) and the layout their render pass leaves them in.
 VkImage g_mv_image = VK_NULL_HANDLE;
@@ -719,7 +735,8 @@ void release_images() {
     host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)im->memory);
     *im = Bg3Image{};
   }
-  g_images_ready = false;
+  if (g_history.owner) host->release_recording(g_history.owner);
+  g_history = {};
   g_w = g_h = 0;
 }
 
@@ -1222,8 +1239,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   PipelineSpecs specs;
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
   if (std::strncmp(file, "gi/rt_reflections", 17) == 0)
-    // The GI-disabled specialization gained a register in the offline trial; leave it unchanged.
-    specs.add(sv::kSpecIdRfCompactProbeState, rf_gi && host->cfg_int("rf_compact_probe_state", 0) != 0 ? 1u : 0u);
+    // Every RF request contains the same independent receiver-probe block.
+    specs.add(sv::kSpecIdRfCompactProbeState, host->cfg_int("rf_compact_probe_state", 1) != 0 ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);
   if (hit_family) {
@@ -1232,7 +1249,13 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   }
   // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
   // value keeps its own slot and pipeline, as the cascade constant does.
-  if (sv::gi_far_entry(file)) specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+  if (sv::gi_far_entry(file)) {
+    specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+    // Diagnostic dispatches select the original specialized executable, including its
+    // register allocation: a runtime shader guard alone can still change its cost.
+    specs.add(sv::kSpecIdGiFarRoofEarly,
+              host->cfg_int("rt_stats", 0) == 0 && host->cfg_int("gi_far_roof_early", 1) != 0 ? 1u : 0u);
+  }
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
     specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
@@ -1285,6 +1308,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   slot.pipeline = VkPipeline(r.pipeline);
   slot.generation = r.generation;
   slot.file = slot_key;
+  slot.request = selected; slot.specs = specs;
   p.pipeline = slot.pipeline;
   p.generation = r.generation;
   host->log("gi: %s generation %llu%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)r.generation,
@@ -1546,6 +1570,7 @@ VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
 uint32_t* g_stats_map = nullptr;
 uint32_t g_stats_slot = 0;
 uint64_t g_stats_frame[kStatsRing] = {};
+CoreCompletionLease g_stats_lease[kStatsRing];
 bool g_stats_scene_current[kStatsRing] = {};
 uint64_t g_stats_sum[kStatsCounters] = {};
 float g_ls_raw[4] = {};   // set1/b0 m0.x, m0.y, m0.w, b13[0] as last written
@@ -1663,12 +1688,12 @@ bool stats_init() {
   return true;
 }
 
-// Picks this frame's slot (cleared on the GPU) after folding in the one written
-// kStatsRing - 1 frames ago.
+// Picks this frame's slot after folding its completed, non-executable producer.
+// run_pre guards reuse before recording any commands; frame age is not completion.
 void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_current) {
   uint64_t now = host->frame_index();
   uint32_t slot = uint32_t(now % kStatsRing);
-  if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
+  if (g_stats_frame[slot] && g_stats_lease[slot].readable()) {
     const uint32_t* c = g_stats_map + slot * (kStatsSlot / 4);
     uint64_t got[4] = {};
     for (int g = 0; g < 4; ++g)
@@ -1735,6 +1760,8 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_cur
   }
   g_stats_slot = slot;
   g_stats_frame[slot] = now;
+  g_stats_lease[slot].clear();
+  g_stats_lease[slot].record(cmd);
   g_stats_scene_current[slot] = scene_current;
   host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -2086,10 +2113,10 @@ void bind_rt(Bound& b, VkAccelerationStructureKHR tlas, VkDescriptorSet alpha) {
 
 void bind_all(Bound& b, const Snapshot& s) {
   b.omm_identity=s.omm_identity;
-  Bg3Image& hin = g_hist[g_parity];
-  Bg3Image& hout = g_hist[g_parity ^ 1];
-  Bg3Image& din = g_hist_depth[g_parity];
-  Bg3Image& dout = g_hist_depth[g_parity ^ 1];
+  Bg3Image& hin = g_hist[g_history.parity];
+  Bg3Image& hout = g_hist[g_history.parity ^ 1];
+  Bg3Image& din = g_hist_depth[g_history.parity];
+  Bg3Image& dout = g_hist_depth[g_history.parity ^ 1];
   b.cam = {s.cam.buffer, s.cam.offset, s.cam.range};
   b.vp = {s.vp.buffer, s.vp.offset, s.vp.range};
   const VkImageLayout G = VK_IMAGE_LAYOUT_GENERAL;
@@ -2276,6 +2303,10 @@ bool dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w
 constexpr VkPipelineStageFlags kCS = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags kAll = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
+// Exact sun descriptors retained only for the armed replay capture (core calls bypass host tracking).
+struct ReplaySun { VkDescriptorBufferInfo ubo{}; VkDescriptorImageInfo img[8]{}; };
+ReplaySun g_replay_sun;
+
 // This frame's sun inputs into the next set of the ring (set 2 of the D-LS layout).
 VkDescriptorSet write_sun_set(const Snapshot& s) {
   const uint64_t now = host->frame_index();
@@ -2321,6 +2352,9 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
     else w[n].pImageInfo = &img[i - 1];
     ++n;
   }
+  if (host->replay_pack && host->cfg_int("replay_pack",0)!=0) {
+    g_replay_sun.ubo=ubo; std::copy_n(img,8,g_replay_sun.img);
+  }
   host->vk->UpdateDescriptorSets(host->device, n, w, 0, nullptr);
   return set;
 }
@@ -2336,11 +2370,55 @@ bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
      !host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&selected_alpha)))return false;
   const VkPipelineLayout layout = material_use ? g_hit_reference_layout : box ? g_ls_box_layout : g_ls_layout;
   if(!layout || (material_use && box))return false;
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   VkWriteDescriptorSet w[kLsBindings + kNumExtras];
   uint32_t count=0;
   if(material_use){if(!gather_hit_gi_writes(b,w,count,true))return false;}
   else count=gather_writes(b,kLsBindings,w);
+  Bg3ReplayDispatch replay{};
+  std::vector<Bg3ReplayWrite> extra;
+  std::vector<Bg3ReplaySpec> replay_specs;
+  VkDescriptorBufferInfo replay_counters[2]={{g_bx_buf,0,kLsBoxXBytes},{g_occ_buf,0,kOccBytes}};
+  std::string replay_defines;
+  int* replay_done=nullptr;
+  if(box && !material_use && host->replay_pack && host->cfg_int("replay_pack_pass",0)==0 && host->cfg_int("replay_pack",0)>0) {
+    const int serial=host->cfg_int("replay_pack",0);
+    replay_done=static_cast<int*>(host->persist("bg3rtx.replay_pack.ls.done",sizeof(int)));
+    if(*replay_done!=serial) {
+      // Capture only the production Ultra request, never the match/check/pan or OMM variants.
+      const Pipe::Variant* selected=nullptr;
+      for(const auto& [key,v]:g_ls_box_k.variants)if(v.pipeline==pipe)selected=&v;
+      if(selected && selected->request.rfind("gi/rt_local_shadows_box_k.hlsl",0)==0) {
+        const size_t q=selected->request.find('?');
+        replay_defines=q==std::string::npos?"":selected->request.substr(q+1);
+        for(uint32_t i=0;i<selected->specs.count;++i)replay_specs.push_back({selected->specs.entries[i].constantID,selected->specs.data[i]});
+        for(uint32_t i=0;i<kSunBindings;++i) {
+          Bg3ReplayWrite e{};e.set=2;e.write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+          e.write.dstBinding=i;e.write.descriptorCount=1;e.write.descriptorType=sun_binding_type(i);
+          if(i==0)e.write.pBufferInfo=&g_replay_sun.ubo;else e.write.pImageInfo=&g_replay_sun.img[i-1];
+          extra.push_back(e);
+        }
+        for(uint32_t i=0;i<2;++i){
+          Bg3ReplayWrite e{};e.set=4;e.write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};e.write.dstBinding=i;
+          e.write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;e.write.descriptorCount=1;e.write.pBufferInfo=&replay_counters[i];extra.push_back(e);
+        }
+        static const uint32_t outputs[]={6,7,44};
+        replay.serial=serial;replay.pass="local_shadows";replay.defines=replay_defines.c_str();
+        replay.frame=pc.frame;replay.groups[0]=gx;replay.groups[1]=gy;replay.groups[2]=1;
+        replay.push=&pc;replay.push_bytes=sizeof(pc);replay.set0=w;replay.set0_count=count;
+        replay.outputs=outputs;replay.output_count=3;replay.set1=selected_alpha;replay.tlas=b.tlas;
+        replay.phase=1;replay.extra_writes=extra.data();replay.extra_count=uint32_t(extra.size());
+        replay.game_set=box->game_set1;replay.specs=replay_specs.data();replay.spec_count=uint32_t(replay_specs.size());
+        const int r=host->replay_pack(cmd,&replay);
+        if(r!=0)*replay_done=serial;
+        if(r!=1)replay.phase=0;
+      } else if(pipe!=g_ls_match.pipeline) {
+        host->log("[replay] pack %d failed: LS capture requires production non-OMM box-k pipeline",serial);
+        *replay_done=serial;
+      }
+    }
+  }
+  // Snapshot shader reads may have changed the compute pipeline and push descriptors.
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
   vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,count,w);
   VkDescriptorSet sets[2] = {selected_alpha, sun};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, material_use ? 1u : 2u, sets, 0, nullptr);
@@ -2349,6 +2427,7 @@ bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
   if (box) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &g_bx_set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, gx, gy, 1);
+  if(replay.phase==1){replay.phase=2;host->replay_pack(cmd,&replay);}
   return true;
 }
 
@@ -2360,15 +2439,46 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
   if(!traversal.valid())return false;
   const VkDeviceFuncs& vk = *host->vk;
   const VkPipelineLayout layout = s.rf_sharc ? g_rf_sharc_layout : g_rf_layout;
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.rf_sharc ? g_rf_sharc.pipeline : g_rf.pipeline);
-  VkWriteDescriptorSet w[kRfBindings + kNumExtras];   // bindings 0-30 and the D-RF extras (40)
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kRfBindings, w), w);
+  VkWriteDescriptorSet w[kRfBindings + kNumExtras];
+  const uint32_t count=gather_writes(b,kRfBindings,w);
+  Bg3ReplayDispatch replay{};
+  std::string replay_defines;
+  std::vector<Bg3ReplaySpec> replay_specs;
+  if(host->replay_pack && host->cfg_int("replay_pack_pass",0)==1 && host->cfg_int("replay_pack",0)>0) {
+    const int serial=host->cfg_int("replay_pack",0);
+    auto* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.rf.done",sizeof(int)));
+    if(*done!=serial) {
+      const Pipe::Variant* selected=nullptr;
+      if(!s.rf_sharc)for(const auto& [key,v]:g_rf.variants)if(v.pipeline==g_rf.pipeline)selected=&v;
+      if(selected && selected->request.substr(0,selected->request.find('?'))=="gi/rt_reflections.hlsl" && selected->request.find("RT_OMM_SCENE")==std::string::npos) {
+        const auto q=selected->request.find('?');
+        replay_defines=q==std::string::npos?"":selected->request.substr(q+1);
+        for(uint32_t i=0;i<selected->specs.count;++i)replay_specs.push_back({selected->specs.entries[i].constantID,selected->specs.data[i]});
+        static const uint32_t outputs[]={6,7,30};
+        replay.serial=serial;replay.pass="reflections";replay.defines=replay_defines.c_str();
+        replay.frame=pc.frame;replay.groups[0]=(g_w+7)/8;replay.groups[1]=(g_h+7)/8;replay.groups[2]=1;
+        replay.push=&pc;replay.push_bytes=sizeof(pc);replay.set0=w;replay.set0_count=count;
+        replay.outputs=outputs;replay.output_count=3;replay.set1=b.alpha;replay.tlas=b.tlas;
+        replay.phase=1;replay.game_set=s.game_set1;replay.specs=replay_specs.data();replay.spec_count=uint32_t(replay_specs.size());
+        const int r=host->replay_pack(cmd,&replay);
+        if(r!=0)*done=serial;
+        if(r!=1)replay.phase=0;
+      } else {
+        host->log("[replay] pack %d failed: RF requires default non-OMM reflections without hit shading",serial);
+        *done=serial;
+      }
+    }
+  }
+  // Capture shader reads may replace the compute pipeline and push descriptors.
+  vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,s.rf_sharc?g_rf_sharc.pipeline:g_rf.pipeline);
+  vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,count,w);
   VkDescriptorSet sets[2] = {b.alpha, s.game_set1};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, s.game_set1_ndyn,
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (s.rf_sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  if(replay.phase==1){replay.phase=2;host->replay_pack(cmd,&replay);}
   return true;
 }
 
@@ -2638,9 +2748,11 @@ std::string pipe_defines(const Pipe& p){
 }
 void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,uint32_t n,VkDescriptorSet set1,
                          VkAccelerationStructureKHR tlas,const Push& hp,const char* variant,const std::string& defines){
- if(!host->replay_pack)return;
+ if(!host->replay_pack || host->cfg_int("replay_pack_pass",0)!=0)return;
  const int key=host->cfg_int("replay_pack",0);
  if(key==0 || key<-1)return;
+ // Production box-k LS owns the armed pack on Ultra, even when GI uses emission.
+ if(key>0 && host->cfg_int("ls_box",0) && host->cfg_int("ls_k",0))return;
  int* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.done",sizeof(int)));
  if(key>0 && *done==key)return;
  if(variant){
@@ -2859,11 +2971,16 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
   return tlas;
 }
 
-// rt_occ_stats: the window over the read-back slots (the slot written kOccRing - 1 frames ago is
-// folded before this frame reuses it), one "occ stats" line per 60 frames read.
-void occ_fold_slot(uint64_t now) {
+// rt_occ_stats: fold a completed, non-executable producer before reusing its
+// readback slot. One "occ stats" line per 60 frames read.
+bool occ_fold_slot(uint64_t now) {
   const uint32_t slot = uint32_t(now % kOccRing);
-  if (g_occ_map && g_occ_frame[slot] && g_occ_frame[slot] + kOccRing - 1 <= now) {
+  if (!g_occ_lease[slot].reusable()) {
+    static bool warned = false;
+    if (!warned) { warned = true; host->log("occ stats: readback slot still owned; skipping update"); }
+    return false;
+  }
+  if (g_occ_map && g_occ_frame[slot] && g_occ_lease[slot].readable()) {
     occ::occ_fold(g_occ_win, g_occ_map + size_t(slot) * (kOccBytes / 4));
     // rt_occ_stats_frames: the window (60; 1-4 for frame-by-frame occluder kind and distance of a moving shadow)
     if (g_occ_win.frames >= stats_period(unsigned((std::max)(host->cfg_int("rt_occ_stats_frames", 60), 1)))) {
@@ -2873,10 +2990,13 @@ void occ_fold_slot(uint64_t now) {
   }
   g_occ_frame[slot] = 0;
   g_occ_slot = slot;
+  g_occ_lease[slot].clear();
+  return true;
 }
 
 // The counters of this frame into its host slot (after the passes that add to them).
 void occ_copy(VkCommandBuffer cmd) {
+  g_occ_lease[g_occ_slot].record(cmd);
   memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
   const VkBufferCopy cp{0, VkDeviceSize(g_occ_slot) * kOccBytes, kOccBytes};
   host->vk->CmdCopyBuffer(cmd, g_occ_buf, g_occ_host, 1, &cp);
@@ -2888,7 +3008,7 @@ void occ_copy(VkCommandBuffer cmd) {
 bool occ_run(VkCommandBuffer cmd, Bound& b, const Push& base, uint32_t flags) {
   const VkDeviceFuncs& vk = *host->vk;
   const uint64_t now = host->frame_index();
-  occ_fold_slot(now);
+  if (!occ_fold_slot(now)) return false;
   auto traversal = prepare_omm_traversal(cmd, b, g_occ.pipeline, true);
   if (!traversal.valid()) return false;
   memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT);   // the previous frame's copy out of it first
@@ -2905,6 +3025,7 @@ bool occ_run(VkCommandBuffer cmd, Bound& b, const Push& base, uint32_t flags) {
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
   occ_copy(cmd);   // complete without D-LS; the D-LS pass's copy (run_post) replaces it
   g_occ_frame[g_occ_slot] = now;
+
   g_occ_armed = now;
   if (!g_occ_logged) {
     g_occ_logged = true;
@@ -2915,6 +3036,19 @@ bool occ_run(VkCommandBuffer cmd, Bound& b, const Push& base, uint32_t flags) {
 }
 
 bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
+  history_resolve();
+  if (!g_stats_lease[host->frame_index() % kStatsRing].reusable()) {
+    static bool warned = false;
+    if (!warned) { warned = true; host->log("gi: counter slot still owned; skipping update"); }
+    return false;
+  }
+  const uint64_t recording = host->recording_index(cmd);
+  if (!recording || (g_history.owner && g_history.owner != recording)) {
+    static bool warned = false;
+    if (!warned) { warned = true; host->log("gi: history producer is unsubmitted; skipping this recording"); }
+    return false;
+  }
+  s.recording = recording;
   initialize_hair_origin();
   if(!g_hair_origin_cap && host->cfg_int("rt_hair_physical_origin",0) && !g_hair_origin_warned){g_hair_origin_warned=true;host->log("[hair origin] enable rejected: restart with rt_hair_physical_origin=1 and rt_native_hair=1 to reserve resources");}
   g_hair_origin_frame=s.hair_physical_origin=g_hair_origin_cap && host->cfg_int("rt_hair_physical_origin",0)!=0 && host->cfg_int("rt_origin",1)!=0;
@@ -2924,6 +3058,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
             refresh(g_ao_apply, "gi/gi_ao_apply.hlsl") & refresh(g_composite, "gi/gi_composite.hlsl") &
             refresh(g_contact, "gi/gi_contact.hlsl");
   if (!ok) return false;
+  if (!g_history.owner) host->retain_recording(recording);
+  if (!g_history.begin(recording)) return false;
   // Warmup and actual primary dispatch share one Pipe/variant cache slot.
   // Select once so identity/epoch preparation cannot replace it with base
   // every frame and force two pipeline creations at an unchanged generation.
@@ -2935,7 +3071,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     refresh(g_pan_primary, primary_shader, g_rt_layout);
     if (g_ls_layout) refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout);
   }
-  if (!g_images_ready) {
+  if (!g_history.ready) {
     for (Bg3Image* im : all_images)
       image_layout(cmd, im->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                    VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -2948,7 +3084,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       host->vk->CmdClearColorImage(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_GENERAL,&invalid,1,&range);
     }
     memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
-    g_images_ready = true;
+    g_history.ready = true;
   }
   timing_init();
   timing_collect();
@@ -3326,7 +3462,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     ls_timestamp(cmd, 0);   // the timing covers the join pass and the shadow pass
     // Per-light data: the join pass writes one record per light array slot.
-    g_lsl_ok = lsl_begin(&g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);
+    g_lsl_ok = lsl_begin(cmd, &g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);
     if (g_lsl_ok) {
       if (g_lsl.needs_init) {
         image_layout(cmd, g_lsl.slots_image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
@@ -3543,7 +3679,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   }
   if (s.pan) {
     Bg3Binding im{};
-    im.image = g_hist[g_parity ^ 1].image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    im.image = g_hist[g_history.parity ^ 1].image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_hw; im.height = g_hh;
     if (s.gi) host->pan_capture(cmd, "gi", &im);
   }
@@ -3601,7 +3737,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   g_slot = (g_slot + 1) % kRing;
   // The SSS pass samples the diffuse buffer in its fragment shader.
   memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | kCS);
-  if (s.gi) g_parity ^= 1;
+  if (s.gi) g_history.parity ^= 1;
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   if (!g_logged) {
     g_logged = true;
@@ -3635,6 +3771,7 @@ void flush(VkCommandBuffer cmd) {
   if (it == g_pending.end()) return;
   Snapshot s = it->second;
   g_pending.erase(it);
+  if (s.recording != host->recording_index(cmd)) return;
   run_post(cmd, s);
 }
 
@@ -3647,6 +3784,11 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
     return;
   describe(cmd, d);
   std::lock_guard<std::mutex> lock(g_mu);
+  history_resolve();
+  for (auto it = g_pending.begin(); it != g_pending.end();) {
+    if (it->second.recording != host->recording_index(it->first)) it = g_pending.erase(it);
+    else ++it;
+  }
   uint64_t f = host->frame_index();
   const bool validation=host->cfg_int("ls_native_direct_validate",0)!=0;
   const int validation_view=host->cfg_int("ls_debug",0);
@@ -3848,6 +3990,7 @@ void gi_release() {
   g_occ_win = occ::OccWindow{};
   g_occ_logged = false;
   std::memset(g_occ_frame, 0, sizeof g_occ_frame);
+  for (auto& lease : g_occ_lease) lease.clear();
   host->defer_destroy(BG3_DEFER_SAMPLER, (uint64_t)g_linear_clamp);
   g_linear_clamp = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_sun_pool);   // frees the sets
@@ -3860,6 +4003,7 @@ void gi_release() {
   g_stats_buf = VK_NULL_HANDLE;
   g_stats_mem = VK_NULL_HANDLE;
   g_stats_map = nullptr;
+  for (auto& lease : g_stats_lease) lease.clear();
   std::memset(g_stats_frame, 0, sizeof g_stats_frame);
   defer_layout_destroy(uint64_t(g_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_set_layout);

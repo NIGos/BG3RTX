@@ -33,4 +33,12 @@ inline std::string validate(const std::string& rt,const std::string& nr){
   if((a.key==dev.key&&(a.mods&3)==3)||(b.key==dev.key&&(b.mods&3)==3))return "Ctrl+Shift+F10 is reserved for the developer target toggle.";
   return {};
 }
+// Editing must allow recovery when the other saved binding is invalid.
+// Save still validates the complete pair.
+inline std::string validate_change(const std::string& value,const std::string& other){
+  auto error=validate(value,"None");
+  if(!error.empty())return error;
+  if(conflict(parse(value),parse(other)))return "Choose different keyboard shortcuts.";
+  return {};
+}
 }

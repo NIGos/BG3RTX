@@ -105,6 +105,10 @@ and on again. DLSS and frame generation stay as they are. **Ctrl+Shift+F10** swi
 Experimental option off and on, but only options that apply without a restart; in this release
 there is none, so it has no effect yet. **Ctrl+Shift+F8** toggles experimental DLSS 5 Neural Rendering
 when it was enabled at game start. DLSS 5 has its own launcher page, runtime picker and status.
+It needs your own x64 `nvngx_dlssnr.dll` version 310.8 or 310.9; no DLSS 5 runtime is bundled.
+Before Play with Ray Reconstruction On, the launcher restores the game's DLSS upscaler,
+backs up `graphicSettings.lsx` as `.lsx.bg3rtx-bak`, and keeps an existing DLSS quality mode.
+Set `game_dlss_guard=0` in `bg3rtx_user.ini` to disable this repair.
 Customise the RT shortcut on Advanced and the DLSS 5 shortcut on DLSS 5 under Keyboard shortcuts.
 Choose None to disable or Reset to default to restore; save changes to apply.
 

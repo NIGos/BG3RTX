@@ -32,7 +32,71 @@ def fixture(name="one"):
     return job, plan
 
 
+class DeveloperSettingTests(unittest.TestCase):
+    def test_qualified_presets_and_unqualified_overrides(self):
+        self.assertFalse(f.developer_setting_problems(dict(set="dev=0,preset=ultra,ls_k=1,rt_omm_dyn=1,rt_vt_alpha_masks=1,rt_water_compose_shift=1"), []))
+        self.assertTrue(f.developer_setting_problems(dict(set="dev=0,preset=high,ls_k=1"), []))
+        self.assertTrue(f.developer_setting_problems(dict(set="dev=0,preset=ultra,ls_k=2"), []))
+        job = dict(set="dev=0,preset=ultra,ls_k=1")
+        problems = f.developer_setting_problems(job, [phase("high", values="preset=high"), phase("reset", values="ls_k=0")])
+        self.assertEqual(len(problems), 1)
+        self.assertIn("high:", problems[0])
+
+    def test_removed_compact_knob_is_not_developer_only(self):
+        self.assertFalse(f.developer_setting_problems(dict(set="dev=0,rt_compact_hit_state=1"), []))
+
+    def test_keep_reshade_boolean_field(self):
+        for value in (True, False):
+            self.assertFalse(f.environment_problems(dict(keep_reshade=value)))
+        for value in (None, 0, 1, "false", "true"):
+            self.assertIn("keep_reshade must be a boolean", f.environment_problems(dict(keep_reshade=value))[0])
+
+    def test_release_job_and_plan_reject_water_surface_fresnel(self):
+        job = dict(set="dev=0,rt_water_surface_fresnel=1")
+        self.assertIn("rt_water_surface_fresnel=1", f.developer_setting_problems(job, [])[0])
+        job["set"] = "dev=0"
+        problems = f.developer_setting_problems(job, [phase("on", values="rt_water_surface_fresnel=1")])
+        self.assertIn("on:", problems[0])
+        j, p = fixture()
+        j["set"] += ",dev=0,rt_water_surface_fresnel=1"
+        self.assertTrue(any(s.startswith("release policy:") for s in f.lint(j, p, [])["problems"]))
+
+    def test_allowed_modes_and_off_resets(self):
+        for values in ("dev=1,rt_water_surface_fresnel=1", "dev=0,experimental_options=1,rt_water_surface_fresnel=1",
+                       "dev=0,rt_water_surface_fresnel=0", "rt_water_surface_fresnel=1"):
+            self.assertFalse(f.developer_setting_problems(dict(set=values), []))
+
+    def test_cumulative_policy_toggle_and_list_settings(self):
+        job = dict(set=["dev=1", "rt_water_surface_fresnel=1"])
+        p = [phase("release", values="dev=0"), phase("restore", values="rt_water_surface_fresnel=0")]
+        problems = f.developer_setting_problems(job, p)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("release:", problems[0])
+
+    def test_metadata_maps_compound_and_inverted_keys(self):
+        problems = f.developer_setting_problems(dict(set="dev=0,rt_omm_dyn=1,rr_post=0"), [])
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(any("exp_omm" in s for s in problems))
+        self.assertTrue(any("reset it to 1" in s for s in problems))
+
+
 class PipelineReadinessTests(unittest.TestCase):
+    def test_cached_gi_variants_table_requires_only_fresh_quiet(self):
+        keys = ('gi_hit_sun', 'gi_hit_direct', 'gi_far', 'rt_hit_emission', 'rt_emissive',
+                'rt_hair_groom', 'rt_hair_physical_origin', 'rt_hit_material',
+                'rt_hit_material_instanced', 'rt_hit_material_wind_rgb',
+                'rt_alpha_fine_lod', 'rt_vt_alpha_masks', 'rt_omm', 'rt_omm_dyn')
+        for key in keys:
+            with self.subTest(key=key):
+                quiet = f.pipeline_readiness.QUIET
+                self.assertEqual(f.pipeline_readiness.TABLE[key], [quiet])
+                job = dict(set=f'{key}=1')
+                plan = [phase('before', values=''), phase('cached', values=f'{key}=0')]
+                f.pipeline_readiness.apply(job, plan)
+                self.assertEqual(plan[1]['wait_log'], [quiet])
+                self.assertEqual(plan[1]['wait_log_fresh'], [quiet])
+                self.assertFalse(f.pipeline_readiness.problems(job, plan))
+
     def test_cpu_and_push_values_never_wait_for_pipeline_generations(self):
         j = dict(set='rt_scene_compact_holds=0,rt_build=auto,gi_rt=1,gi_rr_rays=2,gi_strength=1')
         p = [phase('before', values=''), phase('after', values=
@@ -902,6 +966,23 @@ class WindowFpsTests(unittest.TestCase):
 
 
 class ReadinessBudgetTests(unittest.TestCase):
+    def test_cached_gi_quiet_only_ignores_abandoned_builds(self):
+        quiet = f.pipeline_readiness.QUIET
+        runner = ('12:00:00.000 [pan-plan] window 0 set=gi_hit_sun=1\n'
+                  '12:00:10.000 [pan-plan] window 1 set=gi_hit_sun=0\n'
+                  '12:00:30.000 [motion-plan] complete')
+        lines = ['12:00:09.000 [watch] ready | pipelines 0 (0 ms in driver)',
+                 '12:00:10.000 [cfg] settings read',
+                 '12:00:10.100 [cfg] keys: gi_hit_sun=0',
+                 '12:00:10.150 gi: gi/gi_trace_rt_hit_direct.hlsl building in the background']
+        step = dict(wait_log=[quiet], wait_log_fresh=[quiet])
+        def estimate(extra):
+            f.readiness_budget.configure([dict(save='same', runner=runner, lines=lines+extra)])
+            return f.readiness_budget.estimate(dict(save='same'), step, {'gi_hit_sun': '0'})
+        self.assertEqual(estimate([])['samples'], 0)
+        result = estimate(['12:00:12.000 [watch] ready | pipelines 0 (0 ms in driver)'])
+        self.assertEqual((result['samples'], result['seconds']), (1, 2))
+
     def tearDown(self):
         f.readiness_budget.configure([])
 

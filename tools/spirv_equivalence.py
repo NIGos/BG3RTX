@@ -237,4 +237,9 @@ def specialize(tool, src, dst, assignments, preserve=()):
             frozen = opt(tool, frozen, tmp / "frozen.spv", "--fold-spec-const-op-composite")
         else:
             frozen = opt(tool, assigned, tmp / "frozen.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
-        return opt(tool, frozen, dst, "-O", "--remove-unused-interface-variables", "--trim-capabilities")
+        # Specialization can expose constant branches only after the first optimizer
+        # schedule has visited CFG cleanup. Repeat the same semantics-preserving
+        # schedule on both sides so those dead selections do not cause false failures.
+        optimized = opt(tool, frozen, tmp / "optimized.spv", "-O",
+                        "--remove-unused-interface-variables", "--trim-capabilities")
+        return opt(tool, optimized, dst, "-O", "--remove-unused-interface-variables", "--trim-capabilities")

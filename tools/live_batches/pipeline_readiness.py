@@ -27,17 +27,21 @@ TABLE = {
 GI_TRACE = r"gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\.hlsl[^ ]* generation "
 # Specialization 1029 in core/gi.cpp; cached selections still require fresh QUIET.
 TABLE["rt_compact_hit_state"] = [GI_TRACE]
+# GI roof rejection, specialization 1038 (forced OFF when rt_stats != 0).
+TABLE["gi_far_roof_early"] = [GI_TRACE]
 # RF specialization 1031; newly selected and cached variants both need fresh QUIET.
 TABLE["rf_compact_probe_state"] = [r"gi: gi/rt_reflections[^ /]*\.hlsl[^ ]* generation "]
 GI_QUERY = [GI_TRACE, r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation ",
             r"gi: gi/rt_reflections\.hlsl[^ ]* generation "]
+# These variants may already be cached: TABLE consumers must not turn the
+# legacy family patterns into mandatory generation announcements.
 for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
             "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
             "rt_alpha_fine_lod", "rt_vt_alpha_masks", "rt_omm", "rt_omm_dyn"):
-    TABLE[key] = list(GI_QUERY)
+    TABLE[key] = [QUIET]
 for key in ("gi_far", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
             "rt_hit_emission", "rt_emissive"):
-    TABLE[key] = [GI_TRACE]
+    TABLE[key] = [QUIET]
 WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"
 for key in ("rt_water_compose_shift",
             "rt_water_shadows", "rt_water_ls_shadows",
@@ -80,14 +84,15 @@ for key in CONSERVATIVE:
 # selecting pipelines. Unknown rendering keys require explicit completion evidence.
 # Alpha spill only selects the CPU capture allocator (layer/geocapture.cpp:2634);
 # its current-frame scene publication is checked by the job's scene-wait gates.
-CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_edge pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())
+CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_edge pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack replay_pack_pass rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())
 
 # Explicit non-pipeline contracts, audited against core/gi.cpp refresh()/Push
 # and common/shader_variant.h. A cfg acknowledgement is sufficient: these
 # values change host policy, dispatch counts or push constants, not requests
 # or specialization constants. Keep them out of build reconciliation entirely.
 # NR bypass changes only the layer's dispatch decision/history reset, not a shader pipeline.
-NO_PIPELINE = set("rt_scene_compact_holds cpu_opt1 cpu_opt2 cpu_opt3 dlss5_nr_bypass rt_build fps_cap cpu_timing detailed_logging dev "
+# core/gi.cpp make_push reads hit_ao_rays into Push::rt_ao_rays every frame.
+NO_PIPELINE = set("hit_ao_rays rt_scene_compact_holds cpu_opt1 cpu_opt2 cpu_opt3 dlss5_nr_bypass rt_build fps_cap cpu_timing detailed_logging dev "
     "gi_rr_rays gi_rays gi_ao gi_strength rf_max_rough ls_shadowed rr_cbt rr fg "
     "rt_shadows rt_alpha rt_hair_groom_primary_order rt_hair_primary_passes "
     "rt_hair_groom_crowd_ksegments rt_hair_groom_tips rt_water_geometry preset ab_off".split())

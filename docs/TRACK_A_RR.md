@@ -491,6 +491,26 @@ frame** (the traced Goblin Camp frame had no DoF; the DoF weights were checked
 only on the earlier build, where the residual error was the uniform store
 offset, independent of the DoF weight).
 
+**S-F05 boundary correction (rrpost-r11, 2026-11-06, offline).** Mantissa masking
+alone retained FP32's exponent range. `trunc_r11g11b10` now uses fixed subnormal
+steps (R/G 2^-20, B 2^-19), saturates finite overflow at 65024/65024/64512,
+preserves positive infinity and reduced NaN payloads, and zeros negative finite
+values/infinity. Normal inputs retain the original path. No new key or request.
+`tests/rr_r11_test.py` runs `tools/rr_r11_fixture.cpp` on an isolated Vulkan device:
+real R11 image stores and subsequent loads versus production HLSL and an independent
+numeric reference, bit for bit. It checks every finite positive FP16 value, R11/R10
+boundaries and their FP32 neighbours, negatives and NaN payload boundaries.
+The fixture refuses GPU work while BG3, Stalker2 or Cyberpunk runs and requires
+Khronos validation. RTX 5090 verified; other devices must pass their own oracle.
+77933 mixed RGB inputs / 233799 channel comparisons pass exactly, with zero
+numeric-reference mismatches, normal changes or Vulkan validation errors.
+Release equivalence uses an explicit normal-input assumption (the exact range
+guard folded true), plus a separate quantisation-OFF proof. It covers both RR
+requests; unrelated requests remain byte-identical. Full-range equality would
+be incorrect: boundary outputs intentionally change. In-game cost was not measured
+(offline-only authorization); normal store rounding is unchanged. To inspect later,
+use the existing `rr_post_check` replication comparison; no live batch was queued.
+
 **A/B against the old path** (foundry, static, one run toggled live with
 `scripts/live_phases.py`: new, old, new; tonemapped HDR10 frames compared in PQ
 code values):
@@ -806,3 +826,38 @@ in Test Dialogue3. This is a visual decision, not a statistical quality pass.
 
 Dialogue3 drift repair (pt-d3-analysis, 2026-11-03): 12 counterbalanced adjacent OFF/ON pairs; freeze masks from all OFF windows and use a Bonferroni exact paired sign gate (12 observables, minimum 8 pairs). See post_temporal/predicted.json for the derived 338.9 s plan, 818.9 s load/readiness bound and offline fixtures.
 The earlier four-window receipt was insufficient (2 pairs). Later VALID 032335 had 10 pairs; all 12 primary sign tests missed significance, float energy +0.1492% failed, and background registration failed. S8 remains unqualified; the Ultra promotion follows the explicit visual verdict above.
+
+
+### L11/L12/L17 submission redo (layer-submit2, 2026-11-06, READY_FOR_LIVE)
+
+The reverted `ae625cef` used one pending temporal/guide producer and refused later
+recordings until its exact ID was published. Recording and submission are separate:
+`BeginCommandBuffer` assigns a new ID; `CmdExecuteCommands` copies secondary IDs;
+only primaries enter `QueueSubmit(2)`. A secondary re-begin invalidates its old
+recording. Submitting a different primary cannot publish that ID. The global guide
+gate also refused RR before a separately recorded G-buffer producer was submitted.
+The descriptor change pinned executable recordings in 256 slots; completion alone
+cannot release those sets, so later post steps could fail even when the GPU was idle.
+These are code-confirmed failure paths; no new game trace was taken offline.
+
+The redo retains immutable descriptor leases but grows pool pages at the retained
+recording high water mark. Reset releases ownership; the lifetime tracker still
+proves GPU completion before reuse. Every full-overwrite guide writer carries its
+own UNDEFINED-to-GENERAL barrier, ordered after prior accesses. Its initialization
+is published only by a submitted ID, without gating RR on one global pending ID.
+Each temporal slot retains producer provenance and metadata independently. Only a
+submitted previous-frame producer can be sampled. A missing/pending/discarded
+producer uses the fresh sample and still runs temporal plus output-resolution grade.
+A newer recording cannot erase an older slot's pending publication. An older
+resubmitted writer invalidates metadata for a newer writer to that same slot.
+Cold dispatches alias unused history descriptors to the initialized output, avoiding
+an UNDEFINED transition that would discard the other slot's pending contents.
+
+Existing keys/presets are unchanged; variant request delta is 0. Shared shader_identity
+proves 218/218 requests byte-identical to HEAD 5256bec2d25a by identical input keys.
+Offline tests cover N/N+1 before submit, secondary ID snapshots, discard/re-begin,
+steady-state submitted history, older resubmission and 600 retained descriptor sets.
+Final `scripts/build.ps1 -Test`: PASS 196/196 (20 s build, 180 s tests).
+Live gate for the coordinator: `rel1-smoke-ultra-s8` must contain `[rrpost] gpu temporal`
+lines and output-resolution grade > 0 (rejected attempt: 0 lines and 0.000 ms;
+qualified baseline: 32 lines and 0.079 ms). GPU cost is pending that authorized smoke.

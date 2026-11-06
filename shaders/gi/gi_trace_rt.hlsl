@@ -128,6 +128,22 @@ static const uint kGiFarStatFirst = 372u, kGiFarStatCount = 11u;
 // ray from inside one) takes no far radiance from a screen or hidden hit; nor does any hit while the volumes are
 // unknown (no trust slot: Push::ls_flags bit 25; no asset DB roofs: header flag 2). Conservative: the
 // native ambient stays for those rays.
+[[vk::constant_id(1038)]] const uint kGiFarRoofEarly = 0u;
+// Only the ORIGINAL origin inside the first padded volume is a proof. Unknown data,
+// invalid volumes/rays and subnormal directions retain the complete original path.
+bool gi_far_inside_first_roof(float3 o, float3 d, float t) {
+  if ((pc.ls_flags & (1u << 25)) == 0u || (st_u(4) & 2u) == 0u || st_u(0) == 0u) return false;
+  const float4 c = st_f4(192u), q = st_f4(208u);
+  const float3 h = st_f4(224u).xyz;
+  const float3 lo = qrot_inv(q, o - (c.xyz - cam2.c[13].xyz)), ld = qrot_inv(q, d);
+  if (!isfinite(t) || !all(isfinite(lo)) || !all(isfinite(ld)) || !all(isfinite(h)) ||
+      !all(h >= 0.0) || !all(abs(ld) >= 1.175494351e-38) || !all(abs(lo) <= h)) return false;
+  // Use precisely the original slab ordering and segment boundaries as a final guard.
+  const float3 inv = 1.0 / select(abs(ld) > 1e-8, ld, select(ld >= 0.0, 1e-8, -1e-8));
+  const float3 t1 = (-h - lo) * inv, t2 = (h - lo) * inv, tn = min(t1, t2), tf = max(t1, t2);
+  const float t0 = max(max(max(tn.x, tn.y), tn.z), 0.0), t3 = min(min(tf.x, tf.y), tf.z);
+  return t3 >= t0 && t0 <= t;
+}
 bool gi_far_roof_clear(float3 o, float3 d, float t) {
   if ((pc.ls_flags & (1u << 25)) == 0u || (st_u(4) & 2u) == 0u) return false;
   const float3 cam_abs = cam2.c[13].xyz;
@@ -408,11 +424,25 @@ void main(uint3 tid : SV_DispatchThreadID) {
       if (pc.rt_stats != 0u) hit_em_count(0u, he, dot(he.radiance * w, float3(0.2126, 0.7152, 0.0722)), fp.x ^ fp.y);
     }
 #endif
+#if RT_HIT_GI_SUN && (RT_GI_FAR || defined(RT_SPEC_GI_FAR))
+    // Emission above is retained. Statistics retain all material/direct/sun/AO work and
+    // its diagnostic side effects; the original fallback below has zero base fade.
+    const bool roof_early = kGiFarRoofEarly != 0u && pc.rt_stats == 0u
+#if defined(RT_SPEC_GI_FAR)
+        && kSpecGiFar != 0u
+#endif
+        && !visible && !aborted && t > RB && pc.gi_rt_fallback == 0u &&
+        gi_far_inside_first_roof(o, dir, t);
+#endif
 #if RT_HIT_GI_DIRECT
     // Screen and successful SHaRC hits already returned their radiance above.
     // This replaces only fallback0's zero bounce; its native ambient occlusion
     // remains exactly the same. Direct-only radiance never replaces a full probe.
-    if(!visible && !aborted && t>=0 && pc.gi_rt_fallback==0u && hit_material_publication_ready()){
+    if(!visible && !aborted && t>=0 && pc.gi_rt_fallback==0u && hit_material_publication_ready()
+#if RT_HIT_GI_SUN && (RT_GI_FAR || defined(RT_SPEC_GI_FAR))
+       && !roof_early
+#endif
+       ){
       uint hit_bin=fp.x^fp.y;
       if(pc.rt_stats!=0u)stat_add(282u,true,hit_bin);
       NativeHitMaterial material=rt_hit_material(hh,cone.f0+cone.spread*t);

@@ -350,7 +350,11 @@ void dlss5_on_present(){
 void dlss5_device_destroy(DeviceData* dd){
   std::lock_guard<std::mutex> lock(mutex);enabled_devices.erase(dd->device);if(device!=dd)return;retired_owner=true;
   const auto r=dd->vk.DeviceWaitIdle(dd->device);log("[dlss5] device drain %d; release feature/resources on existing owner (no NGX shutdown)",int(r));
-  for(auto& s:slots)slot_destroy(s);feature.reset();pipelines.reset();device=nullptr;history=false;capabilities_checked=false;need_reset=true;
+  // Drop every feature reference before any bound image is destroyed, including
+  // failed creates retained only by slots and features shared across slots.
+  for(auto& s:slots)s.feature.reset();
+  feature.reset();
+  for(auto& s:slots)slot_destroy(s);pipelines.reset();device=nullptr;history=false;capabilities_checked=false;need_reset=true;
 }
 
 VkResult dlss5_create_device(InstanceData* id,PFN_vkCreateDevice create,VkPhysicalDevice physical,const VkDeviceCreateInfo* ci,const VkAllocationCallbacks* alloc,VkDevice* out){

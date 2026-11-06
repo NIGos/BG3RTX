@@ -123,6 +123,14 @@ uint64_t life_gpu_done() {
   return g_life_done;
 }
 
+// Query completion on the submitting queue, never another queue's present.
+bool life_recording_complete(VkQueue queue, uint64_t frame, uint64_t seq) {
+  std::lock_guard lock(g_life_mu);
+  auto it = g_queue_done.find(queue);
+  return resource_retirement::complete(seq, g_idle_seq.load(), frame,
+      it == g_queue_done.end() ? 0 : it->second, it != g_queue_done.end());
+}
+
 // `h` is in use by work of ours submitted in frame `frame` (e.g. a scene slot's
 // alpha set handed out to the RT passes, recorded in another command buffer than
 // the one that noted the views): a destroy waits for the present fence after it.

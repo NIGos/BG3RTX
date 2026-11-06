@@ -21,13 +21,13 @@ Status values: open, fixing (branch), fixed (commit), removed, deferred (reason)
 | L8 | layer/hotreload.cpp:421; rrpost.cpp:244 | P0 | CreateImageView failure ignored, allocation reported OK | confirmed | cons-layer | fixed (bundle35) |
 | L9 | layer/ngx.cpp:516, bvhsplit.cpp:141, rtscene.cpp:284, rrpost.cpp:238, water.cpp:268, emissive.cpp:298 | P0 | Bind*Memory results unchecked | confirmed | cons-layer | fixed (bundle35) |
 | L10 | layer/water.cpp:1017,1063; emissive.cpp:1419,1455 | P0 | Begin/End command buffer failures ignored before QueueSubmit | confirmed | cons-layer | fixed (bundle35) |
-| L11 | layer/rrpost.cpp:428,490 | P0 | RR descriptor ring (256) has no completion ownership | suspected | cons-layer | deferred: needs submission-dependency tracking (record/submit/discard ownership); post-release |
-| L12 | layer/ngx.cpp:825,936 | P0 | NGX guides marked initialized at recording, not submission | suspected | cons-layer | deferred: needs submission-dependency tracking (record/submit/discard ownership); post-release |
+| L11 | layer/rrpost.cpp:428,490 | P0 | RR descriptor ring (256) has no completion ownership | confirmed | cons-layer | READY_FOR_LIVE (layer-submit2; build -Test 196/196, shader identity 218/218): RR descriptors stay immutable until recording discard plus GPU completion; grow pages beyond 256 instead of dropping post passes; rel1-smoke-ultra-s8 temporal lines and grade > 0 pending |
+| L12 | layer/ngx.cpp:825,936 | P0 | NGX guides marked initialized at recording, not submission | confirmed | cons-layer | READY_FOR_LIVE (layer-submit2; build -Test 196/196, shader identity 218/218): Each full-overwrite guide dispatch carries its own layout transition; initialization published only by exact submitted recording; rel1-smoke-ultra-s8 temporal lines and grade > 0 pending |
 | L13 | layer/ngx.cpp:542,550; rrpost.cpp:901 | P0 | Guide view read without the mutex that guards resize | suspected | cons-layer | fixed (bundle35) |
 | L14 | layer/assetdb.cpp:247,281,286,301 | P0 | Asset DB bounds checks can overflow (corrupt file) | confirmed | cons-layer | fixed (bundle35) |
 | L15 | layer/alphatest.cpp:1211,1214,452 | P1 | Alpha mask init committed at recording time | confirmed | cons-layer | fixed (bundle35) |
 | L16 | layer/alphatest.cpp:682,1182 | P1 | Teardown leaves dummy init latched for the next device | confirmed | cons-layer | fixed (bundle35) |
-| L17 | layer/rrpost.cpp:1147,1117 | P1 | Temporal history accepts an unsubmitted producer | suspected | cons-layer | deferred: needs submission-dependency tracking (record/submit/discard ownership); post-release |
+| L17 | layer/rrpost.cpp:1147,1117 | P1 | Temporal history accepts an unsubmitted producer | confirmed | cons-layer | READY_FOR_LIVE (layer-submit2; build -Test 196/196, shader identity 218/218): History provenance per ping-pong slot; delayed or discarded producers use fresh temporal samples without skipping temporal/final; rel1-smoke-ultra-s8 temporal lines and grade > 0 pending |
 | L18 | layer/streamline.cpp:833; cmd.cpp:497 | P1 | Discarded FG recordings exhaust the 8 copy slots | confirmed | cons-layer | fixed (bundle35) |
 | L19 | layer/shaders.cpp:53,115,515 | P1 | thread_local DXC COM pointers leak | confirmed | cons-layer | fixed (bundle35) |
 | L20 | layer/util.cpp:85; shaders.cpp:400 | P2 | write_file ignores fwrite/fclose errors (shader manifest) | confirmed | cons-layer | fixed (bundle35) |
@@ -35,15 +35,15 @@ Status values: open, fixing (branch), fixed (commit), removed, deferred (reason)
 | C1 | core/gi.cpp:851,869,876,2300 | P0 | Sun DSL created, pool/set failed: retry updates an unallocated set | confirmed | cons-core | fixed (bundle35) |
 | C2 | core/emissive.cpp:199,201,204 | P0 | Partial layout init passes null layouts on retry | confirmed | cons-core | fixed (bundle35) |
 | C3 | core/core.cpp:77,84,95,114 | P0 | Unused probe pipeline built every frame, results unchecked | confirmed | cons-core | fixed (bundle35) |
-| C4 | core/gi.cpp:2261,2300 | P0 | Sun descriptor set reuse by frame age | suspected | cons-core | not confirmed: ring larger than frames in flight, no wrap with a pending consumer shown; core ABI has no completion token (post-release contract) |
+| C4 | core/gi.cpp:2290-2347 | P0 | Sun descriptor set reuse by frame age | not confirmed for ordered submitted frames | core-contract | not confirmed: scene retirement bounds ordered pending RT use to 8 scenes x 2 handout frames x 2 sun sets = 32 sets; ring is 32. Delayed/unsubmitted recordings remain outside that proof and need submission ownership. See completion audit below. |
 | C5 | core/gi.cpp:739,747,750 | P1 | Layout leak on failed pipeline-layout creation | confirmed | cons-core | fixed (bundle35) |
 | C6 | core/gi.cpp:787,790,1216 | P1 | Reflection layout change drops cached pipeline variants (leak) | confirmed | cons-core | fixed (bundle35) |
-| C7 | core/ls_lights.cpp:192; sun_trust.cpp:138; water.cpp:479,1551 | P1 | Mapped rings read/overwritten without completion | suspected | cons-core | not confirmed: ring larger than frames in flight, no wrap with a pending consumer shown; core ABI has no completion token (post-release contract) |
-| C8 | core/gi.cpp:2923,3606 | P1 | GI init/parity committed at recording | suspected | cons-core | not confirmed: ring larger than frames in flight, no wrap with a pending consumer shown; core ABI has no completion token (post-release contract) |
+| C7 | core/ls_lights.cpp:192; sun_trust.cpp:138; water.cpp:394,694,1329 | P1 | Mapped rings read/overwritten without completion | confirmed contract gap; live overlap unmeasured | core-contract2 | READY_FOR_LIVE (core-contract2, ABI 28, build -Test 199/199, shader identity 218/218): mapped upload/readback slots retain exact consumers; reuse/read requires recording discard and every submission completed on its queue. Busy update skipped with one warning; CPU 2/3-frame, FG, discard and stall models; Ultra smoke pending. |
+| C8 | core/gi.cpp:3012,3665; layer/cmd.cpp:528-533 | P1 | GI init/parity committed at recording | confirmed discard hazard; ordinary pending reuse not a bug | core-contract2 | READY_FOR_LIVE (core-contract2, ABI 28, build -Test 199/199, shader identity 218/218): GI init/parity are speculative per exact recording; successful submission commits, discard rolls back. Another pending producer is refused; stale snapshots rejected. CPU discard/history tests; Ultra smoke pending. |
 | C9 | core/water.cpp:1673,1683 | P1 | Water state read before the mutex | suspected | cons-core | fixed (bundle35) |
 | C10 | shaders/gi/gi_common.hlsli:166 | P1 | Reprojection converts before the finite check; off-screen falls back to current pixel | suspected | cons-core | fixed (bundle37, cons-shaders) |
 | C11 | core/water.cpp:1530,392,1072 | P2 | Rejected water hit layouts and pipelines prepared with the key off | confirmed | cons-core | fixed (bundle35) |
-| C12 | core/gi.cpp:1641,3020 | P2 | Mapped counters consumed by frame age | suspected | cons-core | not confirmed: ring larger than frames in flight, no wrap with a pending consumer shown; core ABI has no completion token (post-release contract) |
+| C12 | core/gi.cpp:1678,2927 | P2 | Mapped counters consumed by frame age | confirmed contract gap; live overlap unmeasured | core-contract2 | READY_FOR_LIVE (core-contract2, ABI 28, build -Test 199/199, shader identity 218/218): GI stats and occlusion readbacks require submitted, discarded, GPU-completed consumer recordings; busy slots are preserved and update skipped. CPU completion tests; Ultra smoke pending. |
 | C13 | common/experimental_ab.h:13 | P2 | F10 cannot target Fresnel, the only release Experimental option | confirmed | cons-product | not a bug: F10 targets live options only; Fresnel needs a restart; the UI now says so (bundle37, cons-ui) |
 | P1 | common/settings.h:1038,1250 | P1 | Rejected water shading/cost, alpha spill and pak publication stay selectable via "Show experimental options" | confirmed | cons-product | fixed (bundle35) |
 | P2 | tools/launcher/launch.cpp:244 | P0 | GetEnvironmentStringsW null dereferenced | confirmed | cons-product | fixed (bundle35) |
@@ -60,6 +60,53 @@ Status values: open, fixing (branch), fixed (commit), removed, deferred (reason)
 | T1 | scripts/merge_scope.py:88; merge-green.ps1:140 | P2 | Shader+tooling bundle skips tooling gates | confirmed | cons-product | fixed (bundle35) |
 | T2 | scripts/test-queue.ps1:498,507 | P2 | Cancelled job descendants survive | confirmed | later (lives paused) | deferred: developer queue only, lives paused; next queue tooling change |
 | R1 | layer/geocapture.cpp:1099,1110 | P2 | Diagnostic pipeline retries leak (not release path) | confirmed | cons-layer | fixed (bundle35) |
+
+## Core completion audit (core-contract, 2026-11-06)
+
+- Current source ABI is **27**, despite the handoff's ABI 26 note. `Bg3HostApi::frame_index`
+  (`common/host_api.h:245`) is the CPU present counter, not GPU completion. No completed-frame
+  callback or core submit/discard notification exists. `life_gpu_done` is host-private
+  (`layer/tracker.cpp:121`, `layer/host.h:322`); its fences cover submitted present-queue work only.
+- There is **no layer-enforced numerical limit on pending app frames**: `layer/layer.cpp:783`
+  increments before presentation; `layer/tracker.cpp:169,199` only polls fences and appends them.
+  `layer/streamline.cpp:1909,2580` forwards acquire/present to the SDK. Reflex sleep (`:1024`)
+  and generated-frame count (`:2555`, at most three interpolated frames) are not a completion bound.
+  Generated presents increment `g_displayed` (`:193`), not the app frame index. Eight FG copy
+  slots (`:718,742-746`) guard their own reuse with SDK input-consumption tokens; they do not throttle core rings.
+- The relevant indirect bound is `kSceneSlots = 8` (`layer/host.h:644`). Slots require
+  `gpu_done >= last_use + 2` (`layer/rtscene.cpp:187`); handout rejects builds older than one
+  frame (`:1384`). For ordered submissions, at most 16 pending RT handout frames consume
+  eight scenes (build frame plus following frame). C4 allocates at most two sun sets per
+  pre/post pair (`core/gi.cpp:2733,3367,3558`; reflection fallback replaces the post allocation).
+  Thus its 32 sets cover that bound. This is not proof for commands submitted late/out of order
+  or discarded: a present fence does not own recordings. No larger ring is a general fix.
+- C7/C12 counterexample under the same bound: keep completion behind frame 1; build scenes in
+  frames 1,3,5,7,9 and reuse each in the following frame. Only five of eight scene slots are
+  needed by frame 9. Nine light/trust/water uploads wrap an eight-slot ring; GI modulo-8
+  counters also read slot 1 at frame 9 while its submitted GPU work can still be pending.
+  Trust upload even precedes the TLAS query (`core/gi.cpp:3033`). Coherent mapping and GPU
+  barriers do not synchronize these CPU accesses. Water timestamp availability is checked
+  after the mapped counters are read (`core/water.cpp:397,408,696,739`), and timing is optional.
+- C8 has no CPU mapped ping-pong overwrite: GPU barriers order normal submitted history use.
+  However, `g_images_ready = true` and parity advance during recording (`core/gi.cpp:3012,3665`).
+  `EndCommandBuffer` flushes the core before it can fail (`layer/cmd.cpp:528-533`); reset/discard
+  (`:108-142,439-441`) never informs the core. Discard the initial recording, then record again:
+  initialization is skipped and history state is advanced without its producer. This needs
+  recording generation plus submit/discard ownership; a completed-frame scalar alone cannot repair it.
+- **Stopped before ABI changes**, per task instruction. C7/C12 need completion tied to the
+  consuming recording; C8 needs lifecycle callbacks. No runtime/shader/settings changes or live evidence claimed.
+
+## Core completion implementation (core-contract2, 2026-11-06)
+
+- ABI **28** appends present-queue completion and retained exact-recording queries; both DLLs rebuilt together.
+- Reuses layer-submit2 submit/discard paths and secondary recording snapshots. Completion uses the submitting
+  queue's existing present fences (submit frame + 1), or a covering device-idle wait; unknown queries fail closed.
+- C7/C12 mapped slots remain immutable until every executable consumer is discarded and all its submissions
+  complete. A busy selected slot skips the update and logs once. Readback additionally requires submission.
+- C8 keeps GI initialization/parity speculative for its recording, publishes on submission, rolls back on discard,
+  and rejects stale pending snapshots. Ordered GPU-only history still needs no CPU completion wait.
+- C4 remains as documented above: not confirmed. No shader/settings changes, no new requests, no live preparation.
+- Offline results and pending coordinator Ultra smoke: [core-contract2](progress/core-contract2.md).
 
 ## 2. Debt
 
@@ -80,7 +127,7 @@ Status values: open, fixing (branch), fixed (commit), removed, deferred (reason)
 |---|---|---|---|---|
 | S-F03 | gi_composite.hlsl:51; water_compose.hlsl:144,363 | P2 | half-float radiance stores overflow | fixed (bundle37): clamped to 65504 |
 | S-F04 | rr_post.hlsl:159-171 | P2 | geometric mean overflow turns bright pixels black | fixed (bundle37): log fallback |
-| S-F05 | rr_post.hlsl:67 | P2 | R11G11B10 quantisation emulation ignores exponent limits | deferred: needs a verified GPU boundary fixture |
+| S-F05 | rr_post.hlsl:67 | P2 | R11G11B10 quantisation emulation ignores exponent limits | fixed offline (rrpost-r11): real R11 image boundary oracle; subnormals, finite overflow and NaN payloads; normal-domain and quantisation-OFF release equivalence; no new key |
 | S-F06 | rt_common.hlsli:390 | P2 | alpha page coordinates computed before the mip clamp | fixed (bundle37) |
 | S-F07 | gi_trace.hlsl:59; gi_contact.hlsl:31 | P2 | UV == 1 loads one texel out of bounds | fixed (bundle37) |
 | S-F02 | gi_composite.hlsl:48 | P2 | one scalar share cannot recover diffuse RGB | deferred: design limit, no visible error shown |

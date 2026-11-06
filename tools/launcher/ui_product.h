@@ -98,7 +98,7 @@ static LRESULT CALLBACK focusproc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD
     else if((w>=VK_F1&&w<=VK_F12)||(w>='A'&&w<='Z')||(w>='0'&&w<='9'))
       k={unsigned(w),unsigned(((GetKeyState(VK_CONTROL)&0x8000)?1:0)|((GetKeyState(VK_SHIFT)&0x8000)?2:0)|((GetKeyState(VK_MENU)&0x8000)?4:0)),true};
     if(k.valid){auto value=bg3::hotkeys::format(k);
-      auto error=bg3::hotkeys::validate(i==0?value:g.st.shortcuts[0],i==1?value:g.st.shortcuts[1]);
+      auto error=bg3::hotkeys::validate_change(value,g.st.shortcuts[1-i]);
       if(error.empty()){g.st.shortcuts[i]=value;SetWindowTextW(h,widen(value).c_str());status(L"Keyboard shortcut changed. Save to apply.");}
       else status(widen(error));
     }
@@ -186,7 +186,7 @@ static void rebuild() {
       SendMessageW(adapter,CB_SETCURSEL,g_adapter+1,0);y+=48;
     }
     label(g.body,L"Comparison and overlays",16,y,w,28,true);y+=36;
-    label(g.body,L"Ctrl+Shift+F9 in game switches all ray-traced lighting off and on, to compare with the game's own image.",16,y,w,48);y+=56;
+    label(g.body,L"By default, Ctrl+Shift+F9 in game switches all ray-traced lighting off and on. Change this shortcut on Advanced.",16,y,w,48);y+=56;
     place(add(g.body,WC_LINK,L"<a>Fonts and third-party notices</a>",WS_TABSTOP,NOTICES),16,y,w,32);y+=48;
     label(g.body,L"Independent fan mod; not affiliated with the game's developers.",16,y,w,48);y+=56;
   } else {
@@ -305,8 +305,9 @@ static void select_preset(int p) {
 static void play() {
   if(g_no_game||!g_screenshot.empty()||game_running()||g.stage<4)return;
   if(!save(false)||!valid_game_dir(g.dir))return;
-  auto p=make_plan(g.dir,L"",{},false,effective_fg(g.st));DWORD pid=0;std::wstring err,runtime_note;if(!launcher::dlss5::stage(g.st,g.dir,runtime_note,err)){status(err);return;}guard_game_upscaler(g.st);
-  if(!launch(p,&pid,&err))status(L"Settings saved, but the game could not start. "+err+L" See Help & support.");
+  auto p=make_plan(g.dir,L"",{},false,effective_fg(g.st));DWORD pid=0;std::wstring err,runtime_note;if(!launcher::dlss5::stage(g.st,g.dir,runtime_note,err)){status(err);return;}
+  auto guard_note=guard_game_upscaler(g.st);if(!guard_note.empty())runtime_note+=L"\n"+guard_note;
+  if(!launch(p,&pid,&err))status(L"Settings saved, but the game could not start. "+err+L" See Help & support. "+runtime_note);
   else status(L"Game started. "+runtime_note);
 }
 static void command(int id,int code,HWND source) {
@@ -338,7 +339,7 @@ static void command(int id,int code,HWND source) {
     case CLOSE:SendMessageW(g.wnd,WM_CLOSE,0,0);break;
     case BROWSE:browse();break;
     case HK_RT_RESET:case HK_NR_RESET:{int i=id==HK_RT_RESET?0:1;auto value=std::string(bg3::hotkeys::defaults[i]);
-      auto error=bg3::hotkeys::validate(i==0?value:g.st.shortcuts[0],i==1?value:g.st.shortcuts[1]);
+      auto error=bg3::hotkeys::validate_change(value,g.st.shortcuts[1-i]);
       if(error.empty()){g.st.shortcuts[i]=value;rebuild();}else status(widen(error));break;}
     case NR_BROWSE:g.st.dlss5_runtime_path=launcher::dlss5::browse(g.wnd,g.st.dlss5_runtime_path);g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);status(L"Runtime file selected. Save and restart the game to apply.");rebuild();break;
     case NR_CLEAR:g.st.dlss5_runtime_path.clear();g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);status(L"DLSS 5 will look in the game folder. Save to keep this change.");rebuild();break;

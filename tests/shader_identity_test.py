@@ -536,6 +536,9 @@ with tempfile.TemporaryDirectory() as td:
               "specialization freezes all constants and folds composites before optimization")
         check(calls[2].args[3:] == ("-O", "--remove-unused-interface-variables", "--trim-capabilities"),
               "specialization optimizes and trims inactive declarations symmetrically")
+        check(calls[3].args[1] == calls[2].args[2] and calls[3].args[2] == target and
+              calls[3].args[3:] == calls[2].args[3:],
+              "second symmetric optimizer schedule cleans branches exposed by specialization")
 # Release proof domains and old request mapping must be exhaustive and explicit.
 from tools import release_shader_equivalence as rse
 import struct

@@ -1347,3 +1347,75 @@ vs OFF repeat spread 0.104 ms, slower in both ON windows. Evidence:
 close-out receipt). Removed code, key, NO_PIPELINE entry, opt_r5 job and candidate
 tests. Retained qualified cpu_opt1/2/3 and rt_scene_compact_holds, all default 1.
 ABI unchanged; shader request delta 0. No new live run or queue staging.
+
+### Ultra scene cost and exactness audit (2026-11-05, scene-ana)
+
+Analysis only; no implementation qualifies for the requested existing-fixture proof.
+Sources below are in the main checkout's `captures/queue/logs`, read-only. Values
+are individual static-camera period medians, not paired comparisons or additive totals.
+The profile runner marks Ultra/High static-a at 06:53:07/06:53:35 (S8) and
+00:53:01/00:54:08 (inn). Rolling receipts can include preceding samples.
+
+| Receipt (file:line) | Convert/extract ms | BLAS ms | TLAS ms | Total ms |
+| --- | ---: | ---: | ---: | ---: |
+| Ultra S8 `opt-profile-s8.1.065142.log:5348` | 0.595 | 0.375 | 0.203 | 1.175 |
+| High S8, packing on, same file `:7665` | 0.580 | 0.356 | 0.329 | 1.267 |
+| Ultra inn `opt-profile-inn.1.005111.log:7140` | 1.219 | 0.773 | 0.324 | 2.504 |
+| High inn, before packing, same file `:11873` | 1.500 | 0.816 | 0.354 | 2.740 |
+
+The timer boundaries (`rtscene.cpp:1590-1630`, `bvhsplit.cpp:3021-3606`)
+allow only this split: conversion includes hold copies/packing, hair bounds,
+OMM checks and extraction/audits; BLAS includes static-mesh builds/compaction,
+dynamic builds/refits, cascade BLAS and optional groom work. Their individual
+GPU ms are **unavailable**, not zero. Static cached meshes already skip capture
+and rebuilding (`bvhsplit.cpp:2266-2313`); held absent draws already skip BLAS
+updates (`:2508`). Static camera does not imply static geometry.
+
+Population receipts: S8 `:5343` has 631 static instances, 283 captured draws,
+282.4 dynamic refits/0.7 rebuilds per build; inn `:7135` has 900, 605.4,
+592.9/12.2 respectively. Inn High `:11868` has 1169 static instances and
+396.5/37.5 dynamic refits/rebuilds. Counts cannot apportion the combined BLAS ms.
+Cascade raster + XFB + conversion is separate from scene conversion: S8
+`rel1-smoke-ultra-s8.1.205853.log:8184` is 0.653 ms; inn profile `:7133`
+is 0.753 ms. Cascade BLAS remains inside scene BLAS. Emissive build/capture
+is separate: S8 profile `:5301` 0.108/0.099 ms; inn `:7309` 0.097/0.035 ms.
+High disables cascade/emissive. Groom is off in these jobs; procedural hair
+bounds/AABB BLAS have no separate timer and cannot be subtracted as a hair cost.
+
+Why packing did not improve Ultra: the old predicate already enabled packing
+through `rt_hair_pool_trim=1`; `dyn_hold_compact_requested` now ORs that with
+`rt_scene_compact_holds`. The original Ultra runner enables native hair/trim;
+High disables trim but retains the device's 88-byte stride. Ultra already packed
+3.99 GB + copied 0.285 GB per 120 S8 builds (`:5343`); inn 6.30 + 0.526 GB
+(`:7135`). High inn copied 23.00 GB (`:11868`). This explains the mechanism,
+not a cross-preset saving. Current stock-hair release settings differ from these
+historical native-hair jobs; do not extrapolate their hair cost to stock hair.
+
+Ranked remaining assessments; ranges are unmeasured planning savings, include
+zero, are not additive and do not exclude regressions:
+
+| Rank | Assessment | Potential GPU ms | Exactness and existing offline proof |
+| --- | --- | --- | --- |
+| 1 | Batch small extraction/audit jobs, retaining all work | 0-0.10 during churn; possibly 0 static | Same per-job arithmetic, ranges, status and publication required. Current fixtures do not exercise a batched production dispatch; no implementation under this task's proof bar. |
+| 2 | Skip repeated dynamic work only with identical current inputs | 0 to a fraction of BLAS 0.375 S8 / 0.773 inn; no positive estimate supported | Draw identity/count does not prove vertices, animation, UBOs or host-mapped writes unchanged. Held/static reuse already exists; no existing fixture certifies an additional immutable subset. |
+| 3 | More TLAS UPDATE eligibility for transform-only changes | 0 to part of TLAS 0.203 S8 / 0.324 inn; no positive estimate supported | Already implemented at `bvhsplit.cpp:3480`: submitted previous source, same capacity/count/ordered BLAS references/flags and rebuild horizon. Transform changes alone do not prevent UPDATE. Replacing a rebuilt BLAS address cannot bypass the signature safely; no existing traversal-equivalence fixture. |
+
+Cascade conversion caching stays **rejected**, not a new candidate: list/count
+signatures do not cover vertex inputs (earlier rejection above). Cascade refits
+already run: `opt-compact-hit-inn.1.110402.log:9309/:10364` advances by 106
+builds/494 refits in 600 operations; `opt-perm-s8.1.181043.log:9333/:10290`
+by 14/586. Dynamic refits already require matching count/alpha/hair/flags/OMM,
+submitted source and age (`:2599`); Ultra uses 600 frames, High 60. Extending
+that cadence is not an exact win proof: BVH order can alter capped traversal or
+equal-distance winners, and lower build cost can increase subsequent trace cost.
+Do not reopen rejected coalesced conversion, cascade reuse or cpu_opt4.
+
+`dyn_hold_test` proves packing/expiry and `cascade_casters_test` proves detection,
+conversion/rebase/classification, not full mutable-input invalidation or AS update
+equivalence. `frame_replay --ab-spec` pairs compute dispatches over the same
+already-built AS; compile-only/pipeline-stats neither time AS construction nor
+prove BUILD versus UPDATE hits (legacy/hair cases are masked in replay).
+Any future candidate needs bit-equal stored outputs/counters and a paired 95%
+interval wholly below zero for total affected work, with no affected scene losing
+beyond its interval. No encoding tolerance is invoked here. No new raw key or
+SpecId allocated; 1037+ remain available, 1032-1034 retired; request delta 0.

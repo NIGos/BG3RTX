@@ -14,14 +14,16 @@
 //   buffer S B BYTES [FILE]                 descriptor range of BYTES; FILE fills it from 0 (rest zero)
 //   range S B OFFSET FILE [FOFF BYTES]      a further slice at OFFSET (sparse: only what instances use):
 //                                           FILE whole, or BYTES of it from byte FOFF (many slices, one file)
-//   image S B E FORMAT W H LAYERS MIPS FILE [SOURCE]   VkFormat number; mip-major, each mip all layers
+//   image S B E FORMAT W H LAYERS MIPS FILE [SOURCE [R G B A]]   VkFormat number; mip-major, each mip all layers
 //                                           (a kSampledCube slot: 6 layers, the cube faces in order),
 //                                           packed. SOURCE: the game view's VkFormat when the writer read
 //                                           the image through a shader (no TRANSFER_SRC usage) and stored
 //                                           it decoded in FORMAT (BCn -> R8/RG8/RGBA8/RGBA16F, shader_read_format)
+//                                           R G B A: optional VkComponentSwizzle values (default identity).
 //   omitted S B E                           an image left out (budget, format): bound NaN, so a
 //                                           material lookup that needs it fails as "sampling" (6)
-//   sampler S B E MAG MIN MIPMODE AU AV AW ANISO MAXLOD   (Vk enums as numbers; ANISO 0 = off)
+//   sampler S B E MAG MIN MIPMODE AU AV AW ANISO MAXLOD [STATE1 BIAS MINLOD COMPARE OP BORDER UNNORMALIZED FLAGS ANISO_ENABLE]
+//                                           Legacy samplers omit ordinary state and cannot certify exact replay.
 //   instances FILE COUNT                    VkAccelerationStructureInstanceKHR x COUNT, TLAS order
 //                                           (= InstInfo order); accelerationStructureReference is an
 //                                           opaque BLAS key, the geometry comes from InstInfo
@@ -41,6 +43,7 @@
 // (sparse ranges) and the instance array as read at submit.
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iterator>
@@ -179,7 +182,52 @@ inline constexpr auto kWaterComposeFixture = [] {
   for (size_t i = 0; i < std::size(extra); ++i) slots[std::size(kGiHitDirect) + i] = extra[i];
   return slots;
 }();
+// Production Ultra LS: stock hair, box exact-k, non-OMM. All mutable storage
+// inputs are restored from Output::initial before each timed dispatch.
+inline constexpr auto kLocalShadows = [] {
+  std::array<Slot,52> v{}; size_t n=0;
+  for (const auto& s : kGiHitDirect) {
+    if ((s.set == 1 && s.binding <= 9) || (s.set == 0 && (s.binding <= 5 || s.binding == 18 || s.binding >= 20))) v[n++]=s;
+    if (s.set == 3) { auto sun = s; sun.set = 2; v[n++]=sun; }
+  }
+  const Slot extra[] = {
+    {0,3,kSampled2D,1,0,"gAlbedo"}, {0,4,kSampled2D,1,0,"gMaterial"},
+    {0,6,kStorage,1,122,"diffuse"}, {0,7,kStorage,1,122,"specular"},
+    {0,12,kStorage,1,64,"gAO"}, {0,16,kStorage,1,9,"gSunShadow"},
+    {0,27,kSsbo,1,0,"lShadows"}, {0,28,kSampled2D,1,0,"lAtlas"},
+    {0,41,kSampled2D,1,0,"gRT3"}, {0,42,kSsbo,1,0,"lSssProfiles"},
+    {0,43,kUbo,1,0,"gFrame"}, {0,44,kStorage,1,kRgba16Sfloat,"gAux"},
+    {0,45,kSsbo,1,0,"lsLights"}, {0,50,kStorage,1,kRgba32Sfloat,"rtHairOrigin"},
+    {1,19,kSampler,16,0,"gNativeTilesetSampler"},
+    {3,16,kSampler,1,0,"lBoxCookieSmp"}, {3,29,kSsbo,1,0,"lBoxes"},
+    {3,45,kSampled2D,4096,0,"lBoxCookies"},
+    {4,0,kSsbo,1,0,"lsBoxStats"}, {4,1,kSsbo,1,0,"lsOccStats"}};
+  for (const auto& slot:extra) v[n++]=slot;
+  if (n!=v.size()) throw "local-shadow replay contract size";
+  return v;
+}();
+// Default Ultra RF, without hidden-hit shading or SHaRC. Retain validation/debug
+// reads too; mutable packed colours and hit distance use two-phase snapshots.
+inline constexpr auto kReflections = [] {
+  std::array<Slot,43> v{}; size_t n=0;
+  for (const auto& s:kGiHitDirect) {
+    if ((s.set==0 && s.binding!=8 && s.binding!=13 && s.binding!=46) ||
+        (s.set==1 && s.binding<=9) ||
+        (s.set==2 && s.binding!=2 && s.binding!=3 && s.binding!=34 && s.binding!=36)) v[n++]=s;
+  }
+  const Slot extra[]={
+    {0,3,kSampled2D,1,0,"gAlbedo"},{0,4,kSampled2D,1,0,"gMaterial"},
+    {0,6,kStorage,1,122,"diffuse"},{0,7,kStorage,1,122,"specular"},
+    {0,27,kSsbo,1,0,"lShadows"},{0,28,kSampled2D,1,0,"lAtlas"},
+    {0,30,kStorage,1,76,"rfHitDist"},{0,50,kStorage,1,kRgba32Sfloat,"rtHairOrigin"},
+    {1,19,kSampler,16,0,"gNativeTilesetSampler"}};
+  for(const auto& s:extra)v[n++]=s;
+  if(n!=v.size())throw "reflection replay contract size";
+  return v;
+}();
 inline constexpr Pass kPasses[] = {
+    {"reflections", "gi/rt_reflections.hlsl", kReflections.data(), uint32_t(kReflections.size()), 3, 256},
+    {"local_shadows", "gi/rt_local_shadows_box_k.hlsl", kLocalShadows.data(), uint32_t(kLocalShadows.size()), 5, 256},
     {"gi_hit_direct", "gi/gi_trace_rt_hit_direct.hlsl", kGiHitDirect, uint32_t(std::size(kGiHitDirect)), 4, 256},
     {"water_compose_fixture", "rt/water_compose_fixture.hlsl", kWaterComposeFixture.data(), uint32_t(kWaterComposeFixture.size()), 4, 256},
 };
@@ -224,7 +272,8 @@ inline uint64_t image_bytes(uint32_t f, uint32_t w, uint32_t h, uint32_t layers,
 // ---- shader read (layer/replay.cpp, shaders/replay_image.hlsl) ----
 // A game image without TRANSFER_SRC usage cannot be copied, but it is SAMPLED: the writer reads every
 // texel through a 2D-array view of the game view's format (Load: no filtering, the decoded value the
-// pass's shader would fetch) and stores it in `pack_format`. BCn cannot be read back as raw blocks,
+// pass's shader would fetch) and stores it in `pack_format`. Exact LS packs use raw BCn
+// transfer copies instead. The approximate fallback for other packs keeps BCn decoded,
 // so it is stored decoded at the precision the decoder delivers to the filter: 8 bits per channel for
 // BC1/2/3/7 (sRGB kept as sRGB, so the replay's sampler linearizes and filters as the game's does),
 // BC4/BC5 as R8/RG8 (UNORM or SNORM: the values the hardware rounds to 8 bits before the filter, at
@@ -330,14 +379,23 @@ inline std::vector<CopyPiece> transfer_pieces(uint32_t f, uint32_t w, uint32_t h
 
 struct Buffer { uint32_t set, binding; uint64_t bytes; std::string file; };
 struct Range { uint32_t set, binding; uint64_t offset; std::string file; uint64_t file_offset = 0, bytes = 0; };   // bytes 0: whole file
-struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; uint32_t source_format = 0; };   // 0: copied as is
+struct Image { uint32_t set, binding, element, format, w, h, layers, mips; std::string file; uint32_t source_format = 0; std::array<uint32_t,4> components{}; };   // 0: copied as is
 struct Omitted { uint32_t set, binding, element; };
-struct Sampler { uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod; };
-struct Output { uint32_t set, binding, format, w, h; std::string reference; };
+struct Sampler {
+  uint32_t set, binding, element, mag, min, mip, au, av, aw; float aniso, max_lod;
+  // Version 0 is the legacy partial snapshot. Version 1 carries all ordinary
+  // VkSamplerCreateInfo state; extension chains are refused by the live writer.
+  uint32_t state_version = 0;
+  float lod_bias = 0, min_lod = 0;
+  uint32_t compare_enable = 0, compare_op = 0, border = 0, unnormalized = 0, flags = 0, aniso_enable = 0;
+};
+struct Output { uint32_t set, binding, format, w, h; std::string reference, initial; };
 struct Casters { std::string file; uint32_t instance = 0, tris = 0, stride = 0; };   // file empty: none
+struct Spec { uint32_t id, value; };
 struct Manifest {
   int version = 0;
-  std::string pass, defines, push, instances;
+  std::string pass, defines, push, instances, counter_initial, counters;
+  std::vector<Spec> specs;
   uint64_t frame = 0;
   uint32_t groups[3] = {0, 0, 0}, instance_count = 0;
   std::vector<Buffer> buffers;
@@ -349,6 +407,39 @@ struct Manifest {
   Casters casters;
   std::vector<std::string> notes;
 };
+
+// Two-phase writer contract. Storage outputs have already passed add_image's
+// raw-format/view checks; this validates the manifest's initial/reference pairs
+// and the complete, unique sampler descriptors needed to reproduce the pass.
+struct TwoPhaseContract { uint32_t raw_output_pairs = 0, complete_samplers = 0; std::string error; };
+inline TwoPhaseContract two_phase_contract(const Pass& pass, const Manifest& m, const uint32_t* outputs, uint32_t output_count) {
+  TwoPhaseContract result;
+  for (const auto& s : m.samplers) result.complete_samplers += s.state_version == 1;
+  if (result.complete_samplers != m.samplers.size()) { result.error = "two-phase replay requires complete STATE1 samplers"; return result; }
+  for (const auto& s : m.samplers) {
+    const auto* slot = find_slot(pass,s.set,s.binding);
+    if (!slot || slot->kind != kSampler || s.element >= slot->count) { result.error = "two-phase replay sampler descriptor is unsupported"; return result; }
+  }
+  for (uint32_t i=0; i<pass.slot_count; ++i) if (pass.slots[i].kind == kSampler) {
+    const auto& slot = pass.slots[i];
+    for (uint32_t e=0; e<slot.count; ++e)
+      if (std::count_if(m.samplers.begin(),m.samplers.end(),[&](const auto& s){return s.set==slot.set && s.binding==slot.binding && s.element==e;}) != 1) {
+        result.error = "two-phase replay sampler descriptor is missing or duplicated"; return result;
+      }
+  }
+  if (!outputs || !output_count) { result.error = "two-phase replay requires output bindings"; return result; }
+  for (uint32_t i=0; i<output_count; ++i) {
+    const auto* slot = find_slot(pass,0,outputs[i]);
+    if (std::count(outputs,outputs+output_count,outputs[i]) != 1) { result.error = "two-phase replay output binding is duplicated"; return result; }
+    if (slot && slot->kind==kStorage && std::count_if(m.outputs.begin(),m.outputs.end(),[&](const auto& o){
+      return o.set==0 && o.binding==slot->binding && o.format==slot->storage_format &&
+        !o.initial.empty() && !o.reference.empty() && o.initial!=o.reference;
+    })==1) ++result.raw_output_pairs;
+  }
+  if (result.raw_output_pairs!=output_count || m.outputs.size()!=output_count)
+    result.error = "two-phase replay requires distinct raw initial/reference output pairs";
+  return result;
+}
 
 // The variant defines a pack records (the live request's "A=1;B=2", core/gi.cpp pipe_defines): only those
 // the pass contract carries the bindings for. RT_CASCADE_MASKS (rt_cascade_casters: GI rays trace 0x01, so
@@ -441,6 +532,9 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
     if (k == "bg3rtx_replay_pack") ok = bool(t >> m.version);
     else if (k == "pass") ok = bool(t >> m.pass);
     else if (k == "defines") { ok = bool(t >> m.defines); if (m.defines == "-") m.defines.clear(); }
+    else if (k == "spec") { Spec s{}; ok = bool(t >> s.id >> s.value); for (const auto& old : m.specs) if (old.id == s.id) ok = false; m.specs.push_back(s); }
+    else if (k == "counter_initial") ok = bool(t >> m.counter_initial);
+    else if (k == "counters") ok = bool(t >> m.counters);
     else if (k == "frame") ok = bool(t >> m.frame);
     else if (k == "dispatch") ok = bool(t >> m.groups[0] >> m.groups[1] >> m.groups[2]);
     else if (k == "push") ok = bool(t >> m.push);
@@ -454,13 +548,27 @@ inline bool parse(const std::string& text, Manifest& m, std::string& error) {
     else if (k == "image") {
       Image i{}; ok = bool(t >> i.set >> i.binding >> i.element >> i.format >> i.w >> i.h >> i.layers >> i.mips >> i.file);
       if (ok && !(t >> i.source_format)) i.source_format = 0;
+      else if (ok && (t >> i.components[0])) {
+        ok = bool(t >> i.components[1] >> i.components[2] >> i.components[3]);
+        for (uint32_t c : i.components) ok = ok && c <= 6; // VkComponentSwizzle
+      }
       ok = ok && i.w && i.h && i.layers && i.mips && image_bytes(i.format, i.w, i.h, i.layers, i.mips);
       m.images.push_back(i);
     } else if (k == "omitted") { Omitted o{}; ok = bool(t >> o.set >> o.binding >> o.element); m.omitted.push_back(o); }
     else if (k == "sampler") {
       Sampler s{}; ok = bool(t >> s.set >> s.binding >> s.element >> s.mag >> s.min >> s.mip >> s.au >> s.av >> s.aw >> s.aniso >> s.max_lod);
+      std::string state;
+      if (ok && (t >> state)) {
+        s.state_version = 1;
+        ok = state == "STATE1" && bool(t >> s.lod_bias >> s.min_lod >> s.compare_enable >> s.compare_op >> s.border >> s.unnormalized >> s.flags >> s.aniso_enable);
+        std::string extra; if (t >> extra) ok = false;
+        ok = ok && s.compare_enable <= 1 && s.compare_op <= 7 && s.border <= 5 && s.unnormalized <= 1 && s.aniso_enable <= 1 &&
+          std::isfinite(s.lod_bias) && std::isfinite(s.min_lod) && std::isfinite(s.max_lod) && std::isfinite(s.aniso) &&
+          s.min_lod <= s.max_lod && (!s.aniso_enable || s.aniso >= 1);
+      }
+      ok = ok && s.mag <= 1 && s.min <= 1 && s.mip <= 1 && s.au <= 4 && s.av <= 4 && s.aw <= 4;
       m.samplers.push_back(s);
-    } else if (k == "output") { Output o{}; ok = bool(t >> o.set >> o.binding >> o.format >> o.w >> o.h); t >> o.reference; m.outputs.push_back(o); }
+    } else if (k == "output") { Output o{}; ok = bool(t >> o.set >> o.binding >> o.format >> o.w >> o.h); t >> o.reference; t >> o.initial; if (o.reference == "-") o.reference.clear(); m.outputs.push_back(o); }
     else if (k == "casters") ok = m.casters.file.empty() && bool(t >> m.casters.file >> m.casters.instance >> m.casters.tris >> m.casters.stride) && m.casters.tris;
     else if (k == "note") { std::string rest; std::getline(t, rest); m.notes.push_back(rest); }
     else ok = false;
@@ -480,6 +588,9 @@ inline std::string serialize(const Manifest& m) {
   o << "bg3rtx_replay_pack " << (m.version ? m.version : kVersion) << "\n";
   o << "pass " << m.pass << "\n";
   o << "defines " << (m.defines.empty() ? "-" : m.defines) << "\n";
+  for (const auto& s : m.specs) o << "spec " << s.id << " " << s.value << "\n";
+  if (!m.counter_initial.empty()) o << "counter_initial " << m.counter_initial << "\n";
+  if (!m.counters.empty()) o << "counters " << m.counters << "\n";
   o << "frame " << m.frame << "\n";
   for (const auto& n : m.notes) o << "note" << (n.empty() || n[0] == ' ' ? "" : " ") << n << "\n";
   o << "dispatch " << m.groups[0] << " " << m.groups[1] << " " << m.groups[2] << "\n";
@@ -490,18 +601,27 @@ inline std::string serialize(const Manifest& m) {
     if (r.bytes) o << " " << r.file_offset << " " << r.bytes;
     o << "\n";
   }
-  for (const auto& i : m.images)
+  for (const auto& i : m.images) {
     o << "image " << i.set << " " << i.binding << " " << i.element << " " << i.format << " " << i.w << " " << i.h << " " << i.layers << " "
-      << i.mips << " " << i.file << (i.source_format ? " " + std::to_string(i.source_format) : "") << "\n";
+      << i.mips << " " << i.file;
+    const bool mapped = i.components != std::array<uint32_t,4>{};
+    if (i.source_format || mapped) o << " " << i.source_format;
+    if (mapped) for (uint32_t c : i.components) o << " " << c;
+    o << "\n";
+  }
   for (const auto& x : m.omitted) o << "omitted " << x.set << " " << x.binding << " " << x.element << "\n";
-  for (const auto& s : m.samplers)
+  for (const auto& s : m.samplers) {
     o << "sampler " << s.set << " " << s.binding << " " << s.element << " " << s.mag << " " << s.min << " " << s.mip << " " << s.au << " "
-      << s.av << " " << s.aw << " " << s.aniso << " " << s.max_lod << "\n";
+      << s.av << " " << s.aw << " " << s.aniso << " " << s.max_lod;
+    if (s.state_version) o << " STATE1 " << s.lod_bias << " " << s.min_lod << " " << s.compare_enable << " " << s.compare_op << " "
+      << s.border << " " << s.unnormalized << " " << s.flags << " " << s.aniso_enable;
+    o << "\n";
+  }
   if (!m.instances.empty()) o << "instances " << m.instances << " " << m.instance_count << "\n";
   if (!m.casters.file.empty())
     o << "casters " << m.casters.file << " " << m.casters.instance << " " << m.casters.tris << " " << m.casters.stride << "\n";
   for (const auto& x : m.outputs)
-    o << "output " << x.set << " " << x.binding << " " << x.format << " " << x.w << " " << x.h << (x.reference.empty() ? "" : " " + x.reference) << "\n";
+    o << "output " << x.set << " " << x.binding << " " << x.format << " " << x.w << " " << x.h << (x.reference.empty() ? (x.initial.empty() ? "" : " -") : " " + x.reference) << (x.initial.empty() ? "" : " " + x.initial) << "\n";
   return o.str();
 }
 

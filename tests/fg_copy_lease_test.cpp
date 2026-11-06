@@ -55,5 +55,51 @@ int main() {
   if (!check(init.ready && init.available(3) && !init.needed(3))) return 1;
   init = {};
   if (!check(!init.ready && init.needed(3))) return 1;
+  // BG3 records separate command buffers before submitting them. Publication
+  // of N must survive the recording of N+1, including secondary producer IDs.
+  PostHistoryProducer history[2];
+  history[0].record(100);                         // secondary, frame N
+  history[1].record(101);                         // frame N+1 before submit N
+  if (!check(!history[0].readable() && !history[1].readable())) return 1;
+  history[0].submit(90);                          // primary ID is not the producer
+  if (!check(!history[0].readable())) return 1;
+  history[0].submit(100);                         // executed secondary snapshot
+  if (!check(history[0].readable() && !history[1].readable())) return 1;
+  history[1].submit(101);
+  if (!check(history[0].readable() && history[1].readable())) return 1;
+  for (uint64_t n = 102; n < 300; ++n) {
+    auto& output = history[n % 2];
+    auto& previous = history[1 - n % 2];
+    if (!check(previous.readable())) return 1;    // steady-state history remains valid
+    output.record(n);
+    if (!check(previous.readable() && !output.readable())) return 1;
+    previous.discard(n - 1);                     // re-begin submitted recording
+    if (!check(previous.readable())) return 1;
+    output.submit(n);
+    if (!check(output.readable())) return 1;
+  }
+  history[0].record(400); history[1].record(401);
+  history[1].discard(401);                        // discarded newer producer
+  history[0].submit(400);
+  history[1].submit(401);                         // cannot revive a discarded recording
+  if (!check(history[0].readable() && !history[1].readable())) return 1;
+  history[1].record(402); history[1].discard(401); // old reset cannot cancel new begin
+  history[1].submit(402);
+  if (!check(history[1].readable())) return 1;
+  PostHistoryProducer reused;
+  reused.record(1); reused.submit(1);
+  reused.record(2); reused.submit(2);
+  if (!check(reused.readable())) return 1;
+  reused.submit(1); // an older executable writer overwrites the slot
+  if (!check(!reused.readable())) return 1;
+  DescriptorRecordingLease descriptors[256];
+  for (auto& descriptor : descriptors) {
+    descriptor.record(500);
+    if (!check(!descriptor.reusable(true))) return 1;
+    descriptor.discard(499);
+    if (!check(!descriptor.reusable(true))) return 1;
+    descriptor.discard(500);
+    if (!check(!descriptor.reusable(false) && descriptor.reusable(true))) return 1;
+  }
   return 0;
 }

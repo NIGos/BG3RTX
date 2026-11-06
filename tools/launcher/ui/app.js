@@ -153,13 +153,16 @@ function shortcutsCard(id) {
  const help=el('p','help-copy','Select the field and press a key combination. Delete or Backspace disables it. Escape cancels.');
  input.onfocus=()=>{input.value='';};input.onblur=()=>{input.value=state.shortcuts?.[id]||'None';};
  input.onkeydown=e=>{
+  if(e.key==='Tab')return;
   e.preventDefault();e.stopPropagation();
+  if(e.repeat)return;
   if(e.key==='Escape'){input.blur();return;}
-  if(e.key==='Tab'){input.blur();return;}
   let value;
   if(e.key==='Delete'||e.key==='Backspace')value='None';
   else {
    let key=e.key.toUpperCase();
+   // Shift changes digit labels (for example 1 becomes !), but the host uses VK_1.
+   if(/^Digit[0-9]$/.test(e.code||''))key=e.code.slice(-1);
    if(!/^(F[1-9]|F1[0-2]|[A-Z0-9])$/.test(key))return;
    value=(e.ctrlKey?'Ctrl+':'')+(e.shiftKey?'Shift+':'')+(e.altKey?'Alt+':'')+key;
   }
@@ -188,7 +191,7 @@ function renderSettings() {
   sf.append(el('p','cost','Play starts the Vulkan version of the game (bin\\bg3.exe) with BG3RTX.'));setup.append(sf);grid.append(setup);
   const memory=state.compatibility||{},mem=el('article','card');mem.append(el('h3','','Video memory'),el('p','description pre',memory.memory||(measured(memory.vram)?memory.vram:'Not checked yet. Use Recheck graphics.')));grid.append(mem);
   const info=el('article','card');info.append(el('h3','','Compatibility'),el('p','description pre',[state.compatibility?.gpu,...(state.compatibility?.details||[]).filter(x=>x&&x!==state.compatibility?.memory)].filter(Boolean).join('\n')));grid.append(info);
-  const help=el('article','card');help.append(el('h3','','Comparison and overlays'),el('p','description pre',"Ctrl+Shift+F9 in game switches all ray-traced lighting off and on, to compare with the game's own image. DLSS and Frame Generation stay as they are.\nIf the game does not start or Frame Generation does nothing, turn off other overlays (Steam, Discord, GOG Galaxy) for one launch."));grid.append(help);
+  const help=el('article','card');help.append(el('h3','','Comparison and overlays'),el('p','description pre',"By default, Ctrl+Shift+F9 in game switches all ray-traced lighting off and on, to compare with the game's own image. Change this shortcut on Advanced. DLSS and Frame Generation stay as they are.\nIf the game does not start or Frame Generation does nothing, turn off other overlays (Steam, Discord, GOG Galaxy) for one launch."));grid.append(help);
   root.append(grid);
   const foot=el('div','page-foot');const notices=el('a','link','Fonts and third-party notices');notices.href='https://app.bg3rtx.local/notices';notices.onclick=e=>{e.preventDefault();send('notices');};foot.append(notices,el('p','help-copy',"Independent fan mod; not affiliated with the game's developers."));root.append(foot);return;
  }
@@ -285,6 +288,6 @@ if(sample) {
  ['detailed_logging','Detailed logging','Support',['Off','On'],0,'Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.']
  ].map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(levels),cost:'Not measured (sample)',apply:['rt_geometry','exp_hidden_surface','exp_native_coverage','exp_water','frame_generation','detailed_logging'].includes(id)?'Restart the game to apply':'Applies after saving',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
  // The WebView host sends its review state (real settings table); a plain browser uses this sample.
- if(!window.chrome?.webview){render({type:'state',version:'0.9.1.0',modStatus:'Sample preview; game launch disabled',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview'});
+ if(!window.chrome?.webview){render({type:'state',version:'0.9.2.0',modStatus:'Sample preview; game launch disabled',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview'});
  reviewView(false);}
 } else send('init');

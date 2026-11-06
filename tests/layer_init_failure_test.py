@@ -22,6 +22,70 @@ def function(file, signature):
 
 
 class LayerInitFailure(unittest.TestCase):
+    def test_ngx_shutdown_hooks_are_transactional(self):
+        compiler = shutil.which('cl.exe')
+        self.assertIsNotNone(compiler, 'run through scripts/build.ps1 -Test (MSVC environment)')
+        text = (ROOT / 'layer/ngx.cpp').read_text(encoding='utf-8')
+        start = text.index('    bool shutdown_safe')
+        end = text.index('    if(!shutdown_safe)', start)
+        source = NGX_SHUTDOWN_FIXTURE + '\n' + function('layer/ngx.cpp', 'static bool hook_terminal(')
+        source += '\nbool install() {\n' + text[start:end] + '\nreturn shutdown_safe;\n}\n' + r'''
+int main() {
+  for (missing = 0; missing < 4; ++missing) for (alias = 0; alias < 2; ++alias)
+  for (int fail : {0, 1, 2}) {
+    fail_protect = fail; protects = 0; protection = 0x20; a[0] = b[0] = 0;
+    g_nr_shutdown = {}; g_nr_shutdown1 = {};
+    int count = !(missing & 1) + !(missing & 2);
+    bool expected = !fail || fail > count;
+    bool ok = install();
+    if (ok != expected) return 1;
+    if (!ok && (a[0] || b[0] || g_nr_shutdown.active || g_nr_shutdown1.active)) return 2;
+    if (ok && (g_nr_shutdown.active != !(missing & 1) ||
+               g_nr_shutdown1.active != !(missing & 2))) return 3;
+    if (ok && ((g_nr_shutdown.active && !a[0]) ||
+               (g_nr_shutdown1.active && !(alias ? a[0] : b[0])))) return 4;
+    if (protection != 0x20) return 5;
+  }
+}
+'''
+        with tempfile.TemporaryDirectory(prefix='ngx-shutdown-') as temp:
+            path = Path(temp)
+            (path / 'test.cpp').write_text(source, encoding='utf-8')
+            result = subprocess.run([compiler, '/nologo', '/EHsc', '/std:c++20', '/MT',
+                                     'test.cpp', '/Fe:test.exe'], cwd=path, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(path / 'test.exe')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_streamline_teardown_clears_deferred_init(self):
+        compiler = shutil.which('cl.exe')
+        self.assertIsNotNone(compiler, 'run through scripts/build.ps1 -Test (MSVC environment)')
+        source = SL_TEARDOWN_FIXTURE + '\n' + function('layer/streamline.cpp', 'void sl_device_destroy(') + r'''
+int main() {
+  DeviceData owner, other;
+  g_dd = &owner; g_pending = std::make_unique<int>(7);
+  g_sl_init = true; g_sl_instance = 42; g_have_of_queue = true;
+  g_req.queues = 3; g_active = true;
+  sl_device_destroy(&other);
+  if (!g_pending || !g_sl_init || !g_active) return 1;
+  sl_device_destroy(&owner);
+  // A replacement device must not enter sl_device_pre with a cleared SDK table.
+  if (g_sl_init || g_dd || g_pending || g_active || g_sl_instance ||
+      g_req.queues || g_have_of_queue) return 2;
+  if (shutdowns != 1) return 3;
+  sl_device_destroy(&owner);
+  return shutdowns == 1 ? 0 : 4;
+}
+'''
+        with tempfile.TemporaryDirectory(prefix='sl-teardown-') as temp:
+            path = Path(temp)
+            (path / 'test.cpp').write_text(source, encoding='utf-8')
+            result = subprocess.run([compiler, '/nologo', '/EHsc', '/std:c++20', '/MT',
+                                     'test.cpp', '/Fe:test.exe'], cwd=path, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(path / 'test.exe')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_rr_layout_faults_and_retry(self):
         compiler = shutil.which('cl.exe')
         self.assertIsNotNone(compiler, 'run through scripts/build.ps1 -Test (MSVC environment)')
@@ -71,6 +135,67 @@ class LayerInitFailure(unittest.TestCase):
             text = (ROOT / ('layer/' + file + '.cpp')).read_text(encoding='utf-8')
             self.assertRegex(text, r'if \(dd->vk.CreateImageView[^\n]+!= VK_SUCCESS\) \{\s*dd->vk.DestroyImage[^;]+;\s*dd->vk.FreeMemory')
 
+
+NGX_SHUTDOWN_FIXTURE = r'''
+#include <cstdint>
+#include <cstring>
+#include <initializer_list>
+using DWORD = unsigned long;
+constexpr DWORD PAGE_EXECUTE_READWRITE = 0x40;
+struct InlineHook { uint8_t* target{}; void* trampoline{}; bool active{}; };
+InlineHook g_nr_shutdown, g_nr_shutdown1;
+uint8_t a[14]{}, b[14]{};
+int protects, fail_protect, missing, alias;
+DWORD protection = 0x20; // Both targets share a page, as real exports may do.
+bool VirtualProtect(void*, int, DWORD value, DWORD* old) {
+  if (value == PAGE_EXECUTE_READWRITE && ++protects == fail_protect) return false;
+  *old = protection; protection = value; return true;
+}
+void* GetCurrentProcess() { return nullptr; }
+void FlushInstructionCache(void*, void*, int) {}
+template<class... T> void log(const char*, T...) {}
+uint8_t* follow_jumps(uint8_t* p) { return p; }
+void write_abs_jump(uint8_t* p, const void*) { std::memset(p, 1, 14); }
+void nr_shutdown() {}
+void nr_shutdown1() {}
+void* proc(const char* name) {
+  bool second = std::strstr(name, "Shutdown1");
+  if (missing & (second ? 2 : 1)) return nullptr;
+  return second && !alias ? b : a;
+}
+'''
+
+SL_TEARDOWN_FIXTURE = r'''
+#include <memory>
+#include <mutex>
+#include <vector>
+#define VK_NULL_HANDLE 0
+namespace sl { enum class Result { eOk }; }
+int shutdowns;
+sl::Result shutdown() { ++shutdowns; return sl::Result::eOk; }
+struct { sl::Result (*Shutdown)() = shutdown; } g_sl;
+struct {} g_px;
+struct Dispatch {
+  template<class... T> void DestroyImageView(T...) {}
+  template<class... T> void DestroyImage(T...) {}
+  template<class... T> void FreeMemory(T...) {}
+  template<class... T> void DestroyQueryPool(T...) {}
+  void DeviceWaitIdle(int) {}
+};
+struct DeviceData { int device = 1; Dispatch vk; };
+DeviceData* g_dd;
+bool g_active, g_sl_init, g_have_of_queue;
+int g_sl_instance, g_depth_only_view, g_mv_copy_queries;
+struct { int queues; } g_req;
+struct Image { int image, view; } g_preserved_mvec, g_preserved_depth;
+struct Copy { Image image, depth; int memory, depth_memory; };
+std::vector<Copy> g_mv_copies(1);
+std::vector<int> g_mv_copy_ms;
+std::unique_ptr<int> g_pending;
+std::mutex g_pending_mu;
+const char* res_str(sl::Result) { return "ok"; }
+template<class... T> void log(const char*, T...) {}
+'''
 
 FIXTURE = r'''
 #define VK_NO_PROTOTYPES

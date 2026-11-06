@@ -1,4 +1,4 @@
-# Offline frame replay (gi_hit_direct)
+# Offline frame replay (GI, Ultra local shadows and default reflections)
 
 Re-run one production pass on one captured frame without the game (docs/OFFLINE_OPPORTUNITIES.md A).
 Pass: `gi_hit_direct` (`shaders/gi/gi_trace_rt_hit_direct.hlsl`, base variant). It was chosen over
@@ -11,7 +11,7 @@ the probes, the sky cubes, the DFG LUT and the sun set, which `--native-ambient`
 
 ```
 frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define N=V]... [--repeat N] [--pipeline-stats] [--spec ID=UINT]... [--reference-out <dir>] [--no-validation]
-frame_replay --compile-only [--compile-pass gi|reflections|local-shadows] (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
+frame_replay --compile-only [--compile-pass gi|origin|reflections|local-shadows] (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
 frame_replay --synthesize <dir> [--dark] [--box] [--lighting] [--casters]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
 frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
@@ -115,13 +115,19 @@ bin/frame_replay --compile-only --compile-pass local-shadows --spv .scratch/rf-l
   --spec 1000=1 --spec 1008=0 --spec 1009=0 --spec 1010=0 --spec 1020=0 --spec 1026=0
 ```
 
-`rf_compact_probe_state=0` is a developer raw key, specialization 1031. With hit GI enabled,
-compare `--spec 1031=0` / `--spec 1031=1` on the same module. Core keeps it OFF when
-`rf_hit_gi=0`: that trial gained a register. No shader requests are added.
+`rf_compact_probe_state=0` is a developer raw key, specialization 1031. Compare
+`--spec 1031=0` / `--spec 1031=1` on the same module. Core permits it on every
+`rt_reflections` request, including default Ultra with hit shading and hit GI OFF.
+No shader requests are added. Default Ultra's request is
+`gi/rt_reflections.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1`;
+use the compile-only reflections command above with its cached module and omit
+the unused hit-instancing, wind RGB and hit-GI constants. On RTX 5090, 1031 OFF/ON
+uses 128/96 registers and 0/1536 shared bytes (2026-11-06). These are driver
+pipeline statistics, not a live timing or quality qualification.
 
-These selectors only create pipelines and print driver statistics. They do not replay RF/LS
-outputs. A future shader reduction needs ON/OFF specialized SPIR-V review of stored-result logic
-and a live in-run energy/image A/B; compile-only statistics cannot establish image exactness.
+These compile-only selectors only create pipelines and print driver statistics. Ordinary
+`--pack` replay also supports production Ultra local shadows and default reflections as
+described below. Compile-only statistics cannot establish image exactness.
 
 With `--repeat N`, the summary prints the median, min, max and max-minus-min spread of **all**
 dispatch GPU timestamps, including the first dispatch. Retain the individual run lines to diagnose
@@ -134,6 +140,111 @@ lines and returns nonzero for any changed output bit or counter. This is separat
 and output directories must differ; use `--out` outside source packs to keep captures unchanged.
 For example, run OFF to `.scratch/gi-off`, then ON to `.scratch/gi-on` with
 `--reference-out .scratch/gi-off`, matching every other shader, specialization and push option.
+
+## Paired A/B timing
+
+Use `--ab-spec ID=A,B` (repeatable) with common `--spec ID=UINT` settings to
+create both pipelines once over the same uploaded pack and acceleration structures.
+`--ab-spv <B.spv>` optionally supplies a different module for B; `--spv <A.spv>`
+supplies A. This supports sun versus direct attribution without a new production flag.
+Both modules must use the same descriptor/push contract. Prefer cached SPIR-V from
+`tools/shader_identity.py`, with the exact pack defines.
+
+`--repeat N` means N paired samples (default 40 in A/B mode). Four warmup dispatches
+(two per pipeline) are excluded. Each sample runs ABBA, then the next BAAB, and uses
+`mean(B) - mean(A)` timestamps: the symmetric sample cancels linear drift in dispatch
+order. Timings include the compute dispatch, excluding uploads, output readback
+and clears. A negative delta means B is faster. `ab.csv` retains every pair; the
+console and `ab_summary.txt` report the median delta and a distribution-free 95%
+interval for its population median, using binomial order statistics (conservative
+coverage for ties). Small samples can produce infinite bounds.
+
+`--ab-warmup N` (0..256, default 0) runs N additional untimed dispatches immediately
+before each measured dispatch in the same GPU submission. All mutable outputs and
+counters are restored before every warmup and again before timing. This avoids
+timing a cold GPU after CPU readback gaps; the selected count is printed in the
+receipt. It changes no production shader or global GPU setting. Check a same-module
+40-pair control before interpreting a candidate's interval.
+
+Every measured dispatch is compared byte for byte with the first dispatch in its
+quartet: all stored output components and every raw counter/bin. The summary requires
+all comparisons to match to print `100% bit-equal`. The first failed quartet reports
+the differing-byte count and first output component/pixel/channel, plus the first
+raw counter index/bin and its values when counters differ. That quartet also saves
+`ab_A_<output>.raw` and `ab_B_<output>.raw` for full numeric diagnosis (and
+`ab_A_rtstats.bin` / `ab_B_rtstats.bin` when counters differ). An unexpected
+same-pipeline mismatch uses `_repeat` for its second snapshot. Attribution can intentionally
+change outputs; add `--ab-require-equal` to return failure for any changed bit.
+Ordinary output files contain the final dispatch; use `ab.csv` for paired timings.
+
+`--ab-self-test` checks drift cancellation and confidence bounds without a GPU.
+
+```powershell
+bin/frame_replay --pack <pack> --spv sun.spv --sun-trust trust.bin --push radius=6 `
+  --ab-spec 1007=1,0 --repeat 40 --out .scratch/far-split
+bin/frame_replay --pack <pack> --spv sun.spv --ab-spv direct.spv --spec 1007=0 `
+  --sun-trust trust.bin --repeat 40 --out .scratch/sun-split
+```
+
+## BLAS policy A/B (replay only, 2026-11-05)
+
+`--blas-policy legacy|layer|trace` selects reconstruction flags. Default `legacy` preserves
+historical replay (all FAST_TRACE, no update flag). `layer` uses FAST_TRACE | ALLOW_COMPACTION
+for static mesh-pool BLAS and FAST_BUILD | ALLOW_UPDATE for dynamic/cascade BLAS.
+`trace` changes only dynamic/cascade to FAST_TRACE | ALLOW_UPDATE. The cascade policy models
+`rt_cascade_refit=1` (Ultra default). Static BLAS are built but not compacted in replay.
+
+`--ab-blas --repeat 40` keeps both layer A and trace B BLAS/TLAS resident and selects the
+TLAS outside each timed dispatch. Static BLAS are shared. Existing ABBA/BAAB timing,
+per-sample warmup, output/counter checks and first-mismatch snapshots apply unchanged.
+`--blas-control` with `--ab-blas` builds both sides using layer flags (zero-change control).
+After trace measurement, `blas.csv` and `blas_summary.txt` report 40 paired GPU timings
+of build and refit, separately for dynamic class 1 and cascade class 2. Each timestamp
+covers one batched build call with disjoint aligned scratch for all BLAS in that class;
+it excludes allocation, upload and TLAS work. Four warmups per measurement are excluded.
+
+Classes are derived from InstInfo: soup = dynamic, pool = static unless kInfoHeld bit 31;
+static alpha pool row indices (1..4096 in bits 16..31) cannot overlap bit 31. The manifest's
+casters directive identifies cascade geometry before its patched InstInfo is classified.
+Unique BLAS/tris and held counts are printed; conflicting classes for a shared key fail.
+Legacy/hair/unavailable geometry remains masked out as in ordinary replay.
+
+Run only without bg3.exe. Use a supported sun/far module, `--sun-trust`, Ultra spec values,
+`--push radius=6 --push rays=2 --push rt_stats=0 --ab-warmup 8`. Old GI packs lack the
+emissive scene set: `_em` shaders cannot run on their lighting set 2. Results without
+emission are an approximation to full Ultra, and frozen-geometry refits cannot establish
+cost or traversal quality after animated deformation. A stable-scene estimate uses
+(build + R * refit) / (R + 1), R = 600 dynamic and 60 cascade; topology changes add builds.
+`--ab-self-test` also checks class derivation, including every static alpha pool row.
+
+## Origin replay (2026-11-05)
+
+`--origin` adapts an existing `gi_hit_direct` pack in memory. It reads `Push::full`,
+requires full-resolution depth/normal images and captured camera buffers, dispatches
+8 x 8 groups over the full image, and replaces GI outputs with `rtOrigin.raw`
+(RGBA16F) and `rtOrigin.pfm`. The captured origin input becomes the live reference;
+input and output never alias. Set 2 b3 supplies material at set 0 b4. Source packs
+are unchanged. `--origin-self-test` checks the adapter without a GPU (also a CTest).
+
+Use cached SPIR-V for the exact production request through `tools/shader_identity.py`.
+`--compile-only --compile-pass origin` includes the material binding missing from the
+GI compile-only layout. Stock Ultra request:
+`gi/rt_origin.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1`.
+Use `Result.path()` / `Result.blob()` from the helper: its CLI JSON digest identifies
+all request entries together, rather than naming an individual SPIR-V blob.
+
+```powershell
+bin/frame_replay --compile-only --compile-pass origin --spv origin.spv --pipeline-stats --spec 1000=1 --out .scratch/origin-stats
+bin/frame_replay --origin --pack <pack> --spv origin.spv --ab-spv candidate.spv --repeat 40 --ab-require-equal --spec 1000=1 --out .scratch/origin-ab
+```
+
+Paired A/B compares **every byte**, including raw counter bins. The rounded `vs live`
+percentage is only context: the S8 pack differed by at most 0.00006103516 in one
+component despite printing 100.0000%. Rebuilt AS order and unsupported/masked instances
+prevent a universal live-equivalence claim. This mode supports stock alpha-card hair;
+native/scalp/groom/physical-hair/tileset specialization values must remain 0. It shares
+the ordinary replay's missing-input/AS limitations. OMM is not reconstructed. Check no
+`bg3.exe` before each GPU command and serialize GPU lanes for useful timing intervals.
 
 ## PT reference: `--pt-reference` (tools/pt_reference.hlsl, M6 offline)
 
@@ -440,3 +551,167 @@ record elements, `lighting_inputs`); `frame_replay_test` writes its synthetic pa
 replays it, and runs the image read on every mapped format.
 Open: the exact VT cache sizes, formats, layers and mips at S8 (the next pack's `textures` line),
 then the choice between a larger cap for this one job and a hit-sampled tile capture.
+
+
+## Production Ultra local shadows
+
+New `pass local_shadows` packs dispatch `gi/rt_local_shadows_box_k.hlsl` with the
+actual captured `RT_SPEC_NATIVE`, `RT_SPEC_HAIR_ORIGIN`, `RT_SPEC_CASCADE` request
+and all actual specialization values (`spec ID VALUE`). `--spec` overrides a captured
+value; `--ab-spec ID=A,B` varies it in paired ABBA/BAAB dispatches. `--pipeline-stats`
+works with this pass. Stock visible hair and non-OMM Ultra are the capture contract.
+Old GI packs cannot be converted: they lack LS-time inputs and references.
+
+The pack includes LS-time shadow records/atlas, projector records/2D cookies,
+AO/sun mask/auxiliary state, material/class/frame data, joined light slots and the
+same alpha geometry/TLAS inputs. Shadow traversal does not read hit-material caches
+(set 1 b12-15); these large unused inputs are excluded. Sun set 2 holds b0-6;
+box set 3 holds b16/b29/b45. Counter buffers remain device-local during LS replay.
+
+`output S B FORMAT W H REFERENCE INITIAL` adds an exact initial storage image;
+`-` means no live reference. The initial native R11G11B10 diffuse/specular and
+RGBA16F auxiliary bytes are restored before **every** dispatch, outside timestamps.
+`counter_initial FILE` restores the primary raw counter bins; `counters FILE`
+provides the live post-dispatch reference. Extra counter buffers at set 4 are
+restored from their captured buffer bytes and included in raw paired comparisons.
+Every output is compared byte for byte in the paired run. Live packed colour is
+compared as bytes; reconstructed AS traversal can differ from the game's AS.
+
+`BG3RPKZ1` files use lossless, checksummed 4 MiB XPRESS_HUFF blocks. The reader
+also accepts legacy raw files. Image uploads index compressed blocks and decode
+one block at a time, retaining the existing bounded staging budget. The manifest's
+sizes and sparse offsets always describe decoded bytes.
+
+```powershell
+bin/frame_replay --pack captures/replay-NEW --out .scratch/ls-ab `
+  --ab-spec ID=0,1 --repeat 40 --ab-require-equal --pipeline-stats
+```
+
+`frame_replay_ls_test` (`--ls-self-test DIR`) writes a synthetic LS pack with a
+shadowed slab, nonzero native packed colours, a populated shadow view/atlas and
+projector cookie element 7. It requires colour modification, changed output for
+black-cookie/dark-atlas controls, repeat identity, captured specs/counter round trip,
+and exact paired restoration under Vulkan validation. `replay_pack_test` also checks
+legacy manifest round trips and malformed new directives. `replay_codec_test` checks
+lossless framing, random reads, corruption and legacy raw input without a GPU.
+
+Raw compressed LS images (ls-pack2): diagnostic image creation adds TRANSFER_SRC
+for sampled BC1-BC7 images, including BC4/BC5 UNORM and SNORM. Capture uses
+`vkCmdCopyImageToBuffer` on the descriptor's base mip/layer and bound range;
+rows are tightly packed block rows, with partial blocks only at mip edges.
+The manifest keeps the view VkFormat and optional `SOURCE R G B A` component
+mapping (SOURCE 0 for raw data). Replay recreates that format and view mapping,
+and uploads the lossless raw blocks. LS rejects any decoded BCn fallback;
+other passes retain the decoded compatibility path. A new diagnostic host build
+must create the images before capture; no additional ABI change is needed.
+The compressed LS disk cap remains 2048 MiB, including manifest and codec
+headers. Each codec block is checked before writing, so even a failed pack
+cannot overrun the cap. Synthetic tests cover raw BC4/BC5 atlas/cookie controls,
+odd block extents, nonzero mip/layer bases, multiple mips/layers, codec byte
+identity and sampled-value identity; no real inn size is inferred from fixtures.
+
+
+## Default Ultra reflections replay
+
+Corrected inn packs `replay-20261106-093603-61` and
+`replay-20261106-093623-62` match live outputs and counters in two ordinary
+dispatches each. However, sustained identical-pipeline 40-pair replay fails:
+the stats-OFF pack intermittently changes 206 specular bytes and 18 hit-distance
+bytes. Full-float ray origins, directions and closest-hit distances agree at
+the nine changed distance pixels, while projected UVs differ by about one ULP
+and cross pixel boundaries. The underlying cause remains unresolved. Validation,
+BLAS policy and UBO allocation/restoration trials do not resolve it. A final
+`vs live` match does not override an earlier strict-gate failure. The 1041 probe
+deferral trial saved a paired 0.126424 ms but was removed for failed exactness;
+see `docs/progress/rf-opt2.md`. Do not qualify a candidate from short repeats.
+
+For qualification, add `--require-live-equal` to the ordinary pack replay before
+profiling. It requires live references for every output and the raw counters,
+and returns failure for any changed byte or missing reference. Ordinary diagnostic
+replay still prints comparisons without enforcing this gate. Paired A/B equality
+is a separate requirement and cannot replace agreement with the captured live frame.
+
+Sampler lines with `STATE1` preserve LOD bias/minimum, comparison, border,
+unnormalized-coordinate, flags and anisotropy-enable state in addition to the
+legacy fields. Legacy sampler lines load with an incomplete-state warning;
+their missing values cannot be recovered from the image bytes. The writer refuses
+unsupported sampler/view extension state rather than silently dropping it.
+
+The real inn pack `replay-20261106-084948-1` fails live specular agreement
+(1,270,225 differing bytes); diffuse, hit distance and counters match exactly.
+The module matches the runtime cache and repeat output is deterministic.
+Sampler-state loss is a known contract gap, not an established explanation of
+that difference. Do not use this pack to qualify an optimization yet.
+Follow-up checked distinct raw pre/post specular snapshots, their restoration,
+and the consecutive RF capture/dispatch/capture bracket. No other pass intervenes;
+2,234,064 depth-valid no-hit pixels round-trip exactly. Prepared replacement
+capture: `tools/live_batches/rf_pack_state1` (not staged or authorized), with a
+required fixed-writer marker and separate statistics OFF/ON packs. See its README
+for the strict post-capture commands and the remaining record-time UBO limitation.
+
+`pass reflections` runs `gi/rt_reflections.hlsl`, with the captured request defines,
+all specialization values and 256 push bytes. It supports ordinary replay,
+`--ab-spec`, `--ab-warmup`, `--ab-require-equal` and `--pipeline-stats`.
+The contract is default Ultra: `rf_hit_shade=0`, `sharc=0`, stock hair,
+non-OMM. It excludes the unused hit-material caches and hit-lighting sets.
+
+Arm `replay_pack_pass=1,replay_pack=N` (N positive) for one RF dispatch per
+serial; selector 0 keeps legacy GI/LS behavior. RF capture uses ABI 27's existing
+two-phase API: snapshot after LS and before RF, rebind the production pipeline
+and descriptors, dispatch, then snapshot references. Both diagnostic DLLs must
+be rebuilt; sampled compressed images need the existing raw-BCn host build.
+No ABI bump or shader request was added.
+
+Inputs include the G-buffer, velocity, previous radiance, geometric/physical
+origin images, light lists/constants, shadow records/atlas, alpha geometry/TLAS,
+AO, DFG, global specular cubes, local probe records and every bound cube element
+(the mixed native b45's 2D cookies are not read by default RF). The game's
+unrelated dynamic descriptors are ignored; a captured lighting buffer with a
+dynamic descriptor is refused rather than copied from the wrong offset.
+
+Initial native R11G11B10 diffuse/specular, R16 hit distance and primary raw counter
+bins are restored before every dispatch, outside timestamps. Live output/counter
+differences are reported separately from strict paired offline equality.
+The shared LS lossless codec and 2048 MiB compressed disk cap apply; missing
+required singleton lighting resources, omitted images and decoded BCn fail capture.
+The cascade exclusion proof also applies to default RF: when both effective
+pipelines trace mask 0x01, preserve the captured soup range instead of appending
+unused cascade triangles across the driver's 2 GiB GetDimensions limit.
+
+`frame_replay --rf-self-test DIR` (CTest `frame_replay_rf_test`) builds a tilted
+slab reflecting the visible back plane, nonzero packed colours/history, a
+specular local probe pair and raw BC1 cubes. It requires eligible screen hits,
+zero range/ray guards, finite outputs, colour and hit-distance writes, changed
+results for dark-history/black-probe controls, repeat identity and exact paired
+output/counter restoration through compressed files under Vulkan validation.
+
+Prepared capture only: `tools/live_batches/rf_pack/jobs/rf-pack-inn.json`.
+The coordinator must capture the real pack before any savings investigation;
+synthetic results do not establish real inn pack size, live-reference identity,
+production GPU cost or an optimisation result.
+
+## Numeric paired replay against a control
+
+`--ab-numeric` writes `ab_numeric.csv`: one phase 0/1 cross-state comparison
+per ABBA/BAAB quartet. The balanced order reverses subtraction in BAAB so
+signed means always mean B minus A. The native R11G11B10/R16 values are decoded
+before subtraction. Every output/channel reports differing pixel count, maximum
+absolute difference, signed mean difference, mean absolute difference and
+nonfinite count. Means include unchanged pixels. GPU timing still uses all four
+dispatches, with restoration/readback/numeric analysis outside timestamps.
+
+Run matching `--repeat 40 --ab-warmup 8 --spv MODULE --ab-numeric` experiments
+with `--ab-spec 1031=0,0` (control) and `--ab-spec 1031=0,1` (candidate), without
+`--ab-require-equal`. Then run:
+
+```powershell
+python tools/replay_numeric.py --control CONTROL_DIR --candidate CANDIDATE_DIR --out summary.json
+```
+
+The gate requires every candidate pair's differing-pixel count, maximum absolute
+difference, absolute signed mean and mean absolute difference to fit the control's
+empirical nearest-rank 99th percentile for each output/channel. With 40 pairs this
+is the largest observed control value; there is no fitted tolerance. Nonfinite
+values, missing/duplicate pairs or output/channel mismatch fail. The summary also
+reports the existing distribution-free 95% median timing interval. This is a
+noise-relative offline gate; live confirmation remains separate.

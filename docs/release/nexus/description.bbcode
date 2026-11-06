@@ -103,10 +103,12 @@ All presets use Reflex On and, where your card supports it, frame generation 2x.
 [img]IMAGE_URL:h_controls.png[/img]
 
 [list]
-[*][b]Ctrl+Shift+F9[/b] (in game): switch all ray-traced lighting off and on, to compare the same view. DLSS and frame generation stay as they are.[/*]
+[*][b]Ctrl+Shift+F9[/b] (in game): switch all ray-traced lighting off and on, to compare the same view. DLSS and frame generation stay as they are. The shortcut can be changed on the Advanced page.[/*]
+[*][b]Ctrl+Shift+F8[/b] (in game): switch DLSS 5 Neural Rendering off and on, when it was enabled at game start. Changeable on the DLSS 5 page.[/*]
 [*][b]Launcher pages[/b]: [i]Lighting[/i], [i]Surfaces[/i] and [i]Performance[/i] hold every player option. [i]Help & support[/i] holds compatibility help, memory information, overlay troubleshooting and the bug report.[/*]
 [*][b]Live or restart[/b]: most options apply while you play. A few say "Restart the game to apply", for example turning frame generation on or off, ray-tracing detail and the first enable of water or hair shadows.[/*]
 [*][b]Experimental[/b]: turn on [i]Show experimental options[/i] in the launcher to see the Experimental page. It currently has one option, [i]Water surface reflections[/i], off in every preset.[/*]
+[*][b]DLSS 5[/b] (experimental, off by default): NVIDIA's neural rendering after Ray Reconstruction, before post effects and frame generation. Its page has the switch, a runtime file picker and a status line. You provide [i]nvngx_dlssnr.dll[/i] yourself; BG3RTX does not include it, and NVIDIA's loader rejects unsigned copies. About 6.7 ms per frame on an RTX 5090 at 3840x1600.[/*]
 [/list]
 
 [img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793823121-1599587881.png[/img]
@@ -118,7 +120,7 @@ All presets use Reflex On and, where your card supports it, frame generation 2x.
 [*]The first time hair shadows are turned on, shaders compile: expect a short pause or stutter.[/*]
 [*][b]Reflections[/b] trace the real scene, but a reflected surface that is hidden or off screen keeps the game's own reflection for now.[/*]
 [*]Other Vulkan overlays (Steam, EOS, GOG) can conflict. If the game crashes at start or frame generation does nothing, tick [b]Disable other Vulkan overlays[/b] in the launcher. NVIDIA Smooth Motion is turned off automatically while frame generation is on.[/*]
-[*]ReShade, other graphics mods and HDR have not been tested with BG3RTX.[/*]
+[*][b]ReShade[/b] works with BG3RTX, frame generation included. Effects that redo ambient occlusion or global illumination duplicate BG3RTX's work; colour and sharpening effects are fine. Other graphics mods and HDR have not been tested.[/*]
 [*]The DirectX 11 renderer is not supported.[/*]
 [*]The water flicker at the port is also in the game's own water. BG3RTX does not fix it.[/*]
 [*]Visible hair is the game's stock hair. Strand hair is planned as a later update.[/*]

@@ -26,6 +26,7 @@
 // Anything out of order breaks the chain for that frame and the evaluate falls
 // back to RR on the game's graded colour (logged).
 #include "host.h"
+#include "recording_init.h"
 #include "../common/pipeline_async.h"
 
 #include <cmath>
@@ -122,6 +123,13 @@ Img g_xs, g_xr, g_ac, g_eb, g_check, g_cbt, g_z, g_sss_before, g_sss;
 // keep a stale descriptor of a game image or buffer (see run()).
 Img g_dummy2d, g_dummy3d;
 Img g_hist_ac[2], g_hist_eb[2], g_hist_meta[2];
+struct History {
+  PostHistoryProducer producer;
+  uint64_t frame = 0;
+  uint32_t ow = 0, oh = 0;
+  float jitter[2] = {};
+};
+History g_history[2];
 bool g_hist_valid = false, g_temporal_active = false;
 uint32_t g_hist_index = 0, g_hist_ow = 0, g_hist_oh = 0;
 uint64_t g_hist_frame = 0;
@@ -137,6 +145,14 @@ VkDescriptorPool g_pool = VK_NULL_HANDLE;
 constexpr uint32_t kRing = 256;
 VkDescriptorSet g_sets[kRing] = {};
 uint32_t g_next_set = 0;
+DescriptorRecordingLease g_set_owners[kRing];
+struct SetPage {
+  VkDescriptorPool pool = VK_NULL_HANDLE;
+  VkDescriptorSet sets[kRing] = {};
+  DescriptorRecordingLease owners[kRing];
+};
+std::vector<SetPage> g_set_pages; // grow at the executable-recording high water mark
+
 VkSampler g_sampler = VK_NULL_HANDLE;
 struct Pipe {
   const char* entry;
@@ -449,10 +465,48 @@ void ts_harvest(DeviceData* dd, uint32_t slot) {
 }
 
 // Records one rr_post.hlsl entry. Returns false if the pipeline or set is missing.
+VkDescriptorSet acquire_set(DeviceData* dd, VkCommandBuffer cmd) {
+  const auto recording = cmd_recording(cmd);
+  if (!recording) return VK_NULL_HANDLE;
+  auto find = [&](auto& sets, auto& owners) -> VkDescriptorSet {
+    for (uint32_t i = 0; i < kRing; ++i) {
+      const auto index = (g_next_set + i) % kRing;
+      if (owners[index].recording ||
+          !owners[index].reusable(life_before_destroy(uint64_t(sets[index]), "RR descriptor", false))) continue;
+      owners[index].record(recording);
+      g_next_set = (index + 1) % kRing;
+      life_note(cmd, uint64_t(sets[index]));
+      return sets[index];
+    }
+    return VK_NULL_HANDLE;
+  };
+  if (auto set = find(g_sets, g_set_owners)) return set;
+  for (auto& page : g_set_pages)
+    if (auto set = find(page.sets, page.owners)) return set;
+  // Completion alone cannot release an executable set. Allocate another page
+  // instead of silently dropping temporal/final when the old ring fills.
+  SetPage page;
+  VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 9 * kRing},
+    {VK_DESCRIPTOR_TYPE_SAMPLER, kRing}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 6 * kRing},
+    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4 * kRing}};
+  VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+  pi.maxSets = kRing; pi.poolSizeCount = 4; pi.pPoolSizes = sizes;
+  if (dd->vk.CreateDescriptorPool(dd->device, &pi, nullptr, &page.pool) != VK_SUCCESS) return VK_NULL_HANDLE;
+  std::vector<VkDescriptorSetLayout> layouts(kRing, g_dsl);
+  VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+  ai.descriptorPool = page.pool; ai.descriptorSetCount = kRing; ai.pSetLayouts = layouts.data();
+  if (dd->vk.AllocateDescriptorSets(dd->device, &ai, page.sets) != VK_SUCCESS) {
+    dd->vk.DestroyDescriptorPool(dd->device, page.pool, nullptr); return VK_NULL_HANDLE;
+  }
+  g_set_pages.push_back(page);
+  return find(g_set_pages.back().sets, g_set_pages.back().owners);
+}
+
 bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const Push& pc, uint32_t gx, uint32_t gy) {
   VkPipeline pipe = pipeline(dd, g_pipes[which]);
   if (!pipe) return false;
-  VkDescriptorSet set = g_sets[g_next_set++ % kRing];
+  VkDescriptorSet set = acquire_set(dd, cmd);
+  if (!set) return false;
   VkDescriptorImageInfo ii[18] = {};
   VkWriteDescriptorSet w[20] = {};
   uint32_t n = 0, k = 0;
@@ -1133,6 +1187,20 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
   g_temporal_active = false;
   DeviceData* dd = device_of(cmd);
   if (!cfg_int("rr_post_temporal", 0)) { g_hist_valid = false; return; }
+  const auto recording = cmd_recording(cmd);
+  if (!recording) return;
+  // Submission validity and current-frame dispatch are independent. A delayed
+  // producer gives a fresh sample, never a skipped temporal or output grade.
+  g_hist_valid = g_history[g_hist_index].producer.readable();
+  // A discarded newer recording must not hide the other submitted slot.
+  for (uint32_t i = 0; i < 2; ++i)
+    if (g_history[i].producer.readable() && g_history[i].frame + 1 == frame_index()) {
+      g_hist_index = i;
+      g_hist_frame = g_history[i].frame;
+      g_hist_ow = g_history[i].ow; g_hist_oh = g_history[i].oh;
+      memcpy(g_hist_jitter, g_history[i].jitter, sizeof g_hist_jitter);
+      g_hist_valid = true;
+    }
   const uint32_t w = g_ch.w, h = g_ch.h;
   if (!dd || !depth.view || !mv.view || depth.width != w || depth.height != h ||
       mv.width != w || mv.height != h || !std::isfinite(jitter[0]) || !std::isfinite(jitter[1]) ||
@@ -1141,6 +1209,9 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
     log("[rrpost] temporal REFUSED: missing/invalid RR depth, motion or jitter"); return;
   }
   const bool resize = g_hist_ac[0].w != w || g_hist_ac[0].h != h || g_hist_ow != ow || g_hist_oh != oh;
+  if (resize || reset) for (auto& history : g_history) {
+    history.producer.recording = 0; history.producer.submitted = false;
+  }
   if (resize || reset || g_hist_frame + 1 != frame_index()) g_hist_valid = false;
   bool allocated = true;
   for (uint32_t i = 0; i < 2; ++i) {
@@ -1151,17 +1222,18 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
   if (!allocated || !pipeline(dd, g_pipes[P_TEMPORAL_FINAL])) {
     g_hist_valid = false; log("[rrpost] temporal REFUSED: resources/pipeline"); return;
   }
-  if (!g_hist_valid)
-    to_general(dd, cmd, {&g_hist_ac[0], &g_hist_eb[0], &g_hist_meta[0], &g_hist_ac[1], &g_hist_eb[1], &g_hist_meta[1]});
   const uint32_t next = 1 - g_hist_index;
   to_general(dd, cmd, {&g_hist_ac[next], &g_hist_eb[next], &g_hist_meta[next]});
   Binds b;
   b.in[0] = g_ac.view; b.in[1] = g_eb.view; b.in[2] = mv.view;
   b.in_l[0] = b.in_l[1] = VK_IMAGE_LAYOUT_GENERAL; b.in_l[2] = mv.layout;
   b.temporal_in[0] = depth.view; b.depth_layout = depth.layout;
-  b.temporal_in[1] = g_hist_ac[g_hist_index].view;
-  b.temporal_in[2] = g_hist_eb[g_hist_index].view;
-  b.temporal_in[3] = g_hist_meta[g_hist_index].view;
+  // With flags=0 the shader never samples history. Bind the initialized output
+  // slot instead of transitioning (and discarding) another pending producer.
+  const auto previous = g_hist_valid ? g_hist_index : next;
+  b.temporal_in[1] = g_hist_ac[previous].view;
+  b.temporal_in[2] = g_hist_eb[previous].view;
+  b.temporal_in[3] = g_hist_meta[previous].view;
   b.temporal_ac = g_hist_ac[next].view; b.temporal_eb = g_hist_eb[next].view;
   b.temporal_meta = g_hist_meta[next].view;
   Push pc{}; pc.size[0] = w; pc.size[1] = h;
@@ -1171,7 +1243,11 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
   if (!run(dd, cmd, P_TEMPORAL, b, pc, (w + 7) / 8, (h + 7) / 8)) {
     g_hist_valid = false; log("[rrpost] temporal REFUSED: dispatch"); return;
   }
-  g_hist_index = next; g_hist_valid = g_temporal_active = true; g_hist_frame = frame_index();
+  g_history[next].producer.record(recording);
+  g_history[next].frame = frame_index();
+  g_history[next].ow = ow; g_history[next].oh = oh;
+  memcpy(g_history[next].jitter, jitter, sizeof g_history[next].jitter);
+  g_hist_index = next; g_hist_valid = false; g_temporal_active = true; g_hist_frame = frame_index();
   g_hist_ow = ow; g_hist_oh = oh;
   memcpy(g_hist_jitter, jitter, sizeof g_hist_jitter);
   memcpy(g_final_jitter, jitter, sizeof g_final_jitter);
@@ -1323,3 +1399,16 @@ void rrpost_on_present() {
 }
 
 }  // namespace bg3
+
+namespace bg3 {
+void rrpost_discard_recording(uint64_t recording) {
+  std::lock_guard lock(g_mu);
+  for (auto& owner : g_set_owners) owner.discard(recording);
+  for (auto& page : g_set_pages) for (auto& owner : page.owners) owner.discard(recording);
+  for (auto& history : g_history) history.producer.discard(recording);
+}
+void rrpost_submit_recording(uint64_t recording) {
+  std::lock_guard lock(g_mu);
+  for (auto& history : g_history) history.producer.submit(recording);
+}
+}

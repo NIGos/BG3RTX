@@ -24,7 +24,9 @@
 // 25: Bg3HostApi::replay_pack (appended; diagnostics, tools/frame_replay.md "Live writer").
 // 26: Bg3HostApi::set_rr_motion_vectors (appended; rt_water_rr_mv, RR's motion vectors on water).
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
-#define BG3RTX_ABI_VERSION 26
+// 27: two-phase LS replay snapshots, additional descriptor sets and exact specialization payload.
+// 28: GPU completion and retained exact recording lifecycle queries. Rebuild both DLLs.
+#define BG3RTX_ABI_VERSION 28
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -188,6 +190,8 @@ struct Bg3SunSceneInfo {
 
 // ABI 25 (diagnostics only, tools/frame_replay.md "Live writer"): one compute dispatch the core
 // just recorded, as the offline replay pack needs it. Everything is only read during the call.
+struct Bg3ReplayWrite { uint32_t set; VkWriteDescriptorSet write; };
+struct Bg3ReplaySpec { uint32_t id, value; };
 struct Bg3ReplayDispatch {
   int32_t serial;               // replay_pack serial (> 0), or 0: take the pack only while a trace records
   const char* pass;             // a common/replay_pack.h kPasses name ("gi_hit_direct")
@@ -202,6 +206,23 @@ struct Bg3ReplayDispatch {
   uint32_t output_count;
   VkDescriptorSet set1;         // the host's material set bound as set 1 (rt_hit_material_use)
   VkAccelerationStructureKHR tlas;
+  // phase 0: legacy post-dispatch GI. 1: LS inputs before dispatch. 2: LS outputs after dispatch.
+  uint32_t phase;
+  const Bg3ReplayWrite* extra_writes;
+  uint32_t extra_count;
+  VkDescriptorSet game_set; // LS set 3; game's recorded native lighting set 1
+  const Bg3ReplaySpec* specs;
+  uint32_t spec_count;
+};
+
+enum Bg3RecordingFlags : uint32_t {
+  BG3_RECORDING_EXECUTABLE = 1u, // may be submitted again until reset/free/rebegin
+  BG3_RECORDING_SUBMITTED = 2u,  // at least one successful submission
+  BG3_RECORDING_COMPLETE = 4u,   // every successful submission is GPU-complete
+};
+struct Bg3RecordingState {
+  uint32_t flags;
+  uint64_t completion_frame; // latest submission CPU frame + 1; never a recording age
 };
 
 struct Bg3HostApi {
@@ -351,6 +372,15 @@ struct Bg3HostApi {
   // the game's vectors with the water surface's on the water pixels. Called every frame the core
   // writes it, and with VK_NULL_HANDLE when it stops (the game's vectors again).
   void (*set_rr_motion_vectors)(VkImage image, VkImageView view, VkFormat format, uint32_t width, uint32_t height);
+  // ABI 28. completed_frame covers the present queue only. Recording COMPLETE
+  // checks every actual consumer queue (or a covering device-idle wait).
+  uint64_t (*completed_frame)();
+  uint64_t (*recording_index)(VkCommandBuffer cmd); // exact BeginCommandBuffer generation
+  // Retain during that recording callback, once per owner. Release every retain.
+  // A retained generation remains queryable after reset/free and hot reload.
+  void (*retain_recording)(uint64_t recording);
+  void (*release_recording)(uint64_t recording);
+  Bg3RecordingState (*recording_state)(uint64_t recording); // unknown/zero fails closed
 };
 
 struct Bg3CoreApi {

@@ -1,0 +1,18 @@
+Version 0.9.1-beta
+
+New
+- DLSS 5 Neural Rendering (experimental, off by default). It runs after Ray Reconstruction and before post effects and frame generation. It has its own launcher page with an on/off switch, a runtime file picker and a status line. You provide the DLSS 5 runtime (nvngx_dlssnr.dll) yourself; BG3RTX does not include it. Cost on an RTX 5090 at 3840x1600: about 6.7 ms per frame.
+- Ctrl+Shift+F8 switches DLSS 5 on and off while you play, if it was enabled when the game started.
+- Keyboard shortcuts can be changed in the launcher: the ray tracing on/off shortcut on Advanced, the DLSS 5 one on the DLSS 5 page.
+- ReShade works with BG3RTX, frame generation included. Before, the game hid its DLSS option when ReShade was installed.
+
+Improved
+- Ultra global illumination is cheaper: about 0.3 ms less per frame in the ray-traced bounce pass, with the same image.
+- The launcher puts the game's upscaler back to DLSS before each start when the game has reset it. Ray Reconstruction needs it.
+
+Fixed
+- Changing the DLSS mode in game (for example Quality to Balanced) with DLSS 5 on no longer closes the game.
+
+Known issues
+- DLSS 5 is experimental and changes the look of the image (contrast and detail). Runtime files that are not signed by NVIDIA are rejected by NVIDIA's own loader.
+- ReShade effects that redo ambient occlusion or global illumination duplicate BG3RTX's work. Colour and sharpening effects are fine.

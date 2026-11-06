@@ -982,22 +982,146 @@ remaining instanced-row AO gap needs a pack containing those rows; non-instanced
 cannot close it. Keep `rf_hit_shade`, `rf_hit_gi` and the water candidate Experimental/off until
 their energy gates pass. Ultra is the first possible preset after combined smoke qualification.
 
-## Receiver probe live state (rf-ls-regs, offline candidate, 2026-11-05)
+## Receiver probe live state (rf-on, qualified, 2026-11-06)
 
-`rf_compact_probe_state=0` is a developer raw key, Vulkan specialization 1031, no knob or preset.
+`rf_compact_probe_state` (SpecId 1031) is qualified and always on: code default,
+all presets and release policy use 1; `dev=1` preserves raw 0 for A/B. No GUI knob.
+
+Default Ultra live S8 Queens House, `opt-compact-rf-s8.1.102848`: **VALID SAVING**.
+Reflections OFF/ON/OFF/ON 1.200/1.034/1.224/1.066 ms (OFF spread 0.023 ms).
+Float pre-post energy stays within the OFF band on all channels: luminance
+-0.00025/-0.00018, band 0.0247. Inn live is INVALID (readiness); offline paired
+savings are -0.123/-0.129 ms. Default-request registers fall from 128 to 96.
+Replay differs only in the 63 specular / 9 distance projection-unstable pixels
+that also differ OFF/OFF; this does not claim strict replay equality.
+Check on S8 with default Ultra reflections; developer A/B uses the raw key.
+Shader request delta 0; ABI unchanged. Historical candidate evidence follows.
+
+Initially, `rf_compact_probe_state=0` was a developer raw key, Vulkan specialization 1031, no knob or preset.
 
 Live result (2026-11-05, Ultra with the optional Far + reflections mode, rf_hit_shade=rf_hit_gi=1; the default Far mode never runs this code): two VALID in-run A/B runs, opt-compact-rf-inn.1.121959 and opt-compact-rf-s8.1.122421. Reflections OFF/ON/OFF/ON: inn 5.736/5.613/5.810/5.755 ms (OFF spread 0.074), S8 3.615/3.529/3.566/3.574 ms (spread 0.050); ON minus the preceding OFF -0.12, -0.05, -0.09, +0.01 ms. Float pre-post energy within the OFF-repeat band in every pair. Kept off (user decision): about 0.05 ms, not separated from noise, only in a non-default mode.
 With `rf_hit_gi>0`, ON evaluates the same receiver probe/DFG/occlusion block after hit shading.
 Only its position changes: all inputs are read-only during the intervening traversal/shading;
 guard increments are integer additions with the same multiplicity. No ray, precision or accumulation changes.
-Core keeps it OFF without hit GI (that trial was 229 -> 230 registers, shared bytes 32 -> 32).
+At that time core kept it OFF without hit GI (that trial was 229 -> 230 registers, shared bytes 32 -> 32).
 The production native/hair-origin/instanced/cascade/emission/hit-GI request uses 255 -> 245 registers,
 driver Shared Memory Size 800 -> 32 bytes (baseline and candidate OFF: 255 / 800).
 The driver Local Memory Size is anomalous, 68719476752 in every run: no reliable spill-byte claim.
 At 245 registers this does not cross the next occupancy step. GPU time is unmeasured.
 ON/OFF specialized SPIR-V retains the stored-result logic and identical operation counts
 (4 image writes, 8 ray-query sites, 378 integer atomic adds; float add/multiply/ext-inst counts match).
-No RF replay pass exists: construction/SPIR-V review is the offline evidence, not a rendered exactness test.
-Pending: a separately authorized live in-run OFF/ON/OFF energy/image/cost A/B at the inn with hit GI on,
+At that point no RF replay pass existed: construction/SPIR-V review was the offline evidence, not a rendered exactness test.
+Historical pending gate: a separately authorized live in-run OFF/ON/OFF energy/image/cost A/B at the inn with hit GI on,
 and the combined Ultra smoke. No qualification or default promotion from register statistics alone.
 See docs/progress/rf-ls-regs.md for gates and tools/frame_replay.md for reproduction.
+
+### Default request extension (rf-default, offline, 2026-11-06)
+
+Core now binds 1031 from the raw key for every `rt_reflections` request, including
+default Ultra (`rf_hit_shade=0,rf_hit_gi=0`). The key remains 0 by default; no
+shader source, ABI or manifest request changes. Key-off identity against HEAD
+e911e0444287 passes 218/218 requests by identical compiler inputs.
+Default native/hair-origin/cascade request compile-only driver statistics:
+OFF/ON registers 128/96, shared bytes 0/1536, binary bytes 109312/110592.
+Receipts: `.scratch/rf-default/key-off-identity.json`, `compile-off.log`, `compile-on.log`.
+
+Construction audit: the two blocks at rt_reflections.hlsl lines 218-221 and
+441-444 are text-identical; the global/local probe expressions and ordered lerps
+inside bg3_spec_ambient are unchanged. Between them, no reads of cl/E/Tp/n_local,
+no assignments to sf/fp/d/k, and no caller return/discard occur. The only pixel
+returns (bounds and nonpositive depth) precede both blocks. Invalid directions,
+aborted rays, misses and all eligibility/shading/cache branches reconverge before
+the ON block, including RF_HIT_SHADE=0's rt_closest path. Helper returns return
+to their caller. Cluster/probe/DFG/AO inputs are read-only; traversal and hit shading
+do not write them. Probe guard additions preserve their integer multiplicity.
+Thus every surviving pixel executes exactly one unchanged probe accumulation
+before its first use at composition/validation/debug/stats. Numerical replay
+comparison uses the OFF/OFF control's derived p99 bounds because sustained OFF/OFF
+itself has projection instability; pending live confirmation remains unqualified.
+
+Historical numeric replay gate (2026-11-06): **FAIL 2/2 packs; NOT QUALIFIED at that stage**.
+The later live default-Ultra qualification above supersedes this status; the strict numeric gate failure remains recorded. Same cached
+module, validation enabled, 8 per-sample warmups, 40 ABBA/BAAB quartets each for
+OFF/OFF and OFF/ON. Output statistics use one predetermined adjacent phase 0/1
+comparison per quartet (40 balanced AB/BA observations); timing uses all four.
+The empirical nearest-rank control p99 is zero for every measured metric/channel
+in both packs. Whole-quartet legacy equality nevertheless detects OFF/OFF variation
+in later phases; these are distinct samples, not evidence of deterministic replay.
+No rerun or bound adjustment. Diffuse is exact in both candidates; no nonfinite values.
+
+| Inn pack | Specular differing pixels (pairs) | Max absolute RGB | Mean signed RGB over 40 pairs | R16 pixels (pairs), max absolute, mean signed |
+|---|---|---|---|---|
+| 093603-61, stats OFF | 63 (4/40) | .0234375 / .015625 / .015625 | 3.608e-10 / 4.963e-10 / 6.257e-10 | 9 (4/40), 65503.992012, .0071942075 |
+| 093623-62, stats ON | 63 (40/40) | .00604248047 / .00317382813 / .00244140625 | -5.965e-11 / -5.174e-11 / -5.642e-11 | 3 (7/40), 65503.973465, -.00059951125 |
+
+All means include every pixel, decoded in the native storage format; large distance
+deltas include the 65504 no-hit sentinel. Per-channel signed/absolute means and maxima,
+all per-pair observations and exceeded-bound counts: `.scratch/rf-default/numeric61.json`,
+`numeric62.json` and `{control,candidate}{61,62}/ab_numeric.csv`.
+Durable full-channel summaries and construction/register receipts: `docs/evidence/rf-default.json`.
+Mean-absolute and absolute-signed-mean gates fail too. Whole-quartet raw counters match for pack 61;
+both control and candidate vary for pack 62, so counters do not qualify it.
+Paired B-A medians and 95% intervals (ms): candidate 61 -.122904 [-.157664,+.019344],
+control 61 -.000104 [-.125696,+.203392]; candidate 62 -.128760 [-.228944,-.016736],
+control 62 -.000432 [-.000976,+.015328]. Timing is noisy offline evidence, not live cost.
+Default inn/S8 OFF/ON/OFF/ON cost then energy jobs are regenerated and linted,
+`keep_reshade=false`, prepared only at that stage. The later S8 live qualification
+above promotes the key to 1; the inn live failed readiness and remains INVALID.
+
+
+## Default Ultra RF replay (rf-replay, READY_FOR_LIVE, 2026-11-06)
+
+Follow-up `rf-opt2`, 2026-11-06: corrected STATE1 packs 093603-61 and
+093623-62 match every live output/counter in 2/2 ordinary dispatches each.
+Sustained baseline control nevertheless fails (40 ABBA/BAAB pairs): 206
+specular bytes / 63 pixels and 18 distance bytes / 9 pixels change intermittently
+on pack 61. Diagnostic full-float origins, directions and closest-hit distances
+are identical; projected UVs differ by about one ULP, selecting adjacent
+depth/origin/history pixels. Cause unresolved; validation OFF, layer BLAS flags
+and UBO restoration/allocation trials do not fix it. No replay fix is claimed.
+`rf_fast` (1041) delayed the unchanged receiver probe block until after traversal:
+paired saving 0.126424 ms, 95% median CI [0.125200,0.128240], registers 128 -> 96,
+shared bytes 0 -> 1536. Timing bar met, exactness failed: candidate removed,
+ID retired, defaults unchanged, request delta 0. These are offline numbers,
+not a live cost claim. Receipts and ablation numbers: `docs/progress/rf-opt2.md`.
+
+Real inn pack validation (rf-opt, 2026-11-06): frame 1981 fails specular
+agreement in 1,270,225 bytes / 420,526 pixels; diffuse, R16 hit distance and
+all raw counters are exact, guards 0. Repeats and pipeline-statistics OFF
+agree exactly. The SPIR-V matches the capture's runtime cache. Baseline uses
+128 registers and 0 shared bytes. Its roughly 0.79 ms standalone replay is
+not the approximately 2.2 ms live pass cost. Profiling and `rf_fast` are
+blocked by this gate; no optimization is qualified. Sampler-state capture
+was incomplete and is now extended, but that omission is not the proven
+cause of this pack's difference. Strict replay validation is
+`--require-live-equal`; see `docs/progress/rf-opt.md` for receipts.
+
+Follow-up audit: RF phase 1, its one dispatch and phase 2 are consecutive in
+`rf_dispatch`; no LS, GI composite, rrpost or water dispatch intervenes. The
+manifest restores raw `img6.bin` and compares distinct `s0b7.live`, both format
+122, with disjoint staging ranges. All 2,234,064 depth-valid no-hit pixels
+round-trip exactly; changed hit channels differ by up to hundreds of packed
+codes, ruling against a one-code R11G11B10 rounding explanation. Captured view
+formats, including sRGB/UNORM distinctions, are recreated rather than decoded.
+The actual mismatch cause remains unproven. Prepared recapture
+`tools/live_batches/rf_pack_state1` requires a fixed-writer witness (3/3 raw
+initial/reference pairs, 20/20 STATE1 samplers), with a second statistics-on
+pack to separate probe/initial-specular counters from final writeback. Host-only
+UBOs remain record-time CPU snapshots and are counted explicitly. Stop for
+that new evidence; no candidate or cost qualification from the old pack.
+
+The default `rt_reflections` request now has a dedicated two-phase replay
+contract, separate from optional hit shading. Diagnostic `replay_pack_pass=1`
+with a positive `replay_pack` serial selects it; both default to 0. ABI remains 27,
+shader request delta 0. Initial packed diffuse/specular, R16 hit distance and raw
+counter bins are restored before each dispatch; all outputs and counters can be
+compared live versus replay and in strict paired A/B. Raw BCn, probe cubes,
+lighting inputs and geometry reuse the LS writer/codec. See tools/frame_replay.md.
+
+The synthetic default-request test exercises screen reflections, raw BC1 probes,
+history controls, finite outputs, zero guards and repeat/paired byte identity.
+Prepared inn Ultra job: tools/live_batches/rf_pack/jobs/rf-pack-inn.json,
+visible_unfocused_fg, 45 s static plan, compressed cap 2048 MiB. Frozen and
+non-frozen lint pass. Prepared only; no live authorization, game or queue action.
+Actual pack size, reconstructed-TLAS agreement and GPU capture cost await the
+coordinator's capture. No saving is claimed; stop here before optimisation.

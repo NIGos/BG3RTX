@@ -91,9 +91,94 @@ uint64_t cmd_recording(VkCommandBuffer cmd){
   std::shared_lock lock(g_cmd_mu);auto i=g_cmds.find(cmd);
   return i==g_cmds.end()?0:std::atomic_ref<uint64_t>(i->second->recording).load(std::memory_order_acquire);
 }
+// Retained only for core consumers. Executable generations keep their metadata
+// even at zero references: a later core pass may retain the same generation.
+namespace {
+struct CoreSubmission { VkQueue queue; uint64_t frame, seq; };
+struct CoreRecording {
+  uint32_t refs = 0;
+  bool executable = true, submitted = false;
+  uint64_t completion_frame = 0;
+  std::vector<CoreSubmission> consumers;
+};
+std::mutex g_core_recording_mu;
+std::unordered_map<uint64_t, CoreRecording> g_core_recordings;
+bool core_recording_complete(const CoreRecording& r) {
+  for (const auto& c : r.consumers)
+    if (!life_recording_complete(c.queue, c.frame, c.seq)) return false;
+  return true;
+}
+void core_prune_recordings() {
+  for (auto i = g_core_recordings.begin(); i != g_core_recordings.end();)
+    if (!i->second.refs && !i->second.executable && core_recording_complete(i->second)) i = g_core_recordings.erase(i);
+    else ++i;
+}
+void core_discard_recording(uint64_t recording) {
+  std::lock_guard lock(g_core_recording_mu);
+  auto i = g_core_recordings.find(recording);
+  if (i != g_core_recordings.end()) i->second.executable = false;
+  core_prune_recordings();
+}
+void core_submit_recording(uint64_t recording, VkQueue queue, uint64_t frame, uint64_t seq) {
+  auto i = g_core_recordings.find(recording);
+  if (i == g_core_recordings.end()) return;
+  auto& r = i->second;
+  r.submitted = true;
+  r.completion_frame = (std::max)(r.completion_frame, frame + 1);
+  // Keep one latest lease per queue; queue submission order covers older uses.
+  for (auto& c : r.consumers) if (c.queue == queue) { c.frame = frame; c.seq = seq; return; }
+  r.consumers.push_back({queue, frame, seq});
+}
+}
+void core_retain_recording(uint64_t recording) {
+  if (!recording) return;
+  std::lock_guard lock(g_core_recording_mu);
+  ++g_core_recordings[recording].refs;
+}
+void core_release_recording(uint64_t recording) {
+  std::lock_guard lock(g_core_recording_mu);
+  auto i = g_core_recordings.find(recording);
+  if (i != g_core_recordings.end() && i->second.refs) --i->second.refs;
+  core_prune_recordings();
+}
+Bg3RecordingState core_recording_state(uint64_t recording) {
+  std::lock_guard lock(g_core_recording_mu);
+  auto i = g_core_recordings.find(recording);
+  if (i == g_core_recordings.end()) return {};
+  const auto& r = i->second;
+  return {uint32_t((r.executable ? BG3_RECORDING_EXECUTABLE : 0) |
+      (r.submitted ? BG3_RECORDING_SUBMITTED : 0) |
+      (core_recording_complete(r) ? BG3_RECORDING_COMPLETE : 0)), r.completion_frame};
+}
+void core_submit_recordings(VkQueue queue, const std::vector<VkCommandBuffer>& cmds) {
+  // life_on_submit published its sequence before the native QueueSubmit. A
+  // later sequence only makes a covering idle wait conservatively later.
+  const uint64_t frame = frame_index(), seq = life_idle_begin();
+  std::lock_guard lock(g_core_recording_mu);
+  for (auto cmd : cmds) {
+    auto* s = cmd_state(cmd);
+    if (!s) continue;
+    for (auto recording : s->post_secondaries) core_submit_recording(recording, queue, frame, seq);
+    core_submit_recording(s->recording, queue, frame, seq);
+  }
+  core_prune_recordings();
+}
+static void post_discard_recording(uint64_t recording) {
+  rrpost_discard_recording(recording); ngx_discard_recording(recording);
+  core_discard_recording(recording);
+}
+void post_submit_recordings(const std::vector<VkCommandBuffer>& cmds) {
+  for (auto cmd : cmds) {
+    auto* s = cmd_state(cmd);
+    if (!s) continue;
+    // Copy IDs at ExecuteCommands, never look up a secondary's current handle.
+    for (auto recording : s->post_secondaries) { rrpost_submit_recording(recording); ngx_submit_recording(recording); }
+    rrpost_submit_recording(s->recording); ngx_submit_recording(s->recording);
+  }
+}
 void cmd_forget(VkCommandBuffer cmd) {
   sl_discard_recording(cmd);
-  alpha_discard_recording(cmd_recording(cmd));
+  alpha_discard_recording(cmd_recording(cmd));post_discard_recording(cmd_recording(cmd));
   terrain_capture_discard(cmd);
   std::unique_lock<std::shared_mutex> lock(g_cmd_mu);
   auto it = g_cmds.find(cmd);
@@ -122,12 +207,12 @@ static void discard_recordings(VkDevice device, VkCommandPool pool, bool destroy
       else { state->begin_flags=0; ++it; }
     }
   }
-  for (auto recording:recordings) { alpha_discard_recording(recording); }
+  for (auto recording:recordings) { alpha_discard_recording(recording); post_discard_recording(recording); }
   for (auto command:commands) { sl_discard_recording(command); terrain_capture_discard(command); bvh_cmd_reset(command); }
 }
 static void discard_recording(VkCommandBuffer command) {
   sl_discard_recording(command);
-  alpha_discard_recording(cmd_recording(command));
+  alpha_discard_recording(cmd_recording(command));post_discard_recording(cmd_recording(command));
   terrain_capture_discard(command);
   {
     std::unique_lock lock(g_cmd_mu);
@@ -472,10 +557,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   diag(DIAG_BEGIN_CMD);
   bvh_cmd_reset(cmd);   // recorded again: a previous recording not submitted is dropped
   VkResult r = vk(cmd).BeginCommandBuffer(cmd, bi);
-  if(r==VK_SUCCESS){sl_discard_recording(cmd);alpha_discard_recording(cmd_recording(cmd));terrain_capture_discard(cmd);omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
+  if (r != VK_SUCCESS) return r; // retain the previous recording on failed begin
+  if(r==VK_SUCCESS){sl_discard_recording(cmd);alpha_discard_recording(cmd_recording(cmd));post_discard_recording(cmd_recording(cmd));terrain_capture_discard(cmd);omm::command_discard(cmd);omm::command_begin(cmd,(bi->flags&VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)==0);}
   CmdState* s = cmd_state(cmd, true);
   static std::atomic<uint64_t> recordings{0};
   std::atomic_ref<uint64_t>(s->recording).store(++recordings,std::memory_order_release);
+  s->post_secondaries.clear();
   s->begin_flags = r==VK_SUCCESS && bi ? bi->flags : 0;
   s->ours_since_event = false;
   if (r == VK_SUCCESS) fault_checkpoint(cmd, kCkCmdBegin, uint32_t(s->recording));
@@ -978,6 +1065,8 @@ static VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cmd, uint32
   for (uint32_t i = 0; i < n; ++i) {
     CmdState* sec = cmd_state(cmds[i]);
     if (!sec) continue;
+    s->post_secondaries.push_back(sec->recording);
+    s->post_secondaries.insert(s->post_secondaries.end(), sec->post_secondaries.begin(), sec->post_secondaries.end());
     s->refs.insert(s->refs.end(), sec->refs.begin(), sec->refs.end());   // submitted with the primary
     for (auto& [img, lay] : sec->sl_layouts) sl_note_barrier(s, img, lay);
     for (auto& [img, lay] : sec->sl_input_layouts) sl_note_event_barrier(s, img, lay);

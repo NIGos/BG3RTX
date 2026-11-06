@@ -22,6 +22,7 @@ int main() {
   m.buffers = {{0, 0, 400, "s0b0.bin"}, {1, 6, 1476395008ull, ""}, {1, 8, 256, "s1b8.bin"}};
   m.ranges = {{1, 6, 64, "s1b6.ranges.bin", 0, 192}, {1, 6, 8192, "s1b6.ranges.bin", 192, 384}, {1, 1, 0, "legacy.bin"}};
   m.images = {{0, 5, 0, rp::kR32Sfloat, 2560, 1440, 1, 1, "img0.bin"}, {1, 3, 2, 146, 4096, 4096, 4, 13, "img1.bin"}};
+  m.images[1].components = {3, 3, 3, 2}; // R R R ONE
   m.omitted = {{1, 2, 17}, {1, 14, 3}};
   m.samplers = {{1, 15, 0, 1, 1, 1, 0, 0, 2, 16.0f, 1000.0f}, {1, 4, 0, 1, 1, 1, 0, 0, 0, 0.0f, 16.0f}};
   m.instances = "instances.bin"; m.instance_count = 61234;
@@ -43,14 +44,93 @@ int main() {
             b.ranges[i].file_offset == m.ranges[i].file_offset && b.ranges[i].bytes == m.ranges[i].bytes;
   for (size_t i = 0; lists && i < 2; ++i)
     lists = b.images[i].format == m.images[i].format && b.images[i].w == m.images[i].w && b.images[i].layers == m.images[i].layers &&
-            b.images[i].mips == m.images[i].mips && b.images[i].file == m.images[i].file && b.omitted[i].element == m.omitted[i].element &&
+            b.images[i].components == m.images[i].components && b.images[i].mips == m.images[i].mips && b.images[i].file == m.images[i].file && b.omitted[i].element == m.omitted[i].element &&
             b.samplers[i].aniso == m.samplers[i].aniso && b.samplers[i].max_lod == m.samplers[i].max_lod && b.samplers[i].aw == m.samplers[i].aw &&
             b.outputs[i].format == m.outputs[i].format && b.outputs[i].reference == m.outputs[i].reference;
   check(lists, "buffers, sparse ranges (file slices), images, omitted, samplers, outputs");
   check(rp::serialize(b) == text, "serialize(parse(text)) == text");
   {
+    // Legacy snapshots remain loadable but never acquire an invented completeness marker.
+    check(b.samplers[0].state_version == 0, "legacy sampler state remains explicitly incomplete");
+    rp::Manifest complete=m;
+    auto& s=complete.samplers[0]; s.state_version=1; s.lod_bias=-0.375f; s.min_lod=2.25f;
+    s.compare_enable=1; s.compare_op=6; s.border=4; s.unnormalized=1; s.flags=0; s.aniso_enable=1;
+    const auto state=rp::serialize(complete); rp::Manifest back;
+    check(rp::parse(state,back,error) && rp::serialize(back)==state && back.samplers[0].state_version==1 &&
+      back.samplers[0].lod_bias==-0.375f && back.samplers[0].min_lod==2.25f && back.samplers[0].compare_enable==1 &&
+      back.samplers[0].compare_op==6 && back.samplers[0].border==4 && back.samplers[0].unnormalized==1 &&
+      back.samplers[0].aniso_enable==1, "complete ordinary sampler state round-trip");
+    const std::string prefix="bg3rtx_replay_pack 1\npass reflections\npush p\ndispatch 1 1 1\nsampler 2 32 0 1 1 0 2 2 2 1 16 ";
+    for(const char* tail : {"STATE2 0 0 0 0 0 0 0 0", "STATE1 0 0", "STATE1 0 0 2 0 0 0 0 0",
+        "STATE1 0 0 0 8 0 0 0 0", "STATE1 0 0 0 0 6 0 0 0", "STATE1 0 17 0 0 0 0 0 0",
+        "STATE1 0 0 0 0 0 0 0 0 extra"}) {
+      rp::Manifest bad; check(!rp::parse(prefix+tail+"\n",bad,error), "malformed complete sampler state rejected");
+    }
+  }
+  {
     rp::Manifest bad;
     check(!rp::parse("bg3rtx_replay_pack 1\npass gi_hit_direct\npush p\ndispatch 1 1 1\nrange 1 6 0 f 0\n", bad, error), "a range slice without BYTES is rejected");
+  }
+  {
+    const auto& pass=*rp::find_pass("reflections"); const uint32_t outputs[]={6,7,30};
+    rp::Manifest rf;rf.pass=pass.name;
+    for(uint32_t i=0;i<pass.slot_count;++i)if(pass.slots[i].kind==rp::kSampler) {
+      const auto& slot=pass.slots[i];
+      for(uint32_t e=0;e<slot.count;++e) {rp::Sampler s{};s.set=slot.set;s.binding=slot.binding;s.element=e;s.state_version=1;rf.samplers.push_back(s);}
+    }
+    for(uint32_t binding:outputs)rf.outputs.push_back({0,binding,rp::find_slot(pass,0,binding)->storage_format,128,128,
+      "live"+std::to_string(binding),"initial"+std::to_string(binding)});
+    auto contract=[&](const rp::Manifest& manifest){return rp::two_phase_contract(pass,manifest,outputs,3);};
+    const auto valid=contract(rf);
+    check(valid.error.empty() && valid.raw_output_pairs==3 && valid.complete_samplers==20,"complete RF two-phase contract has 3 raw pairs and 20 samplers");
+    auto bad=rf;bad.samplers.erase(bad.samplers.begin());check(!contract(bad).error.empty(),"two-phase contract rejects missing sampler");
+    bad=rf;bad.samplers[0].state_version=0;check(!contract(bad).error.empty(),"two-phase contract rejects legacy sampler");
+    bad=rf;bad.samplers.push_back(bad.samplers[0]);check(!contract(bad).error.empty(),"two-phase contract rejects duplicate sampler");
+    bad=rf;bad.samplers[0].binding=999;check(!contract(bad).error.empty(),"two-phase contract rejects unsupported sampler");
+    bad=rf;bad.outputs[0].initial=bad.outputs[0].reference;check(!contract(bad).error.empty(),"two-phase contract rejects identical initial/reference file");
+    bad=rf;bad.outputs[0].initial.clear();check(!contract(bad).error.empty(),"two-phase contract rejects missing initial output");
+    bad=rf;bad.outputs[0].reference.clear();check(!contract(bad).error.empty(),"two-phase contract rejects missing reference output");
+    bad=rf;bad.outputs.erase(bad.outputs.begin());check(!contract(bad).error.empty(),"two-phase contract rejects missing output pair");
+    bad=rf;bad.outputs.push_back(bad.outputs[0]);check(!contract(bad).error.empty(),"two-phase contract rejects duplicate output pair");
+    bad=rf;bad.outputs[0].format=97;check(!contract(bad).error.empty(),"two-phase contract rejects unsupported raw output format");
+    const uint32_t duplicate[]={6,6,30};
+    check(!rp::two_phase_contract(pass,rf,duplicate,3).error.empty(),"two-phase contract rejects duplicate expected binding");
+  }
+
+  {
+    rp::Manifest ls=m;ls.pass="local_shadows";
+    ls.specs={{1000,1},{1008,0}};ls.counter_initial="before.bin";ls.counters="after.bin";
+    ls.outputs={{0,6,122,128,128,"live.bin","initial.bin"},{0,7,122,128,128,"","initial.bin"}};
+    rp::Manifest back;
+    const auto text=rp::serialize(ls);
+    check(rp::parse(text,back,error) && rp::serialize(back)==text,"LS specs, counter snapshots and output initial round-trip");
+    check(back.outputs[1].reference.empty() && back.outputs[1].initial=="initial.bin","LS initial without live reference round-trip");
+    rp::Manifest bad;
+    check(!rp::parse(text+"spec 1000 0\n",bad,error),"duplicate specialization ID rejected");
+    bad={};check(!rp::parse(text+"spec 1009\n",bad,error),"truncated specialization rejected");
+    bad={};check(!rp::parse(text+"counter_initial\n",bad,error),"truncated counter initial rejected");
+    const auto* pass=rp::find_pass("local_shadows");
+    bool unique=true;
+    for(uint32_t i=0;i<pass->slot_count;++i)for(uint32_t j=0;j<i;++j)
+      unique &= pass->slots[i].set != pass->slots[j].set || pass->slots[i].binding != pass->slots[j].binding;
+    check(unique && rp::find_slot(*pass,3,45)->kind==rp::kSampled2D && rp::find_slot(*pass,0,6)->storage_format==122,
+          "LS unique descriptor contract, 2D cookies and native packed colour");
+  }
+
+  {
+    const auto* pass=rp::find_pass("reflections");
+    bool unique=pass && pass->set_count==3;
+    for(uint32_t i=0;pass && i<pass->slot_count;++i)for(uint32_t j=0;j<i;++j)
+      unique &= pass->slots[i].set!=pass->slots[j].set || pass->slots[i].binding!=pass->slots[j].binding;
+    check(unique && rp::find_slot(*pass,2,45)->kind==rp::kSampledCube &&
+          rp::find_slot(*pass,0,30)->storage_format==76 && rp::find_slot(*pass,0,7)->storage_format==122,
+          "RF unique contract, cube probes, R16 hit distance and packed colour");
+    check(!rp::find_slot(*pass,1,14) && !rp::find_slot(*pass,3,0),"default RF excludes hit caches and hit sun set");
+    rp::Manifest rf=m;rf.pass="reflections";rf.specs={{1000,1}};
+    rf.outputs={{0,7,122,128,128,"live.bin","initial.bin"},{0,30,76,128,128,"hit.live","hit.initial"}};
+    rf.counter_initial="before.bin";rf.counters="after.bin";rp::Manifest back;
+    const auto text=rp::serialize(rf);
+    check(rp::parse(text,back,error) && rp::serialize(back)==text,"RF initial/reference/spec/counter round trip");
   }
 
   // 2. InstInfo spans: soup vs pool, legacy / hair / empty entries name nothing.

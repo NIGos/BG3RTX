@@ -186,7 +186,7 @@ std::string Bridge::handle(const std::string& message){
     if(index<0){status_="Unknown keyboard shortcut.";return state_json();}
     auto value=type=="resetShortcut"?std::string(bg3::hotkeys::defaults[index]):get<std::string>(o,"value");
     auto rt=index==0?value:state_.shortcuts[0],nr=index==1?value:state_.shortcuts[1];
-    auto error=bg3::hotkeys::validate(rt,nr);
+    auto error=bg3::hotkeys::validate_change(value,index==0?nr:rt);
     if(!error.empty())status_=error;
     else {state_.shortcuts[index]=bg3::hotkeys::format(bg3::hotkeys::parse(value));status_="Keyboard shortcut changed. Save to apply.";}
   }

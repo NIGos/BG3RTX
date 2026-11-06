@@ -26,7 +26,7 @@ def tooling_tests(root, paths):
     for name in registry:
         # These registered tests need DXC or the MSVC build environment. Tooling-only
         # edits lint their source; the shader and full scopes run them through CTest.
-        if name in ('water_surface_shader', 'core_resource_init', 'layer_init_failure', 'launcher_ui'):
+        if name in ('water_surface_shader', 'core_resource_init', 'layer_init_failure', 'launcher_ui', 'rr_r11', 'post_recording', 'dlss5_teardown', 'hotkey_poll'):
             continue
         path = root / f'tests/{name}_test.py'
         text = path.read_text(encoding='utf-8-sig')
@@ -58,7 +58,8 @@ def shader_test_regex(root):
         seen[path] = hit
         return hit
 
-    names = {'native_hit_gpu_fixture', 'frame_replay_test', 'pt_reference_test'}
+    names = {'native_hit_gpu_fixture', 'frame_replay_test', 'frame_replay_ls_test',
+             'frame_replay_rf_test', 'pt_reference_test'}
     for path in (root / 'tests').glob('*_test.*'):
         if path.suffix not in ('.py', '.cpp'):
             continue

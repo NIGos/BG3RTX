@@ -512,6 +512,15 @@ The merged build ran for 7 minutes with no crash (`fg=2`, main's defaults, displ
 
 ## Known issues
 
+2026-11-06 offline review (`review-dlss5`): deferred device initialization now checks
+and consumes its pending scratch under one mutex, including the one-time trigger log.
+Device teardown clears the SDK initialization flag, instance, requirements, optical-flow
+queue flag and pending scratch along with the function table. A replacement device on
+the same instance therefore skips Streamline instead of calling a null SetVulkanInfo;
+a fresh instance can initialize it again. The actual teardown body is covered by
+`layer_init_failure_test.py` (fails against the previous body, passes after the fix).
+No live FG/HDR or recreation qualification is claimed.
+
 - **Refresh-capped output.** DLSS-G paces to the 120 Hz refresh, so in this setup FG lowers the rendered rate instead of raising the displayed rate. To gain motion smoothness beyond 120 Hz, use a higher-refresh mode or VRR.
 - **Loading screen.** DLSS-G switches on during the "100%" loading screen. The scene renders behind it, so every input looks valid, and `fg_menu_detect` does not catch it. This is harmless, and the transition into gameplay is handled.
 - **UI blending space.** The game composites the UI in linear light: the UI is sRGB-decoded, and the PQ-decoded scene is attenuated by (1-a)^2. DLSS-G assumes `final = ui.rgb + (1-a)*hudless` in a single space. For UI detection this does not matter. For `fg_ui_recompose=1`, semi-transparent UI could come out with the wrong brightness, which is why it is off by default.

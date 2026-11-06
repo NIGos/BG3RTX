@@ -4,6 +4,7 @@
 
 | Candidate | Verdict | Measured result / reason |
 | --- | --- | --- |
+| `rf_compact_probe_state` (1031) | Qualified, always on | Default Ultra S8 `opt-compact-rf-s8.1.102848` VALID SAVING: reflections OFF/ON/OFF/ON 1.200/1.034/1.224/1.066 ms (OFF spread 0.023). Float energy within OFF band on all channels; luminance -0.00025/-0.00018, band 0.0247. Inn live INVALID (readiness); offline paired -0.123/-0.129 ms. Registers 128 -> 96; replay differs only in the 63/9 projection-unstable pixels also differing OFF/OFF. |
 | `rt_scene_compact_holds` | Qualified, default 1 | High inn scene build: -0.87 ms GPU; OFF spread 0.075 ms; float energy within OFF spread. |
 | `cpu_opt1` | Qualified, default 1 | Ultra inn hook bodies: -0.13 ms/frame CPU; OFF spread 0.016 ms. |
 | `cpu_opt2` | Qualified, default 1 | Ultra inn hook bodies: -0.30 ms/frame CPU; OFF spread 0.088 ms. |
@@ -1215,3 +1216,47 @@ At that revision, startup alternatives included roof reject (SpecId 1028) and la
 
 Round 1 supersedes that prewarm/readiness plan: both candidate registrations and
 `opt_prewarm` are removed, and the GI attribution job is abandoned.
+
+## Round 6 (2026-11-05 afternoon): lane permutation rejected, attribution
+
+- `gi_far_roof_early` (SpecId 1038): qualified, always on like `rt_compact_hit_state`. Default and every
+  preset use 1; release policy forces 1, while dev=1 preserves raw 0 for A/B. No player knob.
+  Host statistics mode still forces the original path. Exact (bit-equal); shader request delta 0, ABI unchanged.
+  S8 Ultra `opt-roof-s8.1.211159` VALID: GI trace OFF/ON/OFF/ON 7.655/6.275/7.937/6.226 ms
+  (-1.38/-1.71 ms); GI total 12.349/10.514/12.386/10.382 ms. RR about +0.2 ms in ON windows.
+  Inn INVALID (last window short); complete windows about 12.2 ms ON vs 12.5/13.2 ms OFF, supporting only.
+  Offline paired: S8 -1.73 ms, inn -1.36 ms, camp neutral (240 pairs +0.005 [-0.06,+0.06] ms).
+  Check S8 Ultra roofed-room far bounce with developer A/B: unchanged image, lower GI trace cost.
+  Live results supplied for this offline qualification; no new game or queue run.
+- `gi_lane_permute` (SpecId 1032): bijective thread-to-pixel remap of the GI trace kernel, outputs 100% bit-equal
+  offline. Live S8 Ultra (opt-perm-s8.1.181043, VALID): GI trace OFF/ON/OFF/ON 8.42/12.86/8.97/12.21 ms, about
+  +3.8 ms slower. Rejected; code, key and batch removed (with `gi_ao_r16f`, exact but at most 0.06 ms). Ids 1032-1033 retired.
+- Attribution, S8 Ultra (opt-attr-s8.1.173918, VALID): GI trace 8.0 ms -> 2.1 ms with `gi_hit_sun=0` (which also
+  removes gi_far) and -> 1.5 ms with `gi_hit_direct=0`. Nearly all the trace cost is the hidden-hit branch with sun
+  and far. Paired offline far increments: S8 +2.430 ms, camp +5.460 ms, inn +2.448 ms; sun with far off:
+  +0.098 / +0.427 / +0.005 ms. See TRACK_C_GI "Far GI cost split, 2026-11-05" for the next decomposition.
+- `gi_sun_wave` (SpecId 1034): deferred dense sun queries with ordered resolve, exact outputs and raw counters
+  on S8/camp/inn. Forty paired ABBA/BAAB samples gave ON-OFF +0.735776 ms [95% CI +0.540272, +0.849120],
+  +3.114312 ms [+2.451616, +3.897856], +0.737392 ms [+0.638336, +0.863264]. Rejected: all slower.
+  Code, raw key, setting, scratch buffers, two requests and feature tests removed; 1034 retired, never reuse.
+  The paired replay A/B tool and its tests remain. Manifest requests return to 125; no ABI change.
+  Cleanup passes ordinary release equivalence (215/215 byte-identical to main) and the full build plus 191 CTests.
+
+## Round 7 (2026-11-05 evening): outcomes
+
+| Candidate | Verdict | Evidence |
+|---|---|---|
+| `gi_far_roof_early` (1038) | **Qualified, always on** | Exact. Offline paired: S8 -1.73, inn -1.36, camp +0.005 [-0.06,+0.06] (240 pairs). Live VALID: S8 GI trace -1.4/-1.7 ms; inn -0.8/-1.0 ms (opt-roof-inn.1.220224). |
+| `gi_far_roof_identity` (1036) | Rejected, removed | Camp +0.08 [+0.05,+0.12] ms, no gain elsewhere. |
+| `gi_sun_wave` (1034) | Rejected, removed | Exact but slower: +0.74 / +3.11 / +0.74 ms (S8/camp/inn). Sun rays cost only 0.01-0.43 ms; far is the cost. |
+| `gi_lane_permute` (1032), `gi_ao_r16f` (1033) | Rejected, removed | Live S8: GI trace +3.8 ms with the permutation. AO R16F at most 0.06 ms. |
+| `gi_origin_fast` (1037) | Rejected, removed | Paired +0.07 [-0.09,+0.33] ms; origin pass at 80 registers. |
+| `gi_far_lean` (1039) | Rejected, removed | Far registers 243 -> 239/218, no occupancy step; inn +0.35, S8 +0.96 ms. |
+| GI-only conservative TLAS | Rejected (offline) | Culls 0.9-3.5% of instances; extra TLAS 0.27-0.36 ms; net +0.5..+0.7 ms. |
+| Ultra scene build | No candidate | Convert/BLAS/TLAS 0.6/0.4/0.2 (S8), 1.2/0.8/0.3 (inn); no exact work with a supported gain. |
+| Local shadows | No candidate worth keeping | Pack writer extended (raw BCn, ABI 27); inn pack replays bit-exactly. Split: point/spot 0.54, rays 0.29, boxes 0.23 ms. `ls_fast` exact but 0.012 ms: dropped. |
+
+Kept tools: frame_replay paired A/B (`--ab-spec`), origin replay, pipeline statistics for GI/RF/LS.
+Far GI cost (paired, ms, S8/camp/inn): traversal 0.33/3.79/2.07, extra hidden shading 1.56/2.04/0.93, roof loop 0.47/0.33/0.37.
+| SER (hardware reordering) | Out of scope for this round | Driver supports it only in RT pipelines; needs raygen/SBT port, 1-2 weeks, 0-10% expected (docs/SER_FEASIBILITY_20261105.md). |
+| BLAS FAST_TRACE for dynamic/cascade | Rejected (offline) | Trace gain 0.05/0.38/0.08 ms but extra build+refit; net per frame -0.13 / -0.12 / -0.62 ms (S8/camp/inn). |

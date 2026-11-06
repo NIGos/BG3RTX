@@ -1,0 +1,14 @@
+{
+  "status": "READY_FOR_LIVE",
+  "authorized": false,
+  "scene": "The Blushing Mermaid - 96h 39m",
+  "preset": "ultra",
+  "observable": "Validate corrected RF capture and identify pre-pack probe/gs counter differences",
+  "expected_pack_count": 2,
+  "max_pack_bytes": 2147483648,
+  "expected_rendering_delta": "none; diagnostic capture only",
+  "expected_gpu_saving_ms": null,
+  "gate": "Each manifest has STATE1 20/20 and distinct raw pre/post outputs. Each replay --require-live-equal exits 0 with every output/counter bit equal. No optimization if either fails.",
+  "limitation": "Original cause unproven. Old pack lacks sampler state. If new packs differ, stats-on raw bins56/58/59 separate probe luminance, initial gs and local-probe path from packed writeback. No launch is authorized.",
+  "expected_total_disk_bytes_about": 1000000000
+}

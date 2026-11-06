@@ -513,11 +513,11 @@ inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_
 // (rt_bvh_split=1, TRACK_D_RT.md 11) rt_rebuild_frames only paces the per-draw
 // BLAS of the captured (skinned, wind, per-draw matrix) draws, staggered per draw;
 // static meshes are built once for trace speed and never refit.
-inline constexpr KV kPresetExtra[kPresetCount][3] = {
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}},
-  {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}}};
+inline constexpr KV kPresetExtra[kPresetCount][5] = {
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}, {"rf_compact_probe_state", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}, {"rf_compact_probe_state", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}, {"rf_compact_probe_state", "1"}},
+  {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}, {"rf_compact_probe_state", "1"}}};
 
 // ---- defaults: one source (docs/SETTINGS_DESIGN.md "Defaults: one source") ----
 // kDefaults is every key bg3rtx.ini sets, with its value; kReleaseDefaults the developer
@@ -631,6 +631,7 @@ inline constexpr KV kDefaults[] = {
     {"pan_prepare", "0"},
     {"pan_inputs", "0"},
     {"replay_pack", "0"},
+    {"replay_pack_pass", "0"},
     {"replay_pack_cap_mb", "2048"},
     {"fg_input_copy", "1"},
     {"sl_init_after_create", "1"},
@@ -716,13 +717,14 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt", "1"},
     {"gi_rt_radius", "1.0"},
     {"rt_compact_hit_state", "1"},
-    {"rf_compact_probe_state", "0"},
+    {"rf_compact_probe_state", "1"},
     {"gi_rt_depth_k", "1.0"},
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
+    {"gi_far_roof_early", "1"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
@@ -1071,7 +1073,8 @@ inline std::vector<int> preset_values(int p) {
 
 // ---- ini parsing and layering ----
 
-// key=value lines, '#' starts a comment (same rules the layer always had).
+// key=value lines; '#' starts a comment outside a double-quoted value.
+// Backslashes stay literal so quoted Windows runtime paths round-trip unchanged.
 inline Map parse_ini(const std::string& text) {
   Map out;
   size_t pos = 0;
@@ -1079,6 +1082,16 @@ inline Map parse_ini(const std::string& text) {
     size_t nl = text.find('\n', pos);
     std::string s = text.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
     pos = nl == std::string::npos ? text.size() : nl + 1;
+    size_t quoted_eq = s.find('=');
+    if (quoted_eq != std::string::npos) {
+      std::string key = trim(s.substr(0, quoted_eq));
+      std::string value = trim(s.substr(quoted_eq + 1));
+      size_t end = value.size() > 1 && value.front() == '"' ? value.find('"', 1) : std::string::npos;
+      if (!key.empty() && key.find('#') == std::string::npos && end != std::string::npos) {
+        std::string rest = trim(value.substr(end + 1));
+        if (rest.empty() || rest.front() == '#') { out[key] = value.substr(1, end - 1); continue; }
+      }
+    }
     size_t hash = s.find('#');
     if (hash != std::string::npos) s.resize(hash);
     size_t eq = s.find('=');
@@ -1201,6 +1214,8 @@ inline void enforce_release_policy(Map& m) {
   m["rr_post"] = "1";
   m["rt_scene_compact_holds"] = "1";
   m["rt_compact_hit_state"] = "1";
+  m["gi_far_roof_early"] = "1";
+  m["rf_compact_probe_state"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
        "sharc",
        "rt_hair_receiver_guard"}) m[key] = "0";
@@ -1525,7 +1540,8 @@ inline std::string render_user_ini(const std::string& existing, int base_preset,
   if (!overrides.empty()) out += "\n# Changed from the preset\n" + overrides;
   if (!forced.empty()) {
     out += "\n# Hardware limits (set by the launcher)\n";
-    for (auto& kv : forced) out += kv.first + "=" + kv.second + "\n";
+    for (auto& kv : forced) out += kv.first + "=" +
+      (kv.second.find('#') == std::string::npos ? kv.second : "\"" + kv.second + "\"") + "\n";
   }
   if (!kept.empty()) out += "\n# Other keys (kept as written)\n" + kept;
   return out;

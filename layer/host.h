@@ -248,6 +248,7 @@ struct CmdState {
   bool tracing = false;                // began while a trace was recording
   // native_hit::RecordingList<Pending>, latched at prepass_begin.
   std::shared_ptr<void> hit_material_candidates;
+  std::vector<uint64_t> post_secondaries; // exact executed IDs, not mutable secondary handles
   uint64_t recording = 0;              // unique per vkBeginCommandBuffer (rrpost chains)
   VkCommandBufferUsageFlags begin_flags = 0; // exact native recording contract
   VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_SECONDARY; // unknown stays unsupported
@@ -301,6 +302,10 @@ struct DrawArgs {
   uint32_t first_instance;
 };
 CmdState* cmd_state(VkCommandBuffer cmd, bool create = false);
+void core_retain_recording(uint64_t recording);
+void core_release_recording(uint64_t recording);
+Bg3RecordingState core_recording_state(uint64_t recording);
+void core_submit_recordings(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 uint64_t cmd_recording(VkCommandBuffer cmd); // locked copy; safe across reset/free
 void cmd_forget(VkCommandBuffer cmd);
 
@@ -319,6 +324,7 @@ void alpha_slot_in_use(uint32_t slot, uint64_t frame);   // alphatest.cpp: the s
 void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 void life_on_present(DeviceData* dd, VkQueue queue);   // after the present went down, queue still owned
 // Around the game's vkDeviceWaitIdle: submissions before begin are complete after it.
+bool life_recording_complete(VkQueue queue, uint64_t frame, uint64_t seq);
 uint64_t life_gpu_done();   // presents <= this have completed on the GPU (life_on_present fences)
 uint64_t life_idle_begin();
 void life_idle_end(uint64_t seq_before);
@@ -440,6 +446,11 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds);
 void sl_discard_recording(VkCommandBuffer cmd);
 void alpha_discard_recording(uint64_t recording);
 void alpha_submit_recordings(const std::vector<VkCommandBuffer>& cmds);
+void ngx_submit_recording(uint64_t recording);
+void ngx_discard_recording(uint64_t recording);
+void post_submit_recordings(const std::vector<VkCommandBuffer>& cmds);
+void rrpost_discard_recording(uint64_t recording);
+void rrpost_submit_recording(uint64_t recording);
 void sl_preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& motion, const Bg3Binding& depth);
 VkImageLayout sl_input_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout fallback);
 bool sl_note_image_destroyed(VkImage image, bool wait = true);

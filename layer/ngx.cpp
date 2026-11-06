@@ -17,6 +17,7 @@
 // rr is read on every evaluate, so it switches without a restart; the first
 // evaluate after a switch carries Reset=1.
 #include "host.h"
+#include <algorithm>
 #include "dlss5.h"
 
 #include <nvsdk_ngx_vk.h>
@@ -134,12 +135,29 @@ static bool hook_install(InlineHook& h, void* fn, void* detour, const char* name
 // relative loads inside the first 14 bytes, which ordinary hook_install correctly
 // rejects. This uses the existing absolute-jump patch only for terminal no-op
 // Shutdown exports; both this host and the core remain pinned until process exit.
-static bool hook_terminal(InlineHook& h,void* fn,void* detour,const char* name){
-  if(!fn)return false;auto* target=follow_jumps(static_cast<uint8_t*>(fn));DWORD old{};
-  if(!VirtualProtect(target,14,PAGE_EXECUTE_READWRITE,&old))return false;
-  write_abs_jump(target,detour);DWORD ignored{};VirtualProtect(target,14,old,&ignored);
-  FlushInstructionCache(GetCurrentProcess(),target,14);h.target=target;h.trampoline=nullptr;h.active=true;
-  log("[ngx] terminal no-op hook %s at %p (no original call, process-lifetime retention)",name,target);return true;
+static bool hook_terminal(InlineHook& h0,void* fn0,void* detour0,
+                          InlineHook& h1,void* fn1,void* detour1){
+  struct Patch { InlineHook* hook;uint8_t* target;void* detour;DWORD old; };
+  Patch patches[2]={{&h0,fn0?follow_jumps(static_cast<uint8_t*>(fn0)):nullptr,detour0,0},
+                    {&h1,fn1?follow_jumps(static_cast<uint8_t*>(fn1)):nullptr,detour1,0}};
+  // Prepare both exports before changing either: one failed protection change
+  // must not leave an owner with only one of its Shutdown paths retained.
+  int prepared=0;
+  for(;prepared<2;++prepared){
+    auto& p=patches[prepared];
+    if(p.target && !VirtualProtect(p.target,14,PAGE_EXECUTE_READWRITE,&p.old))break;
+  }
+  if(prepared==2)for(auto& p:patches)if(p.target){
+    write_abs_jump(p.target,p.detour);
+    FlushInstructionCache(GetCurrentProcess(),p.target,14);
+    p.hook->target=p.target;p.hook->trampoline=nullptr;p.hook->active=true;
+    log("[ngx] terminal no-op hook at %p (no original call, process-lifetime retention)",p.target);
+  }
+  const bool ok=prepared==2;
+  // Reverse order also restores the original protection when the exports
+  // resolve to the same target or share a memory page.
+  while(prepared>0){auto& p=patches[--prepared];if(p.target){DWORD ignored{};VirtualProtect(p.target,14,p.old,&ignored);}}
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +281,8 @@ struct Guide {
   VkDeviceMemory memory = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
   VkFormat format = VK_FORMAT_UNDEFINED;
-  bool initialized = false;
+  bool initialized = false; // published only by successful submit
+  std::vector<uint64_t> init_recordings;
   NVSDK_NGX_Resource_VK res{};
 };
 
@@ -831,14 +850,16 @@ static GuidePush guide_push(const SrFeature& f, uint32_t w, uint32_t h, const Gu
   return pc;
 }
 
-// Guide images go UNDEFINED -> GENERAL once, then stay GENERAL.
+// Every guide dispatch fully overwrites the images. Initialize independently
+// in each recording; a discarded or delayed producer cannot suppress the barrier.
 static void guides_init_barrier(DeviceData* dd, VkCommandBuffer cmd) {
   std::lock_guard lock(g_guide_mu);
   VkImageMemoryBarrier init[3];
   uint32_t n = 0;
   for (auto& g : g_guide)
-    if (!g.initialized) {
+    {
       init[n] = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+      init[n].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
       init[n].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
       init[n].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
       init[n].newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -846,10 +867,12 @@ static void guides_init_barrier(DeviceData* dd, VkCommandBuffer cmd) {
       init[n].image = g.image;
       init[n].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
       ++n;
-      g.initialized = true;
+      const auto recording = cmd_recording(cmd);
+      if (recording && std::find(g.init_recordings.begin(), g.init_recordings.end(), recording) == g.init_recordings.end())
+        g.init_recordings.push_back(recording);
     }
   if (n)
-    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
                               nullptr, 0, nullptr, n, init);
 }
 
@@ -1774,9 +1797,8 @@ static void hook_module(HMODULE mod) {
         reinterpret_cast<LPCWSTR>(mod),&pinned_core)){
       log("[dlss5] NR disabled: cannot retain the existing NGX owner");return;
     }
-    bool shutdown_safe=true;
-    if(auto fn=proc("NVSDK_NGX_VULKAN_Shutdown"))shutdown_safe &= hook_terminal(g_nr_shutdown,fn,reinterpret_cast<void*>(&nr_shutdown),"VULKAN_Shutdown (NR retention)");
-    if(auto fn=proc("NVSDK_NGX_VULKAN_Shutdown1"))shutdown_safe &= hook_terminal(g_nr_shutdown1,fn,reinterpret_cast<void*>(&nr_shutdown1),"VULKAN_Shutdown1 (NR retention)");
+    bool shutdown_safe=hook_terminal(g_nr_shutdown,proc("NVSDK_NGX_VULKAN_Shutdown"),reinterpret_cast<void*>(&nr_shutdown),
+                                     g_nr_shutdown1,proc("NVSDK_NGX_VULKAN_Shutdown1"),reinterpret_cast<void*>(&nr_shutdown1));
     if(!shutdown_safe){log("[dlss5] NR disabled: owner teardown could not be retained safely");return;}
     if(!g_nr_init.active || !g_nr_init_ext.active || !g_nr_init_ext2.active){
       log("[dlss5] NR disabled: existing NGX Init path forwarding unavailable; owner unchanged, restart with supported loader required");return;
@@ -1834,3 +1856,16 @@ void ngx_init() {
 }
 
 }  // namespace bg3
+
+namespace bg3 {
+void ngx_submit_recording(uint64_t recording) {
+  std::lock_guard lock(g_guide_mu);
+  for (auto& guide : g_guide)
+    if (recording && std::find(guide.init_recordings.begin(), guide.init_recordings.end(), recording) != guide.init_recordings.end())
+      guide.initialized = true;
+}
+void ngx_discard_recording(uint64_t recording) {
+  std::lock_guard lock(g_guide_mu);
+  for (auto& guide : g_guide) std::erase(guide.init_recordings, recording);
+}
+}

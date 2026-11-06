@@ -382,7 +382,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test opt_scene_jobs cons_reprojection cons_rr_math cons_shader_bounds core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_diagnostic batch_jobs_lint release_qual opt_profile water_surface_shader water_surface_gate assets_discovery qa_evidence build_config test_registration qa_detectors fg_log_audit fg_motion_gate fg_static_effects m1_coverage_log pan_artifacts pan_fg_evidence rebase_gate rotation_preflight hair_prefetch hair_patterns gpu_logging_gate package_runtime cpu_opt_jobs cpu_opt3_jobs compact_hit_jobs compact_rf_jobs)
+  foreach(py_test dlss5_teardown hotkey_poll post_recording rr_r11 opt_scene_jobs cons_reprojection cons_rr_math cons_shader_bounds core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_diagnostic batch_jobs_lint release_qual opt_profile water_surface_shader water_surface_gate assets_discovery qa_evidence build_config test_registration qa_detectors fg_log_audit fg_motion_gate fg_static_effects m1_coverage_log pan_artifacts pan_fg_evidence rebase_gate rotation_preflight hair_prefetch hair_patterns gpu_logging_gate package_runtime cpu_opt_jobs cpu_opt3_jobs compact_hit_jobs compact_rf_jobs roof_jobs replay_numeric)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     set_tests_properties(${py_test}_test PROPERTIES ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}")
@@ -496,7 +496,15 @@ add_executable(emissive_core_test tests/emissive_core_test.cpp core/em_policy.cp
 target_include_directories(emissive_core_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME emissive_core_test COMMAND emissive_core_test)
 
-# Hot-reloadable core: rebuild while the game runs.
+# Windowless, validation-enabled R11G11B10 boundary oracle (no game hooks).
+add_executable(rr_r11_fixture tools/rr_r11_fixture.cpp)
+target_include_directories(rr_r11_fixture PRIVATE ${VULKAN_SDK}/Include)
+target_link_directories(rr_r11_fixture PRIVATE ${VULKAN_SDK}/Lib)
+target_link_libraries(rr_r11_fixture PRIVATE vulkan-1)
+if(Python3_Interpreter_FOUND)
+  set_tests_properties(rr_r11_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+endif()
+
 option(BG3RTX_HAIR_GPU_PROBE "Build the isolated, windowless native Hair Vulkan probe" OFF)
 if(BG3RTX_HAIR_GPU_PROBE)
   add_executable(native_hair_gpu_probe tools/native_hair_gpu_probe.cpp)
@@ -609,6 +617,12 @@ add_executable(dlss5_nr_frame_test tests/dlss5_nr_frame_test.cpp)
 add_test(NAME dlss5_nr_frame_test COMMAND dlss5_nr_frame_test)
 add_executable(dlss5_runtime_policy_test tests/dlss5_runtime_policy_test.cpp)
 add_test(NAME dlss5_runtime_policy_test COMMAND dlss5_runtime_policy_test)
+add_test(NAME frame_replay_origin_adapter_test COMMAND frame_replay --origin-self-test)
+add_test(NAME frame_replay_ab_statistics_test COMMAND frame_replay --ab-self-test)
+add_test(NAME frame_replay_rf_test COMMAND frame_replay --rf-self-test ${CMAKE_BINARY_DIR}/frame_replay_rf_test)
+set_tests_properties(frame_replay_rf_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+add_test(NAME frame_replay_ls_test COMMAND frame_replay --ls-self-test ${CMAKE_BINARY_DIR}/frame_replay_ls_test)
+set_tests_properties(frame_replay_ls_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
 add_test(NAME frame_replay_test COMMAND frame_replay --self-test ${CMAKE_BINARY_DIR}/frame_replay_test)
 set_tests_properties(frame_replay_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
 # Offline PT reference (tools/pt_reference.hlsl): furnace and slab checks of the path tracer.
@@ -616,6 +630,8 @@ add_test(NAME pt_reference_test COMMAND frame_replay --pt-self-test ${CMAKE_BINA
 set_tests_properties(pt_reference_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 # The pack writer's CPU side (common/replay_pack.h: manifest writer round trip, InstInfo spans,
 # budget) that the live writer (layer/replay.cpp) and --synthesize share.
+add_executable(replay_codec_test tests/replay_codec_test.cpp)
+add_test(NAME replay_codec_test COMMAND replay_codec_test)
 add_executable(replay_pack_test tests/replay_pack_test.cpp)
 add_test(NAME replay_pack_test COMMAND replay_pack_test)
 
@@ -639,3 +655,10 @@ add_test(NAME native_hit_recording_test COMMAND native_hit_recording_test)
 
 add_executable(rr_post_temporal_test tests/rr_post_temporal_test.cpp)
 add_test(NAME rr_post_temporal_test COMMAND rr_post_temporal_test)
+
+add_executable(recording_history_test tests/recording_history_test.cpp)
+add_test(NAME recording_history_test COMMAND recording_history_test)
+
+add_executable(core_completion_lease_test tests/core_completion_lease_test.cpp)
+target_include_directories(core_completion_lease_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME core_completion_lease_test COMMAND core_completion_lease_test)

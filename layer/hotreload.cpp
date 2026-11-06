@@ -192,6 +192,11 @@ void core_init(DeviceData* dd) {
   g_host.persist = &persist;
   g_host.defer_destroy = &defer_destroy;
   g_host.frame_index = &host_frame_index;
+  g_host.completed_frame = &life_gpu_done;
+  g_host.recording_index = &cmd_recording;
+  g_host.retain_recording = &core_retain_recording;
+  g_host.release_recording = &core_release_recording;
+  g_host.recording_state = &core_recording_state;
   g_host.root_dir = root_dir().c_str();
   g_host.query_binding = &query_binding;
   g_host.alloc_image = &alloc_image;

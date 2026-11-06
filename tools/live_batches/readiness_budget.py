@@ -3,7 +3,7 @@ from statistics import median
 import re
 
 from scripts.queue_gates import stamped_lines, windows, _apply
-from tools.live_batches.pipeline_readiness import conditional, reconciled
+from tools.live_batches.pipeline_readiness import QUIET, conditional, reconciled
 
 ENTRIES = []
 CACHE = {}
@@ -35,8 +35,9 @@ def same_value(actual, wanted):
 
 
 def estimate(job, phase, changed, first=False):
-    # Startup log-only timestamps do not build pipelines or alter readiness signals.
-    changed = {k: v for k, v in changed.items() if k != "detailed_logging"}
+    # Log timestamps and the diagnostic capture selector do not build pipelines
+    # or alter readiness signals.
+    changed = {k: v for k, v in changed.items() if k not in ("detailed_logging", "replay_pack_pass")}
     patterns = phase.get('wait_log', [])
     patterns = [patterns] if isinstance(patterns, str) else patterns
     if not patterns:
@@ -75,6 +76,13 @@ def estimate(job, phase, changed, first=False):
                     continue
                 observation_index, ack = acknowledgement
                 observation_start = ack
+                if patterns == [QUIET]:
+                    ready = next((t for index, (t, line) in enumerate(lines)
+                                  if index > observation_index and t < win['end']
+                                  and re.search(QUIET, line, re.I)), None)
+                    if ready is not None:
+                        samples.append(max(0, ready-win['start']))
+                    continue
                 pending = set()
                 historical = {}
                 affected = [p for p in patterns if conditional(p) and not re.search(
