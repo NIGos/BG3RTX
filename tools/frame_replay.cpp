@@ -78,6 +78,7 @@ std::map<uint32_t, uint32_t> g_specs;
 std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_ab_specs;
 fs::path g_ab_spv;
 bool g_ab_require_equal = false;
+bool g_ab_numeric = false;
 bool g_require_live_equal = false;
 uint32_t g_ab_warmup = 0; // untimed GPU dispatches immediately before each A/B sample
 bool g_ab_blas = false, g_blas_control = false;
@@ -700,6 +701,17 @@ struct ImageResult { std::string name; uint32_t format, w, h; std::vector<uint8_
 struct RunResult { std::vector<ImageResult> outputs; Stats stats; double gpu_ms; std::vector<uint8_t> raw_stats; };
 struct Replay { std::vector<RunResult> runs; std::vector<std::string> warnings; };
 
+float image_component(const std::vector<uint8_t>& raw, uint32_t format, size_t p, uint32_t k, uint32_t comps) {
+      auto ufloat = [](uint32_t x, uint32_t mantissa) {
+        const uint32_t e = x >> mantissa, m = x & ((1u << mantissa)-1);
+        return e == 31 ? (m ? std::nanf("") : INFINITY) : std::ldexp(float(e ? (1u << mantissa) + m : m), int(e ? e : 1)-15-int(mantissa));
+      };
+      const uint32_t packed = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? reinterpret_cast<const uint32_t*>(raw.data())[p] : 0;
+      return format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? ufloat((packed >> (k == 0 ? 0 : k == 1 ? 11 : 22)) & (k == 2 ? 1023u : 2047u),k == 2 ? 5 : 6) :
+                (format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R16_SFLOAT) ? half_to_float(reinterpret_cast<const uint16_t*>(raw.data())[p * comps + k])
+                                                       : reinterpret_cast<const float*>(raw.data())[p * comps + k];
+}
+
 ImageResult summarize(const std::string& name, uint32_t format, uint32_t w, uint32_t h, std::vector<uint8_t> raw) {
   ImageResult r{name, format, w, h, std::move(raw), 0, {0, 0, 0, 0}, 0};
   r.hash = fnv1a(r.raw);
@@ -707,14 +719,7 @@ ImageResult summarize(const std::string& name, uint32_t format, uint32_t w, uint
   uint32_t comps = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? 3 : format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
   for (uint64_t i = 0; i < px; ++i)
     for (uint32_t k = 0; k < comps; ++k) {
-      auto ufloat = [](uint32_t x, uint32_t mantissa) {
-        const uint32_t e = x >> mantissa, m = x & ((1u << mantissa)-1);
-        return e == 31 ? (m ? std::nanf("") : INFINITY) : std::ldexp(float(e ? (1u << mantissa) + m : m), int(e ? e : 1)-15-int(mantissa));
-      };
-      const uint32_t packed = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? reinterpret_cast<const uint32_t*>(r.raw.data())[i] : 0;
-      float v = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? ufloat((packed >> (k == 0 ? 0 : k == 1 ? 11 : 22)) & (k == 2 ? 1023u : 2047u),k == 2 ? 5 : 6) :
-                (format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R16_SFLOAT) ? half_to_float(reinterpret_cast<const uint16_t*>(r.raw.data())[i * comps + k])
-                                                       : reinterpret_cast<const float*>(r.raw.data())[i * comps + k];
+      float v = image_component(r.raw, format, i, k, comps);
       if (!std::isfinite(v)) { ++r.nonfinite; continue; }
       r.mean[k] += v / double(px);
     }
@@ -1355,7 +1360,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   }
   std::vector<double> timings;
   const uint32_t dispatches = ab_mode() ? 4 + repeat * 4 : repeat;
-  std::ofstream ab_csv;
+  std::ofstream ab_csv, numeric_csv;
   std::vector<double> ab_deltas;
   RunResult pair_reference;
   double quartet_ms[4]{};
@@ -1364,6 +1369,11 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   uint32_t first_failed_pair = UINT32_MAX;
   bool explained_outputs = false, explained_counters = false, saved_failed_pair = false;
   if (ab_mode()) {
+    if (g_ab_numeric) {
+      numeric_csv.open(out / "ab_numeric.csv");
+      numeric_csv << "pair,output,channel,pixels,different_pixels,max_abs,mean_diff,mean_abs_diff,nonfinite\n";
+      numeric_csv.precision(17);
+    }
     ab_csv.open(out / "ab.csv");
     ab_csv << "pair,A_ms,B_ms,delta_ms,outputs_equal,counters_equal\n";
     std::puts("[replay] paired A/B: 4 warmup dispatches excluded; each pair ABBA/BAAB, delta B-A (linear drift cancels)");
@@ -1470,6 +1480,25 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                     r.mean[2], r.mean[3], (unsigned long long)r.nonfinite, (unsigned long long)r.hash);
     }
     if (ab_mode() && !warmup) {
+      // One balanced, adjacent cross-state comparison per quartet: phase 0/1.
+      // BAAB reverses operand order so signed output differences remain B-A.
+      if (g_ab_numeric && phase == 1) {
+        check(rr.outputs.size() == pair_reference.outputs.size(), "numeric output count");
+        for (size_t i = 0; i < rr.outputs.size(); ++i) {
+          const auto& a = use_b ? pair_reference.outputs[i] : rr.outputs[i];
+          const auto& b = use_b ? rr.outputs[i] : pair_reference.outputs[i];
+          const unsigned channels = a.format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? 3 :
+            a.format == VK_FORMAT_R16G16B16A16_SFLOAT || a.format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
+          check(a.format == b.format && a.w == b.w && a.h == b.h, "numeric image shape");
+          const size_t pixel_bytes = size_t(rp::image_bytes(a.format,a.w,a.h,1,1)) / (size_t(a.w)*a.h);
+          const auto diff = bg3::replay::numeric_difference(a.raw,b.raw,pixel_bytes,channels,
+            [&](const std::vector<uint8_t>& raw, size_t p, unsigned k) { return image_component(raw,a.format,p,k,channels); });
+          for (unsigned k = 0; k < channels; ++k)
+            numeric_csv << pair + 1 << ',' << a.name << ',' << k << ',' << diff.pixels << ',' << diff.different_pixels << ','
+              << diff.max_abs[k] << ',' << diff.mean[k] << ',' << diff.mean_abs[k] << ',' << diff.nonfinite << '\n';
+        }
+        numeric_csv.flush();
+      }
       quartet_ms[phase] = rr.gpu_ms;
       if (phase == 0) {
         pair_reference = rr;
@@ -2991,6 +3020,7 @@ int main(int argc, char** argv) {
       check(g_blas_policy == "legacy" || g_blas_policy == "layer" || g_blas_policy == "trace", "--blas-policy legacy|layer|trace");
     }
     else if (args[i] == "--ab-spv") g_ab_spv = next();
+    else if (args[i] == "--ab-numeric") g_ab_numeric = true;
     else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
     else if (args[i] == "--require-live-equal") g_require_live_equal = true;
     else if (args[i] == "--ab-warmup") {
@@ -3061,6 +3091,7 @@ int main(int argc, char** argv) {
     check(repeat <= (UINT32_MAX - 4) / 4, "paired repeat count too large");
     if (!repeat_given) repeat = 40;
   }
+  check(!g_ab_numeric || ab_mode(), "--ab-numeric requires paired A/B mode");
   check(!g_ab_warmup || ab_mode(), "--ab-warmup requires --ab-spec or --ab-spv");
   if (g_require_live_equal)
     check(!compile_only && !pt && !native && !pt_cost_only && !g_origin && !pack.empty(),

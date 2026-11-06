@@ -990,7 +990,7 @@ Live result (2026-11-05, Ultra with the optional Far + reflections mode, rf_hit_
 With `rf_hit_gi>0`, ON evaluates the same receiver probe/DFG/occlusion block after hit shading.
 Only its position changes: all inputs are read-only during the intervening traversal/shading;
 guard increments are integer additions with the same multiplicity. No ray, precision or accumulation changes.
-Core keeps it OFF without hit GI (that trial was 229 -> 230 registers, shared bytes 32 -> 32).
+At that time core kept it OFF without hit GI (that trial was 229 -> 230 registers, shared bytes 32 -> 32).
 The production native/hair-origin/instanced/cascade/emission/hit-GI request uses 255 -> 245 registers,
 driver Shared Memory Size 800 -> 32 bytes (baseline and candidate OFF: 255 / 800).
 The driver Local Memory Size is anomalous, 68719476752 in every run: no reliable spill-byte claim.
@@ -1001,6 +1001,57 @@ At that point no RF replay pass existed: construction/SPIR-V review was the offl
 Pending: a separately authorized live in-run OFF/ON/OFF energy/image/cost A/B at the inn with hit GI on,
 and the combined Ultra smoke. No qualification or default promotion from register statistics alone.
 See docs/progress/rf-ls-regs.md for gates and tools/frame_replay.md for reproduction.
+
+### Default request extension (rf-default, offline, 2026-11-06)
+
+Core now binds 1031 from the raw key for every `rt_reflections` request, including
+default Ultra (`rf_hit_shade=0,rf_hit_gi=0`). The key remains 0 by default; no
+shader source, ABI or manifest request changes. Key-off identity against HEAD
+e911e0444287 passes 218/218 requests by identical compiler inputs.
+Default native/hair-origin/cascade request compile-only driver statistics:
+OFF/ON registers 128/96, shared bytes 0/1536, binary bytes 109312/110592.
+Receipts: `.scratch/rf-default/key-off-identity.json`, `compile-off.log`, `compile-on.log`.
+
+Construction audit: the two blocks at rt_reflections.hlsl lines 218-221 and
+441-444 are text-identical; the global/local probe expressions and ordered lerps
+inside bg3_spec_ambient are unchanged. Between them, no reads of cl/E/Tp/n_local,
+no assignments to sf/fp/d/k, and no caller return/discard occur. The only pixel
+returns (bounds and nonpositive depth) precede both blocks. Invalid directions,
+aborted rays, misses and all eligibility/shading/cache branches reconverge before
+the ON block, including RF_HIT_SHADE=0's rt_closest path. Helper returns return
+to their caller. Cluster/probe/DFG/AO inputs are read-only; traversal and hit shading
+do not write them. Probe guard additions preserve their integer multiplicity.
+Thus every surviving pixel executes exactly one unchanged probe accumulation
+before its first use at composition/validation/debug/stats. Numerical replay
+comparison uses the OFF/OFF control's derived p99 bounds because sustained OFF/OFF
+itself has projection instability; pending live confirmation remains unqualified.
+
+Numeric replay result (2026-11-06): **FAIL 2/2 packs; NOT QUALIFIED**. Same cached
+module, validation enabled, 8 per-sample warmups, 40 ABBA/BAAB quartets each for
+OFF/OFF and OFF/ON. Output statistics use one predetermined adjacent phase 0/1
+comparison per quartet (40 balanced AB/BA observations); timing uses all four.
+The empirical nearest-rank control p99 is zero for every measured metric/channel
+in both packs. Whole-quartet legacy equality nevertheless detects OFF/OFF variation
+in later phases; these are distinct samples, not evidence of deterministic replay.
+No rerun or bound adjustment. Diffuse is exact in both candidates; no nonfinite values.
+
+| Inn pack | Specular differing pixels (pairs) | Max absolute RGB | Mean signed RGB over 40 pairs | R16 pixels (pairs), max absolute, mean signed |
+|---|---|---|---|---|
+| 093603-61, stats OFF | 63 (4/40) | .0234375 / .015625 / .015625 | 3.608e-10 / 4.963e-10 / 6.257e-10 | 9 (4/40), 65503.992012, .0071942075 |
+| 093623-62, stats ON | 63 (40/40) | .00604248047 / .00317382813 / .00244140625 | -5.965e-11 / -5.174e-11 / -5.642e-11 | 3 (7/40), 65503.973465, -.00059951125 |
+
+All means include every pixel, decoded in the native storage format; large distance
+deltas include the 65504 no-hit sentinel. Per-channel signed/absolute means and maxima,
+all per-pair observations and exceeded-bound counts: `.scratch/rf-default/numeric61.json`,
+`numeric62.json` and `{control,candidate}{61,62}/ab_numeric.csv`.
+Durable full-channel summaries and construction/register receipts: `docs/evidence/rf-default.json`.
+Mean-absolute and absolute-signed-mean gates fail too. Whole-quartet raw counters match for pack 61;
+both control and candidate vary for pack 62, so counters do not qualify it.
+Paired B-A medians and 95% intervals (ms): candidate 61 -.122904 [-.157664,+.019344],
+control 61 -.000104 [-.125696,+.203392]; candidate 62 -.128760 [-.228944,-.016736],
+control 62 -.000432 [-.000976,+.015328]. Timing is noisy offline evidence, not live cost.
+Default inn/S8 OFF/ON/OFF/ON cost then energy jobs are regenerated and linted,
+`keep_reshade=false`, prepared only. Key stays 0; live confirmation remains unperformed.
 
 
 ## Default Ultra RF replay (rf-replay, READY_FOR_LIVE, 2026-11-06)
