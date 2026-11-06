@@ -135,12 +135,29 @@ static bool hook_install(InlineHook& h, void* fn, void* detour, const char* name
 // relative loads inside the first 14 bytes, which ordinary hook_install correctly
 // rejects. This uses the existing absolute-jump patch only for terminal no-op
 // Shutdown exports; both this host and the core remain pinned until process exit.
-static bool hook_terminal(InlineHook& h,void* fn,void* detour,const char* name){
-  if(!fn)return false;auto* target=follow_jumps(static_cast<uint8_t*>(fn));DWORD old{};
-  if(!VirtualProtect(target,14,PAGE_EXECUTE_READWRITE,&old))return false;
-  write_abs_jump(target,detour);DWORD ignored{};VirtualProtect(target,14,old,&ignored);
-  FlushInstructionCache(GetCurrentProcess(),target,14);h.target=target;h.trampoline=nullptr;h.active=true;
-  log("[ngx] terminal no-op hook %s at %p (no original call, process-lifetime retention)",name,target);return true;
+static bool hook_terminal(InlineHook& h0,void* fn0,void* detour0,
+                          InlineHook& h1,void* fn1,void* detour1){
+  struct Patch { InlineHook* hook;uint8_t* target;void* detour;DWORD old; };
+  Patch patches[2]={{&h0,fn0?follow_jumps(static_cast<uint8_t*>(fn0)):nullptr,detour0,0},
+                    {&h1,fn1?follow_jumps(static_cast<uint8_t*>(fn1)):nullptr,detour1,0}};
+  // Prepare both exports before changing either: one failed protection change
+  // must not leave an owner with only one of its Shutdown paths retained.
+  int prepared=0;
+  for(;prepared<2;++prepared){
+    auto& p=patches[prepared];
+    if(p.target && !VirtualProtect(p.target,14,PAGE_EXECUTE_READWRITE,&p.old))break;
+  }
+  if(prepared==2)for(auto& p:patches)if(p.target){
+    write_abs_jump(p.target,p.detour);
+    FlushInstructionCache(GetCurrentProcess(),p.target,14);
+    p.hook->target=p.target;p.hook->trampoline=nullptr;p.hook->active=true;
+    log("[ngx] terminal no-op hook at %p (no original call, process-lifetime retention)",p.target);
+  }
+  const bool ok=prepared==2;
+  // Reverse order also restores the original protection when the exports
+  // resolve to the same target or share a memory page.
+  while(prepared>0){auto& p=patches[--prepared];if(p.target){DWORD ignored{};VirtualProtect(p.target,14,p.old,&ignored);}}
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -1780,9 +1797,8 @@ static void hook_module(HMODULE mod) {
         reinterpret_cast<LPCWSTR>(mod),&pinned_core)){
       log("[dlss5] NR disabled: cannot retain the existing NGX owner");return;
     }
-    bool shutdown_safe=true;
-    if(auto fn=proc("NVSDK_NGX_VULKAN_Shutdown"))shutdown_safe &= hook_terminal(g_nr_shutdown,fn,reinterpret_cast<void*>(&nr_shutdown),"VULKAN_Shutdown (NR retention)");
-    if(auto fn=proc("NVSDK_NGX_VULKAN_Shutdown1"))shutdown_safe &= hook_terminal(g_nr_shutdown1,fn,reinterpret_cast<void*>(&nr_shutdown1),"VULKAN_Shutdown1 (NR retention)");
+    bool shutdown_safe=hook_terminal(g_nr_shutdown,proc("NVSDK_NGX_VULKAN_Shutdown"),reinterpret_cast<void*>(&nr_shutdown),
+                                     g_nr_shutdown1,proc("NVSDK_NGX_VULKAN_Shutdown1"),reinterpret_cast<void*>(&nr_shutdown1));
     if(!shutdown_safe){log("[dlss5] NR disabled: owner teardown could not be retained safely");return;}
     if(!g_nr_init.active || !g_nr_init_ext.active || !g_nr_init_ext2.active){
       log("[dlss5] NR disabled: existing NGX Init path forwarding unavailable; owner unchanged, restart with supported loader required");return;
