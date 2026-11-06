@@ -72240,6 +72240,26 @@
     "\\[replay\\] pack 1 written: .*pass reflections": [
       0,
       null
+    ],
+    "\\[replay\\] pack (61|62) (failed|over budget)": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack 61 contract: pass reflections, two-phase 1, raw output pairs 3/3, sampler STATE1 20/20, record-time UBOs \\d+": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack 61 written: .*pass reflections": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack 62 contract: pass reflections, two-phase 1, raw output pairs 3/3, sampler STATE1 20/20, record-time UBOs \\d+": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack 62 written: .*pass reflections": [
+      0,
+      null
     ]
   }
 }

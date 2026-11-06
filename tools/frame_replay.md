@@ -607,6 +607,30 @@ identity and sampled-value identity; no real inn size is inferred from fixtures.
 
 ## Default Ultra reflections replay
 
+For qualification, add `--require-live-equal` to the ordinary pack replay before
+profiling. It requires live references for every output and the raw counters,
+and returns failure for any changed byte or missing reference. Ordinary diagnostic
+replay still prints comparisons without enforcing this gate. Paired A/B equality
+is a separate requirement and cannot replace agreement with the captured live frame.
+
+Sampler lines with `STATE1` preserve LOD bias/minimum, comparison, border,
+unnormalized-coordinate, flags and anisotropy-enable state in addition to the
+legacy fields. Legacy sampler lines load with an incomplete-state warning;
+their missing values cannot be recovered from the image bytes. The writer refuses
+unsupported sampler/view extension state rather than silently dropping it.
+
+The real inn pack `replay-20261106-084948-1` fails live specular agreement
+(1,270,225 differing bytes); diffuse, hit distance and counters match exactly.
+The module matches the runtime cache and repeat output is deterministic.
+Sampler-state loss is a known contract gap, not an established explanation of
+that difference. Do not use this pack to qualify an optimization yet.
+Follow-up checked distinct raw pre/post specular snapshots, their restoration,
+and the consecutive RF capture/dispatch/capture bracket. No other pass intervenes;
+2,234,064 depth-valid no-hit pixels round-trip exactly. Prepared replacement
+capture: `tools/live_batches/rf_pack_state1` (not staged or authorized), with a
+required fixed-writer marker and separate statistics OFF/ON packs. See its README
+for the strict post-capture commands and the remaining record-time UBO limitation.
+
 `pass reflections` runs `gi/rt_reflections.hlsl`, with the captured request defines,
 all specialization values and 256 push bytes. It supports ordinary replay,
 `--ab-spec`, `--ab-warmup`, `--ab-require-equal` and `--pipeline-stats`.
