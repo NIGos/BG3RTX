@@ -222,6 +222,10 @@ static bool ab_overridden(const char* key) {
 }
 
 static void ab_poll_hotkey() {
+  // Different Vulkan queues may present concurrently. Consume each key edge and
+  // update its timing state as one operation, independently of the config lock.
+  static std::mutex poll_mu;
+  std::lock_guard<std::mutex> poll_lock(poll_mu);
   static bool was_master_down = false, was_target_down = false, was_nr_down = false;
   // The toggle's cost: the longest gap between presents in the 3 s after it (a shader fetched
   // or compiled on the render thread, a pipeline created) is logged once.
