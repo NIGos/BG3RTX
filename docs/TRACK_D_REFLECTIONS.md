@@ -1005,6 +1005,20 @@ See docs/progress/rf-ls-regs.md for gates and tools/frame_replay.md for reproduc
 
 ## Default Ultra RF replay (rf-replay, READY_FOR_LIVE, 2026-11-06)
 
+Follow-up `rf-opt2`, 2026-11-06: corrected STATE1 packs 093603-61 and
+093623-62 match every live output/counter in 2/2 ordinary dispatches each.
+Sustained baseline control nevertheless fails (40 ABBA/BAAB pairs): 206
+specular bytes / 63 pixels and 18 distance bytes / 9 pixels change intermittently
+on pack 61. Diagnostic full-float origins, directions and closest-hit distances
+are identical; projected UVs differ by about one ULP, selecting adjacent
+depth/origin/history pixels. Cause unresolved; validation OFF, layer BLAS flags
+and UBO restoration/allocation trials do not fix it. No replay fix is claimed.
+`rf_fast` (1041) delayed the unchanged receiver probe block until after traversal:
+paired saving 0.126424 ms, 95% median CI [0.125200,0.128240], registers 128 -> 96,
+shared bytes 0 -> 1536. Timing bar met, exactness failed: candidate removed,
+ID retired, defaults unchanged, request delta 0. These are offline numbers,
+not a live cost claim. Receipts and ablation numbers: `docs/progress/rf-opt2.md`.
+
 Real inn pack validation (rf-opt, 2026-11-06): frame 1981 fails specular
 agreement in 1,270,225 bytes / 420,526 pixels; diffuse, R16 hit distance and
 all raw counters are exact, guards 0. Repeats and pipeline-statistics OFF
