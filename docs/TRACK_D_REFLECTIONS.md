@@ -982,9 +982,22 @@ remaining instanced-row AO gap needs a pack containing those rows; non-instanced
 cannot close it. Keep `rf_hit_shade`, `rf_hit_gi` and the water candidate Experimental/off until
 their energy gates pass. Ultra is the first possible preset after combined smoke qualification.
 
-## Receiver probe live state (rf-ls-regs, offline candidate, 2026-11-05)
+## Receiver probe live state (rf-on, qualified, 2026-11-06)
 
-`rf_compact_probe_state=0` is a developer raw key, Vulkan specialization 1031, no knob or preset.
+`rf_compact_probe_state` (SpecId 1031) is qualified and always on: code default,
+all presets and release policy use 1; `dev=1` preserves raw 0 for A/B. No GUI knob.
+
+Default Ultra live S8 Queens House, `opt-compact-rf-s8.1.102848`: **VALID SAVING**.
+Reflections OFF/ON/OFF/ON 1.200/1.034/1.224/1.066 ms (OFF spread 0.023 ms).
+Float pre-post energy stays within the OFF band on all channels: luminance
+-0.00025/-0.00018, band 0.0247. Inn live is INVALID (readiness); offline paired
+savings are -0.123/-0.129 ms. Default-request registers fall from 128 to 96.
+Replay differs only in the 63 specular / 9 distance projection-unstable pixels
+that also differ OFF/OFF; this does not claim strict replay equality.
+Check on S8 with default Ultra reflections; developer A/B uses the raw key.
+Shader request delta 0; ABI unchanged. Historical candidate evidence follows.
+
+Initially, `rf_compact_probe_state=0` was a developer raw key, Vulkan specialization 1031, no knob or preset.
 
 Live result (2026-11-05, Ultra with the optional Far + reflections mode, rf_hit_shade=rf_hit_gi=1; the default Far mode never runs this code): two VALID in-run A/B runs, opt-compact-rf-inn.1.121959 and opt-compact-rf-s8.1.122421. Reflections OFF/ON/OFF/ON: inn 5.736/5.613/5.810/5.755 ms (OFF spread 0.074), S8 3.615/3.529/3.566/3.574 ms (spread 0.050); ON minus the preceding OFF -0.12, -0.05, -0.09, +0.01 ms. Float pre-post energy within the OFF-repeat band in every pair. Kept off (user decision): about 0.05 ms, not separated from noise, only in a non-default mode.
 With `rf_hit_gi>0`, ON evaluates the same receiver probe/DFG/occlusion block after hit shading.
@@ -998,7 +1011,7 @@ At 245 registers this does not cross the next occupancy step. GPU time is unmeas
 ON/OFF specialized SPIR-V retains the stored-result logic and identical operation counts
 (4 image writes, 8 ray-query sites, 378 integer atomic adds; float add/multiply/ext-inst counts match).
 At that point no RF replay pass existed: construction/SPIR-V review was the offline evidence, not a rendered exactness test.
-Pending: a separately authorized live in-run OFF/ON/OFF energy/image/cost A/B at the inn with hit GI on,
+Historical pending gate: a separately authorized live in-run OFF/ON/OFF energy/image/cost A/B at the inn with hit GI on,
 and the combined Ultra smoke. No qualification or default promotion from register statistics alone.
 See docs/progress/rf-ls-regs.md for gates and tools/frame_replay.md for reproduction.
 
@@ -1026,7 +1039,8 @@ before its first use at composition/validation/debug/stats. Numerical replay
 comparison uses the OFF/OFF control's derived p99 bounds because sustained OFF/OFF
 itself has projection instability; pending live confirmation remains unqualified.
 
-Numeric replay result (2026-11-06): **FAIL 2/2 packs; NOT QUALIFIED**. Same cached
+Historical numeric replay gate (2026-11-06): **FAIL 2/2 packs; NOT QUALIFIED at that stage**.
+The later live default-Ultra qualification above supersedes this status; the strict numeric gate failure remains recorded. Same cached
 module, validation enabled, 8 per-sample warmups, 40 ABBA/BAAB quartets each for
 OFF/OFF and OFF/ON. Output statistics use one predetermined adjacent phase 0/1
 comparison per quartet (40 balanced AB/BA observations); timing uses all four.
@@ -1051,7 +1065,8 @@ Paired B-A medians and 95% intervals (ms): candidate 61 -.122904 [-.157664,+.019
 control 61 -.000104 [-.125696,+.203392]; candidate 62 -.128760 [-.228944,-.016736],
 control 62 -.000432 [-.000976,+.015328]. Timing is noisy offline evidence, not live cost.
 Default inn/S8 OFF/ON/OFF/ON cost then energy jobs are regenerated and linted,
-`keep_reshade=false`, prepared only. Key stays 0; live confirmation remains unperformed.
+`keep_reshade=false`, prepared only at that stage. The later S8 live qualification
+above promotes the key to 1; the inn live failed readiness and remains INVALID.
 
 
 ## Default Ultra RF replay (rf-replay, READY_FOR_LIVE, 2026-11-06)
