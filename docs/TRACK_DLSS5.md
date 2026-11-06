@@ -143,8 +143,14 @@ shared owner with FG 2+ (`TRACK_B_FG.md:348`), game's own owner with FG Off.
 Forwarded driver Init calls prepend persistent bin/sl search paths, preserve
 other common info/logging and initialize exactly once. No private second owner.
 Release/drain happens before device destruction; NR never calls Shutdown1.
+After the drain, device teardown drops all slot/global feature references before
+destroying any bound images, including failed creates retained only by a slot.
+The offline teardown fixture checks shared features, failed creates, foreign
+devices and repeated teardown; the previous order fails its resource-lifetime check.
 The known stall requires explicit process-lifetime core retention/no-op shutdown
 when native NR is armed; device recreation fails closed until process restart.
+Both Shutdown exports are prepared before either is patched; failure to acquire
+writable protection leaves both unmodified, avoiding one retained shutdown path.
 The existing inline-hook mechanism forwards Init and stubs Shutdown in memory;
 no on-disk DLL, NR snippet or caller identity is patched or spoofed.
 
@@ -163,6 +169,7 @@ Ctrl+Shift+F8 (customisable on DLSS 5) toggles the live bypass only if NR was en
 The master RT shortcut is customisable on Advanced (default Ctrl+Shift+F9); F10 stays reserved.
 Bindings parse once per settings reload; invalid or conflicting INI bindings disable both shortcuts
 and log a configuration warning. No shader variants or ABI changes.
+Hotkey polling serializes concurrent presents so each press toggles the setting once.
 `dlss5_nr_bypass=1` is a hidden live diagnostic bypass, default 0; it resets history
 on resume and permits an in-run A/B without pretending device enable is live.
 
