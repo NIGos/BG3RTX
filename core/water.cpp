@@ -61,6 +61,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include "completion_lease.h"
 #include <mutex>
 #include <string>
 #include <vector>
@@ -131,6 +132,8 @@ uint8_t* g_map = nullptr;
 VkQueryPool g_qp = VK_NULL_HANDLE;
 uint32_t g_slot = 0;
 bool g_written[kRing] = {}, g_timed[kRing] = {};
+CoreCompletionLease g_lease[kRing];
+bool g_busy_logged = false;
 uint64_t g_last_frame = UINT64_MAX;
 bool g_failed_logged = false;
 
@@ -392,7 +395,7 @@ double u64(const uint32_t* w, uint32_t i) { return double(uint64_t(w[i]) | (uint
 
 // Reads the slot about to be reused (written kRing frames ago) into the window.
 void collect(uint32_t slot) {
-  if (!g_written[slot]) return;
+  if (!g_written[slot] || !g_lease[slot].readable()) return;
   g_written[slot] = false;
   const uint32_t* w = reinterpret_cast<const uint32_t*>(g_map + stat_off(slot));
   if (w[0]) {
@@ -493,6 +496,8 @@ bool g_cgsh = false;   // M5.4c: the ;WATER_GSH=1 variant of the above (the reco
 VkQueryPool g_cqp = VK_NULL_HANDLE;
 uint32_t g_cslot = 0;
 bool g_cwritten[kRing] = {}, g_ctimed[kRing] = {};
+CoreCompletionLease g_clease[kRing];
+bool g_cbusy_logged = false;
 uint32_t g_cpasses[kRing] = {};
 // What the composition at the end of the forward water passes needs from this frame's lighting.
 struct Stash {
@@ -691,7 +696,7 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
 
 // Reads the compose slot about to be reused (kRing frames later) into the window.
 void collect_compose(uint32_t slot) {
-  if (!g_cwritten[slot]) return;
+  if (!g_cwritten[slot] || !g_clease[slot].readable()) return;
   g_cwritten[slot] = false;
   const uint32_t* w = reinterpret_cast<const uint32_t*>(g_cmap + cslot_off(slot));
   if (w[0]) {
@@ -943,8 +948,15 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
     return maybe_log_compose();
   }
   const uint32_t slot = g_cslot;
+  if (!g_clease[slot].reusable()) {
+    if (!g_cbusy_logged) host->log("[water] compose slot still owned by recording/GPU; update skipped"), g_cbusy_logged = true;
+    g_st.frame = 0;
+    return maybe_log_compose();
+  }
   g_cslot = (g_cslot + 1) % kRing;
   collect_compose(slot);
+  g_clease[slot].clear();
+  g_clease[slot].record(cmd);
   const VkBuffer rb = VkBuffer(cb.buffer);
   const VkPipelineStageFlags kXfer = VK_PIPELINE_STAGE_TRANSFER_BIT;
   // The earlier frames' readers of the record buffer, the images and the slot.
@@ -1132,6 +1144,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   g_ccont.note(now, true);
   ++(use == LightingUse::kThisFrame ? g_cwin.this_frame : g_cwin.earlier);
   const uint32_t slot = g_st.slot;
+  g_clease[slot].record(cmd);
   const uint32_t pass = g_cpasses[slot]++;
   const VkImageLayout from = p->color_layouts[0] == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
                                                                               : p->color_layouts[0];
@@ -1259,6 +1272,8 @@ void release_compose() {
   if (g_cqp) host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_cqp);
   g_cqp = VK_NULL_HANDLE;
   for (bool& w : g_cwritten) w = false;
+  for (auto& lease : g_clease) lease.clear();
+  g_cbusy_logged = false;
   for (uint32_t& n : g_cpasses) n = 0;
   g_cslot = 0;
   g_cbuf_zeroed = false;
@@ -1319,8 +1334,14 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   }
   const VkDeviceFuncs& vk = *host->vk;
   const uint32_t slot = g_slot;
+  if (!g_lease[slot].reusable()) {
+    if (!g_busy_logged) host->log("[water] reflection slot still owned by recording/GPU; update skipped"), g_busy_logged = true;
+    return skip();
+  }
   g_slot = (g_slot + 1) % kRing;
   collect(slot);
+  g_lease[slot].clear();
+  g_lease[slot].record(cmd);
   Params prm{};
   std::memcpy(prm.cam_build, sc.cam, sizeof prm.cam_build);
   prm.f0 = f0_of(sc.reflectance);
@@ -1517,6 +1538,8 @@ void water_release() {
   if (g_qp) host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_qp);
   g_qp = VK_NULL_HANDLE;
   for (bool& w : g_written) w = false;
+  for (auto& lease : g_lease) lease.clear();
+  g_busy_logged = false;
   g_slot = 0;
   g_last_frame = UINT64_MAX;
   g_out_frame = 0;

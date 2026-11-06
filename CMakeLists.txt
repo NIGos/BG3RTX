@@ -653,3 +653,10 @@ add_test(NAME native_hit_recording_test COMMAND native_hit_recording_test)
 
 add_executable(rr_post_temporal_test tests/rr_post_temporal_test.cpp)
 add_test(NAME rr_post_temporal_test COMMAND rr_post_temporal_test)
+
+add_executable(recording_history_test tests/recording_history_test.cpp)
+add_test(NAME recording_history_test COMMAND recording_history_test)
+
+add_executable(core_completion_lease_test tests/core_completion_lease_test.cpp)
+target_include_directories(core_completion_lease_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME core_completion_lease_test COMMAND core_completion_lease_test)

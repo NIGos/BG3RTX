@@ -24,6 +24,6 @@ struct LslFrame {
 // Fills this frame's upload slot. False when there is nothing to join (no database and no
 // bridge, API older than v2, ls_lights=0, or an allocation failed): the passes then use
 // ls_source_radius for every light, as before.
-bool lsl_begin(LslFrame* f);
+bool lsl_begin(VkCommandBuffer cmd, LslFrame* f);
 void lsl_initialized();   // the caller moved the slot image to GENERAL
 void lsl_release();

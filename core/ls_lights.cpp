@@ -1,5 +1,6 @@
 // D-LS per-light data: the upload side (core/ls_lights.h, docs/SE_BRIDGE.md).
 #include "ls_lights.h"
+#include "completion_lease.h"
 
 #include <algorithm>
 #include <chrono>
@@ -22,6 +23,8 @@ uint8_t* g_map = nullptr;
 Bg3Image g_slots{};
 bool g_slots_init = false, g_failed = false, g_logged = false;
 uint32_t g_ring = 0;
+CoreCompletionLease g_lease[kRing];
+bool g_busy_logged = false;
 uint64_t g_calls = 0;
 bool g_have_cam = false;
 float g_cam[3] = {};
@@ -186,14 +189,23 @@ void refresh(const Bg3AssetDbApi* a) {
 
 }  // namespace
 
-bool lsl_begin(LslFrame* f) {
+bool lsl_begin(VkCommandBuffer cmd, LslFrame* f) {
   const Bg3AssetDbApi* a = api();
   if (!a || !host->cfg_int("ls_lights", 1) || !ensure()) return false;
-  g_ring = (g_ring + 1) % kRing;
+  const uint32_t next = (g_ring + 1) % kRing;
+  if (!g_lease[next].reusable()) {
+    if (!g_busy_logged) host->log("ls: upload slot still owned by recording/GPU; update skipped"), g_busy_logged = true;
+    return false;
+  }
+  g_ring = next;
+  const bool readable = g_lease[g_ring].readable();
+  g_lease[g_ring].clear();
+  g_lease[g_ring].record(cmd);
   uint8_t* slot = g_map + size_t(g_ring) * kSlotBytes;
   // The camera position the match pass wrote into this slot kRing frames ago.
   float cam[4];
-  memcpy(cam, slot, sizeof cam);
+  if (readable) memcpy(cam, slot, sizeof cam);
+  else cam[1] = cam[2] = cam[3] = NAN;
   if (std::isfinite(cam[1]) && std::isfinite(cam[2]) && std::isfinite(cam[3])) {
     memcpy(g_cam, cam + 1, sizeof g_cam);
     g_have_cam = true;
@@ -253,6 +265,8 @@ void lsl_release() {
   g_mem = VK_NULL_HANDLE;
   g_map = nullptr;
   g_slots = Bg3Image{};
+  for (auto& lease : g_lease) lease.clear();
+  g_busy_logged = false;
   g_slots_init = g_have_cam = g_logged = g_failed = false;
   g_records.clear();
   g_count = 0;

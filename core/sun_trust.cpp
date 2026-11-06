@@ -1,5 +1,6 @@
 // RT sun replace: the upload side of the trust test (core/sun_trust.h).
 #include "sun_trust.h"
+#include "completion_lease.h"
 
 #include <cmath>
 #include <cstring>
@@ -34,6 +35,8 @@ Bg3Image g_dev{};
 bool g_dev_init = false;
 bool g_failed = false;
 uint32_t g_ring = 0;
+CoreCompletionLease g_lease[kRing];
+bool g_busy_logged = false;
 uint64_t g_calls = 0;
 bool g_have_cam = false;
 float g_cam[3] = {}, g_last_query[3] = {1e30f, 1e30f, 1e30f};
@@ -135,11 +138,20 @@ void refresh(const Bg3AssetDbApi* a, float pad_xz, float pad_y) {
 
 bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
   if (!ensure()) return false;
-  g_ring = (g_ring + 1) % kRing;
+  const uint32_t next = (g_ring + 1) % kRing;
+  if (!g_lease[next].reusable()) {
+    if (!g_busy_logged) host->log("sun: trust slot still owned by recording/GPU; update skipped"), g_busy_logged = true;
+    return false;
+  }
+  g_ring = next;
+  const bool readable = g_lease[g_ring].readable();
+  g_lease[g_ring].clear();
+  g_lease[g_ring].record(cmd);
   uint8_t* slot = g_map + size_t(g_ring) * kSlotBytes;
   // What the shader wrote into this slot kRing frames ago.
   float cam[3];
-  memcpy(cam, slot + 36, sizeof cam);
+  if (readable) memcpy(cam, slot + 36, sizeof cam);
+  else cam[0] = cam[1] = cam[2] = NAN;
   if (std::isfinite(cam[0]) && std::isfinite(cam[1]) && std::isfinite(cam[2])) {
     memcpy(g_cam, cam, sizeof g_cam);
     g_have_cam = true;
@@ -265,6 +277,7 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
 
 void sunt_end(VkCommandBuffer cmd) {
   if (!g_buf || !g_dev.image || !g_dev_init) return;
+  g_lease[g_ring].record(cmd);
   const VkDeviceFuncs& vk = *host->vk;
   VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
   ib.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -299,6 +312,8 @@ void sunt_release() {
     host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_dev.memory);
   }
   g_dev = Bg3Image{};
+  for (auto& lease : g_lease) lease.clear();
+  g_busy_logged = false;
   g_dev_init = false;
   g_buf = VK_NULL_HANDLE;
   g_mem = VK_NULL_HANDLE;
