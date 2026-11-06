@@ -712,7 +712,7 @@ ImageResult summarize(const std::string& name, uint32_t format, uint32_t w, uint
       };
       const uint32_t packed = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? reinterpret_cast<const uint32_t*>(r.raw.data())[i] : 0;
       float v = format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? ufloat((packed >> (k == 0 ? 0 : k == 1 ? 11 : 22)) & (k == 2 ? 1023u : 2047u),k == 2 ? 5 : 6) :
-                format == VK_FORMAT_R16G16B16A16_SFLOAT ? half_to_float(reinterpret_cast<const uint16_t*>(r.raw.data())[i * 4 + k])
+                (format == VK_FORMAT_R16G16B16A16_SFLOAT || format == VK_FORMAT_R16_SFLOAT) ? half_to_float(reinterpret_cast<const uint16_t*>(r.raw.data())[i * comps + k])
                                                        : reinterpret_cast<const float*>(r.raw.data())[i * comps + k];
       if (!std::isfinite(v)) { ++r.nonfinite; continue; }
       r.mean[k] += v / double(px);
@@ -837,7 +837,7 @@ bool origin_self_test() {
 }
 
 bool ls_masks_casters(const rp::Manifest& m) {
-  if (m.pass != "local_shadows" ||
+  if ((m.pass != "local_shadows" && m.pass != "reflections") ||
       (";" + m.defines + ";").find(";RT_SPEC_CASCADE=1;") == std::string::npos) return false;
   uint32_t value = 0;
   for (const auto& spec : m.specs) if (spec.id == 1000u) value = spec.value;
@@ -895,12 +895,12 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   // build below and rt_hit_normal see real triangles. The live entry had none (GI rays never read it).
   std::vector<uint8_t> casters, info_patched;
   uint64_t casters_base = 0;
-  // Production LS excludes mask 0x02. Keep its captured soup descriptor range:
+  // Production LS/RF excludes mask 0x02. Keep its captured soup descriptor range:
   // appending unused casters can cross 2 GiB and make NVIDIA GetDimensions return 0.
   // Respect both pipelines' effective overrides before eliding any geometry.
   const bool masked_casters = ls_masks_casters(m);
   if (!m.casters.file.empty() && masked_casters)
-    result.warnings.push_back("casters: excluded by both LS pipelines' 0x01 ray mask; captured soup range preserved");
+    result.warnings.push_back("casters: excluded by both replay pipelines' 0x01 ray mask; captured soup range preserved");
   if (!m.casters.file.empty() && !g_no_casters && !masked_casters) {
     casters = file(m.casters.file);
     rp::Buffer* soup = nullptr; const rp::Buffer* info_b = nullptr;
@@ -953,7 +953,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     check(r.file_offset + n <= d.size() && r.offset + n <= it->second.size, "range outside its file or buffer: " + r.file);
     upload(it->second, r.offset, d.data() + r.file_offset, size_t(n));
   }
-  Buf stats = make_buffer(kCounters * 64 * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, m.pass != "local_shadows");
+  Buf stats = make_buffer(kCounters * 64 * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, m.pass != "local_shadows" && m.pass != "reflections");
   // Images (inputs), outputs, dummies.
   std::map<uint64_t, std::map<uint32_t, Img>> images;   // slot -> element -> image
   // The writer stores each VkImage once and names its file from every descriptor element that binds
@@ -1011,7 +1011,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       initial = make_buffer(bytes.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false);
       upload(initial,0,bytes.data(),bytes.size());
     }
-    check(m.pass != "local_shadows" || initial.b, "LS output requires exact initial bytes");
+    check((m.pass != "local_shadows" && m.pass != "reflections") || initial.b, "two-phase output requires exact initial bytes");
     outputs.push_back({im, slot->name, o.reference, initial});
   }
   const float nan = std::nanf("");
@@ -1463,7 +1463,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
               const auto& a = pair_reference.outputs[i]; const auto& b = rr.outputs[i];
               const auto diff = bg3::replay::byte_difference(a.raw, b.raw);
               if (!diff.count) continue;
-              const size_t component_bytes = a.format == VK_FORMAT_R16G16B16A16_SFLOAT ? 2 : 4;
+              const size_t component_bytes = (a.format == VK_FORMAT_R16G16B16A16_SFLOAT || a.format == VK_FORMAT_R16_SFLOAT) ? 2 : 4;
               const size_t components = a.format == VK_FORMAT_R16G16B16A16_SFLOAT || a.format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
               size_t different_pixels = 0; double max_diff = 0;
               for (size_t p = 0; p < size_t(a.w) * a.h; ++p) {
@@ -1596,10 +1596,10 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     write_vec(out / (r.name + ".raw"), r.raw);
     write_pfm(out / (r.name + ".pfm"), r);
     if (!g_reference_out.empty()) {
-      const size_t component = r.format == VK_FORMAT_R16G16B16A16_SFLOAT ? 2 : 4;
+      const size_t component = (r.format == VK_FORMAT_R16G16B16A16_SFLOAT || r.format == VK_FORMAT_R16_SFLOAT) ? 2 : 4;
       g_reference_mismatch |= !reference_equal(g_reference_out / (r.name + ".raw"), r.raw, component, r.name);
     }
-    if (!outputs[i].reference.empty() && m.pass == "local_shadows") {
+    if (!outputs[i].reference.empty() && (m.pass == "local_shadows" || m.pass == "reflections")) {
       const auto live = file(outputs[i].reference);
       const auto diff = rp::byte_difference(live,r.raw);
       std::printf("  vs live %s: %zu differing bytes of %zu (exact packed format %u)\n",r.name.c_str(),diff.count,r.raw.size(),r.format);
@@ -2533,6 +2533,7 @@ int ls_self_test(const fs::path& dir) {
   m.defines = "RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1";
   m.specs = {{1000,1},{1008,0},{1009,0},{1010,0},{1020,0},{1026,0}};
   check(ls_masks_casters(m), "LS captured cascade mask excludes casters");
+  {auto rf=m;rf.pass="reflections";check(ls_masks_casters(rf),"default RF preserves soup range when casters are masked");}
   g_specs[1000u] = 0;
   check(!ls_masks_casters(m), "LS common override retains casters");
   g_ab_specs[1000u] = {1,0};
@@ -2646,6 +2647,84 @@ int ls_self_test(const fs::path& dir) {
   std::printf("LS synthetic pack disk: %llu bytes (cap %llu)\n",(unsigned long long)disk_bytes,(unsigned long long)rp::kPackHardCapBytes);
   std::puts("LS synthetic pack: production Ultra shader, packed colour restoration, auxiliary, raw BC4 atlas/BC5 cookie, specs and counters PASS");
   return g_validation_errors.load() ? 1 : 0;
+}
+
+// Default RF production request, with a tilted slab reflecting the visible back
+// plane. A nonzero history source makes both packed colour and hit distance observable.
+int rf_self_test(const fs::path& dir) {
+  if(int r=init_gpu(true,true))return r;
+  const auto pack=dir/"pack";synthesize(pack,false,false,true);
+  rp::Manifest m;std::string error;
+  {const auto b=read_file(pack/"manifest.txt");check(rp::parse(std::string(b.begin(),b.end()),m,error),error);}
+  m.pass="reflections";
+  m.defines="RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1";
+  m.specs={{1000,1},{1008,0},{1009,0},{1010,0},{1020,0},{1026,0}};
+  const auto& pass=*rp::find_pass(m.pass);
+  // G-buffer albedo/material are pushed at set 0 by production RF.
+  for(auto& i:m.images)if(i.set==2 && (i.binding==2 || i.binding==3)){i.set=0;++i.binding;}
+  auto valid=[&](const auto& x){return rp::find_slot(pass,x.set,x.binding)!=nullptr;};
+  std::erase_if(m.buffers,[&](const auto& b){return !valid(b);});
+  std::erase_if(m.images,[&](const auto& i){return !valid(i);});
+  std::erase_if(m.samplers,[&](const auto& i){return !valid(i);});
+  auto pb=read_file(pack/m.push);Push push{};std::memcpy(&push,pb.data(),sizeof push);
+  push.rf_max_rough=0.8f;push.rf_mirror_rough=0.1f;push.rf_tmax=100;
+  push.rf_depth_tol=1;push.rf_edge=0.05f;push.rf_strength=1;push.rf_sample=1;
+  push.rf_models=3;push.rf_stats=1;push.res_shift=0;
+  write_file(pack/m.push,&push,sizeof push);
+  const uint32_t W=push.full[0],H=push.full[1];m.groups[0]=(W+7)/8;m.groups[1]=(H+7)/8;
+  auto flags=read_file(pack/"lflags.bin");std::memcpy(flags.data()+16,&W,4);std::memcpy(flags.data()+20,&H,4);write_vec(pack/"lflags.bin",flags);
+  // Use a specular local probe pair as well as the global raw BC1 cube.
+  auto probes=read_file(pack/"probes.bin");uint32_t mask=4,pair=1;
+  std::memcpy(probes.data()+136,&mask,4);std::memcpy(probes.data()+140,&pair,4);write_vec(pack/"probes.bin",probes);
+  std::vector<uint8_t> cube;
+  const uint8_t block[8]={0,248,0,248,0,0,0,0};
+  for(int f=0;f<6;++f)cube.insert(cube.end(),block,block+8);
+  write_vec(pack/"raw-bc1.cube",cube);
+  for(auto& i:m.images)if(i.set==2 && (i.binding==35 || i.binding==37 || (i.binding==45 && i.element==0)))
+    {i.format=131;i.w=i.h=4;i.file="raw-bc1.cube";}
+  auto raw=[](const auto& v){const auto* b=reinterpret_cast<const uint8_t*>(v.data());return std::vector<uint8_t>(b,b+v.size()*sizeof(v[0]));};
+  auto normal=read_file(pack/"normal.rg32f");auto depth=read_file(pack/"depth.r32f");
+  for(size_t i=0;i<size_t(W)*H;++i){float d;std::memcpy(&d,depth.data()+i*4,4);if(d<4.4f){const float rg[2]={(0.5f+1.7777f)/3.5554f,0.5f};std::memcpy(normal.data()+i*8,rg,8);}}
+  write_vec(pack/"normal.rg32f",normal);
+  // Nonzero previous colour; GGX paths include visible, hidden, offscreen and miss.
+  std::vector<uint16_t> history(size_t(W)*H*4,0x4400);write_vec(pack/"prev.rgba16f",history);
+  std::vector<uint32_t> colour(size_t(W)*H,(15u<<6)|((15u<<6)<<11)|((15u<<5)<<22));
+  std::vector<uint16_t> hit(size_t(W)*H,0x3c00);
+  write_vec(pack/"colour.bin",colour);write_vec(pack/"hit.bin",hit);
+  m.outputs={{0,6,122,W,H,"","colour.bin"},{0,7,122,W,H,"","colour.bin"},{0,30,76,W,H,"","hit.bin"}};
+  std::vector<uint8_t> initial(kCounters*64*4,0);initial.back()=17;
+  write_vec(pack/"initial-counters.bin",initial);m.counter_initial="initial-counters.bin";
+  auto save=[&]{auto text=rp::serialize(m);write_file(pack/"manifest.txt",text.data(),text.size());};save();
+  rp::Manifest back;check(rp::parse(rp::serialize(m),back,error),error);
+  check(back.specs.size()==m.specs.size() && back.outputs[2].initial=="hit.bin","RF manifest round trip");
+  const auto a=replay(pack,nullptr,{}, {},dir/"first",2,true);
+  check(a.runs[0].stats.t[49]>0 && a.runs[0].stats.t[50]>0,"RF eligible rays and screen hits");
+  check(a.runs[0].stats.t[118]==0 && a.runs[0].stats.t[119]==0 && a.runs[0].stats.t[120]==0,"RF guards zero");
+  check(a.runs[0].raw_stats==a.runs[1].raw_stats,"RF repeat raw counters");
+  check(a.runs[0].outputs[1].raw!=raw(colour),"RF modifies packed specular");
+  check(a.runs[0].outputs[2].raw!=raw(hit),"RF writes R16 hit distance");
+  for(size_t i=0;i<m.outputs.size();++i){const auto& x=a.runs[0].outputs[i];
+    check(x.raw==a.runs[1].outputs[i].raw && x.nonfinite==0,"RF repeat identity and finite outputs");
+    m.outputs[i].reference="reference"+std::to_string(i)+".bin";write_vec(pack/m.outputs[i].reference,x.raw);}
+  auto bytes=read_file(dir/"first"/"pass.spv");std::vector<uint32_t> code(bytes.size()/4);std::memcpy(code.data(),bytes.data(),bytes.size());
+  const auto zero_history=std::vector<uint16_t>(history.size(),0);write_vec(pack/"prev.rgba16f",zero_history);
+  const auto dark=replay(pack,&code,{}, {},dir/"dark-history",1,true);write_vec(pack/"prev.rgba16f",history);
+  check(dark.runs[0].outputs[1].raw!=a.runs[0].outputs[1].raw,"RF reads previous radiance");
+  // Change only the probe cube: makes the replacement term's subtraction observable.
+  write_vec(pack/"raw-bc1.cube",std::vector<uint8_t>(cube.size(),0));
+  const auto black=replay(pack,&code,{}, {},dir/"black-probe",1,true);write_vec(pack/"raw-bc1.cube",cube);
+  check(black.runs[0].outputs[1].raw!=a.runs[0].outputs[1].raw,"RF reads raw BCn probe cubes");
+  m.counters="reference-counters.bin";write_vec(pack/m.counters,a.runs[0].raw_stats);save();
+  // Exercise the same bounded lossless codec the live two-phase writer uses.
+  for(const char* name:{"colour.bin","hit.bin","raw-bc1.cube","initial-counters.bin"}){
+    const auto data=read_file(pack/name);std::ofstream output(pack/name,std::ios::binary);
+    rp::codec::Writer writer(output,data.size());check(writer.write(data.data(),data.size()) && writer.finish(),"RF compressed fixture");}
+  g_ab_specs[2147483647u]={0,1};g_ab_require_equal=true;g_ab_warmup=2;
+  replay(pack,&code,{}, {},dir/"paired",2,true);
+  check(!g_reference_mismatch,"RF paired output/counter restoration");
+  g_ab_specs.clear();g_ab_require_equal=false;g_ab_warmup=0;
+  std::puts("RF synthetic pack: default production shader, packed colours, R16 hit distance, raw BCn probes, repeat and paired equality PASS");
+  return g_validation_errors.load()?1:0;
 }
 
 int self_test(const fs::path& dir) {
@@ -2811,7 +2890,7 @@ int self_test(const fs::path& dir) {
 
 int main(int argc, char** argv) {
   std::vector<std::string> args(argv + 1, argv + argc);
-  fs::path pack, out, hlsl, spv, synth, test, ls_test;
+  fs::path pack, out, hlsl, spv, synth, test, ls_test, rf_test;
   std::vector<std::string> defines;
   uint32_t repeat = 1;
   bool repeat_given = false;
@@ -2876,6 +2955,7 @@ int main(int argc, char** argv) {
     else if (args[i] == "--box") synth_box = true;            // --synthesize: the closed box (PT furnace)
     else if (args[i] == "--lighting") synth_lighting = true;  // --synthesize: with the lighting inputs (kSynthAmbient)
     else if (args[i] == "--casters") synth_casters = true;    // --synthesize: the box's floor as rt_cascade_casters
+    else if (args[i] == "--rf-self-test") rf_test = next();
     else if (args[i] == "--ls-self-test") ls_test = next();
     else if (args[i] == "--self-test") test = next();
     else if (args[i] == "--load-test") return load_test();
@@ -2904,6 +2984,7 @@ int main(int argc, char** argv) {
     if (!repeat_given) repeat = 40;
   }
   check(!g_ab_warmup || ab_mode(), "--ab-warmup requires --ab-spec or --ab-spv");
+  if (!rf_test.empty()) return rf_self_test(rf_test);
   if (!ls_test.empty()) return ls_self_test(ls_test);
   if (!test.empty()) return self_test(test);
   if (!pt_test.empty()) return pt_self_test(pt_test);

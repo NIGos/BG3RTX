@@ -1,0 +1,13 @@
+{
+  "status": "READY_FOR_LIVE",
+  "authorized": false,
+  "scene": "The Blushing Mermaid - 96h 39m",
+  "preset": "ultra",
+  "observable": "One reflections pack with RF-time inputs, initial outputs/counters and post-pass references",
+  "expected_pack_count": 1,
+  "max_pack_bytes": 2147483648,
+  "expected_rendering_delta": "none; diagnostic capture only",
+  "expected_gpu_saving_ms": null,
+  "gate": "Complete default Ultra RF pack; no capture/budget/device failure. Offline replay reports exact output/counter differences and paired equality.",
+  "limitation": "Real TLAS reconstruction may differ; report live-reference differences separately from strict paired offline equality."
+}

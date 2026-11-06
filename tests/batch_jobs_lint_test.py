@@ -56,6 +56,8 @@ class BatchJobsLintTests(unittest.TestCase):
         readiness_budget.FROZEN = True
         self.assertEqual(readiness_budget.estimate({'save': 'fixture'}, phase,
                          {'rr': '1', 'detailed_logging': '1'}, True), expected)
+        self.assertEqual(readiness_budget.estimate({'save': 'fixture'}, phase,
+                         {'rr': '1', 'replay_pack_pass': '1'}, True), expected)
 
     def test_retained_combined_fixture_has_cross_job_pipeline_readiness(self):
         from tools.live_batches.combined_20261103.make_jobs import FIXTURES

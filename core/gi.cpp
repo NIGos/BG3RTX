@@ -2380,7 +2380,7 @@ bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet 
   VkDescriptorBufferInfo replay_counters[2]={{g_bx_buf,0,kLsBoxXBytes},{g_occ_buf,0,kOccBytes}};
   std::string replay_defines;
   int* replay_done=nullptr;
-  if(box && !material_use && host->replay_pack && host->cfg_int("replay_pack",0)>0) {
+  if(box && !material_use && host->replay_pack && host->cfg_int("replay_pack_pass",0)==0 && host->cfg_int("replay_pack",0)>0) {
     const int serial=host->cfg_int("replay_pack",0);
     replay_done=static_cast<int*>(host->persist("bg3rtx.replay_pack.ls.done",sizeof(int)));
     if(*replay_done!=serial) {
@@ -2439,15 +2439,46 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
   if(!traversal.valid())return false;
   const VkDeviceFuncs& vk = *host->vk;
   const VkPipelineLayout layout = s.rf_sharc ? g_rf_sharc_layout : g_rf_layout;
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.rf_sharc ? g_rf_sharc.pipeline : g_rf.pipeline);
-  VkWriteDescriptorSet w[kRfBindings + kNumExtras];   // bindings 0-30 and the D-RF extras (40)
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, gather_writes(b, kRfBindings, w), w);
+  VkWriteDescriptorSet w[kRfBindings + kNumExtras];
+  const uint32_t count=gather_writes(b,kRfBindings,w);
+  Bg3ReplayDispatch replay{};
+  std::string replay_defines;
+  std::vector<Bg3ReplaySpec> replay_specs;
+  if(host->replay_pack && host->cfg_int("replay_pack_pass",0)==1 && host->cfg_int("replay_pack",0)>0) {
+    const int serial=host->cfg_int("replay_pack",0);
+    auto* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.rf.done",sizeof(int)));
+    if(*done!=serial) {
+      const Pipe::Variant* selected=nullptr;
+      if(!s.rf_sharc)for(const auto& [key,v]:g_rf.variants)if(v.pipeline==g_rf.pipeline)selected=&v;
+      if(selected && selected->request.substr(0,selected->request.find('?'))=="gi/rt_reflections.hlsl" && selected->request.find("RT_OMM_SCENE")==std::string::npos) {
+        const auto q=selected->request.find('?');
+        replay_defines=q==std::string::npos?"":selected->request.substr(q+1);
+        for(uint32_t i=0;i<selected->specs.count;++i)replay_specs.push_back({selected->specs.entries[i].constantID,selected->specs.data[i]});
+        static const uint32_t outputs[]={6,7,30};
+        replay.serial=serial;replay.pass="reflections";replay.defines=replay_defines.c_str();
+        replay.frame=pc.frame;replay.groups[0]=(g_w+7)/8;replay.groups[1]=(g_h+7)/8;replay.groups[2]=1;
+        replay.push=&pc;replay.push_bytes=sizeof(pc);replay.set0=w;replay.set0_count=count;
+        replay.outputs=outputs;replay.output_count=3;replay.set1=b.alpha;replay.tlas=b.tlas;
+        replay.phase=1;replay.game_set=s.game_set1;replay.specs=replay_specs.data();replay.spec_count=uint32_t(replay_specs.size());
+        const int r=host->replay_pack(cmd,&replay);
+        if(r!=0)*done=serial;
+        if(r!=1)replay.phase=0;
+      } else {
+        host->log("[replay] pack %d failed: RF requires default non-OMM reflections without hit shading",serial);
+        *done=serial;
+      }
+    }
+  }
+  // Capture shader reads may replace the compute pipeline and push descriptors.
+  vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,s.rf_sharc?g_rf_sharc.pipeline:g_rf.pipeline);
+  vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,count,w);
   VkDescriptorSet sets[2] = {b.alpha, s.game_set1};
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1, 2, sets, s.game_set1_ndyn,
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (s.rf_sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  if(replay.phase==1){replay.phase=2;host->replay_pack(cmd,&replay);}
   return true;
 }
 
@@ -2717,7 +2748,7 @@ std::string pipe_defines(const Pipe& p){
 }
 void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,uint32_t n,VkDescriptorSet set1,
                          VkAccelerationStructureKHR tlas,const Push& hp,const char* variant,const std::string& defines){
- if(!host->replay_pack)return;
+ if(!host->replay_pack || host->cfg_int("replay_pack_pass",0)!=0)return;
  const int key=host->cfg_int("replay_pack",0);
  if(key==0 || key<-1)return;
  // Production box-k LS owns the armed pack on Ultra, even when GI uses emission.

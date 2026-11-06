@@ -72236,6 +72236,10 @@
         "opt-roof-s8.1.211159.log",
         "frozen VALID match"
       ]
+    ],
+    "\\[replay\\] pack 1 written: .*pass reflections": [
+      0,
+      null
     ]
   }
 }
