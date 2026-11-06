@@ -1738,13 +1738,12 @@ void sl_device_post(SlDeviceScratch* s, DeviceData* dd, VkResult r) {
     log("[sl] vkCreateDevice failed (%d) with Streamline's requirements", r);
     return;
   }
-  g_dd = dd;
   std::lock_guard<std::mutex> lock(g_pending_mu);
+  g_dd = dd;
   g_pending = std::move(own);
 }
 
 static void sl_device_trigger(DeviceData* dd, sl_init::Trigger t) {
-  if (!g_pending || dd != g_dd) return;
   // sl_init_at=1 (default): at the first swapchain creation, which BG3 does
   // after initialising its own NGX instance (for DLSS SR). 0: at the first
   // vkGetDeviceQueue, or with sl_init_after_create=1 at the game's NGX Init.
@@ -1752,19 +1751,22 @@ static void sl_device_trigger(DeviceData* dd, sl_init::Trigger t) {
   int at = cfg_int("sl_init_at", game_ngx_mode() == 2 ? 0 : 1);
   bool after_create = cfg_int("sl_init_after_create", 0) != 0;
   if (!sl_init::init_now(at, after_create, t)) return;
-  static bool logged = false;
-  if (!logged) {
-    logged = true;
-    log("[sl] slSetVulkanInfo trigger: %s (sl_init_at=%d sl_init_after_create=%d)",
-        t == sl_init::Trigger::Swapchain     ? "first swapchain"
-        : t == sl_init::Trigger::GameNgxInit ? "the game's NGX Init"
-                                             : "first vkGetDeviceQueue",
-        at, int(after_create));
-  }
   std::unique_ptr<SlDeviceScratch> s;
   {
     std::lock_guard<std::mutex> lock(g_pending_mu);
+    // Queue lookup and NGX/swapchain triggers may arrive on different threads.
+    // Check and consume the pending owner under the same lock.
+    if (!g_pending || dd != g_dd) return;
     s = std::move(g_pending);
+    static bool logged = false;
+    if (!logged) {
+      logged = true;
+      log("[sl] slSetVulkanInfo trigger: %s (sl_init_at=%d sl_init_after_create=%d)",
+          t == sl_init::Trigger::Swapchain     ? "first swapchain"
+          : t == sl_init::Trigger::GameNgxInit ? "the game's NGX Init"
+                                               : "first vkGetDeviceQueue",
+          at, int(after_create));
+    }
   }
   if (s) finish_device(s.get(), dd);
 }
@@ -1872,7 +1874,17 @@ void sl_device_destroy(DeviceData* dd) {
   }
   g_sl = {};
   g_px = {};
-  g_dd = nullptr;
+  // A replacement device must not use the cleared SDK table. A fresh instance
+  // may initialize Streamline again and gather a fresh set of requirements.
+  g_sl_init = false;
+  g_sl_instance = VK_NULL_HANDLE;
+  g_req = {};
+  g_have_of_queue = false;
+  {
+    std::lock_guard<std::mutex> lock(g_pending_mu);
+    g_pending.reset();
+    g_dd = nullptr;
+  }
 }
 
 // ---------------------------------------------------------------------------
