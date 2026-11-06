@@ -742,7 +742,10 @@ static void test_rendering_experiments() {
       auto values=preset_values(kHigh);values[knob_index(k.id)]=c;
       auto parsed=parse_ini(render_user_ini("# preserved\ncustom_key=7\n",kHigh,values));
       CHECK_EQ(get(parsed,"custom_key"),"7");CHECK(knob_value(k,parsed)==c);
-      CHECK(!unmet_need(k,c,preset_values(kLow)).empty());
+      if (std::string(k.id)=="fg_destroy_wait_exact" || std::string(k.id)=="fg_present_metering") {
+        auto no_fg=preset_values(kLow); no_fg[knob_index("frame_generation")]=0;
+        CHECK(!unmet_need(k,c,no_fg).empty()); // Low itself legitimately enables FG.
+      } else CHECK(!unmet_need(k,c,preset_values(kLow)).empty());
     }
   }
   // ls_k (TRACK_D_LOCAL_LIGHTS 9.11), developer only: needs Local light shadows Full.
@@ -1168,10 +1171,10 @@ static void test_consolidation_policy() {
   CHECK(!ab::flip(m, indicator)); // A stale Fresnel target must not bypass restart safety.
   m["experimental_options"] = "0"; CHECK(!ab::flip(m, indicator));
   CHECK(!ab::eligible(*find_knob("exp_omm"), 1, true));
-  // Release: Ctrl+Shift+F10 flips live Experimental choices only. Water surface reflections need a
-  // restart and strand hair is post-release, so the release has no eligible target (launcher and docs say so).
+  // Only the live FG pacing candidate can be selected as an opt-in A/B target.
   for (const char* id : kOptInKnobs)
-    for (int c = 1; c < choice_count(*find_knob(id)); ++c) CHECK(!ab::eligible(*find_knob(id), c, true));
+    for (int c = 1; c < choice_count(*find_knob(id)); ++c)
+      CHECK(ab::eligible(*find_knob(id), c, true) == (std::string(id)=="fg_destroy_wait_exact"));
   const auto& live = *find_knob("exp_hair_groom");
   selection.touch(live, 1, true); CHECK(!selection.pending);
   CHECK(!opt_in_knob(live) && !knob_visible(live, false, true));
@@ -1377,6 +1380,27 @@ int main(int argc, char** argv) {
     f << schema_json();
     std::printf("wrote data/settings_schema.json\n");
     return 0;
+  }
+  {
+    const auto* pacing=find_knob("fg_destroy_wait_exact");
+    CHECK(pacing && pacing->experimental && pacing->apply==Apply::Live);
+    CHECK(pacing && std::string(pacing->category)=="Advanced" && opt_in_knob(*pacing));
+    CHECK_EQ(code_default("fg_destroy_wait_exact"),"0");
+    for (int p=0;p<kPresetCount;++p) CHECK(preset_values(p)[knob_index("fg_destroy_wait_exact")]==0);
+    Map fgtest=code_defaults();
+    apply_layer(fgtest,parse_ini("preset=ultra\nexperimental_options=1\nfg_destroy_wait_exact=1\n"));
+    CHECK_EQ(get(fgtest,"fg_destroy_wait_exact"),"1");
+    apply_layer(fgtest,parse_ini("experimental_options=0\n"));
+    CHECK_EQ(get(fgtest,"fg_destroy_wait_exact"),"0");
+  }
+  {
+    const auto* metering=find_knob("fg_present_metering");
+    CHECK(metering && metering->experimental && metering->apply==Apply::Restart);
+    CHECK(metering && opt_in_knob(*metering) && std::string(metering->category)=="Advanced");
+    CHECK_EQ(code_default("fg_present_metering"),"0");
+    for (int p=0;p<kPresetCount;++p) CHECK(preset_values(p)[knob_index("fg_present_metering")]==0);
+    CHECK(key_change_needs_restart("fg_present_metering","0","1"));
+    CHECK(key_change_needs_restart("fg_present_metering","1","0"));
   }
   test_dlss5_native_setting();
   test_detailed_logging();

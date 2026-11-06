@@ -1,28 +1,39 @@
-## FG x3 session investigation (branch fgx3, offline verified, 2026-11-06)
+## FG x3 in-game pacing (branch fgx3, READY_FOR_LIVE, 2026-11-06)
 
-- Full evidence and exact log/code pointers: [analysis](../evidence/fgx3-analysis.md).
-- Proven: 11 of 12 SDK eOn interpolation shutdowns explicitly follow focus-loss
-  notices. One short shutdown is unexplained; SyncInterval flips do not prove causation.
-- Rendered rates in sampled windows: x3 25.25 / 24.16 fps, x2 28.52 / 33.17 fps.
-  These are moving, unequal windows, not a controlled x3 cost comparison.
-- Proven code defects: periodic GetState queried twice, draining its presented count;
-  failed tag/constants publication could leave FG enabled. Use one sample per present
-  and fail closed on publication errors. No historical publication error is proved.
-- New release-visible, rate-limited FG cadence summary reports SDK presented/rendered,
-  proxy ratio, SDK pause/focus notices, API publication results and destroy-wait ms.
-  Preserve required fences; bound successful destruction logging and name image/roles/extent.
-- 1,609 successful destroy waits do not measure their duration; x3 serialization
-  remains plausible. NR private slots are not the tagged colour inputs. NR skip
-  messages do not consistently precede focus pauses. Vulkan FG VSync is unsupported
-  by the SDK; a causal VSync hitch is unproved. No speculative override added.
-- fps_cap is correctly a rendered ceiling: 58 -> 17,241 us, removed at 15:07:10.
-  No multiplier division, new INI keys, ABI change or shader request delta (0).
-- Validation: scripts/build.ps1 -Test PASS 204/204 (build 56 s, CTest 194.13 s).
-  CPU publication/count tests and QA detectors pass; git diff --check passes.
-- One later authorized live check must hold focus through x2/x3/x2 windows in one
-  run, with NR and the real Ultra preset. Require successful tags/constants, stable
-  SDK multiplier, no unexplained SDK pauses, and compare destroy-wait total/max ms.
-  Actual display cadence needs display-change timing; present calls alone cannot prove it.
-- No game launch, queue access or push. No stutter fix or runtime cost claim yet.
-- Commit blocked: sandbox denies .git/worktrees/fgx3/index.lock outside writable roots.
-
+- Round 1 commit 4ddec20f fixes state sampling and failed tag/constants readiness.
+  Round 2 takes enabled x3 periods as the case, per the user's focus clarification.
+- Proven symptom: uninterrupted x3 15:07:12.105-15:07:34.117 has 21.48 rendered
+  fps, seven >100 ms gaps and 276 destroy-wait calls. Neighboring enabled x2
+  sections give 27.31-33.02 fps. Scene/motion are uncontrolled; no GPU-ms/p99
+  or scanout measurements exist in that supplied release session.
+- Scanned 220 retained main queue logs (519.9 MB), 1,024 result rows, TRACK
+  history and FG evidence. No retained queue x3/x4 marker; historical x3 is
+  TV-standby functionality with dropped frames, not smoothness qualification.
+- Proven broad retirement policy: old tagged game images wait on the newest
+  global input fence. Actual serialization cost is unmeasured. SDK default
+  blocks the client's presenting queue until FG GPU processing completes;
+  Vulkan FG VSync is unsupported. Both are plausible x3 cost/pacing factors.
+- Public Vulkan metering extension/feature enablement was absent despite SDK
+  availability. New fg_present_metering=0 is support-checked, restart-required;
+  SDK private fallback/cadence impact is unknown. Off in all presets.
+- Both candidates require experimental_options=1; metering applies at restart.
+- Candidate fg_destroy_wait_exact=0: Advanced, Experimental options, live,
+  Off in all presets. Track each game input's actual tagged consumption fence;
+  incomplete destruction polls through the existing deferred route, preserving
+  view/image/allocation lifetime. Unknown/pending use stays conservative.
+- Swapchain boundary invalidates SDK semaphore caches; candidate-only successful
+  idle establishes completion there. No per-frame idle or parallelism override.
+- Foreground log: executable basename + class only, sampled at 250 ms; no titles.
+  Cadence reports exact/global/pending attempts, blocking/polls, wait ms, metering
+  batches/feedback and SDK proxy-present/GetState/ReflexSleep CPU timing.
+- Full analysis, scene table, requirements and stall bounds:
+  [fgx3-analysis](../evidence/fgx3-analysis.md); all retained runs are indexed.
+- No wrong x3 generated count, NR-after-hudless stage or Boost necessity proved.
+  Camera-cut/reset, real simulation markers and x3 input/pacing QA remain gaps.
+- Validation: build.ps1 -Test PASS 206/206 (CTest 138.61 s); settings 4352/4352.
+  Shader request delta 0; ABI unchanged. No game, queue writes or push.
+- One later authorized Ultra + NR check: cold metering On, matched x2/x3/x2
+  and x3 exact Off/On/Off; cold Off comparison still needed for metering benefit;
+  require blocking 0 On, pending drain, valid lifetime/tags/state, and improvement
+  in native p99/max plus display-change cadence beyond repeated-Off variation.
+  Report CPU/GPU cost; SDK/proxy ratios alone do not prove smoothness.

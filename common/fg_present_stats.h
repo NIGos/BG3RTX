@@ -18,3 +18,13 @@ struct FgPresentStats {
   }
   double ratio() const { return rendered ? double(presented)/double(rendered) : 0.0; }
 };
+
+// Present-thread CPU observations, independent of SDK success or failure.
+struct FgCpuTiming {
+  uint64_t calls=0, total_us=0, max_us=0;
+  void add(uint64_t us) {
+    ++calls; total_us+=us; if (us>max_us) max_us=us;
+  }
+  double mean_ms() const { return calls ? double(total_us)/double(calls)/1000.0 : 0.0; }
+  double maximum_ms() const { return double(max_us)/1000.0; }
+};

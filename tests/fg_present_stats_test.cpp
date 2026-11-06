@@ -13,5 +13,11 @@ int main() {
   if (s.ratio()!=1) return 5;
   s={}; s.add(3); s.add(0,false); s.add(6);
   if (s.ratio()!=3 || s.failures!=1) return 6;
+  FgCpuTiming timing;
+  if (timing.mean_ms()!=0 || timing.maximum_ms()!=0) return 7;
+  timing.add(0); timing.add(3000); timing.add(6000);
+  if (timing.calls!=3 || timing.mean_ms()!=3 || timing.maximum_ms()!=6) return 8;
+  timing={}; timing.add(1000);
+  if (timing.calls!=1 || timing.total_us!=1000 || timing.mean_ms()!=1 || timing.maximum_ms()!=1) return 9;
   return 0;
 }

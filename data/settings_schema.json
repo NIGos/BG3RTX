@@ -183,6 +183,32 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_water_surface_fresnel": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_surface_fresnel": "1"}, "needs": {"exp_water": 1}, "migrate_from": ["rt_water_surface_fresnel"], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "fg_destroy_wait_exact", "label": "Frame generation pacing test",
+     "description": "Experimental: may reduce frame generation stutter when the game replaces temporary images. Cost and smoothness are unqualified.",
+     "apply": "live", "apply_note": "Applies after saving.", "advanced": false, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: may reduce frame generation stutter when the game replaces temporary images. Cost and smoothness are unqualified.",
+     "details": "Compare smoothness while turning in the same scene. Experimental; disabled in every preset.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Standard", "apply": "live", "caps": [], "keys": {"fg_destroy_wait_exact": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "Deferred", "apply": "live", "caps": ["fg"], "keys": {"fg_destroy_wait_exact": "1"}, "needs": {"frame_generation": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "fg_present_metering", "label": "Multi-frame presentation test",
+     "description": "Experimental: enables an optional driver presentation capability for frame generation. Smoothness and cost are unqualified.",
+     "apply": "restart", "apply_note": "Restart to apply.", "advanced": false, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: enables an optional driver presentation capability for frame generation. Smoothness and cost are unqualified.",
+     "details": "Requires Frame generation and a game restart. Compare 3x smoothness in the same scene. Disabled in every preset.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Standard", "apply": "restart", "caps": [], "keys": {"fg_present_metering": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "Driver metering", "apply": "restart", "caps": ["mfg"], "keys": {"fg_present_metering": "1"}, "needs": {"frame_generation": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_omm", "label": "Opacity micromaps",
      "description": "Accelerates cutout shadows with locally prepared foliage masks on compatible hardware. About 1 ms faster at camp on RTX 5090; requires a restart.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": false, "developer": true,

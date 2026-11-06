@@ -269,6 +269,20 @@ inline constexpr Knob kKnobs[] = {
      {"rt_water_surface_fresnel"}, false, true, true, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Needs Water lighting. Turning it on needs a game restart; turning it off applies after saving. Compare the reflections on shallow pools."},
 
+  {"fg_destroy_wait_exact", "Frame generation pacing test",
+   "Experimental: may reduce frame generation stutter when the game replaces temporary images. Cost and smoothness are unqualified.",
+   Kind::Choice, Apply::Live, "Applies after saving.", false,
+   {{"off", "Standard", 0, {{"fg_destroy_wait_exact", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "Deferred", kCapFg, {{"fg_destroy_wait_exact", "1"}}, {{"frame_generation", 1}}, {}, false, true, true, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Compare smoothness while turning in the same scene. Experimental; disabled in every preset."},
+
+  {"fg_present_metering", "Multi-frame presentation test",
+   "Experimental: enables an optional driver presentation capability for frame generation. Smoothness and cost are unqualified.",
+   Kind::Choice, Apply::Restart, "Restart to apply.", false,
+   {{"off", "Standard", 0, {{"fg_present_metering", "0"}}, {}, {}, false, false, false, Apply::Restart},
+    {"on", "Driver metering", kCapMfg, {{"fg_present_metering", "1"}}, {{"frame_generation", 1}}, {}, false, true, true, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Requires Frame generation and a game restart. Compare 3x smoothness in the same scene. Disabled in every preset."},
+
   // om3 qualified the fine-LOD policy; om4 qualified the dynamic micromap bake (2026-11-03).
   // Keep the legacy ids for saved GUI selections. Hardware and local masks remain prerequisites.
   {"exp_omm", "Opacity micromaps",
@@ -818,6 +832,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_primary_fade_class", "0"},
     {"crash_dump", "0"},
     {"fg_current_destroy_only", "1"},
+    {"fg_destroy_wait_exact", "0"},
+    {"fg_present_metering", "0"},
     {"fg_tag_hudless", "1"},
     {"fg_tag_ui", "1"},
     {"fg_letterbox", "1"},
@@ -896,6 +912,8 @@ inline Map code_defaults() {
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (from == to) return false;
   if (key == "dlss5_nr" || key == "dlss5_nr_runtime") return true;
+  // Vulkan extension/feature enablement is immutable for the device lifetime.
+  if (key == "fg_present_metering") return true;
   // core/gi.cpp initialize_hair_origin persists the startup reservation across core reloads.
   if (key == "rt_hair_physical_origin") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   if (key == "rt_hair_groom_primary") return true; // Safety gate until hot activation is verified.
@@ -989,7 +1007,7 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 // Release 2026-11: Water surface reflections only. Strand hair (exp_hair_*) is a post-release
 // update and returns to this list with it; until then release resets its keys.
 inline constexpr const char* kOptInKnobs[] = {
-  "water_surface_fresnel"};
+  "water_surface_fresnel", "fg_destroy_wait_exact", "fg_present_metering"};
 inline bool opt_in_knob(const Knob& k) {
   for (const char* id : kOptInKnobs) if (std::string(id) == k.id) return true;
   return false;

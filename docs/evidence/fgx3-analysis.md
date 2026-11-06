@@ -16,7 +16,11 @@ The user's installed release is reported as `8599711c`; no installed binary was 
 | bg3rtx_user.ini | 452 | 17 | ca3b863ebe75f60878d0d7c4bf68677a831ecbffce4a49d0a1a514d12276e3ae |
 | bg3rtx.dlss5-runtime.log | 1503 | 8 | 842560d2505dcaa884cd79f0bb35de07b6738731cdedc61100547d69b93c03d4 |
 
-## Ranked findings
+The Round 2 clarification and enabled-only analysis below supersede any
+interpretation that focus loss explains the in-game x3 symptom. An uninterrupted
+x3 window has seven frame gaps over 100 ms at 21.48 rendered fps.
+
+## Round 1 findings: interpolation interruptions
 
 1. **Proven dominant reason for repeated SDK pauses: loss of window focus.**
    Eleven of twelve enabled-to-disabled transitions with requested `eOn` have
@@ -179,7 +183,7 @@ signed NVIDIA 310.8.0, matching source/destination hashes; it provides no NR
 timing evidence. The current user INI has fps_cap 0, reflex 2 and dlss5_nr 1,
 consistent with the final log settings rather than the whole session.
 
-## Delivered changes and remaining check
+## Round 1 changes and remaining check (code pointers at 4ddec20f)
 
 Current `layer/streamline.cpp:2635-2640` queries SDK state once after each
 present and accumulates its since-last-query count in the CPU-tested
@@ -202,3 +206,188 @@ real Ultra + NR run, verify successful publication and stable SDK multipliers,
 and measure destroy-wait total/max ms alongside any pauses. Actual display
 cadence needs display-change timing. Until then, stutter improvement and GPU
 cost remain unmeasured; offline tests do not substitute for that evidence.
+
+## Round 2: x3 in game
+
+### A. Retained runs and enabled x3 evidence
+
+The user's clarification changes the deciding question: they remained in game
+except to change FG through the launcher. Focus pauses explain interruptions,
+but cannot explain all poor x3 cadence while SDK interpolation stays enabled.
+In particular, the enabled x3 interval 15:07:12.105–15:07:34.117 contains
+450 sampled rendered frames in 20.947 s (**21.48 fps**), **seven >100 ms SDK
+timer resets**, and 276 successful destroy waits with unknown duration.
+The frame cap was already removed. These enabled-period gaps take priority over
+focus as the still-unexplained symptom; GPU cost/p99/serialization are unmeasured.
+
+All 220 retained main queue logs (519.9 MB) and all 1,024 results rows were
+scanned read-only. No x3 or x4 run marker survives in that corpus; 220 raw logs
+contain x2 markers and 193 results rows disclose a mode. Other result rows have
+unknown mode. `test-main/captures/queue` is absent. Historical TRACK_B_FG x3
+evidence is TV-standby functionality with dropped presents, not modern x3
+cadence or quality qualification. Its live-display table measures x2/x4 only.
+
+| Scene/evidence | x2 | x3 | Qualification limit |
+|---|---|---|---|
+| Water Queens House / S8 | 69 named logs; whole-run median fps 23.61–30.00 | no retained queue run | x3 unqualified |
+| Camp | 26 named logs; 19.80–29.99 fps | no retained queue run | x3 unqualified |
+| Inn / Mermaid | 41 named logs; 24.60–29.99 fps | no retained queue run | x3 unqualified |
+| Dialogue | 38 named logs; 0–30.00 fps including startup | no retained queue run | x3 unqualified |
+| Other / unassigned | 46 logs; 18.29–36.00 fps | no retained queue run | scene/mode controls insufficient |
+| User's enabled moving intervals, unnamed scene, Ultra + NR | neighboring intervals 27.31–33.02 fps | mostly 21.48–30.93 fps; seven enabled timer resets | no controlled camera, GPU-ms, scanout ratio or frame p99 |
+| Historical 2026-10-26 | live x2 proxy ratio 2 | standby x3 SDK count 3; dropped frames | functional only; no x3 smoothness pass |
+
+Full denominators, every enabled interval, exact log lines, GPU/pace availability
+and x2/x4 historical limits are in [the run appendix](fgx3-round2-runs.md).
+[The 220-row inventory](fgx3-round2-runs.csv) preserves every retained raw run's
+hash, result-row references and metric summaries. Scene buckets are inferred
+from names; whole-run ranges include loading/toggles/captures and are not gates.
+No actual x3 stutter fix is claimed by round 1 or by this evidence mining.
+
+Even perfect multiplication of the sampled 21.48 rendered fps gives only
+64.44 presented frames/s at x3, versus 66.04 at x2 with 33.02 rendered fps.
+These are arithmetic examples from unequal moving windows, **not measured
+display rates or an x3 effect cost**. They show why reduced native throughput
+can erase the nominal multiplier gain even with interpolation continuously On.
+The bad x3 native average is 46.55 ms, versus 34.77 ms in the first long enabled
+x2 interval; the 11.78 ms difference cannot be assigned to a pass or wait without
+matched scene/timing data.
+
+### B. MFG pacing requirements
+
+[The full line-by-line contract audit](fgx3-pacing-audit.md) records every public
+checklist item, including unqualified items and requirements absent from this
+header version. Audit code pointers are pinned to Round 1 commit `4ddec20f`.
+
+| Requirement | Verified / gap | Consequence for this x3 report |
+|---|---|---|
+| MFG supported, generated count within max | x3 requests 2; reported max 5 (sl.log:488; bg3rtx.log:127,824). Generic code does not clamp to runtime max. | Correct count for this RTX 5090. |
+| Swapchain and acquire/present GPU semaphores | Game asks 3 buffers, SDK uses 6 (sl.log:522,531); mode FIFO (bg3rtx.log:132,134). Proxies retain wait semaphores. | No documented missing x3 buffer requirement or proved shortage. |
+| Options/constants/Present markers match frame | Same present thread/token; one constants publication. Constants are late, and simulation markers are synthetic. | Full Reflex timing qualification is missing, but no token mismatch is logged. |
+| MFG metering | SDK available (:489), but baseline manual setup omits public extension/feature enablement (streamline.cpp device setup; log :41,75). Six batch-1 samples are unfocused startup. FC feedback 1 then good at :638,641. | Proven public setup omission, unknown private SDK fallback. Cold fg_present_metering=0 is a separate support-checked candidate; new counters expose batching. |
+| VSync support | SDK explicitly excludes Vulkan; game FIFO remains requested and clamp warnings continue (:605-663). | Unsupported configuration is a plausible pacing factor, not a demonstrated cause of the seven gaps. |
+| Input lifetime synchronization | Default SDK mode blocks the presenting queue until FG GPU work completes; host additionally waits for the global latest input fence on old resource destruction. | Longer FG work can reduce rendered throughput; avoidable host coupling is the candidate fix. No generation GPU cost is measured. |
+| Correct reset and transition handling | reset always false; invalid frames disable FG but do not null all tags; no forced recreation on every On/Off. | Scene-cut/transition and Off-path gaps; not proven steady x3 causes. Changing x2 to x3 while On has no mandated reset/recreation. |
+| Full input/Reflex/debug/quality qualification | x2 tests exist; x3 + Ultra + NR enhanced-debug and display-cadence tests do not. | Old functional MFG support is not a smoothness pass. |
+
+The public Vulkan metering contract also requires extension/feature enablement,
+which the Streamline requirements list did not supply. The support-checked cold
+candidate fg_present_metering=0 enables that public path without replacing SDK
+batching; both experimental candidates require experimental_options=1 in the
+central settings model. SDK availability/feedback alone does not establish public setup or
+causality. See the audit's linked Khronos sources. This is a separate pacing
+hypothesis from exact retirement; both keys remain off in every preset.
+
+Other checklist gaps (status/minimum-size gating, dynamic resolution, signature
+verification, motion blur and shutdown limitations) are enumerated in the audit.
+They are not attributed to the enabled x3 stutter without evidence. NR records
+before the game's hudless/UI composite, in the same primary command buffer
+(ngx.cpp:1479-1531); it does not insert a second CPU wait after hudless capture.
+The seven long gaps precede Boost (enabled only at 15:08:44.037, :3816), so
+Boost is not their necessary cause. No speculative VSync override is introduced.
+
+### C. Destruction, stall estimate and candidate policy
+
+**Proven:** the baseline applies the newest global FG input fence to historical
+watched inputs, even when current roles are 0 (`4ddec20f:streamline.cpp:2363-2427`,
+tracker.cpp:751,778). The public SDK consumption fence permits waiting on the
+resource's own last tagged present instead (guide 15.1:895-903). The existing
+tracker deferred path polls incomplete destruction and retains allocation/memory
+ownership (tracker.cpp:1092-1129). Newer unrelated input consumption is not a
+requirement for destroying an older input once its own use is complete.
+
+At least 354/535 image waits match earlier game composite colour handles:
+178 UI and 176 hudless. They are output-sized by composite discovery's explicit
+extent classification (streamline.cpp:2135-2208); the relevant ready-input log
+lines :820-823 identify 3840 x 1600 hudless/UI and 2560 x 1067 depth/MV.
+The exact extent of each of the unmatched 181 images is not logged. Two original
+views per retired image can contribute multiple calls without multiple frames.
+Only three NR private slots are allocated in the session; these destructions
+are not NR slot churn. A matching handle's last **discovery** precedes destroy
+by median 0.832 s (range 0.084-132.548 s; p95 22.545 s). Discovery is not final
+SDK use, so these ages cannot replace a last-use fence.
+
+The game source/allocator is unavailable. These logs name inputs when they are
+discovered in composite draws, not when images are allocated. They therefore
+prove transient colour/view retirement, not creation of a new game target every
+frame or the engine reason for each burst. The bad enabled x3 interval contains
+54 discovery lines versus 276 view/image wait calls; cadence is not one new
+NR allocation per frame. Repeated discovery can name the same handle before its
+submit is published. The 32-entry historical watch list deliberately keeps old
+images eligible for waits after the live inputs have rotated away.
+
+**Stall estimate:** the bad enabled x3 window spans 22.012 s, with 276 wait calls
+(12.54 calls/s); its inner native sample averages 46.55 ms/frame. A ~40 ms gap
+between successful wait log lines is the sum of unknown game work, scheduling
+and waits. Each wait's measured lower bound from the old data is **0 ms**, not
+40 ms; the call's timeout is 1 s, and result 0 only means success. A wait on an
+incomplete latest fence can, in principle, consume most of a native frame and
+prevent the render thread overlapping CPU work with FG. Its actual share is
+unmeasured. SDK input consumption is not display scanout completion, so it is
+incorrect to add two generated display intervals to estimate this fence wait.
+The final enabled x2 interval also has 384 calls in 71.289 s (5.39 calls/s);
+different scene/load conditions prevent a causal frequency comparison.
+
+**Implemented candidate:** `fg_destroy_wait_exact=0` (experimental, Advanced,
+live; all presets Off). Record images/views before SDK tag publication; bind
+the actual nonzero consumption fence after present. View aliases resolve to the
+image's latest use. Pending/failed state publication cannot retire against an
+older fence. Known old uses retain their own fence instead of adopting a newer
+unrelated global value. Exact mode polls with timeout 0; incomplete objects use
+the existing tracker pending-destroy route. Unknown use falls back conservatively;
+actual destruction and device teardown discard associations. A successful
+candidate-only idle drain at swapchain destruction closes the SDK semaphore
+lifetime; failed drains never establish completion. This is a rare lifecycle
+boundary, not a per-frame idle. The default path preserves its blocking policy.
+CPU tests cover pending/failed publication, view aliases, different semaphores,
+zero values, reuse and swapchain-boundary completion.
+
+### D/E. Verification still required
+
+Foreground changes now record only executable basename and window class, sampled
+at most every 250 ms, plus whether the known game window owns foreground. No
+window titles or full executable paths are logged. Short focus changes can fall
+between polls; SDK focus notices are independent evidence. Cadence summaries
+identify exact/global polls, blocking attempts, pending attempts, wait ms and
+metering feedback; swapchain logging snapshots the game's requested buffer count
+before the SDK mutates the creation structure.
+
+One later authorized batch should cold-start with fg_present_metering=1 (verify
+supported/enabled once), then compare x2/x3/x2 and x3 exact Off/On/Off in the same
+Ultra + NR scene with matched motion, without opening the launcher during the
+measured windows. Use the existing automated toggles and restore settings. With
+the candidate On, the FG destroy path must report **blocking 0**, exact polls must
+occur, pending destruction must drain without lifetime/API/device faults, and
+native p99/max and display-change cadence must improve beyond repeated-Off
+variation. SDK ratio should approach 3 with sufficient refresh headroom, with
+valid tags/constants and no unexpected metering/focus pauses. This first check
+can reject the metering setup candidate but cannot isolate its benefit versus a
+cold Off run; promotion needs a matched Off/On cold comparison. Proxy/SDK count
+alone is not the smoothness gate. Per-pass GPU ms and wait/query/present/sleep
+CPU timings must distinguish generation cost from host stalls. This candidate
+is READY_FOR_LIVE, not a demonstrated x3 stutter resolution.
+
+Round 2 implementation pointers (final worktree; audit baseline above remains
+4ddec20f): metering support/enablement `layer/streamline.cpp:1672-1751`, caller
+restoration `:1841`; exact fence selection/poll/recheck `:2495-2572`, reservation
+`:2722-2743`, post-present publication `:2874-2890`; prior SDK idle proof `:762`,
+foreground `:1498`, and cadence/CPU timing `:2916-2936`. Policy tests are
+`tests/fg_input_retirement_test.cpp`, `tests/fg_copy_lease_test.cpp`,
+`tests/sl_present_metering_test.cpp`, and `tests/fg_present_stats_test.cpp`.
+Expired semaphore epochs stay pinned across failed drains and new publications;
+only a later proved idle of already-returned presents can release them. A prior
+real idle proof survives normal resize, while new/unsubmitted uses cannot
+inherit it. Private copy leases and tracked game colour images retain separate
+ownership machinery; the new map is cleaned even after a game image rotates
+out of the 32-entry historical watch list.
+
+Final Round 2 offline validation: `scripts/build.ps1 -Test` passes **206/206**
+CTests in 138.61 s, including QA detectors, settings/schema, retirement, copy
+leases, metering, CPU timing and teardown fixtures. Settings also pass 4,352
+checks directly. Defaults/schema were regenerated; `git diff --check` passes.
+The test environment explicitly uses native Windows PowerShell modules for
+Python-launched installer fixtures; inherited PowerShell 7 module paths caused
+the earlier unrelated Get-FileHash failures. Final log:
+`C:/Users/quali/Documents/Code Projects/BG3RTX/.scratch/coord/fgx3/round2-pass-build-test.log`.
+No game was launched, no queue files were written, no runtime GPU cost or
+smoothness improvement is claimed.

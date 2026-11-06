@@ -92,7 +92,7 @@ int main() {
         sdk = os.environ['VULKAN_SDK']
         sl = (ROOT / 'layer/streamline.cpp').read_text(encoding='utf-8')
         start = sl.index('    sl::Result r = g_sl.DLSSGSetOptions(0, o);')
-        end = sl.index('\n  }\n\n  if (g_token', start)
+        end = sl.index('\n  }\n\n  {\n    std::lock_guard<std::mutex> lock(g_fence_mu);', start)
         fg_apply = 'void apply(int want, uint32_t flags, uint64_t frame) { Options o{};\n' + sl[start:end] + '\n}'
         source = (FIXTURE + '\n' + function('layer/rrpost.cpp', 'bool ensure_layout(DeviceData* dd)') + '\n'
                   + function('layer/hotreload.cpp', 'bool alloc_image(') + '\n'
@@ -166,6 +166,8 @@ void* proc(const char* name) {
 '''
 
 SL_TEARDOWN_FIXTURE = r'''
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -192,6 +194,9 @@ struct Copy { Image image, depth; int memory, depth_memory; };
 std::vector<Copy> g_mv_copies(1);
 std::vector<int> g_mv_copy_ms;
 std::unique_ptr<int> g_pending;
+std::mutex g_fence_mu;
+std::map<int,int> g_tag_uses,g_tag_prior,g_tag_views;
+int g_inputs_fence=0; uint64_t g_inputs_value=0,g_returned_present_frame=0;
 std::mutex g_pending_mu;
 const char* res_str(sl::Result) { return "ok"; }
 template<class... T> void log(const char*, T...) {}
