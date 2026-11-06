@@ -302,6 +302,10 @@ struct DrawArgs {
   uint32_t first_instance;
 };
 CmdState* cmd_state(VkCommandBuffer cmd, bool create = false);
+void core_retain_recording(uint64_t recording);
+void core_release_recording(uint64_t recording);
+Bg3RecordingState core_recording_state(uint64_t recording);
+void core_submit_recordings(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 uint64_t cmd_recording(VkCommandBuffer cmd); // locked copy; safe across reset/free
 void cmd_forget(VkCommandBuffer cmd);
 
@@ -320,6 +324,7 @@ void alpha_slot_in_use(uint32_t slot, uint64_t frame);   // alphatest.cpp: the s
 void life_on_submit(VkQueue queue, const std::vector<VkCommandBuffer>& cmds);
 void life_on_present(DeviceData* dd, VkQueue queue);   // after the present went down, queue still owned
 // Around the game's vkDeviceWaitIdle: submissions before begin are complete after it.
+bool life_recording_complete(VkQueue queue, uint64_t frame, uint64_t seq);
 uint64_t life_gpu_done();   // presents <= this have completed on the GPU (life_on_present fences)
 uint64_t life_idle_begin();
 void life_idle_end(uint64_t seq_before);

@@ -29,12 +29,14 @@
 #include <chrono>
 #include "../common/ls_exact_k.h"
 #include "../common/occ_stats.h"
+#include "../common/recording_history.h"
 #include "../common/native_hit_capability.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "core.h"
+#include "completion_lease.h"
 #include "../common/camera_motion.h"
 #include "../common/hair_primary.h"
 #include "../common/native_scalp_capability.h"
@@ -59,6 +61,7 @@
 namespace {
 
 struct Snapshot {
+  uint64_t recording = 0;
   uint64_t omm_identity=0;
   Bg3Binding cam, vp, nrm, alb, mat, dep, ao, shadow, dif, spe;
   // D-LS: the lighting's light list (set 1 b0, b13, b23, b24, b25, b39, b40, b41; set 0 b2).
@@ -338,6 +341,7 @@ VkBuffer g_occ_buf = VK_NULL_HANDLE, g_occ_host = VK_NULL_HANDLE;
 VkDeviceMemory g_occ_mem = VK_NULL_HANDLE, g_occ_host_mem = VK_NULL_HANDLE;
 const uint32_t* g_occ_map = nullptr;
 uint64_t g_occ_frame[kOccRing] = {};
+CoreCompletionLease g_occ_lease[kOccRing];
 uint32_t g_occ_slot = 0;
 uint64_t g_occ_armed = 0;   // the frame whose counters the D-LS pass adds to (0: none)
 occ::OccWindow g_occ_win;
@@ -419,7 +423,7 @@ Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F; full resol
 Bg3Image g_origin{}, g_aux{};   // extras 40 and 44 (full resolution, RGBA16F)
 Bg3Image g_ls_nodata{};          // extra 46 when there is no per-light data: 1x1 RGBA32UI (the shaders' type)
 bool g_x_logged = false;
-uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0, g_shift = 1;
+uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_shift = 1;
 
 // RR mode (docs/QUALITY.md fix 3): with Ray Reconstruction denoising the frame,
 // the GI uses the preset's ray count and keeps no history of its own, the
@@ -429,8 +433,20 @@ uint32_t gi_res_shift() {
   bool rr = m < 0 ? host->rr_active() : m != 0;
   return rr ? 0u : 1u;
 }
-bool g_images_ready = false, g_logged = false;
+bg3::RecordingHistory g_history;
+bool g_logged = false;
 uint64_t g_last_pre_frame = 0;
+void history_resolve() {
+  if (!g_history.owner) return;
+  const auto owner = g_history.owner;
+  const auto state = host->recording_state(owner);
+  g_history.resolve((state.flags & BG3_RECORDING_SUBMITTED) != 0,
+                    (state.flags & BG3_RECORDING_COMPLETE) != 0 && (state.flags & BG3_RECORDING_EXECUTABLE) == 0);
+  if (!g_history.owner) {
+    host->release_recording(owner);
+    if (!(state.flags & BG3_RECORDING_SUBMITTED)) g_last_pre_frame = 0;
+  }
+}
 
 // Motion vectors (from the NGX hook) and the layout their render pass leaves them in.
 VkImage g_mv_image = VK_NULL_HANDLE;
@@ -719,7 +735,8 @@ void release_images() {
     host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)im->memory);
     *im = Bg3Image{};
   }
-  g_images_ready = false;
+  if (g_history.owner) host->release_recording(g_history.owner);
+  g_history = {};
   g_w = g_h = 0;
 }
 
@@ -1553,6 +1570,7 @@ VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
 uint32_t* g_stats_map = nullptr;
 uint32_t g_stats_slot = 0;
 uint64_t g_stats_frame[kStatsRing] = {};
+CoreCompletionLease g_stats_lease[kStatsRing];
 bool g_stats_scene_current[kStatsRing] = {};
 uint64_t g_stats_sum[kStatsCounters] = {};
 float g_ls_raw[4] = {};   // set1/b0 m0.x, m0.y, m0.w, b13[0] as last written
@@ -1670,12 +1688,12 @@ bool stats_init() {
   return true;
 }
 
-// Picks this frame's slot (cleared on the GPU) after folding in the one written
-// kStatsRing - 1 frames ago.
+// Picks this frame's slot after folding its completed, non-executable producer.
+// run_pre guards reuse before recording any commands; frame age is not completion.
 void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_current) {
   uint64_t now = host->frame_index();
   uint32_t slot = uint32_t(now % kStatsRing);
-  if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
+  if (g_stats_frame[slot] && g_stats_lease[slot].readable()) {
     const uint32_t* c = g_stats_map + slot * (kStatsSlot / 4);
     uint64_t got[4] = {};
     for (int g = 0; g < 4; ++g)
@@ -1742,6 +1760,8 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_cur
   }
   g_stats_slot = slot;
   g_stats_frame[slot] = now;
+  g_stats_lease[slot].clear();
+  g_stats_lease[slot].record(cmd);
   g_stats_scene_current[slot] = scene_current;
   host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -2093,10 +2113,10 @@ void bind_rt(Bound& b, VkAccelerationStructureKHR tlas, VkDescriptorSet alpha) {
 
 void bind_all(Bound& b, const Snapshot& s) {
   b.omm_identity=s.omm_identity;
-  Bg3Image& hin = g_hist[g_parity];
-  Bg3Image& hout = g_hist[g_parity ^ 1];
-  Bg3Image& din = g_hist_depth[g_parity];
-  Bg3Image& dout = g_hist_depth[g_parity ^ 1];
+  Bg3Image& hin = g_hist[g_history.parity];
+  Bg3Image& hout = g_hist[g_history.parity ^ 1];
+  Bg3Image& din = g_hist_depth[g_history.parity];
+  Bg3Image& dout = g_hist_depth[g_history.parity ^ 1];
   b.cam = {s.cam.buffer, s.cam.offset, s.cam.range};
   b.vp = {s.vp.buffer, s.vp.offset, s.vp.range};
   const VkImageLayout G = VK_IMAGE_LAYOUT_GENERAL;
@@ -2920,11 +2940,16 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
   return tlas;
 }
 
-// rt_occ_stats: the window over the read-back slots (the slot written kOccRing - 1 frames ago is
-// folded before this frame reuses it), one "occ stats" line per 60 frames read.
-void occ_fold_slot(uint64_t now) {
+// rt_occ_stats: fold a completed, non-executable producer before reusing its
+// readback slot. One "occ stats" line per 60 frames read.
+bool occ_fold_slot(uint64_t now) {
   const uint32_t slot = uint32_t(now % kOccRing);
-  if (g_occ_map && g_occ_frame[slot] && g_occ_frame[slot] + kOccRing - 1 <= now) {
+  if (!g_occ_lease[slot].reusable()) {
+    static bool warned = false;
+    if (!warned) { warned = true; host->log("occ stats: readback slot still owned; skipping update"); }
+    return false;
+  }
+  if (g_occ_map && g_occ_frame[slot] && g_occ_lease[slot].readable()) {
     occ::occ_fold(g_occ_win, g_occ_map + size_t(slot) * (kOccBytes / 4));
     // rt_occ_stats_frames: the window (60; 1-4 for frame-by-frame occluder kind and distance of a moving shadow)
     if (g_occ_win.frames >= stats_period(unsigned((std::max)(host->cfg_int("rt_occ_stats_frames", 60), 1)))) {
@@ -2934,10 +2959,13 @@ void occ_fold_slot(uint64_t now) {
   }
   g_occ_frame[slot] = 0;
   g_occ_slot = slot;
+  g_occ_lease[slot].clear();
+  return true;
 }
 
 // The counters of this frame into its host slot (after the passes that add to them).
 void occ_copy(VkCommandBuffer cmd) {
+  g_occ_lease[g_occ_slot].record(cmd);
   memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
   const VkBufferCopy cp{0, VkDeviceSize(g_occ_slot) * kOccBytes, kOccBytes};
   host->vk->CmdCopyBuffer(cmd, g_occ_buf, g_occ_host, 1, &cp);
@@ -2949,7 +2977,7 @@ void occ_copy(VkCommandBuffer cmd) {
 bool occ_run(VkCommandBuffer cmd, Bound& b, const Push& base, uint32_t flags) {
   const VkDeviceFuncs& vk = *host->vk;
   const uint64_t now = host->frame_index();
-  occ_fold_slot(now);
+  if (!occ_fold_slot(now)) return false;
   auto traversal = prepare_omm_traversal(cmd, b, g_occ.pipeline, true);
   if (!traversal.valid()) return false;
   memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT);   // the previous frame's copy out of it first
@@ -2966,6 +2994,7 @@ bool occ_run(VkCommandBuffer cmd, Bound& b, const Push& base, uint32_t flags) {
   vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
   occ_copy(cmd);   // complete without D-LS; the D-LS pass's copy (run_post) replaces it
   g_occ_frame[g_occ_slot] = now;
+
   g_occ_armed = now;
   if (!g_occ_logged) {
     g_occ_logged = true;
@@ -2976,6 +3005,19 @@ bool occ_run(VkCommandBuffer cmd, Bound& b, const Push& base, uint32_t flags) {
 }
 
 bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
+  history_resolve();
+  if (!g_stats_lease[host->frame_index() % kStatsRing].reusable()) {
+    static bool warned = false;
+    if (!warned) { warned = true; host->log("gi: counter slot still owned; skipping update"); }
+    return false;
+  }
+  const uint64_t recording = host->recording_index(cmd);
+  if (!recording || (g_history.owner && g_history.owner != recording)) {
+    static bool warned = false;
+    if (!warned) { warned = true; host->log("gi: history producer is unsubmitted; skipping this recording"); }
+    return false;
+  }
+  s.recording = recording;
   initialize_hair_origin();
   if(!g_hair_origin_cap && host->cfg_int("rt_hair_physical_origin",0) && !g_hair_origin_warned){g_hair_origin_warned=true;host->log("[hair origin] enable rejected: restart with rt_hair_physical_origin=1 and rt_native_hair=1 to reserve resources");}
   g_hair_origin_frame=s.hair_physical_origin=g_hair_origin_cap && host->cfg_int("rt_hair_physical_origin",0)!=0 && host->cfg_int("rt_origin",1)!=0;
@@ -2985,6 +3027,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
             refresh(g_ao_apply, "gi/gi_ao_apply.hlsl") & refresh(g_composite, "gi/gi_composite.hlsl") &
             refresh(g_contact, "gi/gi_contact.hlsl");
   if (!ok) return false;
+  if (!g_history.owner) host->retain_recording(recording);
+  if (!g_history.begin(recording)) return false;
   // Warmup and actual primary dispatch share one Pipe/variant cache slot.
   // Select once so identity/epoch preparation cannot replace it with base
   // every frame and force two pipeline creations at an unchanged generation.
@@ -2996,7 +3040,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     refresh(g_pan_primary, primary_shader, g_rt_layout);
     if (g_ls_layout) refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout);
   }
-  if (!g_images_ready) {
+  if (!g_history.ready) {
     for (Bg3Image* im : all_images)
       image_layout(cmd, im->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                    VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -3009,7 +3053,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
       host->vk->CmdClearColorImage(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_GENERAL,&invalid,1,&range);
     }
     memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
-    g_images_ready = true;
+    g_history.ready = true;
   }
   timing_init();
   timing_collect();
@@ -3387,7 +3431,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     ls_timestamp(cmd, 0);   // the timing covers the join pass and the shadow pass
     // Per-light data: the join pass writes one record per light array slot.
-    g_lsl_ok = lsl_begin(&g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);
+    g_lsl_ok = lsl_begin(cmd, &g_lsl) && refresh(g_ls_match, "gi/rt_local_shadows_match.hlsl", g_ls_layout);
     if (g_lsl_ok) {
       if (g_lsl.needs_init) {
         image_layout(cmd, g_lsl.slots_image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
@@ -3604,7 +3648,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   }
   if (s.pan) {
     Bg3Binding im{};
-    im.image = g_hist[g_parity ^ 1].image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    im.image = g_hist[g_history.parity ^ 1].image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_hw; im.height = g_hh;
     if (s.gi) host->pan_capture(cmd, "gi", &im);
   }
@@ -3662,7 +3706,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   g_slot = (g_slot + 1) % kRing;
   // The SSS pass samples the diffuse buffer in its fragment shader.
   memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | kCS);
-  if (s.gi) g_parity ^= 1;
+  if (s.gi) g_history.parity ^= 1;
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   if (!g_logged) {
     g_logged = true;
@@ -3696,6 +3740,7 @@ void flush(VkCommandBuffer cmd) {
   if (it == g_pending.end()) return;
   Snapshot s = it->second;
   g_pending.erase(it);
+  if (s.recording != host->recording_index(cmd)) return;
   run_post(cmd, s);
 }
 
@@ -3708,6 +3753,11 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
     return;
   describe(cmd, d);
   std::lock_guard<std::mutex> lock(g_mu);
+  history_resolve();
+  for (auto it = g_pending.begin(); it != g_pending.end();) {
+    if (it->second.recording != host->recording_index(it->first)) it = g_pending.erase(it);
+    else ++it;
+  }
   uint64_t f = host->frame_index();
   const bool validation=host->cfg_int("ls_native_direct_validate",0)!=0;
   const int validation_view=host->cfg_int("ls_debug",0);
@@ -3909,6 +3959,7 @@ void gi_release() {
   g_occ_win = occ::OccWindow{};
   g_occ_logged = false;
   std::memset(g_occ_frame, 0, sizeof g_occ_frame);
+  for (auto& lease : g_occ_lease) lease.clear();
   host->defer_destroy(BG3_DEFER_SAMPLER, (uint64_t)g_linear_clamp);
   g_linear_clamp = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_sun_pool);   // frees the sets
@@ -3921,6 +3972,7 @@ void gi_release() {
   g_stats_buf = VK_NULL_HANDLE;
   g_stats_mem = VK_NULL_HANDLE;
   g_stats_map = nullptr;
+  for (auto& lease : g_stats_lease) lease.clear();
   std::memset(g_stats_frame, 0, sizeof g_stats_frame);
   defer_layout_destroy(uint64_t(g_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_set_layout);

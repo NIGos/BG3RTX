@@ -42,6 +42,7 @@ class RecordingLifecycle(unittest.TestCase):
             self.assertIn("if (r == VK_SUCCESS) {", code)
             self.assertGreater(code.index("alpha_submit_recordings(cmds)"), code.index("VkResult r ="))
             self.assertGreater(code.index("post_submit_recordings(cmds)"), code.index("if (r == VK_SUCCESS) {"))
+            self.assertGreater(code.index("core_submit_recordings(queue, cmds)"), code.index("if (r == VK_SUCCESS) {"))
             self.assertGreater(code.index("sl_note_submit(cmds)"), code.index("VkResult r ="))
         self.assertEqual(source.count("alpha_submit_recordings(cmds)"), 2)
 
@@ -61,6 +62,15 @@ class RecordingLifecycle(unittest.TestCase):
         self.assertIn("life_before_destroy", allocator)
         self.assertIn("g_set_pages.push_back", allocator)
         self.assertIn("life_note(cmd", allocator)
+
+    def test_core_queries_share_exact_post_discard_lifecycle(self):
+        self.assertIn("core_discard_recording(recording)", body("layer/cmd.cpp", "post_discard_recording"))
+        code = body("layer/cmd.cpp", "core_submit_recordings")
+        self.assertIn("s->post_secondaries", code)
+        self.assertIn("core_submit_recording(recording, queue, frame, seq)", code)
+        host = body("layer/hotreload.cpp", "core_init")
+        for name in ("completed_frame", "recording_index", "retain_recording", "release_recording", "recording_state"):
+            self.assertIn("g_host." + name + " =", host)
 
     def test_guides_carry_transition_in_every_recording(self):
         init = body("layer/ngx.cpp", "guides_init_barrier")

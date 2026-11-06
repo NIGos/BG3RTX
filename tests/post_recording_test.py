@@ -24,6 +24,21 @@ class PostRecording(unittest.TestCase):
             result = subprocess.run([str(path / "test.exe")], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_core_retained_recording_completion(self):
+        compiler = shutil.which("cl.exe")
+        self.assertIsNotNone(compiler, "run scripts/build.ps1 -Test")
+        code = (ROOT / "layer/cmd.cpp").read_text()
+        start = code.index("namespace {", code.index("// Retained only for core consumers"))
+        end = code.index("static void post_discard_recording", start)
+        source = CORE_FIXTURE + code[start:end] + CORE_MAIN
+        with tempfile.TemporaryDirectory(prefix="core-recording-") as temp:
+            path = Path(temp)
+            (path / "test.cpp").write_text(source)
+            result = subprocess.run([compiler, "/nologo", "/EHsc", "/std:c++20", "/MT", "test.cpp", "/Fe:test.exe"], cwd=path, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(path / "test.exe")], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_real_temporal_record_submit_discard_sequence(self):
         compiler = shutil.which("cl.exe")
         self.assertIsNotNone(compiler, "run scripts/build.ps1 -Test")
@@ -170,6 +185,61 @@ int main() {
   return 0;
 }
 '''
+
+
+
+CORE_FIXTURE = r"""
+#include <cstdint>
+#include <vector>
+#include <mutex>
+#include <unordered_map>
+#include <algorithm>
+using VkQueue = uint64_t; using VkCommandBuffer = uint64_t;
+enum { BG3_RECORDING_EXECUTABLE=1, BG3_RECORDING_SUBMITTED=2, BG3_RECORDING_COMPLETE=4 };
+struct Bg3RecordingState { uint32_t flags; uint64_t completion_frame; };
+uint64_t frame=10, seq=1, idle=0;
+std::unordered_map<uint64_t,uint64_t> done;
+bool life_recording_complete(VkQueue queue,uint64_t f,uint64_t s) { return s<=idle || f<done[queue]; }
+uint64_t frame_index() { return frame; }
+uint64_t life_idle_begin() { return seq; }
+struct CmdState { uint64_t recording=0; std::vector<uint64_t> post_secondaries; };
+std::unordered_map<VkCommandBuffer,CmdState> states;
+CmdState* cmd_state(VkCommandBuffer cmd) { auto i=states.find(cmd);return i==states.end()?nullptr:&i->second; }
+"""
+CORE_MAIN = r"""
+int main() {
+  if(core_recording_state(999).flags)return 1;
+  states[1]={100,{101}};
+  core_retain_recording(100);core_retain_recording(100);core_retain_recording(101);
+  if(core_recording_state(100).flags!=5)return 2;
+  core_submit_recordings(7,{1});
+  if(core_recording_state(100).flags!=3 || core_recording_state(101).flags!=3)return 3;
+  if(core_recording_state(100).completion_frame!=11)return 4;
+  done[8]=1000; // Another queue's progress cannot prove completion.
+  if(core_recording_state(100).flags&4)return 5;
+  done[7]=10;if(core_recording_state(100).flags&4)return 6;
+  done[7]=11;if(core_recording_state(100).flags!=7)return 7;
+  ++seq;frame=12;core_submit_recordings(7,{1}); // Executable resubmission renews the lease.
+  if(core_recording_state(100).flags!=3)return 8;
+  core_discard_recording(100);core_discard_recording(101);
+  core_release_recording(100);
+  if(core_recording_state(100).flags!=2)return 9; // Second consumer still owns the metadata.
+  done[7]=13;
+  if(core_recording_state(100).flags!=6)return 10;
+  core_release_recording(100);core_release_recording(101);
+  if(!g_core_recordings.empty())return 11;
+  core_retain_recording(102);core_discard_recording(102);
+  if(core_recording_state(102).flags!=4)return 12;
+  core_release_recording(102);
+  states[1]={103,{}};core_retain_recording(103);++seq;
+  core_submit_recordings(9,{1});core_discard_recording(103);
+  if(core_recording_state(103).flags!=2)return 13;
+  idle=seq;if(core_recording_state(103).flags!=6)return 14;
+  core_release_recording(103);
+  if(!g_core_recordings.empty())return 15;
+  return 0;
+}
+"""
 
 if __name__ == "__main__":
     unittest.main()

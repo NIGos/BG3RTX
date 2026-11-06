@@ -38,12 +38,12 @@ Status values: open, fixing (branch), fixed (commit), removed, deferred (reason)
 | C4 | core/gi.cpp:2290-2347 | P0 | Sun descriptor set reuse by frame age | not confirmed for ordered submitted frames | core-contract | not confirmed: scene retirement bounds ordered pending RT use to 8 scenes x 2 handout frames x 2 sun sets = 32 sets; ring is 32. Delayed/unsubmitted recordings remain outside that proof and need submission ownership. See completion audit below. |
 | C5 | core/gi.cpp:739,747,750 | P1 | Layout leak on failed pipeline-layout creation | confirmed | cons-core | fixed (bundle35) |
 | C6 | core/gi.cpp:787,790,1216 | P1 | Reflection layout change drops cached pipeline variants (leak) | confirmed | cons-core | fixed (bundle35) |
-| C7 | core/ls_lights.cpp:192; sun_trust.cpp:138; water.cpp:394,694,1329 | P1 | Mapped rings read/overwritten without completion | confirmed contract gap; live overlap unmeasured | core-contract | deferred: eight-slot wrap permits CPU reads during GPU writes and CPU uploads during GPU reads; water compose GPU reuse is ordered, but its CPU readback is not. Needs ABI completion/recording ownership; stopped before ABI change. |
-| C8 | core/gi.cpp:3012,3665; layer/cmd.cpp:528-533 | P1 | GI init/parity committed at recording | confirmed discard hazard; ordinary pending reuse not a bug | core-contract | deferred: GPU barriers order submitted history accesses; completion is not required for GPU-only ping-pong. Failed EndCommandBuffer or reset discards initialization/history while CPU state stays advanced. Needs submit/discard callbacks, not a larger ring or completed-frame index alone. |
+| C7 | core/ls_lights.cpp:192; sun_trust.cpp:138; water.cpp:394,694,1329 | P1 | Mapped rings read/overwritten without completion | confirmed contract gap; live overlap unmeasured | core-contract2 | READY_FOR_LIVE (core-contract2, ABI 28, build -Test 199/199, shader identity 218/218): mapped upload/readback slots retain exact consumers; reuse/read requires recording discard and every submission completed on its queue. Busy update skipped with one warning; CPU 2/3-frame, FG, discard and stall models; Ultra smoke pending. |
+| C8 | core/gi.cpp:3012,3665; layer/cmd.cpp:528-533 | P1 | GI init/parity committed at recording | confirmed discard hazard; ordinary pending reuse not a bug | core-contract2 | READY_FOR_LIVE (core-contract2, ABI 28, build -Test 199/199, shader identity 218/218): GI init/parity are speculative per exact recording; successful submission commits, discard rolls back. Another pending producer is refused; stale snapshots rejected. CPU discard/history tests; Ultra smoke pending. |
 | C9 | core/water.cpp:1673,1683 | P1 | Water state read before the mutex | suspected | cons-core | fixed (bundle35) |
 | C10 | shaders/gi/gi_common.hlsli:166 | P1 | Reprojection converts before the finite check; off-screen falls back to current pixel | suspected | cons-core | fixed (bundle37, cons-shaders) |
 | C11 | core/water.cpp:1530,392,1072 | P2 | Rejected water hit layouts and pipelines prepared with the key off | confirmed | cons-core | fixed (bundle35) |
-| C12 | core/gi.cpp:1678,2927 | P2 | Mapped counters consumed by frame age | confirmed contract gap; live overlap unmeasured | core-contract | deferred: modulo-8 stats/occlusion reads use age, not completion; GPU fills/copies are ordered but CPU reads can race pending writes. Needs ABI completion/recording ownership; stopped before ABI change. |
+| C12 | core/gi.cpp:1678,2927 | P2 | Mapped counters consumed by frame age | confirmed contract gap; live overlap unmeasured | core-contract2 | READY_FOR_LIVE (core-contract2, ABI 28, build -Test 199/199, shader identity 218/218): GI stats and occlusion readbacks require submitted, discarded, GPU-completed consumer recordings; busy slots are preserved and update skipped. CPU completion tests; Ultra smoke pending. |
 | C13 | common/experimental_ab.h:13 | P2 | F10 cannot target Fresnel, the only release Experimental option | confirmed | cons-product | not a bug: F10 targets live options only; Fresnel needs a restart; the UI now says so (bundle37, cons-ui) |
 | P1 | common/settings.h:1038,1250 | P1 | Rejected water shading/cost, alpha spill and pak publication stay selectable via "Show experimental options" | confirmed | cons-product | fixed (bundle35) |
 | P2 | tools/launcher/launch.cpp:244 | P0 | GetEnvironmentStringsW null dereferenced | confirmed | cons-product | fixed (bundle35) |
@@ -95,6 +95,18 @@ Status values: open, fixing (branch), fixed (commit), removed, deferred (reason)
   recording generation plus submit/discard ownership; a completed-frame scalar alone cannot repair it.
 - **Stopped before ABI changes**, per task instruction. C7/C12 need completion tied to the
   consuming recording; C8 needs lifecycle callbacks. No runtime/shader/settings changes or live evidence claimed.
+
+## Core completion implementation (core-contract2, 2026-11-06)
+
+- ABI **28** appends present-queue completion and retained exact-recording queries; both DLLs rebuilt together.
+- Reuses layer-submit2 submit/discard paths and secondary recording snapshots. Completion uses the submitting
+  queue's existing present fences (submit frame + 1), or a covering device-idle wait; unknown queries fail closed.
+- C7/C12 mapped slots remain immutable until every executable consumer is discarded and all its submissions
+  complete. A busy selected slot skips the update and logs once. Readback additionally requires submission.
+- C8 keeps GI initialization/parity speculative for its recording, publishes on submission, rolls back on discard,
+  and rejects stale pending snapshots. Ordered GPU-only history still needs no CPU completion wait.
+- C4 remains as documented above: not confirmed. No shader/settings changes, no new requests, no live preparation.
+- Offline results and pending coordinator Ultra smoke: [core-contract2](progress/core-contract2.md).
 
 ## 2. Debt
 
