@@ -1,0 +1,110 @@
+{
+ "name": "fx1-s8-fgx3-metering0",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "repeat": 1,
+ "timeout": 600.0,
+ "max_minutes": 10,
+ "window_mode": "visible_unfocused_fg",
+ "live_batch": "fgx3",
+ "stop_on_dump": false,
+ "fail_fast": true,
+ "purpose": "FG x3 pacing A/B (user report: x3 stutters, fps not proportional). One launch, fg_present_metering=0 (cold). Rotate windows x2/x3 with fg_destroy_wait_exact 0/1 ABBA. Observables: [pace] p99/max rendered frame time, [sl] FG cadence SDK presented/rendered and destroy-wait ms, DLSS-G displayed/rendered.",
+ "set": "preset=ultra,experimental_options=1,dlss5_nr=1,dlss5_nr_bypass=0,fg=2,fg_destroy_wait_exact=0,fg_present_metering=0,fg_game_ngx=2,rr=1,rr_post=1,rr_show=0,headless=0,fps_cap=0,reflex=1,detailed_logging=1,rt_stats_period_frames=60,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_scene_wait=1,fg_state_every=30,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rt_stats=0,ls_stats=0,rf_stats=0,rt_primary_check=0,ls_check=0,dump_images=0,dump_raw=0,dump_png_width=1280,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/fg_x3/plans/fx1-s8-fgx3-metering0.json"
+ ],
+ "patterns": [
+  "\\[pace\\]",
+  "\\[sl\\]",
+  "\\[dlss5\\] gpu NR",
+  "\\[dlss5\\] NR (created|skipped|evaluate)",
+  "\\[ngx\\] RR create",
+  "\\[auto\\]",
+  "\\[cfg\\] settings read",
+  "\\[crash\\]",
+  "FAILED",
+  "gi: GPU cost",
+  "rt passes: GPU cost",
+  "\\[watch\\]",
+  "gpu:"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[water\\] water geometry UNAVAILABLE",
+  "\\[water\\] build submission failed",
+  "\\[water\\] reflections unavailable",
+  "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+  "\\[water\\] compose UNAVAILABLE",
+  "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+  "\\[water\\] compose: variant pipeline creation failed",
+  "\\[water\\] compose: a water pipeline blends",
+  "\\[rrpost\\] exposure hold REFUSED",
+  "\\[cascade\\] could not allocate",
+  "skipped: no variant for",
+  "set 1 [1-9]\\d* out-of-range reads skipped",
+  "\\[hit material pool basis\\] over kBasisCapBytes",
+  "\\[dlss5\\] NR (?:disabled|failed|failure)",
+  "pipeline creation failed",
+  "PNG write failed",
+  "capture writer backlog"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[dlss5\\] NR created",
+  "\\[sl\\] present metering device: requested 0 ",
+  "\\[pace\\] rendered frame time over \\d+ frames",
+  "\\[sl\\] FG cadence frame \\d+: requested 3 host 3 fg_destroy_wait_exact=1",
+  "\\[sl\\] FG cadence frame \\d+: requested 2 host 2 fg_destroy_wait_exact=0",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3"
+ ],
+ "expect_runner": [
+  "^Run ended: done",
+  "\\[motion-plan\\] complete phases=9\b"
+ ],
+ "expect_every": [
+  {
+   "name": "pace line in every window",
+   "select": "\\[pace\\] rendered frame time over",
+   "match": "rendered frame time over",
+   "min": 1,
+   "windows": [
+    "x2-std",
+    "x3-std",
+    "x3-exact",
+    "x2-exact",
+    "x3-exact-b",
+    "x3-std-b"
+   ],
+   "period_frames": 60
+  },
+  {
+   "name": "FG cadence line in every window",
+   "select": "\\[sl\\] FG cadence frame",
+   "match": "FG cadence frame",
+   "min": 1,
+   "windows": [
+    "x2-std",
+    "x3-std",
+    "x3-exact",
+    "x2-exact",
+    "x3-exact-b",
+    "x3-std-b"
+   ],
+   "period_frames": 60
+  }
+ ],
+ "estimated_phase_seconds": 174
+}

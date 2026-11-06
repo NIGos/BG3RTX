@@ -1,0 +1,244 @@
+[
+ {
+  "label": "warmup",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 30.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 30.0,
+  "motion_end": 30.0,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "fg=2,fg_destroy_wait_exact=0,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[auto\\] scene ready",
+   "\\[shaders\\] cache: prefetched ",
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 180.0,
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ },
+ {
+  "label": "warm-x3-exact",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6.0,
+  "motion_end": 6.0,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "fg=3,fg_destroy_wait_exact=1,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 30.0
+ },
+ {
+  "label": "warm-x2-std",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6.0,
+  "motion_end": 6.0,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "fg=2,fg_destroy_wait_exact=0,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 30.0
+ },
+ {
+  "label": "x2-std",
+  "kind": "rotate",
+  "speed": "slow",
+  "seconds": 22.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 22.0,
+  "pixels_per_second": 60,
+  "direction": 1,
+  "frames": 120,
+  "settle_frames": 30,
+  "stats_reset": true,
+  "wait_log_timeout": 30.0,
+  "wait_stats": [
+   "\\[pace\\] rendered frame time over",
+   "\\[sl\\] FG cadence frame"
+  ],
+  "set": "fg=2,fg_destroy_wait_exact=0,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ },
+ {
+  "label": "x3-std",
+  "kind": "rotate",
+  "speed": "slow",
+  "seconds": 22.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 22.0,
+  "pixels_per_second": 60,
+  "direction": -1,
+  "frames": 120,
+  "settle_frames": 30,
+  "stats_reset": true,
+  "wait_log_timeout": 30.0,
+  "wait_stats": [
+   "\\[pace\\] rendered frame time over",
+   "\\[sl\\] FG cadence frame"
+  ],
+  "set": "fg=3,fg_destroy_wait_exact=0,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ },
+ {
+  "label": "x3-exact",
+  "kind": "rotate",
+  "speed": "slow",
+  "seconds": 22.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 22.0,
+  "pixels_per_second": 60,
+  "direction": 1,
+  "frames": 120,
+  "settle_frames": 30,
+  "stats_reset": true,
+  "wait_log_timeout": 30.0,
+  "wait_stats": [
+   "\\[pace\\] rendered frame time over",
+   "\\[sl\\] FG cadence frame"
+  ],
+  "set": "fg=3,fg_destroy_wait_exact=1,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ },
+ {
+  "label": "x2-exact",
+  "kind": "rotate",
+  "speed": "slow",
+  "seconds": 22.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 22.0,
+  "pixels_per_second": 60,
+  "direction": -1,
+  "frames": 120,
+  "settle_frames": 30,
+  "stats_reset": true,
+  "wait_log_timeout": 30.0,
+  "wait_stats": [
+   "\\[pace\\] rendered frame time over",
+   "\\[sl\\] FG cadence frame"
+  ],
+  "set": "fg=2,fg_destroy_wait_exact=1,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ },
+ {
+  "label": "x3-exact-b",
+  "kind": "rotate",
+  "speed": "slow",
+  "seconds": 22.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 22.0,
+  "pixels_per_second": 60,
+  "direction": 1,
+  "frames": 120,
+  "settle_frames": 30,
+  "stats_reset": true,
+  "wait_log_timeout": 30.0,
+  "wait_stats": [
+   "\\[pace\\] rendered frame time over",
+   "\\[sl\\] FG cadence frame"
+  ],
+  "set": "fg=3,fg_destroy_wait_exact=1,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ },
+ {
+  "label": "x3-std-b",
+  "kind": "rotate",
+  "speed": "slow",
+  "seconds": 22.0,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 1,
+  "motion_end": 22.0,
+  "pixels_per_second": 60,
+  "direction": -1,
+  "frames": 120,
+  "settle_frames": 30,
+  "stats_reset": true,
+  "wait_log_timeout": 30.0,
+  "wait_stats": [
+   "\\[pace\\] rendered frame time over",
+   "\\[sl\\] FG cadence frame"
+  ],
+  "set": "fg=3,fg_destroy_wait_exact=0,dlss5_nr_bypass=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ }
+]

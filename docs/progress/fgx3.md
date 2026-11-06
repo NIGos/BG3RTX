@@ -32,8 +32,8 @@
   Camera-cut/reset, real simulation markers and x3 input/pacing QA remain gaps.
 - Validation: build.ps1 -Test PASS 206/206 (CTest 138.61 s); settings 4352/4352.
   Shader request delta 0; ABI unchanged. No game, queue writes or push.
-- One later authorized Ultra + NR check: cold metering On, matched x2/x3/x2
-  and x3 exact Off/On/Off; cold Off comparison still needed for metering benefit;
-  require blocking 0 On, pending drain, valid lifetime/tags/state, and improvement
-  in native p99/max plus display-change cadence beyond repeated-Off variation.
-  Report CPU/GPU cost; SDK/proxy ratios alone do not prove smoothness.
+- Live 2026-11-06 (fx1/fx2, S8 Ultra + NR 6.5 ms, unfocused run, rendered capped 30 fps,
+  rotate windows): x3 exact 3.00, no SDK pauses, p99 35.8-40.3 ms vs x2 36.2-38.2 ms; 0 destroy
+  waits in every window, so fg_destroy_wait_exact is unmeasured (kept off). Metering on: proxy
+  present CPU max 24-26 ms in 3 windows (off: 0.4-3.8 ms) and 1-7 non-focus pauses in a static
+  run: REJECTED. User's x3 stutter not reproduced; focus pauses (launcher) remain the proven cause.
