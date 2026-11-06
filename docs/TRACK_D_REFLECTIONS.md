@@ -1005,6 +1005,31 @@ See docs/progress/rf-ls-regs.md for gates and tools/frame_replay.md for reproduc
 
 ## Default Ultra RF replay (rf-replay, READY_FOR_LIVE, 2026-11-06)
 
+Real inn pack validation (rf-opt, 2026-11-06): frame 1981 fails specular
+agreement in 1,270,225 bytes / 420,526 pixels; diffuse, R16 hit distance and
+all raw counters are exact, guards 0. Repeats and pipeline-statistics OFF
+agree exactly. The SPIR-V matches the capture's runtime cache. Baseline uses
+128 registers and 0 shared bytes. Its roughly 0.79 ms standalone replay is
+not the approximately 2.2 ms live pass cost. Profiling and `rf_fast` are
+blocked by this gate; no optimization is qualified. Sampler-state capture
+was incomplete and is now extended, but that omission is not the proven
+cause of this pack's difference. Strict replay validation is
+`--require-live-equal`; see `docs/progress/rf-opt.md` for receipts.
+
+Follow-up audit: RF phase 1, its one dispatch and phase 2 are consecutive in
+`rf_dispatch`; no LS, GI composite, rrpost or water dispatch intervenes. The
+manifest restores raw `img6.bin` and compares distinct `s0b7.live`, both format
+122, with disjoint staging ranges. All 2,234,064 depth-valid no-hit pixels
+round-trip exactly; changed hit channels differ by up to hundreds of packed
+codes, ruling against a one-code R11G11B10 rounding explanation. Captured view
+formats, including sRGB/UNORM distinctions, are recreated rather than decoded.
+The actual mismatch cause remains unproven. Prepared recapture
+`tools/live_batches/rf_pack_state1` requires a fixed-writer witness (3/3 raw
+initial/reference pairs, 20/20 STATE1 samplers), with a second statistics-on
+pack to separate probe/initial-specular counters from final writeback. Host-only
+UBOs remain record-time CPU snapshots and are counted explicitly. Stop for
+that new evidence; no candidate or cost qualification from the old pack.
+
 The default `rt_reflections` request now has a dedicated two-phase replay
 contract, separate from optional hit shading. Diagnostic `replay_pack_pass=1`
 with a positive `replay_pack` serial selects it; both default to 0. ABI remains 27,

@@ -78,6 +78,7 @@ class MergeScopeTests(unittest.TestCase):
         regex = shader_test_regex(ROOT)
         for name in ('shader_variant_test', 'variant_matrix_test', 'host_atomics_lint_test',
                      'shader_identity_test', 'shader_cache_test', 'water_surface_shader_test',
+                     'frame_replay_rf_test',
                      'native_hit_gi_bindings_test', 'native_hit_rf_bindings_test'):
             self.assertRegex(name, regex)
         self.assertIsNone(re.fullmatch(regex, 'queue_gates_test'))
