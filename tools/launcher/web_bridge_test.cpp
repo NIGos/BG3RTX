@@ -78,6 +78,16 @@ int main(int argc,char** argv){
     kb.handle(R"({"type":"shortcut","id":"hotkey_rt_toggle","value":"None"})");check(ks.shortcuts[0]=="None");
   }
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
+  {
+    launcher::State broken;broken.base={{"dev","0"},{"hotkey_rt_toggle","broken"},{"hotkey_dlss5","also broken"}};
+    broken.values=st::preset_values(st::kHigh);
+    launcher::web::Bridge repair(broken);
+    repair.handle(R"({"type":"resetShortcut","id":"hotkey_rt_toggle"})");
+    check(broken.shortcuts[0]=="Ctrl+Shift+F9");
+    check(repair.handle(R"({"type":"save"})").find("Use Ctrl, Shift or Alt")!=std::string::npos);
+    repair.handle(R"({"type":"resetShortcut","id":"hotkey_dlss5"})");
+    check(broken.shortcuts[1]=="Ctrl+Shift+F8");
+  }
   check(launcher::web::Bridge::is_export_intent("{\"type\":\"exportReport\"}"));
   check(!launcher::web::Bridge::is_export_intent("{\"type\":\"prepareReport\",\"issue\":\"exportReport\"}"));
   check(!launcher::web::Bridge::is_collection_intent("{\"type\":\"exportReport\",\"issue\":\"prepareReport\"}"));

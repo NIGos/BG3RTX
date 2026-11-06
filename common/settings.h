@@ -1072,7 +1072,8 @@ inline std::vector<int> preset_values(int p) {
 
 // ---- ini parsing and layering ----
 
-// key=value lines, '#' starts a comment (same rules the layer always had).
+// key=value lines; '#' starts a comment outside a double-quoted value.
+// Backslashes stay literal so quoted Windows runtime paths round-trip unchanged.
 inline Map parse_ini(const std::string& text) {
   Map out;
   size_t pos = 0;
@@ -1080,6 +1081,16 @@ inline Map parse_ini(const std::string& text) {
     size_t nl = text.find('\n', pos);
     std::string s = text.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
     pos = nl == std::string::npos ? text.size() : nl + 1;
+    size_t quoted_eq = s.find('=');
+    if (quoted_eq != std::string::npos) {
+      std::string key = trim(s.substr(0, quoted_eq));
+      std::string value = trim(s.substr(quoted_eq + 1));
+      size_t end = value.size() > 1 && value.front() == '"' ? value.find('"', 1) : std::string::npos;
+      if (!key.empty() && key.find('#') == std::string::npos && end != std::string::npos) {
+        std::string rest = trim(value.substr(end + 1));
+        if (rest.empty() || rest.front() == '#') { out[key] = value.substr(1, end - 1); continue; }
+      }
+    }
     size_t hash = s.find('#');
     if (hash != std::string::npos) s.resize(hash);
     size_t eq = s.find('=');
@@ -1527,7 +1538,8 @@ inline std::string render_user_ini(const std::string& existing, int base_preset,
   if (!overrides.empty()) out += "\n# Changed from the preset\n" + overrides;
   if (!forced.empty()) {
     out += "\n# Hardware limits (set by the launcher)\n";
-    for (auto& kv : forced) out += kv.first + "=" + kv.second + "\n";
+    for (auto& kv : forced) out += kv.first + "=" +
+      (kv.second.find('#') == std::string::npos ? kv.second : "\"" + kv.second + "\"") + "\n";
   }
   if (!kept.empty()) out += "\n# Other keys (kept as written)\n" + kept;
   return out;
