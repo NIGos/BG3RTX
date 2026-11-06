@@ -513,11 +513,11 @@ inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_
 // (rt_bvh_split=1, TRACK_D_RT.md 11) rt_rebuild_frames only paces the per-draw
 // BLAS of the captured (skinned, wind, per-draw matrix) draws, staggered per draw;
 // static meshes are built once for trace speed and never refit.
-inline constexpr KV kPresetExtra[kPresetCount][4] = {
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
-  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}},
-  {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}}};
+inline constexpr KV kPresetExtra[kPresetCount][5] = {
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}, {"rf_compact_probe_state", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}, {"rf_compact_probe_state", "1"}},
+  {{"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}, {"rf_compact_probe_state", "1"}},
+  {{"rt_rebuild_frames", "600"}, {"rt_scene_compact_holds", "1"}, {"rt_compact_hit_state", "1"}, {"gi_far_roof_early", "1"}, {"rf_compact_probe_state", "1"}}};
 
 // ---- defaults: one source (docs/SETTINGS_DESIGN.md "Defaults: one source") ----
 // kDefaults is every key bg3rtx.ini sets, with its value; kReleaseDefaults the developer
@@ -717,7 +717,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt", "1"},
     {"gi_rt_radius", "1.0"},
     {"rt_compact_hit_state", "1"},
-    {"rf_compact_probe_state", "0"},
+    {"rf_compact_probe_state", "1"},
     {"gi_rt_depth_k", "1.0"},
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
@@ -1215,6 +1215,7 @@ inline void enforce_release_policy(Map& m) {
   m["rt_scene_compact_holds"] = "1";
   m["rt_compact_hit_state"] = "1";
   m["gi_far_roof_early"] = "1";
+  m["rf_compact_probe_state"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
        "sharc",
        "rt_hair_receiver_guard"}) m[key] = "0";

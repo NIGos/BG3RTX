@@ -1240,7 +1240,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
   if (std::strncmp(file, "gi/rt_reflections", 17) == 0)
     // Every RF request contains the same independent receiver-probe block.
-    specs.add(sv::kSpecIdRfCompactProbeState, host->cfg_int("rf_compact_probe_state", 0) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdRfCompactProbeState, host->cfg_int("rf_compact_probe_state", 1) != 0 ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);
   if (hit_family) {

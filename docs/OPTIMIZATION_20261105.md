@@ -4,6 +4,7 @@
 
 | Candidate | Verdict | Measured result / reason |
 | --- | --- | --- |
+| `rf_compact_probe_state` (1031) | Qualified, always on | Default Ultra S8 `opt-compact-rf-s8.1.102848` VALID SAVING: reflections OFF/ON/OFF/ON 1.200/1.034/1.224/1.066 ms (OFF spread 0.023). Float energy within OFF band on all channels; luminance -0.00025/-0.00018, band 0.0247. Inn live INVALID (readiness); offline paired -0.123/-0.129 ms. Registers 128 -> 96; replay differs only in the 63/9 projection-unstable pixels also differing OFF/OFF. |
 | `rt_scene_compact_holds` | Qualified, default 1 | High inn scene build: -0.87 ms GPU; OFF spread 0.075 ms; float energy within OFF spread. |
 | `cpu_opt1` | Qualified, default 1 | Ultra inn hook bodies: -0.13 ms/frame CPU; OFF spread 0.016 ms. |
 | `cpu_opt2` | Qualified, default 1 | Ultra inn hook bodies: -0.30 ms/frame CPU; OFF spread 0.088 ms. |
