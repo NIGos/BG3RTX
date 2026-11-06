@@ -538,3 +538,20 @@ No live FG/HDR or recreation qualification is claimed.
 4. **Track A.** RR should go through the shared NGX instance by hooking the same `NVSDK_NGX_VULKAN_*` imports that `streamline.cpp` already patches, and swap SR for DLSS-D (RR) there.
 5. **Dynamic MFG.** Streamline does not support it on Vulkan yet (driver says "missing components"). Revisit when it does.
 6. **Clean up.** Drop the `sl_log_barriers` diagnostics once they are no longer useful. Consider `slFreeResources` when fg is set to 0 at runtime.
+
+## FG x3 pacing review - 2026-11-06 (offline only)
+
+See [the session analysis](evidence/fgx3-analysis.md) for the exact log timestamps,
+code pointers and ranked proven/plausible causes. Most SDK interpolation pauses
+explicitly follow focus loss; SyncInterval 0/1 accompanies the state transition
+and does not establish its cause. Vulkan FG VSync is unsupported by this SDK.
+The existing rendered-frame Reflex ceiling is correct for static MFG.
+
+The present path now samples DLSSGState once per app present and reuses it for
+input retirement and reporting. SDK counts accumulate over reporting windows;
+they are not inferred by multiplying batched present calls. Failed tag/constants
+publication invalidates FG readiness. These repair code defects; the supplied
+session does not establish either defect as the cause of the reported stutter.
+Release cadence summaries include SDK/proxy ratios, pause/focus log notices and
+CPU destroy-wait total/max ms. Required consumption fences remain intact.
+No new settings, shader variants or ABI changes. Runtime qualification is pending.

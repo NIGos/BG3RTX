@@ -298,3 +298,13 @@ and `.scratch/dlss5-res-recreate-converted48.log`. NR median 7.118 ms in the
 `bg3rtx.prev.log` could not be independently read (access denied).
 Full `scripts/build.ps1 -Test`: 189/189 pass (CTest 266.03 s, build 21 s),
 including the expanded CPU recreate-decision test. Shader manifest delta 0.
+
+## 8. FG x3 session correlation (2026-11-06, offline only)
+
+[Session evidence](evidence/fgx3-analysis.md) finds no consistent NR-skip precursor
+to SDK interpolation pauses. Most pauses explicitly report focus loss. The three
+persistent NR slot allocations do not explain repeated tagged-image destruction:
+FG tags the later RR/post colour and UI, not the provider private images. Destroy
+wait success codes are not timings; the FG cadence summary now measures CPU wait
+cost without weakening input lifetime protection. No NR behaviour change or
+in-game performance claim follows from this log-only investigation.

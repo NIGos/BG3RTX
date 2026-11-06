@@ -26,6 +26,7 @@
 #include "host.h"
 #include "../common/fg_stability.h"
 #include "../common/fg_copy_lease.h"
+#include "../common/fg_present_stats.h"
 #include "recording_init.h"
 #include "../common/fg_extent.h"
 #include "../common/async_capture_queue.h"
@@ -103,7 +104,14 @@ struct Reqs {
   uint32_t gfx_queues = 0, compute_queues = 0, of_queues = 0;
 } g_req;
 
+std::atomic<uint64_t> g_sdk_pauses{0}, g_sdk_focus_pauses{0};
+std::atomic<uint64_t> g_destroy_wait_calls{0}, g_destroy_wait_us{0}, g_destroy_wait_max_us{0};
+
 void sl_logcb(sl::LogType type, const char* msg) {
+  // Count SDK decisions before filtering informational logging. This observes
+  // the SDK policy; it does not override its focus or interpolation decisions.
+  if (strstr(msg, "interpolation state changed from enabled to disabled")) ++g_sdk_pauses;
+  if (strstr(msg, "DLSS-G disabled: window not focused")) ++g_sdk_focus_pauses;
   if (type != sl::LogType::eError && type != sl::LogType::eWarn &&
       !logging::sdk_info_enabled(cfg_int)) return;
   size_t n = strlen(msg);
@@ -1899,7 +1907,7 @@ bool sl_create_swapchain(VkDevice d, const VkSwapchainCreateInfoKHR* ci, const V
   g_sc_format = ci->imageFormat;
   InSl guard;
   *r = g_px.CreateSwapchainKHR(d, ci, a, out);
-  log("[sl] swapchain created through Streamline: %d", *r);
+  log("[sl] swapchain created through Streamline: %d, presentMode %d (Vulkan FG does not support VSync)", *r, int(ci->presentMode));
   return true;
 }
 bool sl_destroy_swapchain(VkDevice d, VkSwapchainKHR sc, const VkAllocationCallbacks* a) {
@@ -2352,7 +2360,8 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
 // Streamline does not keep tagged Vulkan images (or the views it was given)
 // alive: wait until DLSS-G has consumed the last presented frame's inputs (its
 // documented fence), so its queued work never touches a destroyed object.
-static bool wait_inputs_consumed(const char* what, uint64_t handle, bool wait) {
+static bool wait_inputs_consumed(const char* what, uint64_t handle, bool wait,
+                                 VkImage image, uint32_t roles) {
   VkSemaphore fence;
   uint64_t value;
   {
@@ -2365,9 +2374,31 @@ static bool wait_inputs_consumed(const char* what, uint64_t handle, bool wait) {
   wi.semaphoreCount = 1;
   wi.pSemaphores = &fence;
   wi.pValues = &value;
+  LARGE_INTEGER start{}, end{};
+  static const LARGE_INTEGER frequency=[] { LARGE_INTEGER f{}; QueryPerformanceFrequency(&f); return f; }();
+  QueryPerformanceCounter(&start);
   VkResult r = g_wait_semaphores(g_dd->device, &wi, wait ? 1000000000ull : 0);
-  if (wait || r != VK_TIMEOUT) log("[sl] tagged %s %p destroyed while frame generation runs: waited for DLSS-G inputs fence value %llu (%d)", what,
-      (void*)handle, (unsigned long long)value, r);
+  QueryPerformanceCounter(&end);
+  const uint64_t us = uint64_t((end.QuadPart-start.QuadPart)*1000000/frequency.QuadPart);
+  static std::atomic<uint64_t> lifetime_calls{0};
+  const uint64_t call = ++lifetime_calls;
+  ++g_destroy_wait_calls;
+  g_destroy_wait_us.fetch_add(us, std::memory_order_relaxed);
+  uint64_t previous = g_destroy_wait_max_us.load();
+  while (previous < us && !g_destroy_wait_max_us.compare_exchange_weak(previous, us)) {}
+  // Retain faults and a bounded sample, rather than synchronous log IO per view
+  // and image. A successful Vulkan result alone says nothing about wait time.
+  if (r < 0 || call <= 4 || call % 120 == 0) {
+    uint32_t w=0,h=0;
+    { std::shared_lock<std::shared_mutex> lock(tracker().mu);
+      auto it=tracker().images.find(image);
+      if (it!=tracker().images.end()) { w=it->second.ci.extent.width; h=it->second.ci.extent.height; }
+    }
+    log("[sl] tagged %s %p destroyed: image %p extent %ux%u current roles 0x%x; "
+        "DLSS-G inputs fence %llu result %d wait %.3f ms blocking %u (sample %llu)",
+        what,(void*)handle,(void*)image,w,h,roles,(unsigned long long)value,r,
+        double(us)/1000.0,unsigned(wait),(unsigned long long)call);
+  }
   fault_on_result(g_dd, r, "DLSS-G inputs consumption wait");
   return r == VK_SUCCESS || r == VK_ERROR_DEVICE_LOST;
 }
@@ -2376,20 +2407,24 @@ static bool wait_inputs_consumed(const char* what, uint64_t handle, bool wait) {
 // that view, so the wait must happen here already.
 bool sl_note_view_destroyed(VkImageView view, bool wait) {
   if (!g_active || !view) return true;
-  bool current = false;
+  uint32_t roles = 0;
+  VkImage image = VK_NULL_HANDLE;
   {
     std::lock_guard<std::mutex> lock(g_mu);
-    for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui}) current |= i->view == view;
+    const Img* inputs[] = {&g_depth, &g_mvec, &g_hudless, &g_ui};
+    for (uint32_t i=0; i<4; ++i)
+      if (inputs[i]->view == view) { roles |= 1u << i; image=inputs[i]->image; }
   }
+  const bool current = roles != 0;
   bool retired = false;
   if (!current && cfg_int("fg_current_destroy_only",1)) {
     std::shared_lock<std::shared_mutex> lock(tracker().mu);
     auto it=tracker().views.find(view);
-    retired=it!=tracker().views.end() && sl_watched(it->second.image);
+    if (it!=tracker().views.end()) { image=it->second.image; retired=sl_watched(image); }
   }
   // A rotated-out tag can still belong to the last presented GPU frame.
   // Ignoring its stability reset must never skip the consumption fence.
-  return !(current || retired) || wait_inputs_consumed("view", (uint64_t)view, wait);
+  return !(current || retired) || wait_inputs_consumed("view", (uint64_t)view, wait, image, roles);
 }
 
 bool sl_note_image_destroyed(VkImage image, bool wait) {
@@ -2406,7 +2441,7 @@ bool sl_note_image_destroyed(VkImage image, bool wait) {
   // rotation of the same target does not invalidate its live replacement.
   const uint64_t frame = frame_index();
   const bool current_only = cfg_int("fg_current_destroy_only",1) != 0;
-  if ((current_roles || current_only) && !wait_inputs_consumed("image", (uint64_t)image, wait)) return false;
+  if ((current_roles || current_only) && !wait_inputs_consumed("image", (uint64_t)image, wait, image, current_roles)) return false;
   const bool reset = g_fg_stability.destroyed(frame,current_roles,current_only);
   std::lock_guard<std::mutex> lock(g_mu);
   g_last_destroy_event = {frame,image,current_roles,reset};
@@ -2416,6 +2451,9 @@ bool sl_note_image_destroyed(VkImage image, bool wait) {
   g_input_layout.erase(image);
   for (auto& w : g_watch)
     if (w.load() == image) w = VK_NULL_HANDLE;
+  static std::atomic<uint64_t> retired_events{0};
+  const uint64_t retired_event = current_roles || reset ? 0 : ++retired_events;
+  if (current_roles || reset || retired_event <= 4 || retired_event % 120 == 0)
   log("[sl] a tagged image was destroyed; image %p frame %llu current roles 0x%x "
       "(depth=1 MV=2 hudless=4 UI=8), stability reset %u, current-only %u",
       (void*)image,(unsigned long long)frame,current_roles,unsigned(reset),unsigned(current_only));
@@ -2538,6 +2576,8 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
   if (cfg_int("fg_menu_detect", 1)) flags |= uint32_t(sl::DLSSGFlags::eEnableFullscreenMenuDetection);
   // Frame generation only once the inputs have been stable for a while.
   uint64_t stable_n = uint64_t(cfg_int("fg_stable_frames", 30));
+  ready = fg_present_inputs_usable(ready, g_token != nullptr, tagged,
+                                   tag_result == sl::Result::eOk, constants_result == sl::Result::eOk);
   bool stable = g_fg_stability.update(frame,ready,stable_n);
   int want = stable ? fg : 0;
   if (g_sl.DLSSGSetOptions && (want != g_fg_applied || flags != g_flags_applied)) {
@@ -2546,7 +2586,7 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
       if (!input_snapshot[i].image) missing |= 1u << i;
       if ((i==1 || i==3) && frame>input_snapshot[i].seen+3) stale |= 1u << i;
     }
-    const char* reason = fg<2 ? "requested-off" : !g_token ? "no-token" : !ready ? "missing-or-stale-input" :
+    const char* reason = fg<2 ? "requested-off" : !g_token ? "no-token" : tagged && (tag_result!=sl::Result::eOk || constants_result!=sl::Result::eOk) ? "input-api-failure" : !ready ? "missing-or-stale-input" :
                          !stable ? "stability-cooldown" : flags!=g_flags_applied && want==g_fg_applied ? "flags-only" : "stable-inputs";
     log("[sl] FG decision frame %llu: applied %d -> want %d requested %d; reason %s; ready %u stable %u "
         "missing 0x%x stale 0x%x (depth=1 MV=2 hudless=4 UI=8); tag API %s constants %s; "
@@ -2592,9 +2632,14 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     r = g_px.QueuePresentKHR(queue, info);
   }
   if (g_token && g_sl.PCLSetMarker) g_sl.PCLSetMarker(sl::PCLMarker::ePresentEnd, *g_token);
-  if (g_fg_running && g_sl.DLSSGGetState) {
-    sl::DLSSGState st{};
-    if (g_sl.DLSSGGetState(0, st, nullptr) == sl::Result::eOk) {
+  // One query per present: GetState drains numFramesActuallyPresented.
+  // Reuse this exact sample for fence publication and periodic diagnostics.
+  sl::DLSSGState st{};
+  const sl::Result state_result = g_sl.DLSSGGetState ? g_sl.DLSSGGetState(0, st, nullptr) : sl::Result::eErrorNotInitialized;
+  static FgPresentStats sdk_stats;
+  sdk_stats.add(st.numFramesActuallyPresented, state_result == sl::Result::eOk);
+  if (g_fg_running && state_result == sl::Result::eOk) {
+    {
       std::lock_guard<std::mutex> lock(g_fence_mu);
       g_inputs_fence = reinterpret_cast<VkSemaphore>(st.inputsProcessingCompletionFence);
       g_inputs_value = st.lastPresentInputsProcessingCompletionFenceValue;
@@ -2612,8 +2657,6 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
   static int stats_reset_token = 0;
   if (stats_window::reset(cfg_int, stats_reset_token)) g_last_state_log = frame;
   if (g_sl.DLSSGGetState && frame >= g_last_state_log + uint64_t(stats_period(unsigned(g_fg_running ? cfg_int("fg_state_every", 60) : 600)))) {
-    sl::DLSSGState st{};
-    g_sl.DLSSGGetState(0, st, nullptr);
     uint64_t shown = g_displayed.load();
     uint64_t batched = g_batched.load();
     static uint64_t prev_batched = 0;
@@ -2629,6 +2672,18 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
         (unsigned long long)(frame - g_prev_frame), ratio, (unsigned long long)(batched - prev_batched),
         g_api_errors.load(), g_last_api_error.load(), g_cam_valid ? "from uniforms" : "identity");
     }
+    const uint64_t waits=g_destroy_wait_calls.exchange(0), wait_us=g_destroy_wait_us.exchange(0);
+    const uint64_t max_us=g_destroy_wait_max_us.exchange(0);
+    log("[sl] FG cadence frame %llu: requested %d host %d state %s; SDK presented/rendered %.2f "
+        "(%llu/%llu, query failures %llu), proxy ratio %.2f; SDK pause notices %llu focus notices %llu; destroy waits %llu "
+        "total %.3f ms max %.3f ms; tag %s constants %s",
+        (unsigned long long)frame,fg,g_fg_applied,res_str(state_result),sdk_stats.ratio(),
+        (unsigned long long)sdk_stats.presented,(unsigned long long)sdk_stats.rendered,
+        (unsigned long long)sdk_stats.failures,ratio,
+        (unsigned long long)g_sdk_pauses.load(),(unsigned long long)g_sdk_focus_pauses.load(),
+        (unsigned long long)waits,double(wait_us)/1000.0,double(max_us)/1000.0,
+        tagged ? res_str(tag_result) : "not-called",tagged ? res_str(constants_result) : "not-called");
+    sdk_stats = {};
     last_status = uint32_t(st.status);
     last_errors = errors;
     prev_batched = batched;
