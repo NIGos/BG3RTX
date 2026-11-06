@@ -613,6 +613,18 @@ identity and sampled-value identity; no real inn size is inferred from fixtures.
 
 ## Default Ultra reflections replay
 
+Corrected inn packs `replay-20261106-093603-61` and
+`replay-20261106-093623-62` match live outputs and counters in two ordinary
+dispatches each. However, sustained identical-pipeline 40-pair replay fails:
+the stats-OFF pack intermittently changes 206 specular bytes and 18 hit-distance
+bytes. Full-float ray origins, directions and closest-hit distances agree at
+the nine changed distance pixels, while projected UVs differ by about one ULP
+and cross pixel boundaries. The underlying cause remains unresolved. Validation,
+BLAS policy and UBO allocation/restoration trials do not resolve it. A final
+`vs live` match does not override an earlier strict-gate failure. The 1041 probe
+deferral trial saved a paired 0.126424 ms but was removed for failed exactness;
+see `docs/progress/rf-opt2.md`. Do not qualify a candidate from short repeats.
+
 For qualification, add `--require-live-equal` to the ordinary pack replay before
 profiling. It requires live references for every output and the raw counters,
 and returns failure for any changed byte or missing reference. Ordinary diagnostic
