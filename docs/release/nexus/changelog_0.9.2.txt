@@ -1,0 +1,14 @@
+Version 0.9.2-beta
+
+Improved
+- Ultra global illumination is cheaper with the same image: hidden far bounces that the cut-away roofs would discard are no longer shaded. About 1.4-1.7 ms less per frame at the Water Queen's House and 0.8-1.0 ms less at the Blushing Mermaid (RTX 5090, 3840x1600).
+- Ray-traced reflections are cheaper with the same image: about 0.16 ms less per frame (Water Queen's House).
+
+Fixed
+- Ray Reconstruction post effects and its guide images now follow what the game really submits to the GPU, so a discarded frame can no longer leave stale data behind.
+- The ray-tracing core reuses its per-frame buffers only after the GPU has finished with them.
+- The HDR precision emulation of the post effects handles very small, very large and invalid values like the real image format.
+- Frame generation start-up: a rare race, and missing functions after the graphics device is recreated, are fixed.
+- DLSS 5: its resources are released in the right order when the game closes.
+- Launcher: a DLSS 5 runtime path containing '#' is saved correctly; invalid shortcut settings no longer block corrections; shortcut capture handles Tab, held keys and Shift+digit; messages from the DLSS upscaler repair are shown.
+- Keyboard shortcuts are read safely when the game presents from more than one thread.
