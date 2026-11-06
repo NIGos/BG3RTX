@@ -1,4 +1,4 @@
-Version 0.9.2-beta
+Version 0.9.3-beta
 
 Improved
 - Ultra global illumination is cheaper with the same image: hidden far bounces that the cut-away roofs would discard are no longer shaded. About 1.4-1.7 ms less per frame at the Water Queen's House and 0.8-1.0 ms less at the Blushing Mermaid (RTX 5090, 3840x1600).
@@ -12,3 +12,9 @@ Fixed
 - DLSS 5: its resources are released in the right order when the game closes.
 - Launcher: a DLSS 5 runtime path containing '#' is saved correctly; invalid shortcut settings no longer block corrections; shortcut capture handles Tab, held keys and Shift+digit; messages from the DLSS upscaler repair are shown.
 - Keyboard shortcuts are read safely when the game presents from more than one thread.
+- Frame generation: the release build no longer runs diagnostic timing, log formatting and a settings refresh on every frame; old test settings can no longer switch captures or diagnostics back on.
+- Frame generation: if Streamline rejects the frame's images or camera data, frame generation now pauses for that frame instead of running on stale inputs; x3/x4 never asks for more frames than the GPU supports.
+- DLSS 5: no longer takes a lock on every GPU submission before it has run; its GPU timers stop when statistics are off; a discarded first-frame setup can no longer be reused.
+
+Note
+- Frame generation pauses while the game window is not in front (Streamline rule): changing settings in the launcher during play briefly turns it off.
