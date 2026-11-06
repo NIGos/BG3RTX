@@ -2913,12 +2913,12 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     }
     const uint64_t waits=g_destroy_wait_calls.exchange(0), wait_us=g_destroy_wait_us.exchange(0);
     const uint64_t max_us=g_destroy_wait_max_us.exchange(0);
-    log("[sl] FG cadence frame %llu: requested %d host %d state %s; SDK presented/rendered %.2f "
+    log("[sl] FG cadence frame %llu: requested %d host %d fg_destroy_wait_exact=%d state %s; SDK presented/rendered %.2f "
         "(%llu/%llu, query failures %llu), proxy ratio %.2f; SDK pause notices %llu focus notices %llu; destroy waits %llu "
         "total %.3f ms max %.3f ms; blocking %llu polls %llu exact %llu global %llu pending %llu; "
         "batched presents %llu largest batch %u feedback notices %llu last numeric %d good notices %llu; "
         "CPU mean/max ms proxyPresent %.3f/%.3f (%llu) GetState %.3f/%.3f (%llu) ReflexSleep %.3f/%.3f (%llu); tag %s constants %s",
-        (unsigned long long)frame,fg,g_fg_applied,res_str(state_result),sdk_stats.ratio(),
+        (unsigned long long)frame,fg,g_fg_applied,cfg_int("fg_destroy_wait_exact",0)!=0 ? 1 : 0,res_str(state_result),sdk_stats.ratio(),
         (unsigned long long)sdk_stats.presented,(unsigned long long)sdk_stats.rendered,
         (unsigned long long)sdk_stats.failures,ratio,
         (unsigned long long)g_sdk_pauses.load(),(unsigned long long)g_sdk_focus_pauses.load(),
