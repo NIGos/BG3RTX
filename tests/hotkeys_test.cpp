@@ -11,4 +11,9 @@ CHECK(!validate("Ctrl+Shift+F10",defaults[1]).empty());
 CHECK(!validate("Ctrl+Shift+Alt+F10",defaults[1]).empty());
 CHECK(!validate(defaults[0],"Ctrl+Shift+F9").empty());
 CHECK(!validate("invalid",defaults[1]).empty());
+CHECK(validate_change(defaults[0],"invalid").empty());
+CHECK(validate_change(defaults[0],"Ctrl+Shift+F10").empty());
+CHECK(!validate_change("invalid",defaults[1]).empty());
+CHECK(!validate_change(defaults[0],defaults[0]).empty());
+CHECK(!validate_change("Ctrl+Shift+F10","invalid").empty());
 return fail?1:0;}

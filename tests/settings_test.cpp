@@ -51,6 +51,11 @@ static void test_parse() {
   CHECK_EQ(get(m, "b"), "2");
   CHECK_EQ(get(m, "c"), "");
   CHECK(m.size() == 3);
+  auto quoted = parse_ini("# ignored=\"hash # value\"\npath=\"C:\\DLSS #1\\nvngx_dlssnr.dll\" # comment\r\nempty=\"\"\nplain=1 # comment\n");
+  CHECK(quoted.size() == 3);
+  CHECK_EQ(get(quoted, "path"), "C:\\DLSS #1\\nvngx_dlssnr.dll");
+  CHECK_EQ(get(quoted, "empty"), "");
+  CHECK_EQ(get(quoted, "plain"), "1");
 }
 
 static void test_preset_expansion() {
@@ -1333,6 +1338,10 @@ static void test_detailed_logging() {
 }
 
 static void test_dlss5_native_setting() {
+  const std::string runtime = "C:/DLSS #1/nvngx_dlssnr.dll";
+  auto rendered_runtime = render_user_ini("", kHigh, preset_values(kHigh), {{"dlss5_nr_runtime", runtime}});
+  CHECK_EQ(lookup(parse_ini(rendered_runtime), "dlss5_nr_runtime"), runtime);
+  CHECK_EQ(lookup(parse_ini("dlss5_nr_runtime=\"C:/DLSS #1/nvngx_dlssnr.dll\" # comment\n"), "dlss5_nr_runtime"), runtime);
   const auto* k = find_knob("dlss5_nr");
   CHECK(k && k->experimental && !k->dev_only && k->apply == Apply::Restart);
   CHECK(k && !opt_in_knob(*k) && knob_visible(*k, false, true) && knob_visible(*k, false));

@@ -8,6 +8,7 @@ class Element {
  append(...items){this.children.push(...items);} replaceChildren(...items){this.children=[];this.append(...items);}
  setAttribute(k,v){this.attributes[k]=v;} addEventListener(){} showModal(){this.open=true;} close(){this.open=false;}
  focus(){document.activeElement=this;}
+ blur(){document.activeElement=null;if(this.onblur)this.onblur();}
  contains(target){return this===target||this.children.some(c=>typeof c==='object'&&c.contains(target));}
  querySelectorAll(selector){const tags=selector.split(',');return this.children.flatMap(c=>typeof c==='object'?[...(tags.includes(c.tagName)?[c]:[]),...c.querySelectorAll(selector)]:[]);}
 }
@@ -43,6 +44,14 @@ ids.get('nav-DLSS 5').onclick();
 assert(ids.get('dlss5-runtime-browse')&&ids.get('hotkey_dlss5'));
 const nrKey=ids.get('hotkey_dlss5');
 const event=key=>({key,ctrlKey:true,shiftKey:true,preventDefault(){},stopPropagation(){}});
+let tabPrevented=false;
+nrKey.onkeydown({...event('Tab'),preventDefault(){tabPrevented=true;}});
+assert(!tabPrevented,'shortcut field blocks keyboard navigation');
+let repeated=sent.length;
+nrKey.onkeydown({...event('N'),repeat:true});
+assert.strictEqual(sent.length,repeated,'held key changed shortcut');
+nrKey.onkeydown({...event('!'),code:'Digit1'});
+assert.strictEqual(sent.at(-1).value,'Ctrl+Shift+1','shifted digit cannot be captured');
 let count=sent.length;nrKey.onkeydown(event('F9'));assert.strictEqual(sent.length,count,'conflict reached bridge');
 nrKey.onkeydown(event('F10'));assert.strictEqual(sent.length,count,'reserved F10 reached bridge');
 nrKey.onkeydown({...event('N'),ctrlKey:false,shiftKey:false,altKey:true});

@@ -2,7 +2,10 @@
 
 Use `bin\BG3RTX.exe` to select the game folder, choose Low, Medium, High or Ultra,
 and save your settings. Custom means you changed something from a preset. In the game's Graphics options,
-select DLSS as the upscaler for Ray Reconstruction. The launcher does not edit the game's graphics settings.
+select DLSS as the upscaler for Ray Reconstruction. Before Play, when Ray Reconstruction is On,
+the launcher restores DLSS in `graphicSettings.lsx` and backs up that file as `.lsx.bg3rtx-bak`.
+It keeps your existing DLSS quality mode, or selects Quality if none is stored.
+Set `game_dlss_guard=0` in `bg3rtx_user.ini` to disable this repair.
 Hardware and dependency checks can restrict the available choices. A suggested preset is not a GPU
 or VRAM qualification. BG3RTX is tested only on an RTX 5090. See the release README for compatibility
 and memory limits.
@@ -69,13 +72,17 @@ old hidden settings do not enable unsupported release features.
 
 The **DLSS 5** page has its own On/Off control, runtime file picker and runtime status.
 DLSS 5 is experimental, Off in every preset, and requires Ray Reconstruction. Enable it
-and select a runtime before starting the game. Changing activation or the runtime needs a restart.
+and select your x64 `nvngx_dlssnr.dll` version 310.8 or 310.9 before starting the game.
+Automatic discovery checks the game folder's `bin`; NVIDIA-signed candidates take precedence.
+The launcher stages the selected file in its own `bin/sl` before Play, checks its signature and
+SHA-256, and logs custom or unsigned runtimes that NVIDIA may reject. The runtime is not bundled.
+Changing activation or the runtime needs a restart.
 
 **Ctrl+Shift+F8** toggles DLSS 5 Neural Rendering off/on live when it was enabled at game start.
 This switches the runtime bypass, without restarting or changing Ray Reconstruction.
 
 Under **Keyboard shortcuts**, change the RT shortcut on **Advanced** and the NR shortcut on
-**DLSS 5**. Select the capture field and press Ctrl, Shift and/or Alt with F1?F12, A?Z or 0?9.
+**DLSS 5**. Select the capture field and press Ctrl, Shift and/or Alt with F1-F12, A-Z or 0-9.
 A single key is also accepted. **None** disables a shortcut; **Reset to default** restores it.
 Duplicate shortcuts and the reserved Ctrl+Shift+F10 are rejected. Save to apply.
 
