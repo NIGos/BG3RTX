@@ -535,7 +535,7 @@ void coverage_log(uint64_t now) {
   if (!stats_due(now)) return;
   char per[1200] = {};
   size_t at = 0;
-  uint32_t shown = 0, probed = 0, swapped = 0, below = 0;
+  uint32_t shown = 0, probed = 0, swapped = 0, below = 0, below_own = 0;
   double minimum = 0.0;
   bool first = true;
   for (const auto& [key, period] : g_coverage_period) {
@@ -550,13 +550,17 @@ void coverage_log(uint64_t now) {
     if (first || ratio < minimum) minimum = ratio;
     first = false;
     below += !e.card || ratio < hair_primary::kCoverMin || ratio > hair_primary::kCoverMax;
-    if (shown++ < 12) at += std::snprintf(per + at, sizeof per - at, " %04llx:%u/%u=%.3f,%u,used=%.3f..%.3f",
+    // rt_hair_coverage_footprint: the lower bound at this measurement's own footprint (the strict one is printed below).
+    const double own = (std::min)(hair_primary::kCoverMin, hair_primary::kCoverRatioMin - hair_primary::cover_sigma(e.strand, e.card));
+    const double own_up = (std::max)(hair_primary::kCoverMax, hair_primary::kCoverRatioMax + hair_primary::cover_sigma(e.strand, e.card));
+    below_own += !e.card || ratio < own || ratio > own_up;
+    if (shown++ < 12) at += std::snprintf(per + at, sizeof per - at, " %04llx:%u/%u=%.3f,%u,used=%.3f..%.3f,own=%.3f",
         (unsigned long long)(key >> 48), unsigned((std::min)(e.strand, uint64_t(UINT32_MAX))),
-        unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped, period.used_min, period.used_max);
+        unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped, period.used_min, period.used_max, own);
   }
-  log_stats("[hair primary] coverage (last %u frames): %u draws probed, %u swapped; per draw (key prefix: newest accepted strand pixels/unique card pixels = ratio, swapped frames, used ratio min..max):%s; ratio min %.3f, bound %.3f, upper %.3f, draws outside bounds %u; "
+  log_stats("[hair primary] coverage (last %u frames): %u draws probed, %u swapped; per draw (key prefix: newest accepted strand pixels/unique card pixels = ratio, swapped frames, used ratio min..max):%s; ratio min %.3f, bound %.3f, upper %.3f, draws outside bounds %u (outside their own footprint bounds %u); "
       "ambiguous tags %u; native depth fallbacks %llu; draws without a slot %u",
-      stats_period(300), probed, swapped, per, minimum, hair_primary::kCoverMin, hair_primary::kCoverMax, below, g_ambiguous, (unsigned long long)g_fallbacks, unsigned(g_without_slot.size()));
+      stats_period(300), probed, swapped, per, minimum, hair_primary::kCoverMin, hair_primary::kCoverMax, below, below_own, g_ambiguous, (unsigned long long)g_fallbacks, unsigned(g_without_slot.size()));
   g_ambiguous = 0; g_fallbacks = 0; g_without_slot.clear();
   g_coverage_period.clear();
   if (logging::stats_enabled(cfg_int)) crumbs_log("[hair primary]");
@@ -1195,7 +1199,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     if (period.last_swap != now) {
       ++period.swapped; period.last_swap = now;
       // rt_hair_primary_hold: a swap the strict gate would have refused (the period line's "held").
-      if (g_coverage.hold && g_coverage.why(key, now + 1, hair_primary::kCoverMin, hair_primary::kCoverMax, false) !=
+      if ((g_coverage.hold || g_coverage.footprint) && g_coverage.why(key, now + 1, hair_primary::kCoverMin, hair_primary::kCoverMax, false) !=
                                  hair_primary::CoverageGate::Why::Ok)
         ++g_held_swaps;
     }
@@ -1326,6 +1330,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms), now);
   g_coverage.hold = cfg_int("rt_hair_primary_hold", 0) != 0;   // once per publish (hysteresis, CoverageGate)
+  g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint
   g_published = now + 1;
   ++g_st.publishes;
   coverage_log(now);
@@ -1367,7 +1372,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         "G-buffer and %llu velocity strand draws, %llu pipelines refused, %llu feedback failures; prepass card depth dropped without its G-buffer "
         "swap %llu; hair draws strand/total: main G-buffer %llu/%llu, velocity %llu/%llu, prepass %llu/%llu; other views "
         "G-buffer %llu, velocity %llu, prepass %llu; instanced %llu; card-only pass groups %u; sun cascade hair card draws "
-        "%llu, without card depth %llu; swap refusals (main-view hair draws kept as cards, first refusing gate):%s; coverage hold %s, swap frames only the hold allowed %llu, strand swaps resumed after card frames %llu; G-buffer headers at submit (rt_hair_groom_primary_current): this frame's publish %llu, record-time because not recorded %llu, build after the G-buffer %llu, different grooms %llu",
+        "%llu, without card depth %llu; swap refusals (main-view hair draws kept as cards, first refusing gate):%s; coverage hold %s, footprint bound %s, swap frames the strict bound would refuse %llu, strand swaps resumed after card frames %llu; G-buffer headers at submit (rt_hair_groom_primary_current): this frame's publish %llu, record-time because not recorded %llu, build after the G-buffer %llu, different grooms %llu",
         (unsigned long long)now, count, stats_period(300), (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
         (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_failures.refused, (unsigned long long)g_failures.feedback,
         (unsigned long long)g_st.orphan, (unsigned long long)g_part.main_swapped[0], (unsigned long long)g_part.main_total[0],
@@ -1376,7 +1381,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         (unsigned long long)g_part.other_total[0], (unsigned long long)g_part.other_total[1],
         (unsigned long long)g_part.other_total[2], (unsigned long long)g_part.instanced, g_part.card_only_groups(),
         (unsigned long long)g_part.cascade_total, (unsigned long long)g_part.cascade_dropped, refusals,
-        g_coverage.hold ? "on" : "off", (unsigned long long)g_held_swaps, (unsigned long long)g_swap_resumes,
+        g_coverage.hold ? "on" : "off", g_coverage.footprint ? "on" : "off", (unsigned long long)g_held_swaps, (unsigned long long)g_swap_resumes,
         (unsigned long long)g_current_picks[0], (unsigned long long)g_current_picks[1],
         (unsigned long long)g_current_picks[2], (unsigned long long)g_current_picks[3]);
     char per[768] = {};

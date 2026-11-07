@@ -194,6 +194,27 @@ static void test_coverage_hold() {
     CHECK(strict.why(8, 105) == CoverageGate::Why::Stale);
   }
 }
+// rt_hair_coverage_footprint: every measurement, also a first swap, against the bound at its own footprint.
+// 2026-11-07 live draws: 9861 0.842 of 443, 23a3 0.792 of 610, 5381 0.314 of 51 and 0.674 of 46 (refused strictly).
+static void test_coverage_footprint() {
+  using namespace hair_primary;
+  CoverageGate strict, fp;
+  fp.footprint = true;
+  struct M { uint64_t key, card, strand; bool fp_ok; };
+  const M ms[] = {{1, 443, 373, true}, {2, 610, 483, false}, {3, 51, 16, false}, {4, 46, 31, false},
+                  {5, 9397, 8400, true}, {6, 9397, 8300, false}, {7, 430, 260, false}};
+  for (const M& m : ms) {
+    strict.observe(m.key, 100, m.card, m.strand);
+    fp.observe(m.key, 100, m.card, m.strand);
+    const bool s = strict.allow(m.key, 101), f = fp.allow(m.key, 101);
+    CHECK(f == m.fp_ok);
+    CHECK(!s || f);                                   // never stricter than the strict bound
+  }
+  // At the offline footprint the two bounds agree (sigma 0.0192): 8400/9397 = 0.894 passes both, 8300 = 0.883 neither.
+  CHECK(strict.allow(5, 101) && !strict.allow(6, 101));
+  CHECK(fp.why(2, 101) == CoverageGate::Why::Low && fp.why(7, 101) == CoverageGate::Why::Low);
+  CHECK(fp.why(1, 101 + kFreshFrames + 1) == CoverageGate::Why::Stale);   // freshness unchanged
+}
 // rt_hair_groom_primary_current: the G-buffer is recorded before this frame's build (so only the previous publish is
 // known then); at vkQueueSubmit this frame's publish is used only when its build is ordered first on the GPU.
 static void test_current_pick() {
@@ -305,7 +326,7 @@ int main() {
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
-  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_current_pick();
+  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_current_pick(); test_coverage_footprint();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

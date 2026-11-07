@@ -355,6 +355,12 @@ struct CoverageGate {
   // widened by that measurement's own count noise (the bound's formula at the live footprint) and at most kHoldFrames
   // old; it returns to cards on an outside measurement, an invalidation, or when the measurement gets older.
   bool hold = false;
+  // rt_hair_coverage_footprint (off): every measurement, also a new swap's, is judged by the same bound at its own
+  // footprint: [kCoverRatioMin - sigma, kCoverRatioMax + sigma], sigma = cover_sigma(S, C) of that measurement. At the
+  // offline footprint (9397 card samples) that is kCoverMin/kCoverMax; small draws (100-1800 pixels, 2026-11-07:
+  // three per frame refused 'coverage low') get their own count noise. A real mismatch stays refused (0.60 of 430
+  // pixels, 0.31 of 50).
+  bool footprint = false;
   std::unordered_map<uint64_t, uint64_t> swapping;
   void swapped(uint64_t key, uint64_t frame) { if (key && frame > swapping[key]) swapping[key] = frame; }
   bool is_swapping(uint64_t key, uint64_t now) const {
@@ -380,7 +386,7 @@ struct CoverageGate {
     if (bad != incomplete.end() && e.frame <= bad->second) return Why::Invalidated;
     const bool held = use_hold && is_swapping(key, now);
     if (!e.frame || now < e.frame || now - e.frame > (held ? kHoldFrames : kFreshFrames) || !e.card) return Why::Stale;
-    if (held) {
+    if (held || (footprint && use_hold)) {
       const double s = cover_sigma(e.strand, e.card);
       bound = (std::min)(bound, kCoverRatioMin - s);
       upper = (std::max)(upper, kCoverRatioMax + s);

@@ -785,6 +785,38 @@ def test_coverage():
           layer.count("shader_variant::kSpecIdHairGroomCoverage") == 2 and "hair_primary::kFlagCoverage" in layer)
 
 
+def test_coverage_pair_gate_bias():
+    """2026-11-07 live: rt_hair_groom_coverage=1 lowered the strand swap rate (600 vs 900-945 of 1500 per window,
+    more 'coverage low'). The gate's ratio is accepted strand pixels over card pixels, both counted where the card
+    covers the jittered pixel centre. The pair's rays sit a quarter pixel off that centre: near a card edge one falls
+    off the card (no strands there), so on narrow cards the ratio drops although the pair is unbiased against the
+    pixel's area coverage. Model: strands filling a card strip of width W at a random angle, 18 jitter phases."""
+    rng = np.random.default_rng(3)
+    n = 64
+    py, px = np.mgrid[0:n, 0:n]
+    ratio = {}
+    for w in (2.0, 32.0):
+        rs = rp = cs = 0
+        for _ in range(6):
+            a, c = rng.uniform(0, np.pi), rng.uniform(n / 2 - 4, n / 2 + 4, 2)
+            card = lambda x, y: np.abs(-(x - c[0]) * np.sin(a) + (y - c[1]) * np.cos(a)) <= w / 2
+            strand = lambda x, y: card(x, y) & (np.mod((x - c[0]) * np.cos(a) + (y - c[1]) * np.sin(a), 0.35) < 0.33)
+            oa, ob = primary.coverage_offset(px, py, 0), primary.coverage_offset(px, py, 1)
+            for t in range(1, 19):
+                cx, cy = px + 0.5 + primary.halton(t, 2) - 0.5, py + 0.5 + primary.halton(t, 3) - 0.5
+                frag = card(cx, cy)
+                cs += frag.sum()
+                rs += (frag & strand(cx, cy)).sum()
+                ha, hb = strand(cx + oa[..., 0], cy + oa[..., 1]), strand(cx + ob[..., 0], cy + ob[..., 1])
+                rp += (frag & (primary.coverage_pick(ha, hb, 0.0 * px, 0.0 * px + 1, px, py, t) != 2)).sum()
+        ratio[w] = (rs / cs, rp / cs)
+    print(json.dumps({"coverage_pair_gate_ratio": {str(k): v for k, v in ratio.items()}}))
+    check("pair gate bias: a 2 px card's ratio drops by more than 5% with the pair (edge rays off the card)",
+          ratio[2.0][1] < 0.95 * ratio[2.0][0], ratio[2.0])
+    check("pair gate bias: a 32 px card's ratio within 2% of the single ray's", abs(ratio[32.0][1] / ratio[32.0][0] - 1) < 0.02,
+          ratio[32.0])
+
+
 def test_post_depth():
     """M3.4: the D24S8 (and the linear depth made from it) that fog, transparents, water, DoF and the camera motion pass
     read after the G-buffer pass shows the same surface as the colour on every pixel of a strand card."""
@@ -1323,7 +1355,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_coverage, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
