@@ -166,25 +166,29 @@ def curve_strands(mask, tile_grid, step, threshold=128):
     """Strands of a curly atlas by the 2-D tracer (curves2d): ([(u, v, width, slope, root, depth, normal)], (lo, hi)
     UV boxes, per-tile stats, per-tile strand root correlation). Width in UV u units across the strand, slope 0, normal
     (N, 2) the unit direction of the width in pixels. Points keep the centreline within a quarter of the strand width
-    (the swept sphere stays inside the painted strand) and are at most `step` pixels apart. Memoised per mask."""
+    (the swept sphere stays inside the painted strand) and are at most `step` pixels apart. The trace is memoised per
+    mask (the atlas grid only groups the statistics)."""
     import hashlib
-    key = (hashlib.sha1(np.ascontiguousarray(mask).tobytes()).hexdigest(), tuple(tile_grid), step, threshold)
-    if key in _curve_memo:
-        return _curve_memo[key]
+    key = (hashlib.sha1(np.ascontiguousarray(mask).tobytes()).hexdigest(), step, threshold)
     h, w = mask.shape[:2]
-    curves, typ, claimed = curves2d.trace(mask, threshold, tile_grid=CURVE_BLOCKS)
-    rows, lo, hi, root_tile, length = [], [], [], [], []
-    for c in curves:
-        t = float(typ[int(round(c.y[0])), int(round(c.x[0]))])
-        x, y, wd, nx, ny = curves2d.resample(c, step, max(0.5, t / 4))
-        xi, yi = np.clip(np.rint(x).astype(int), 0, w - 1), np.clip(np.rint(y).astype(int), 0, h - 1)
-        u, v = (x + 0.5) / w, (y + 0.5) / h
-        rows.append((u, v, wd / w, np.zeros_like(x), mask[yi, xi, 2] / 255.0, mask[yi, xi, 1] / 255.0,
-                     np.stack([nx, ny], 1)))
-        lo.append((u.min(), v.min()))
-        hi.append((u.max(), v.max()))
-        root_tile.append((min(int(x[0] * tile_grid[0] / w), tile_grid[0] - 1), min(int(y[0] * tile_grid[1] / h), tile_grid[1] - 1)))
-        length.append(float(np.hypot(np.diff(c.x), np.diff(c.y)).sum()))
+    if key not in _curve_memo:
+        curves, typ, claimed = curves2d.trace(mask, threshold, tile_grid=CURVE_BLOCKS)
+        rows, lo, hi, length = [], [], [], []
+        for c in curves:
+            t = float(typ[int(round(c.y[0])), int(round(c.x[0]))])
+            x, y, wd, nx, ny = curves2d.resample(c, step, max(0.5, t / 4))
+            xi, yi = np.clip(np.rint(x).astype(int), 0, w - 1), np.clip(np.rint(y).astype(int), 0, h - 1)
+            u, v = (x + 0.5) / w, (y + 0.5) / h
+            rows.append((u, v, wd / w, np.zeros_like(x), mask[yi, xi, 2] / 255.0, mask[yi, xi, 1] / 255.0,
+                         np.stack([nx, ny], 1)))
+            lo.append((u.min(), v.min()))
+            hi.append((u.max(), v.max()))
+            length.append(float(np.hypot(np.diff(c.x), np.diff(c.y)).sum()))
+        _curve_memo.clear()
+        _curve_memo[key] = (curves, typ, claimed, rows, np.array(lo).reshape(-1, 2), np.array(hi).reshape(-1, 2), length)
+    curves, typ, claimed, rows, lo, hi, length = _curve_memo[key]
+    root_tile = [(min(int(c.x[0] * tile_grid[0] / w), tile_grid[0] - 1), min(int(c.y[0] * tile_grid[1] / h), tile_grid[1] - 1))
+                 for c in curves]
     th, tw = h // tile_grid[1], w // tile_grid[0]
     stats, corr = {}, []
     for ty in range(tile_grid[1]):
@@ -200,10 +204,7 @@ def curve_strands(mask, tile_grid, step, threshold=128):
                 ll = np.array([length[i] for i in mine])
                 o = np.argsort(cc)
                 corr.append(float(cc[o][np.searchsorted(np.cumsum(ll[o]), ll.sum() / 2)]))
-    out = (rows, (np.array(lo).reshape(-1, 2), np.array(hi).reshape(-1, 2)), stats, corr)
-    _curve_memo.clear()
-    _curve_memo[key] = out
-    return out
+    return rows, (lo, hi), stats, corr
 
 
 def run_radii(hit, sid, width):
@@ -292,6 +293,15 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
         u, v, wd, slope, rp, dp = (np.concatenate([r[k] for r in rows]) for k in range(6))
         nrm = np.concatenate([r[6] for r in rows]) if curly else None
         sid = np.repeat(np.arange(len(rows)), [len(r[0]) for r in rows])
+        if curly:
+            # Long curly strands cross many cards: keep only the samples inside this card's UV box (a sample outside
+            # it lies in none of its triangles), each inside stretch a strand of its own (as locate would cut it).
+            inb = (u >= lo[0] - EPS) & (u <= hi[0] + EPS) & (v >= lo[1] - EPS) & (v <= hi[1] + EPS)
+            start = inb & np.r_[True, ~inb[:-1] | (sid[1:] != sid[:-1])]
+            sid = (np.cumsum(start) - 1)[inb]
+            u, v, wd, slope, rp, dp, nrm = u[inb], v[inb], wd[inb], slope[inb], rp[inb], dp[inb], nrm[inb]
+            if not len(u):
+                continue
         hit, bary, inside = locate(uv, tris, np.stack([u, v], 1))
         report["samples"] += len(u)
         report["unmapped_samples"] += int((hit < 0).sum())
@@ -310,7 +320,7 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
             width = np.linalg.norm(jacobian_u(mesh, tris)[hc] * (across_px * nrm[:, 0] / W)[:, None]
                                    + jacobian_v(mesh, tris)[hc] * (across_px * nrm[:, 1] / H)[:, None], axis=1)
         if max_fibre_diameter:
-            widest = np.zeros(len(rows))
+            widest = np.zeros(int(sid.max()) + 1)
             np.maximum.at(widest, sid, np.where(hit >= 0, width, 0))
             per_strand = np.maximum(1, np.ceil(widest / max_fibre_diameter - 1e-9)).astype(int)
             report["split_strands"] += int((per_strand > 1).sum())

@@ -3,10 +3,12 @@
 Some atlases paint curls that loop back (HAIR_Afro_B_MSKA): the texture rows do not run root to tip, so the row
 tracer of strands2d cannot follow them (its root channel check fails). Here a strand is followed along its own
 direction: from a seed, each step looks at the mask across the current direction (a profile of +-K pixels), takes the
-covered run nearest the predicted centre and recentres on it. Where that run is wider than 1.5 strand widths (the
-clump rule of strands2d: a crossing, two strands touching, a painted clump) the strand keeps its direction and follows
-the pixels of its own ID: the mask's R channel is constant along a painted strand up to noise, which each strand
-measures on itself (running median absolute deviation, 3 sigma). A strand ends after `max_gap` pixels without
+covered run nearest the predicted centre and recentres on it when it is the strand alone (both edges where expected,
+within EDGE_TOL). Where the run is wider or spills to one side (a crossing, a touching strand, a clump) the strand
+keeps its direction and curvature (estimated from the chord of its recent centres) and follows the pixels of its own
+ID: the mask's R channel is constant along a painted strand up to noise, which each strand measures on itself (running
+median absolute deviation, 3 sigma). Pixels another strand already took are passed for at most `max_gap` texels (a
+crossing); longer means a duplicate and the strand stops. A strand ends after `max_gap` pixels without
 coverage (a crossing hides it for about the width of the strand on top). Seeds are taken root first (B ascending)
 among unclaimed pixels and traced both ways; each strand is then ordered root to tip by the B channel (its
 correlation with arc length, also the strand-wise root check that replaces the row check for these atlases).
@@ -238,9 +240,6 @@ class Tracer:
             # Passing through lasts as long as a crossing (max_gap); longer means a duplicate: stop.
             own = fits and not self.foreign(band, sid, step)
             coast_run = 0 if own else coast_run + 1
-            if getattr(self, "debug", None) is not None:
-                self.debug.append((sid, step, round(qx, 1), round(qy, 1), round(dx, 2), round(dy, 2), le, re, round(w, 1),
-                                   fits, own, round(centre, 1), len(rid_hist), round(med), round(tol)))
             if coast_run > self.max_gap:
                 break
             lo, hi = self.band(centre, width)
