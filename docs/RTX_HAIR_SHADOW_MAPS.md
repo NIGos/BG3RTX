@@ -14,6 +14,7 @@ The matrix assumes ordinary sun, D-LS enabled and valid rays. Mixed sources can 
 - [S] `shaders/gi/rt_shadow.hlsl:124`, `:198`; `shaders/gi/rt_sun_resolve.hlsl:39`: S plus G until fully trusted replacement; G for unknown rays.
 - [L] `shaders/gi/rt_local_shadows.hlsl:674`, `:838`: mapped locals replace G, or use min(S,G) under atlas fallback; unknown keeps G.
 - [H] `shaders/gi/rt_local_shadows.hlsl:412`, `:807`: mapped local lights never replace class-5 hair lighting.
+  (rt_hair_fibre_mapped, M4.3: the fibre pass replaces them on strand pixels where D-LS trusts the trace.)
 - [U] `shaders/gi/rt_local_shadows.hlsl:810`, `:821`: unmapped locals use RT where selected; skipped/unknown lights remain unshadowed.
 - [R] `shaders/rt/rt_common.hlsli:1373`, `:1444`: matched procedural cards skipped; groom TLAS supplies shadow hits.
 - [F] `shaders/gi/hair_fibre.hlsl:126`, `:149`: optional fibre replacement skips mapped locals; sun uses E visibility and strand counts.

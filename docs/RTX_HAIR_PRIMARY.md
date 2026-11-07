@@ -153,6 +153,29 @@ max 1.9e-5; weight relative error max 2.4e-5. Key off: the pass is not dispatche
 (below). Request delta +2 (`gi/hair_fibre_spec.hlsl` with and without OMM). The Tp transcription has no offline
 reference (no capture of b11 on strand pixels): live check is part of L3 (below). Cost unmeasured.
 
+### M4.3: every traced local light on strand pixels (offline, 2026-11-08, branch claude/hair-m4-locals)
+
+`rt_hair_fibre_mapped=0/1` (specialization 1030, knob `exp_hair_fibre_mapped`, Advanced, dev only), off; needs
+`rt_hair_fibre=1`. Before: gi/hair_fibre.hlsl replaced the sun and every light without a game shadow map; lights
+with a map kept the game's hair term with the cards' atlas shadow (RTX_HAIR_SHADOW_MAPS [H]). Now those too:
+the buffer holds E S (bg3_hair_spec + bg3_hair_diff, texp = 1 - S) with the game's hair atlas term S
+(3033c895: sampled from P + L 3.5 nb sqrt(d2), no N.L gate; `hf_atlas_hair`), and it becomes E F(n) v with the
+scene's traced visibility v and the strand count n, as for every other traced light. Only where D-LS trusts
+the trace for mapped lights (`ls_shadowed` 1, or 3 with the light on screen) and the ray is known; elsewhere the
+game's term stays. Unmapped lights were already exact per light (the pass loops over every froxel light; D-LS's
+RIS selection is unbiased against it). No request or ABI change.
+Gates: the removed game term GPU (bg3_materials lobes) vs `bsdf.game_hair_light`, 12,000 samples: relative
+error p99 9.5e-7, max 5.4e-6. N-light fixture (20,000 lights on a sphere, 4 pi / N each): white single
+scattering sums to 0.99973 / 0.99997 (beta 0.41 / 0.7; analytic 1); the dual response summed over the lights
+equals its CPU twin within 3.4e-7 at n = 0, 1, 3. (Its full-sphere sum at fixed n is 3.4-7.0 for colour
+(0.85, 0.7, 0.5): fixed n over the whole sphere is not a volume, so this is not an energy bound; the dual
+model's calibration is the path-traced slab of 3b.) Identity: 218/221 requests byte-identical to main 7f86f343;
+the 3 hair_fibre.hlsl requests strictly equivalent at 1030 = 0. Cost (estimate, unmeasured): per strand pixel and
+mapped light one 12-tap atlas PCF, one scene ray, one groom query (at most 8 crossings) and one dual evaluation,
+the same as an unmapped traced light; the pass cost grows by the mapped share of the froxel's lights.
+Check in game: Test Dialogue1 / Campsite with torches (shadow-mapped lights), hair lit by them: the card-shaped
+self-shadow on the hair is replaced by strand shadows; key on vs off in one run.
+
 ## 4. RR, DLSS-G, DoF
 RR guides are built from the G-buffer at its pass end (`layer/ngx.cpp record_guides_at_gbuffer`): strands
 there are ordinary pixels (albedo, normal, roughness). Motion vectors from the velocity variant; depth from the
