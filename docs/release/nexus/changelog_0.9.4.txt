@@ -1,0 +1,5 @@
+Version 0.9.4-beta
+
+Fixed
+- Launcher: on a PC with integrated graphics next to the NVIDIA RTX card, the launcher now picks the RTX card by itself. Before, it showed "GPU not chosen" and kept every option disabled until a GPU was chosen in Help & support, on every start. With two equally capable cards it still asks.
+- Launcher: problem reports are complete again when the game sits on a disk mounted as a folder (a drive without a letter).
