@@ -5,6 +5,7 @@ fragment shader + slot (image ids differ between runs), builds the hair region f
 (RT2 alpha, class 5) and prints, per stage, the HF energy of strands vs cards.
 
   py -3 tools/hair_groom/grain_stages.py <trace dir> [...] [--label a,b,...]
+  py -3 tools/hair_groom/grain_stages.py --ab on,off,on <trace dirs>   (the 5g live gates, see ab())
 
 HF = rms(x - box3(x)) / mean(x) over the region (relative, so it is independent of exposure); for unit vectors
 (tangent) and motion vectors (pixels) the rms of the vector difference to the 3x3 mean, unnormalised.
@@ -205,7 +206,69 @@ def measure(d: Path):
     return res
 
 
+def tangent_normal(d: Path):
+    """5g tangent space: median |T . N| on hair pixels, T = RT3 decoded (exact 8-bit), N = the RR normal guide (world,
+    rr_guides.hlsl v2) from its dump_raw float32. On strand pixels with the fibre normal, N is perpendicular to the
+    true tangent, so a world-space RT3 gives ~0; a view-space RT3 read as world does not. None without dump_raw."""
+    D = json.loads((d / "dumps.json").read_text())
+    gb = [v for v in D.values() if v["slot"] == 4 and v["fmt"] == "RGBA8"][-1]["pass_fs"]
+    cls = load_alpha(d, pick(D, gb, 2)) & 7
+    z = [v for v in D.values() if v["pass_fs"] == "0" * 16 and v["slot"] == 2 and v["fmt"] == "RGBA16F"
+         and v["w"] == cls.shape[1]]
+    if not z:
+        return None
+    f = d / z[0]["png"].replace(".png", ".f32")
+    if not f.exists():
+        return None
+    n = np.fromfile(f, np.float32).reshape(z[0]["h"], z[0]["w"], 4)[..., :3]
+    t = oct12_decode(load_png(d, pick(D, gb, 3)))
+    if n.shape[:2] != cls.shape:
+        return None
+    m = erode(cls == 5, 1)
+    nn = n[m] / np.maximum(np.linalg.norm(n[m], axis=-1, keepdims=True), 1e-9)
+    return float(np.median(np.abs((t[m] * nn).sum(-1))))
+
+
+def ab(dirs, labels):
+    """Gates of the 5g live A/B (one session; labels on/off per window, e.g. on,off,on; RTX_HAIR_PRIMARY 5g):
+    macro normal: lit coherence of every on window above every off window by >= max(0.01, 2 |on - on|) (0.01: the
+    strand repeat spread of 2026-11-07, 0.009); RR specular-guide HF on/off >= 1.5 (cards/strands 2.8 on 2026-11-07);
+    mean hair luminance reported (a shading-model change may move it). Tangent (needs dump_raw=1 and macro normal
+    off): median |T . N| <= 0.02 in tangent-on windows (oct12 < 0.1 deg, fp16 guide; derived), > 0.05 in off."""
+    R = []
+    for d in dirs:
+        r = measure(d)
+        R.append({"coh": r["lit (deferred)"]["mask_coh"] if "lit (deferred)" in r else r["compose (pre-RR)"]["mask_coh"],
+                  "spec": r["RR guide specular"]["mask"], "mean": r["compose (pre-RR)"]["hull_mean"],
+                  "tn": tangent_normal(d)})
+    print("window   lit-COH  spec-HF  hair-mean  |T.N|")
+    for l, r in zip(labels, R):
+        tn = "-" if r["tn"] is None else f"{r['tn']:.4f}"
+        print(f"{l:8s} {r['coh']:7.4f} {r['spec']:8.4f} {r['mean']:10.4f}  {tn}")
+    on = [r for l, r in zip(labels, R) if l.startswith("on")]
+    off = [r for l, r in zip(labels, R) if l.startswith("off")]
+    if on and off:
+        rep = max(on, key=lambda r: r["coh"])["coh"] - min(on, key=lambda r: r["coh"])["coh"] if len(on) > 1 else 0.0
+        margin = max(0.01, 2 * rep)
+        gap = min(r["coh"] for r in on) - max(r["coh"] for r in off)
+        print(f"GATE macro coherence: min(on) - max(off) = {gap:+.4f} >= {margin:.4f}: {'PASS' if gap >= margin else 'FAIL'}")
+        ratio = np.mean([r["spec"] for r in on]) / max(np.mean([r["spec"] for r in off]), 1e-9)
+        print(f"GATE spec guide HF on/off = {ratio:.2f} >= 1.5: {'PASS' if ratio >= 1.5 else 'FAIL'}")
+        print(f"INFO hair mean on/off = {np.mean([r['mean'] for r in on]) / np.mean([r['mean'] for r in off]):.3f}")
+        tn_on = [r["tn"] for r in on if r["tn"] is not None]
+        tn_off = [r["tn"] for r in off if r["tn"] is not None]
+        if tn_on and tn_off:
+            ok = max(tn_on) <= 0.02 and min(tn_off) > 0.05
+            print(f"GATE tangent |T.N| on max {max(tn_on):.4f} <= 0.02, off min {min(tn_off):.4f} > 0.05: "
+                  f"{'PASS' if ok else 'FAIL'}")
+    return R
+
+
 def main(argv):
+    if "--ab" in argv:   # --ab on,off,on <dirs>: the 5g live gates
+        i = argv.index("--ab")
+        labels = argv[i + 1].split(",")
+        return ab([Path(a) for a in argv[:i] + argv[i + 2:]], labels)
     labels = None
     if "--label" in argv:
         i = argv.index("--label")

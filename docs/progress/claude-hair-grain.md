@@ -1,12 +1,14 @@
-## Strand grain attribution (branch claude/hair-grain, design only, 2026-11-07)
-- New tool `tools/hair_groom/grain_stages.py`: per image-chain stage (G-buffer RT1-RT3, motion, depth, deferred
-  lighting, compose, RR guides, RR input/output, final), HF energy and line coherence over the class-5 hair mask.
-- On the 2026-11-07 Test Dialogue1 traces (strands a, f, fp0, fp2 vs cards e; a/e matched lit mean 0.4165/0.4169):
-  strands never carry more per-frame HF than cards (a/e: albedo 0.99, lit 0.91, RR output 0.78, final 0.96);
-  motion vectors vary 2.1x more per pixel but have the cards' outlier rate (1.1-1.2% > 0.5 px).
-- What differs is line structure: coherence albedo 0.31-0.33 vs 0.35, lighting 0.28 vs 0.32 (gap 4x the strand
-  repeat spread), final 0.75-0.79 vs 0.84. Cause attributed to the fibre normal (N.V = 1 on every strand pixel,
-  `hair_primary_gbuffer.hlsl:248/294`): the game's wrap diffuse, ambient and RR normal/specular guides lose the
-  clump-aligned shading the card normal gives.
-- Proposed `rt_hair_macro_normal` (RT0 = card normal, tangent unchanged), design in RTX_HAIR_PRIMARY 5g; not
-  implemented (needs plumbing and a live A/B; the RT0 preview is too coarse for an offline proof).
+## Strand grain attribution, card normal and world tangent keys (branch claude/hair-grain, offline, off, 2026-11-07)
+- New tool `tools/hair_groom/grain_stages.py`: per image-chain stage HF energy and line coherence over the class-5
+  hair mask; `--ab on,off,on <dirs>` prints the 5g live gates.
+- 2026-11-07 Test Dialogue1 traces (strands a, f, fp0, fp2 vs cards e; a/e matched lit mean): strands never carry more
+  per-frame HF than cards (a/e: albedo 0.99, lit 0.91, RR output 0.78, final 0.96); motion vectors vary 2.1x more per
+  pixel with the cards' outlier rate. Line coherence differs: albedo 0.31-0.33 vs 0.35, lighting 0.28 vs 0.32 (4x the
+  strand spread), final 0.75-0.79 vs 0.84. Attributed to the camera-facing fibre normal (N.V = 1 on strand pixels).
+- `rt_hair_macro_normal` (knob exp_hair_macro_normal, Advanced): RT0 = the card's own normal, exactly the native RT0.
+- Found from the decompiled hair VS 41a168e2: the native RT3 tangent is world space, the strand variant wrote view
+  space, so the strands' Marschner lobes used a rotated tangent. `rt_hair_tangent_world` (knob
+  exp_hair_tangent_world, Advanced) writes the world tangent. The suspected grazing-term space mismatch is not one
+  (frame and ray both world).
+- Both under specialization 1045 (restart to enable, then live via header flags 16/32); no cost; request delta 0.
+- Live check (Test Dialogue1, one session): RTX_HAIR_PRIMARY 5g lists windows and thresholds.

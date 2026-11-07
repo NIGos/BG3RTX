@@ -18,6 +18,13 @@
 // M3.2 (rt_hair_groom_coverage, common/shader_variant.h kSpecIdHairGroomCoverage): two stratified rays per pixel.
 // 0: the single pixel ray below, unchanged; 1: the pair, when header flag 8 is also set (live off-switch).
 [[vk::constant_id(1042)]] const uint kHairGroomCoverage = 0u;
+// 5g (rt_hair_macro_normal / rt_hair_tangent_world, common/shader_variant.h kSpecIdHairShadingSpace): 0: RT0 the fibre
+// normal, RT3 the view-space tangent, unchanged; 1: header flag 16 writes RT0 = the card's own normal (exactly what the
+// native FS writes: VS 41a168e2 location 1 = view(location 3)), flag 32 writes RT3 in world space, the space of the
+// native card tangent (VS 41a168e2 locations 3-5 are world vectors; 3033c895 reads class 5 T without rotation).
+[[vk::constant_id(1045)]] const uint kHairShadingSpace = 0u;
+static const uint hair_primary_flag_macro_normal = 16u;   // common/hair_primary.h kFlagMacroNormal
+static const uint hair_primary_flag_tangent_world = 32u;  // common/hair_primary.h kFlagTangentWorld
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
 [[vk::constant_id(1102)]] const uint kDrawSlot = 16u;
@@ -291,11 +298,17 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float f523 = lerp(1.0, 0.5 + (1.0 - M.y) * 1.5, F(35u));
   const float f34 = F(34u);
 
-  o.rt0 = float4(hp_stereo_encode(n_view), 0.0, 0.0);
+  float3 rt0_n = n_view, rt3_t = t_view;
+  if (kHairShadingSpace != 0u) {   // dead as a whole at constant 0
+    const uint flags = ld(rec + 60u);
+    if ((flags & hair_primary_flag_macro_normal) != 0u) rt0_n = normalize(mul(float4(card_n, 0.0), gCam.view).xyz);
+    if ((flags & hair_primary_flag_tangent_world) != 0u) rt3_t = t_world;
+  }
+  o.rt0 = float4(hp_stereo_encode(rt0_n), 0.0, 0.0);
   o.rt1 = float4(saturate(lerp(c477, V(16u), tip)), 1.0);
   o.rt2 = float4(saturate(lerp(lerp(f34 * f523 + z550, f34 * f523 + z550 * -0.2, m31), 0.2, tip)), 0.5,
                  saturate(F(39u)), hp_rt2_w(kHairPrimaryClass, gDraw.channel, false));
-  o.rt3 = float4(hp_oct12_encode(t_view),
+  o.rt3 = float4(hp_oct12_encode(rt3_t),
                  clamp((1.0 - 0.3 * z550) * saturate(f334 * (saturate(dot(c279, 1.0.xxx)) * 2.0 - 1.0) + F(38u)),
                        0.01, 1.0));
   o.depth = asfloat(e.z);

@@ -45,10 +45,13 @@ constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101, kSpecDrawSlot = 1
 //  10..13 the G-buffer viewport x, y, width, height (float; a flipped viewport has a negative height)
 //  14 mesh pool size in bytes (the strand readers bound every pool read by it, hp_segment), 15 flags (bit 0: dithered
 //  strand tips, bit 1: the build camera at kCameraOffset is valid, bit 2: the previous publish's at kPrevCameraOffset,
-//  bit 3: M3.2 two-ray coverage, read only by a G-buffer variant built with specialization kSpecIdHairGroomCoverage = 1)
+//  bit 3: M3.2 two-ray coverage, read only by a G-buffer variant built with specialization kSpecIdHairGroomCoverage = 1,
+//  bit 4: 5g RT0 = the card's own normal, bit 5: 5g RT3 = the world-space strand tangent; both read only by a G-buffer
+//  variant built with specialization kSpecIdHairShadingSpace = 1)
 // Table at kTableOffset: per groom instance k (the groom TLAS instance index) four byte offsets into the mesh pool:
 //  points (float3), point UV (float2), segment start indices (uint), previous points (float3; 0: none yet).
 constexpr uint32_t kFlagTips = 1u << 0, kFlagCamera = 1u << 1, kFlagPrevCamera = 1u << 2, kFlagCoverage = 1u << 3;
+constexpr uint32_t kFlagMacroNormal = 1u << 4, kFlagTangentWorld = 1u << 5;
 constexpr uint32_t kHeaderWords = 16;
 constexpr uint32_t kDrawSlots = 16;
 constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax

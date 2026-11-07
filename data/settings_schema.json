@@ -490,6 +490,32 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_coverage": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_groom_coverage": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_macro_normal", "label": "Strand hair: card normal",
+     "description": "Experimental: on-screen strands give the game's hair lighting the hair card's own normal (the hair volume's surface) instead of a normal facing the camera. Appearance is unqualified.",
+     "apply": "restart", "apply_note": "restart to enable; switches live after", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: on-screen strands give the game's hair lighting the hair card's own normal (the hair volume's surface) instead of a normal facing the camera. Appearance is unqualified.",
+     "details": "5g: compiled into the strand pipelines at their creation; no extra cost. Compare the hair's shading and strand definition in Test Dialogue1 (on/off/on).",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_macro_normal": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_macro_normal": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "exp_hair_tangent_world", "label": "Strand hair: world-space tangent",
+     "description": "Experimental: on-screen strands write their tangent in world space, the space of the game's card tangent, so the hair highlights follow the strands. Appearance is unqualified.",
+     "apply": "restart", "apply_note": "restart to enable; switches live after", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: on-screen strands write their tangent in world space, the space of the game's card tangent, so the hair highlights follow the strands. Appearance is unqualified.",
+     "details": "5g: compiled into the strand pipelines at their creation; no extra cost. Compare the hair highlights in Test Dialogue1 (on/off/on).",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_tangent_world": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_tangent_world": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_groom_cascade_drop", "label": "Strand hair: no card shadows",
      "description": "Experimental: hair whose strands are in the ray-traced scene stops casting its card silhouette into the game's sun shadow maps. Where the game's shadow is still used, that hair casts no shadow. Unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
