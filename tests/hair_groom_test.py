@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.low_priority import lower_priority
 lower_priority()
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, sample, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, curves2d, dual, geom, mesh, primary, render, sample, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -104,6 +104,82 @@ def test_stitch():
     c = strands2d.Strand2D(list(np.full(50, 30.0)), list(range(60, 110)), [3] * 50)
     out = strands2d.stitch([a, b, c])
     check("stitch joins the aligned piece only", sorted(len(s.y) for s in out) == [50, 100], [len(s.y) for s in out])
+
+
+def curl_fixture(size=192, width=4):
+    """A synthetic curly mask (R id, G 0, B root..tip, A coverage) and its painted centrelines (root to tip).
+
+    Strand 1 is a curl running sideways (a prolate cycloid: a loop that crosses itself, then up again, so its rows do
+    not run root to tip; tightest radius of curvature (d - r)^2 / d = 20 px, five strand widths, as the curls of
+    HAIR_Afro_B); strand 2 rises from the bottom left and crosses it on top with another ID."""
+    t = np.linspace(0, 1, 6000)
+    s = 2.6 * np.pi * t
+    curl = np.stack([45 + 12.0 * s - 40 * np.sin(s), 96 + 40 * np.cos(s)], 1)
+    cross = np.stack([20 + 160 * t, 180 - 160 * t], 1)
+    m = np.zeros((size, size, 4), np.uint8)
+    yy, xx = np.mgrid[0:size, 0:size]
+    for sid, c in ((90, curl), (200, cross)):
+        arc = np.r_[0, np.cumsum(np.hypot(*np.diff(c, axis=0).T))]
+        for (x, y), a in zip(c[::4], arc[::4] / arc[-1]):
+            disc = (xx - x) ** 2 + (yy - y) ** 2 <= (width / 2) ** 2
+            m[disc] = (sid, 0, int(round(a * 255)), 255)
+    return m, [curl, cross]
+
+
+def test_curves2d():
+    m, truth = curl_fixture()
+    corr = curves2d.root_row_correlation(m, (1, 1))
+    rows = np.zeros((128, 128, 4), np.uint8)
+    rows[..., 3] = strand_mask(128, 128, [lambda y: 30.0, lambda y: 90.0], 4)
+    rows[..., 2] = np.linspace(0, 255, 128)[:, None].astype(np.uint8)
+    check("curly detection: the curl's root channel does not run along the rows", corr is not None and corr < convert.CURLY_ROOT_CORR
+          and convert.is_curly(m, (1, 1)) and not convert.is_curly(rows, (1, 1)), corr)
+    curves, typ, claimed = curves2d.trace(m)
+    cov = m[..., 3] >= 128
+    length = [float(np.hypot(np.diff(c.x), np.diff(c.y)).sum()) for c in curves]
+    long_ = [c for c, n in zip(curves, length) if n > 40]
+    check("curves2d: two strands, the curl not cut at its crossings", len(long_) == 2, sorted(length))
+    check("curves2d: typical width (painted discs are 2 r + 1 = 5 px across)", np.all((typ >= 4) & (typ <= 7)), np.unique(typ))
+    check("curves2d: recall", (claimed & cov).sum() / cov.sum() > 0.9, (claimed & cov).sum() / cov.sum())
+    for k, true in enumerate(truth):
+        tl = np.hypot(*np.diff(true, axis=0).T).sum()
+        # The traced curve closest to this painted strand: centreline distance and covered length.
+        best = min(long_, key=lambda c: np.mean(np.min(np.hypot(c.x[:, None] - true[None, ::20, 0], c.y[:, None] - true[None, ::20, 1]), 1)))
+        d = np.min(np.hypot(best.x[:, None] - true[None, ::4, 0], best.y[:, None] - true[None, ::4, 1]), 1)
+        rx, ry = curves2d.resample(best, 4, 0.25)[:2]   # smoothed: the raw centres zigzag by half a texel
+        got = np.hypot(np.diff(rx), np.diff(ry)).sum()
+        check(f"curves2d strand {k}: on the painted centreline", np.median(d) < 0.75 and np.percentile(d, 95) < 1.5,
+              (np.median(d), np.percentile(d, 95)))
+        check(f"curves2d strand {k}: full length", 0.85 * tl < got < 1.1 * tl, (got, tl))
+        check(f"curves2d strand {k}: root to tip", np.hypot(best.x[0] - true[0, 0], best.y[0] - true[0, 1]) < 4
+              and np.hypot(best.x[-1] - true[-1, 0], best.y[-1] - true[-1, 1]) < 4 and best.root_corr > 0.95,
+              ((best.x[0], best.y[0]), (best.x[-1], best.y[-1]), best.root_corr))
+    # Resampling keeps the centreline within a quarter width and spaces points at most `step` apart.
+    c = max(curves, key=lambda c: len(c.x))
+    x, y, w, nx, ny = curves2d.resample(c, 16, 1.0)
+    seg = np.hypot(np.diff(x), np.diff(y))
+    check("curves2d resample: spacing and unit normals", seg.max() <= 16.5 and np.allclose(np.hypot(nx, ny), 1), seg.max())
+    # Converter: a square card (isotropic texels, 0.1 m across the mask) holds the curl; the 2-D tracer is chosen
+    # automatically and the radius is the painted width whichever way the strand runs in the texture.
+    card = card_mesh(length=0.1, width=0.1)
+    groom, rep = convert.convert(card, m, tile_grid=(1, 1), step=16)
+    # The painted width: covered texels per texel of painted centreline (the crossings overlap a little).
+    painted = cov.sum() / sum(np.hypot(*np.diff(c, axis=0).T).sum() for c in truth)
+    expect = painted / 2 * 0.1 / m.shape[0]
+    p5, p50, p95 = np.percentile(groom.radii, [5, 50, 95]) / expect
+    check("convert auto picks the 2-D tracer on a curly mask", rep.get("tracer") == "2d" and groom.strands >= 2, rep.get("tracer"))
+    check("convert curly: radius = painted width in every direction", abs(p50 - 1) < 0.15 and p5 > 0.7 and p95 < 1.3,
+          (p5, p50, p95, painted))
+    first = groom.offsets[:-1]
+    last = groom.offsets[1:] - 1
+    check("convert curly: root channel increases root to tip", np.all(groom.root_param[last] > groom.root_param[first]))
+    emb = np.einsum("pk,pkd->pd", groom.bary, card.positions[card.tris[groom.triangle]])
+    check("convert curly: embedding reproduces the points", np.allclose(emb, groom.points, atol=1e-6))
+    # The row path is untouched: on a mask whose rows run root to tip, "auto" is bit-identical to "rows".
+    g_auto, r_auto = convert.convert(card_mesh(), rows[:, :64].copy(), tile_grid=(1, 1), step=16)
+    g_rows, r_rows = convert.convert(card_mesh(), rows[:, :64].copy(), tile_grid=(1, 1), step=16, tracer="rows")
+    check("convert auto on a row atlas is bit-identical to the row tracer", r_auto == r_rows and all(
+        np.array_equal(getattr(g_auto, f.name), getattr(g_rows, f.name)) for f in dataclasses.fields(g_auto)))
 
 
 def card_mesh(length=0.2, width=0.02, rows=4):
@@ -1204,7 +1280,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_coverage, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_coverage, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
