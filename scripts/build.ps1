@@ -16,7 +16,10 @@ $build = Join-Path $root "build"
 function Enter-VsShell {
   if (Get-Command cl.exe -ErrorAction SilentlyContinue) { return }
   $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-  $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+  # Prefer VS 2022 (MSVC 14.4x): the build trees and the verified releases use it. A newer Visual Studio next to it
+  # would otherwise win -latest and mix its STL headers with the cached 14.4x compiler (STL1001, 2026-11-07).
+  $vs = & $vswhere -latest -products * -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+  if (-not $vs) { $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath }
   if (-not $vs) { throw "No Visual Studio with the C++ x64 tools found" }
   $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
   cmd /c "`"$vcvars`" >nul && set" | ForEach-Object {
