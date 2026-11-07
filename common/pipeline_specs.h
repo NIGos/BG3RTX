@@ -31,7 +31,7 @@ inline std::vector<PipelineSpecs> experimental_specs(const PipelineSpecs& base, 
       {"rt_native_scalp", kSpecIdScalpHair}, {"rt_native_hair", kSpecIdScalpHair},
       {"rt_native_tileset", kSpecIdTileset}, {"rt_water_compose_shift", kSpecIdWaterComposeShift},
       {"rt_hair_groom", kSpecIdHairGroom},
-      {"rt_hair_groom_shadow_t", kSpecIdHairGroomShadowT}};
+      {"rt_hair_groom_shadow_t", kSpecIdHairGroomShadowT}, {"rt_hair_groom_ao_t", kSpecIdHairGroomAoT}};
   std::vector<PipelineSpecs> out;
   for (const auto& knob : settings::kKnobs) {
     if (!knob.experimental || !settings::knob_visible(knob, dev)) continue;

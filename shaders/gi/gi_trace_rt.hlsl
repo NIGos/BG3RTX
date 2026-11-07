@@ -257,6 +257,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   for (uint r = 0; r < pc.rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
     float3 o = RT_SECONDARY_ORIGIN(fp,org, P, N, dist * pa, dir);
+#ifdef RT_SPEC_NATIVE
+    if (kRtGroomAoT != 0u) g_rt_groom_ao = true;   // rt_hair_groom_ao_t: this ray sees the strands' transmittance
+#endif
 #if SHARC_QUERY_PASS || RT_HIT_GI_DIRECT
     RtHit hh = rt_closest_hit(o, dir, R, cone);
     float t = hh.t;
@@ -264,6 +267,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #else
     bool aborted;
     float t = rt_closest(o, dir, R, cone, aborted);
+#endif
+#ifdef RT_SPEC_NATIVE
+    if (kRtGroomAoT != 0u) g_rt_groom_ao = false;
 #endif
     // Aborted: the closest hit is somewhere in [0, min(t, R)] (t: a committed hit, possibly
     // farther than the true one; -1: none yet). Its occlusion weight is then the fade's mean

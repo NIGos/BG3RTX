@@ -87,6 +87,7 @@ void main(uint3 id : SV_DispatchThreadID) {
   }
   const uint lit = passes(r, r.Origin);
   uint succ = 0u, succ_d = 0u, last = 0xFFFFFFFFu;
+  float t1 = -1.0;   // (5) the closest strand hit: rt_closest / rt_closest_hit's opaque groom query (M2.3 AO rays)
   [loop] for (uint it = 0; it < 64u; ++it) {
     RayQuery<RAY_FLAG_FORCE_OPAQUE> c;
     c.TraceRayInline(gScene, 0u, 0xFFu, r);
@@ -96,6 +97,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     ++succ;
     succ_d += (last == 0xFFFFFFFFu || (prim != last + 1u && prim + 1u != last)) ? 1u : 0u;
     last = prim;
+    if (t1 < 0.0) t1 = c.CommittedRayT();
     r.TMin = c.CommittedRayT() + 1e-5;
   }
   const uint at = (id.y * w + id.x) * 32u;
@@ -104,5 +106,6 @@ void main(uint3 id : SV_DispatchThreadID) {
   gOut.Store(at + 8u, cand_d);
   gOut.Store(at + 12u, succ_d);
   gOut.Store(at + 16u, lit);
-  [unroll] for (uint i = 5; i < 8u; ++i) gOut.Store(at + i * 4u, 0u);
+  gOut.Store(at + 20u, asuint(t1));
+  [unroll] for (uint i = 6; i < 8u; ++i) gOut.Store(at + i * 4u, 0u);
 }

@@ -34,6 +34,8 @@ gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT
 gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1
 gi/hair_fibre.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1
 gi/hair_fibre.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1
+gi/hair_fibre_spec.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1
+gi/hair_fibre_spec.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1
 gi/pan_local.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1
 gi/pan_local.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1
 gi/pan_primary.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1

@@ -22,6 +22,8 @@ def main():
     ap.add_argument('--sharc', default='auto')
     ap.add_argument('--spirv-val')
     ap.add_argument('--json')
+    ap.add_argument('--allow-new', action='append', default=[], metavar='FILE',
+                    help='a new feature request file (e.g. gi/hair_fibre_spec.hlsl, M4.2) validated separately')
     a = ap.parse_args()
     tool, cache, base, new = gate_setup(a.baseline, a.dxc, a.sharc, a.spirv_val)
     features = {'gi/hair_fibre.hlsl', 'rt/hair_primary_gbuffer.hlsl', 'rt/hair_primary_count.hlsl'}
@@ -46,7 +48,10 @@ def main():
     print(f"{n}/{len(requests)} requests byte-identical, "
           f"{report['equivalent_at_default']} equivalent at default; "
           f"{len(failures)} failed; request delta {report['request_delta']}", flush=True)
-    return int(bool(failures or missing or current-old or not requests))
+    new_unexpected = sorted(r for r in current - old if split_request(r)[0] not in set(a.allow_new))
+    if new_unexpected:
+        print('unexpected new requests: ' + ', '.join(new_unexpected), flush=True)
+    return int(bool(failures or missing or new_unexpected or not requests))
 
 
 if __name__ == '__main__':

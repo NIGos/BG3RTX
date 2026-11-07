@@ -369,6 +369,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_fibre_gi": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_fibre_gi": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_fibre_spec", "label": "Strand specular reflections",
+     "description": "Experimental: reflections and environment light on visible strands through the fibre's surface reflection instead of the game's hair term. Appearance and cost are unqualified.",
+     "apply": "live", "apply_note": "live; needs Strand hair on screen and RT reflections", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: reflections and environment light on visible strands through the fibre's surface reflection instead of the game's hair term. Appearance and cost are unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_fibre_spec": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_fibre_spec": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_groom_crowd", "label": "Strand hair crowd budget",
      "description": "Experimental: gives nearby characters finer strands and reduces distant hair detail.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": true,
@@ -395,6 +408,19 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_shadow_t": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_shadow_t": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "exp_hair_groom_ao_t", "label": "Strand AO transmittance",
+     "description": "Experimental: ambient occlusion and indirect-light rays through strand hair pass with the fibre's forward-scattered light per crossing, as the strand shadows do, instead of stopping at the first strand. Appearance and cost are unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: ambient occlusion and indirect-light rays through strand hair pass with the fibre's forward-scattered light per crossing, as the strand shadows do, instead of stopping at the first strand. Appearance and cost are unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_ao_t": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_ao_t": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_primary_passes", "label": "Strand passes that swap",
      "description": "Diagnostic for on-screen strands: which passes may replace the cards (G-buffer, motion vectors, depth prepass). Unqualified.",
