@@ -47,6 +47,7 @@
 #include "../common/dyn_hold.h"
 #include "../common/cascade_casters.h"
 #include "../common/rt_capture_budget.h"
+#include "../common/host_memory.h"
 #include "../common/vram_guard.h"
 #include "../common/as_chunk_alloc.h"
 #include "../common/vram_compact.h"
@@ -133,11 +134,28 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host, 
   VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
   if (rt_alloc_device_address()) mai.pNext = &fi;
   mai.allocationSize = req.size;
-  const VkMemoryPropertyFlags hv = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-  mai.memoryTypeIndex = host ? find_memory_type(dd, req.memoryTypeBits, hv | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-                             : find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  if (host && mai.memoryTypeIndex == UINT32_MAX) mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, hv);
-  if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, &out.m) != VK_SUCCESS) {
+  bool allocated = false;
+  if (host) {
+    // BAR VRAM first, system memory when the BAR heap is full (no Resizable BAR: common/host_memory.h).
+    static_assert(bg3::host_memory::kBar == (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT), "host_memory.h flag values");
+    VkPhysicalDeviceMemoryProperties props{};
+    if (dd->inst && dd->inst->GetPhysicalDeviceMemoryProperties) dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical, &props);
+    uint32_t flags[VK_MAX_MEMORY_TYPES];
+    for (uint32_t i = 0; i < props.memoryTypeCount; ++i) flags[i] = props.memoryTypes[i].propertyFlags;
+    bool fell_back = false;
+    allocated = bg3::host_memory::allocate_host_visible(flags, props.memoryTypeCount, req.memoryTypeBits, [&](uint32_t t) {
+      mai.memoryTypeIndex = t;
+      return dd->vk.AllocateMemory(dd->device, &mai, nullptr, &out.m) == VK_SUCCESS;
+    }, &fell_back) != bg3::host_memory::kNoType;
+    static std::atomic<uint32_t> fallbacks{0};
+    if (fell_back && fallbacks.fetch_add(1) < 8)
+      log("[bvh] host-visible VRAM (BAR heap) full: %s (%llu KB) in system memory", what, (unsigned long long)(size >> 10));
+  } else {
+    mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    allocated = mai.memoryTypeIndex != UINT32_MAX && dd->vk.AllocateMemory(dd->device, &mai, nullptr, &out.m) == VK_SUCCESS;
+  }
+  if (!allocated) {
     dd->vk.DestroyBuffer(dd->device, out.b, nullptr);
     out = Buf{};
     return false;
@@ -1948,7 +1966,15 @@ void bvh_begin_capture(VkCommandBuffer) {
   g_dyn_seen.clear();
   g_audits_this_frame = 0;
   g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
-  g_groom_on = cfg_hot(CfgHot::rt_hair_groom) != 0 && hair_groom::lss_enabled() && geo_native_hair_enabled();
+  const bool groom_key = cfg_hot(CfgHot::rt_hair_groom) != 0, lss = hair_groom::lss_enabled(), native = geo_native_hair_enabled();
+  g_groom_on = groom_key && lss && native;
+  // The join's gate, logged when it changes (startup, key toggles, level loads that change the capture).
+  static int logged_gate = -1;
+  const int gate = int(groom_key) | int(lss) << 1 | int(native) << 2;
+  if (groom_key && gate != logged_gate)
+    log("[hair groom] join gate: rt_hair_groom 1, linear swept spheres %d, native hair capture %d (88-byte stride, alpha) -> "
+        "groom joins %s", int(lss), int(native), g_groom_on ? "on" : "OFF");
+  logged_gate = groom_key ? gate : -1;
 }
 
 BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris) {
@@ -2371,7 +2397,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const uint32_t n_inst = n_static + uint32_t(dyn.size()) + (casc ? 1u : 0u);
   if (!ensure_ring(n_inst + (g_groom_on ? kGroomMax : 0u), n_mats + (compact_holds ? uint32_t(dyn.size()) : 0u)) || !ensure_tlas(slot, (std::max)(n_inst, 1u))) {
     g_failed = true;
-    log("[bvh] allocation failed (%u instances); the split is off, the legacy build takes over", n_inst);
+    log("[bvh] allocation failed (%u instances, ring %d, TLAS %d); the split is off, the legacy build takes over%s", n_inst,
+        int(g_ring.b != VK_NULL_HANDLE), int(g_tlas[slot].as != VK_NULL_HANDLE),
+        g_groom_on ? " (hair grooms join only in the split: no strands this session)" : "");
     return false;
   }
   // This build's region of the host ring: the scene slot's, retired on the GPU
