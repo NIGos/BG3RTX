@@ -216,6 +216,95 @@ def r_sample_check(exe, spv, n=4000, seed=19):
     check("R lobe white furnace: sampled estimator = quadrature within 3%", worst < 0.03, worst)
 
 
+def gpu_rows(exe, spv, rows, label):
+    """One "bsdf"-mode dispatch over 16-float rows; float4 per row, or None (skip / failure recorded)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        inp, out = Path(tmp) / "s.bin", Path(tmp) / "o.bin"
+        inp.write_bytes(np.asarray(rows, "<f4").tobytes())
+        p = subprocess.run([str(exe), "bsdf", str(inp), str(spv), str(out)], capture_output=True, text=True)
+        if p.returncode == 77:
+            return None
+        if p.returncode:
+            print(p.stderr)
+            check(label + " GPU check ran", False, p.returncode)
+            return None
+        return np.frombuffer(out.read_bytes(), "<f4").reshape(-1, 4).astype(np.float64)
+
+
+def fibonacci(n):
+    i = np.arange(n) + 0.5
+    z = 1 - 2 * i / n
+    a = np.pi * (1 + 5 ** 0.5) * i
+    r = np.sqrt(1 - z * z)
+    return np.stack([r * np.cos(a), r * np.sin(a), z], 1)
+
+
+def game_light_check(exe, game_spv, bsdf_spv, dual_spv, n=4000, seed=29):
+    """M4.3 (rt_hair_fibre_mapped): per light, the game's hair term of a shadow-mapped light that gi/hair_fibre.hlsl
+    removes (GPU bg3_materials lobes vs bsdf.game_hair_light), and the fibre response that replaces it on a fixture of
+    N lights: a uniform sphere of N = 20000 lights of irradiance 4 pi / N each (a white environment, v = 1) gives
+    sum E F = the integral of F: for the white single-scattering response exactly 1 (energy conservation); the dual
+    response at n = 0..3 fibres in front against its CPU twin summed over the same lights."""
+    rng = np.random.default_rng(seed)
+
+    def unit(k):
+        v = rng.normal(size=(k, 3))
+        return v / np.linalg.norm(v, axis=1, keepdims=True)
+    c = bsdf.CHAR_HAIR
+    rows, want = [], []
+    for color, rough in ((c["color"], c["roughness"]), ((0.6, 0.45, 0.3), 0.55), ((0.85, 0.8, 0.7), 0.3)):
+        t, wo, wi = unit(n), unit(n), unit(n)
+        S = rng.uniform(0, 1, n)
+        S[:200] = 1.0
+        nrm = wo - t * np.einsum("nd,nd->n", wo, t)[:, None]
+        nrm /= np.linalg.norm(nrm, axis=1, keepdims=True)
+        want.append(bsdf.game_hair_light(t, nrm, wo, wi, color, rough, c["scatter"], c["backlit"], S))
+        block = np.zeros((n, 16))
+        block[:, 0:3], block[:, 3], block[:, 4:7], block[:, 7] = t, S, wo, rough
+        block[:, 8:11], block[:, 11], block[:, 12:15], block[:, 15] = wi, c["scatter"], color, c["backlit"]
+        rows.append(block)
+    want = np.concatenate(want)
+    got = gpu_rows(exe, game_spv, np.concatenate(rows), "game light")
+    if got is not None:
+        err = np.abs(got[:, :3] - want) / np.maximum(np.abs(want), 1e-3 * np.abs(want).max())
+        rep = {"samples": len(want), "rel_err_p99": float(np.percentile(err, 99)), "rel_err_max": float(err.max())}
+        print(json.dumps({"game_light": rep}))
+        check("M4.3 game hair term GPU vs CPU: 99% within 1e-4, all within 1e-3 relative",
+              rep["rel_err_p99"] < 1e-4 and rep["rel_err_max"] < 1e-3, rep)
+    # The N-light fixture: a fibre seen at 30 degrees from its normal plane, every light at 4 pi / N.
+    N = 20000
+    L = fibonacci(N)
+    t = np.array([0.0, 0.0, 1.0])
+    wo = np.array([np.cos(np.radians(30)), 0.0, np.sin(np.radians(30))])
+    E = 4 * np.pi / N
+    fixture = {}
+    for rough in (0.41, 0.7):
+        block = np.zeros((4 * N, 16))
+        block[:, 0:3], block[:, 4:7], block[:, 7], block[:, 12:15] = t, wo, rough, 1.0
+        block[:, 8:11] = np.repeat(L, 4, 0)
+        block[:, 3] = np.tile([-0.75, -0.25, 0.25, 0.75], N)   # hb_eval_pixel's four offsets
+        s = gpu_rows(exe, bsdf_spv, block, "N-light single scattering")
+        if s is None:
+            return
+        single = float(E * s[:, :3].sum(0).mean() / 4)
+        fixture[f"single_white_beta{rough}"] = round(single, 5)
+        # Lights at N = 20000 directions: the quadrature error of the sum (lobe width / spacing), 1%.
+        check(f"N-light fixture: white single scattering sums to 1 (beta {rough}) within 1%", abs(single - 1) < 0.01, single)
+        for nf in (0, 1, 3):
+            blk = np.zeros((N, 16))
+            blk[:, 0:3], blk[:, 3], blk[:, 4:7], blk[:, 7] = t, 2.0, wo, rough
+            blk[:, 8:11], blk[:, 11], blk[:, 12:15] = L, nf, (0.85, 0.7, 0.5)
+            g = gpu_rows(exe, dual_spv, blk, "N-light dual")
+            if g is None:
+                return
+            cpu = dual.shade_table_pixel(np.tile(t, (N, 1)), np.tile(wo, (N, 1)), L, np.full(N, nf), (0.85, 0.7, 0.5), rough)
+            gs, cs = E * g[:, :3].sum(0), E * cpu.sum(0)
+            rel = float(np.max(np.abs(gs - cs) / cs))
+            fixture[f"dual_beta{rough}_n{nf}"] = {"gpu": np.round(gs, 5).tolist(), "cpu": np.round(cs, 5).tolist(), "rel": rel}
+            check(f"N-light fixture: sum of the dual response (beta {rough}, n {nf}) GPU = CPU within 1e-4", rel < 1e-4, rel)
+    print(json.dumps({"n_light_fixture": fixture}))
+
+
 def dual_check(exe, spv, n=3000, seed=13):
     """hd_shade (GPU) against dual.shade_table (CPU, same tables) on random frames, offsets, fibre counts 0..6."""
     rng = np.random.default_rng(seed)
@@ -382,6 +471,7 @@ def main():
     ap.add_argument("--dual-spv", type=Path, help="also compare shaders/rt/hair_dual.hlsli with tools/hair_groom/dual.py")
     ap.add_argument("--shadow-spv", type=Path, help="also count strand crossings per ray (tools/hair_shadow_gpu_check.hlsl)")
     ap.add_argument("--coverage-spv", type=Path, help="also check the M3.2 coverage pair (HP_CHECK_COVERAGE build)")
+    ap.add_argument("--game-light-spv", type=Path, help="also check M4.3 (tools/hair_game_light_gpu_check.hlsl), N-light fixture")
     a = ap.parse_args()
     if a.groom:
         gr = np.load(a.groom)
@@ -405,6 +495,8 @@ def main():
         shadow_check(a.exe, a.shadow_spv, pts, rad, offs, cam)
     if a.coverage_spv:
         coverage_check(a.exe, a.coverage_spv)
+    if a.game_light_spv and a.bsdf_spv and a.dual_spv:
+        game_light_check(a.exe, a.game_light_spv, a.bsdf_spv, a.dual_spv)
     print(f"{len(FAILS)} failures" if FAILS else "all passed")
     sys.exit(1 if FAILS else 0)
 

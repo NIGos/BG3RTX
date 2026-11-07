@@ -7,7 +7,7 @@
 // v: the scene's visibility without the strands (RT_VIS_NO_GROOM), n: the strands crossed on the way to the light
 // (counted against the groom TLAS, at most kMaxStrands). What the buffer holds: D-LS's c * t for a traced light
 // (t = v with the strands as occluders: v and n == 0), the game's c for an untraced one, the game's sun term.
-// Kept as the game's: lights with a game shadow map (the game's hair atlas self-shadow is not modelled, as in D-LS),
+// Kept as the game's: lights with a game shadow map unless rt_hair_fibre_mapped (M4.3, below; D-LS keeps them),
 // box lights, unknown rays, D-LS's AO-on-direct give-back. The new light goes to the diffuse buffer.
 #define LS_NO_MAIN 1
 #define RT_VIS_NO_GROOM 1
@@ -17,6 +17,62 @@
 
 #include "hair_strand_pixel.hlsli"
 static const uint kMaxStrands = 8u;
+
+// rt_hair_fibre_mapped (specialization 1030, docs/RTX_HAIR_PRIMARY.md M4.3): the local lights with a game shadow map
+// too. The game shades them on hair with its atlas term S in place of the self-shadow saturate(2 N.L + 0.5)
+// (3033c895, the point and spot loops: the atlas sampled from P + L 3.5 nb sqrt(d2), no N.L gate, 12 taps, faded
+// by the distance), so the buffer holds E S (spec + diff(texp = 1 - S)) for each; that is replaced by the fibre
+// response E F v with the traced visibility and the strand count, like every other traced light. Only where D-LS
+// trusts the trace for mapped lights (ls_shadowed 1, or 3 with the light on screen); otherwise, and for unknown rays,
+// the game's term stays. 0: mapped lights keep the game's hair term (as before).
+[[vk::constant_id(1030)]] const uint kHfMapped = 0u;
+
+// bg3_atlas_shadow as 3033c895 samples it for hair: offset along the light direction, no N.L gate.
+float hf_atlas_hair(Bg3Light l, bool spot, Bg3Surface sf, float3 Ld, float d2) {
+  uint slot = l.flags >> 2;
+  if (!spot) {
+    const float3 m = -Ld;
+    const float f0 = dot(m, float3(0.0, -0.57735026, 0.81649661)), f1 = dot(m, float3(0.0, -0.57735026, -0.81649661));
+    const float f2 = dot(m, float3(-0.81649661, 0.57735026, 0.0)), f3 = dot(m, float3(0.81649661, 0.57735026, 0.0));
+    const float mx = max(max(f0, f1), max(f2, f3));
+    slot += mx == f0 ? 0u : mx == f1 ? 1u : mx == f2 ? 2u : 3u;
+  }
+  if (!bg3_in(lShadows, slot, 96u)) return 1.0;
+  const uint a = slot * 96u;
+  const float4 r0 = asfloat(lShadows.Load4(a)), r1 = asfloat(lShadows.Load4(a + 16));
+  const float4 r2 = asfloat(lShadows.Load4(a + 32)), r3 = asfloat(lShadows.Load4(a + 48));
+  const float2 org = asfloat(lShadows.Load2(a + 64));
+  const float size = asfloat(lShadows.Load(a + 72)), nb = asfloat(lShadows.Load(a + 80));
+  const float2 dp = asfloat(lShadows.Load2(a + 84));
+  const float dw = asfloat(lShadows.Load(a + 92));
+  const float4 q = float4(sf.P + Ld * (3.5 * (nb * sqrt(d2))), 1.0);
+  const float4 c = float4(dot(r0, q), dot(r1, q), dot(r2, q), dot(r3, q));
+  const float3 p = c.xyz / c.w;
+  float2 uv = p.xy * 0.5 + 0.5;
+  uv.y = 1.0 - uv.y;
+  const float ref = (dp.y / dw) / (p.z - dp.x);
+  const float2 texel = lConsts.c[33].xy;
+  const float rot = sf.ign * 6.2831855;
+  const float2 lo = org + texel, hi = org + size.xx - texel;
+  uint aw, ah;
+  lAtlas.GetDimensions(aw, ah);
+  const int2 amax = int2(aw, ah) - 1;
+  float sum = 0.0;
+  [loop] for (int i = 0; i < 12; ++i) {
+    const float fi = float(i);
+    const float r = sqrt(fi + 0.5) * 0.28867513;
+    const float ang = fi * 2.3999631 + rot;
+    const float2 u = clamp(float2(cos(ang), sin(ang)) * r * 2.5 * texel + uv, lo, hi);
+    const float2 f = frac(u / texel + 0.5);
+    const int2 b = int2(floor(u / texel - 0.5));
+    const float g00 = lAtlas.Load(int3(clamp(b, 0, amax), 0)), g10 = lAtlas.Load(int3(clamp(b + int2(1, 0), 0, amax), 0));
+    const float g01 = lAtlas.Load(int3(clamp(b + int2(0, 1), 0, amax), 0)), g11 = lAtlas.Load(int3(clamp(b + int2(1, 1), 0, amax), 0));
+    const float4 cmp = float4(ref < g01, ref < g11, ref < g10, ref < g00);
+    sum += saturate(lerp(lerp(cmp.w, cmp.z, f.x), lerp(cmp.x, cmp.y, f.x), f.y));
+  }
+  const float fade = saturate(lConsts.c[33].w * length(sf.P) + lConsts.c[33].z);
+  return lerp(1.0, sum * 0.083333336, min(fade, l.strength));
+}
 
 // Strands crossed from P toward L within dist (the pixel's own fibre skipped: rays start 1 mm out).
 float hf_strands(float3 P, float3 L, float dist) {
@@ -106,7 +162,30 @@ void main(uint3 tid : SV_DispatchThreadID) {
     const uint li = bg3_light_index(k);
     const bool spot = k >= end_p;
     const Bg3Light l = load_light(li);
-    if ((l.flags & 1u) != 0u) continue;   // a game shadow map: the game's hair term stays
+    if ((l.flags & 1u) != 0u) {   // a game shadow map: the game's hair term stays unless rt_hair_fibre_mapped
+      if (kHfMapped == 0u || pc.ls_shadowed == 0u || ls_qa_off() || ls_atlas_fallback(l.pos)) continue;
+      float R = pc.ls_source_radius;
+      if ((pc.ls_flags & 1u) != 0u) {   // D-LS's per-light data: the source radius and its owner rules
+        const uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
+        if ((si.z & 0x10000u) != 0u) {
+          R = asfloat(si.x);
+          if (ls_skip_light(si)) continue;
+        }
+      }
+      float3 E, Ld;
+      float dist;
+      if (!hf_light(l, spot, sf, E, Ld, dist)) continue;   // outside its range, cone or channel: the game added nothing
+      const float3 Lv = l.pos - sf.P;
+      const float S = hf_atlas_hair(l, spot, sf, Ld, dot(Lv, Lv));
+      const uint vs = trace_light(s.P, s.N, s.org, l.pos, fp, li, s.cone, R);
+      if (vs == kRtUnknown) continue;
+      const float v = vs == kRtLit ? 1.0 : 0.0;
+      const float n = v > 0.0 ? hf_strands(s.P, Ld, dist) : 0.0;
+      add += E * hd_shade_pixel(T, sf.V, Ld, n, colour, beta) * v;
+      sub_d += E * S * bg3_hair_diff(mt, dot(sf.N, Ld), dot(mt.T, Ld), 1.0 - S);
+      sub_s += E * S * bg3_hair_spec(mt, Ld, sf.V);
+      continue;
+    }
     float3 cd, ct, cs, Ld0;
     float d2, nol;
     if (!bg3_light_eval_mat(l, spot, sf, mt, cd, ct, cs, Ld0, d2, nol)) continue;   // the game added nothing

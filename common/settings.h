@@ -399,6 +399,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_fibre_spec", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Advanced", {}},
 
+  {"exp_hair_fibre_mapped", "Strand shading for shadow-mapped lights",
+   "Experimental: physical strand shading also for local lights that have a game shadow map, with ray-traced shadows through the strands instead of the card shadow map. Appearance and cost are unqualified.",
+   Kind::Choice, Apply::Live, "live; needs Physical strand shading", true,
+   {{"off", "Off", 0, {{"rt_hair_fibre_mapped", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_fibre_mapped", "1"}}, {{"exp_hair_fibre", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Advanced", {}},
+
   {"exp_hair_groom_crowd","Strand hair crowd budget",
    "Experimental: gives nearby characters finer strands and reduces distant hair detail.",
    Kind::Choice, Apply::Live, "live", false,
@@ -760,6 +767,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_fibre", "0"},
     {"rt_hair_fibre_gi", "0"},
     {"rt_hair_fibre_spec", "0"},
+    {"rt_hair_fibre_mapped", "0"},
     {"rt_hair_groom_crowd_ksegments", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
