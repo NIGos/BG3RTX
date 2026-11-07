@@ -17,16 +17,26 @@ struct Handle {
   HANDLE h = INVALID_HANDLE_VALUE;
   ~Handle() { if (h != INVALID_HANDLE_VALUE) CloseHandle(h); }
 };
+// A whole disk mounted as a folder (e.g. E:\Storage) is a real volume, not a redirect
+// into another tree: Windows resolves it to a volume GUID only for true mount points.
+bool volume_mount_point(const fs::path& q) {
+  std::wstring dir = q.wstring();
+  if (dir.empty()) return false;
+  if (dir.back() != L'\\') dir += L'\\';
+  wchar_t volume[64];
+  return GetVolumeNameForVolumeMountPointW(dir.c_str(), volume, 64) != 0;
+}
 bool safe_path(const fs::path& p) {
   if (!p.is_absolute()) return false;
   for (const auto& part : p) if (part == L".." || part == L".") return false;
   // Reject alternate data streams, devices and UNC paths as well as ancestors
-  // that are junctions. This service accepts ordinary local drive paths only.
+  // that are junctions or symlinks. This service accepts ordinary local drive paths only
+  // (a whole-volume mount point on the way is allowed).
   const auto s = p.wstring();
   if (s.size() < 3 || s[1] != L':' || s[2] != L'\\' || s.find(L':', 2) != s.npos) return false;
   for (auto q = p; !q.empty(); q = q.parent_path()) {
     DWORD a = GetFileAttributesW(q.c_str());
-    if (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+    if (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_REPARSE_POINT) && !volume_mount_point(q)) return false;
     if (q == q.parent_path()) break;
   }
   return true;

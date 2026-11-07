@@ -9,3 +9,7 @@
   allowed); `package_runtime`, `package_licences` (copies the helper into its fixture), `release_setup`,
   `release_install` and `test_registration` pass.
 - No shipped file changes (install/uninstall scripts untouched). Cost: none.
+- Same cause in the shipped launcher: diagnostics `safe_path` refused the mount point, so a report from a
+  game or fixture on such a disk came out incomplete (`launcher_diagnostics_fixtures` failed on this PC).
+  It now accepts a reparse point only when `GetVolumeNameForVolumeMountPointW` resolves it to a volume;
+  the existing "ancestor junction refused" check still passes. Launcher, package and link tests: 10/10.
