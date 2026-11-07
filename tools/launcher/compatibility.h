@@ -32,5 +32,9 @@ struct Compatibility {
 // selected < 0 requires explicit adapter selection when more than one is found.
 // No verified driver minimum exists in README: 621.01 is a test reference only.
 Compatibility assess_compatibility(const GraphicsInspection&, int selected = -1);
+// Initial adapter when the user has not chosen one: the only adapter, or the single best
+// one (discrete, ray tracing, NVIDIA first, as best_gpu). A tie at the top returns -1 so
+// the user chooses (e.g. two equal RTX cards). A discrete RTX next to an iGPU is not a tie.
+int default_adapter(const GraphicsInspection&);
 std::string graphics_report(const GraphicsInspection&);
 } // namespace launcher
