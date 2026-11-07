@@ -518,6 +518,33 @@ difference 3.3x higher for the next 7 frames.
   off windows may show dropouts with check "no trace (camera rebase)". In the burst: hair pixels per frame within
   +-5% of the burst median in all 16 frames.
 
+## 5i. The flash while anything moves (offline 2026-11-08, branch claude/hair-flash)
+User run 2026-11-08 00:04-00:08 (camera_gate on): flashes while the camera or a character moves, strands steady when
+still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per period: a misreading, fixed here.
+- Counter bug: the count runs in the scene build, which the current-frame header orders before this frame's G-buffer
+  on the GPU, so it reads the previous G-buffer frame's markers; the counter judged the next frame (s.gframe) and saw no
+  markers for any swapped draw. Now it judges the frame the coverage evidence uses (newest tag with markers, unique
+  G-buffer frame), and the trace counts only when they belong to that frame ("unattributed" otherwise).
+- Cause 1, tag reuse: the strand passes seal pixel entries and markers with the header tag, the publish's frame. Frame N
+  takes publish T at submit; frame N + 1 falls back to the same publish when its own is incompatible ("different grooms",
+  0-47 per period, only in moving periods). Both seal with T: N + 1 reuses N's entries without tracing (N's camera,
+  jitter and pose: holes and stale strands when anything moved) and the markers merge (ambiguous tags 24-28 per moving
+  period, 0 when still), so coverage is invalidated (86-420 refusals) and the draws flip to cards and back (strand swaps
+  resumed after card frames 15-52 per moving period, 0-9 when still; native depth fallbacks 21-56).
+  Fix `rt_hair_primary_frame_tag` (live, off): the header tag is the G-buffer frame itself (common/hair_primary.h
+  gbuffer_tag); the submit upgrade keeps it. Seals, markers, tips dither phase and coverage evidence are then per frame.
+- Cause 2, LOD switches drop the groom: a groom whose screen-size LOD changes to one not yet uploaded is released
+  (groom_lod stages the upload and returns nothing for 2-3 frames; bvhsplit releases the slot): its hair is cards for
+  those frames and the key set of the next publishes differs (the different-grooms fallback of cause 1). A new slot
+  also starts at LOD 0 and switches 30 frames later: the log uploads LOD 0 then LOD 1/2 about 1 s apart for every new
+  groom (32 uploads, full builds 9-21 per moving period, 0 when still). Fix `rt_hair_groom_lod_keep` (live, off): keep the
+  built LOD until the wanted one is resident (hair_groom::lod_this_frame); the [hair groom] line counts kept vs dropped.
+- Fixtures: CTest hair_groom_asset_test test_frame_tags (two G-buffer frames on one publish: ambiguous and reused with
+  publish tags, distinct with frame tags; the counter judges the previous frame), test_lod_keep.
+- Live check (Test Dialogue1 and the isometric view, one session, camera and characters moving, both keys on/off/on):
+  on windows: ambiguous tags 0, coverage invalidated near 0, strand swaps resumed after card frames near the still
+  windows' 0-9, "LOD switches ... (groom dropped)" 0; the dropouts line near 0 (not ~1000); no visible flash.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

@@ -892,7 +892,7 @@ Buf g_groom_scratch;
 struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off, prev_off, pad[3]; };
 static_assert(sizeof(GroomPush) == 48);
 struct GroomStats {
-  uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0;
+  uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0, lod_waits = 0, lod_drops = 0;
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
   uint32_t lod[kGroomLods] = {};
   uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
@@ -2743,6 +2743,17 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       const bool crowd_cards = g.crowd == -1;
       if (g.crowd >= 0) lod = (std::max)(lod, (std::min)(g.crowd, int(groom_src->lods.size()) - 1));
       const GroomAsset::Lod* lp = crowd_cards ? nullptr : groom_lod(cmd, fd.groom_id, *groom_src, lod, now);
+      // rt_hair_groom_lod_keep: the wanted LOD is still uploading (groom_lod staged it): keep drawing the built one and
+      // ask again next frame instead of dropping the groom (the upload goes on either way).
+      if (!lp && !crowd_cards && g.lod >= 0 && g.lod != lod && g.pos_size && g.as.as &&
+          cfg_int("rt_hair_groom_lod_keep", 0) != 0) {
+        const GroomAsset::Lod* built = groom_lod(cmd, fd.groom_id, *groom_src, g.lod, now);
+        if (hair_groom::lod_this_frame(lod, g.lod, false, built != nullptr, true) == g.lod) {
+          lp = built; lod = g.lod;
+          g.lod_votes = 29;   // groom_pick_lod returns the wanted LOD again on the next frame
+          ++g_groom_st.lod_waits;
+        }
+      }
       bool ok = lp != nullptr;
       const GroomAsset::Lod& l = lp ? *lp : groom_src->lods[size_t(lod)];
       GroomWork w{&g, &l, fd.soup_off, false, false, {}, key};
@@ -2805,6 +2816,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         ++g_groom_st.lod[size_t(lod)];
         w.refit ? ++g_groom_st.refits : ++g_groom_st.builds;
       } else if (!crowd_cards) {
+        if (!lp && g.lod >= 0 && g.lod != lod) ++g_groom_st.lod_drops;   // a LOD switch dropped the groom (5i)
         groom_release(g, now);
         s.groom.reset();
       }
@@ -3664,11 +3676,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   g_groom_st.max_instances = (std::max)(g_groom_st.max_instances, groom_count);
   if (g_groom_on && (cfg_int("rt_stats_period_frames", 0) <= 0 ? now % 300 == 0 : now > g_groom_stats_start && (now - g_groom_stats_start) % stats_period(300) == 0)) {
     log_stats("[hair groom] frame %llu: %u groom instances; last %u frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
-        "refits %llu, compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
+        "refits %llu, LOD switches waiting for upload %llu (kept) / %llu (groom dropped), compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
         "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB",
         (unsigned long long)now, groom_count, stats_period(300), g_groom_st.max_instances, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
         g_groom_st.lod[2], (unsigned long long)g_groom_st.builds, (unsigned long long)g_groom_st.refits,
-        (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched,
+        (unsigned long long)g_groom_st.lod_waits, (unsigned long long)g_groom_st.lod_drops, (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched,
         (unsigned long long)g_groom_st.miss[1], (unsigned long long)g_groom_st.miss[2], (unsigned long long)g_groom_st.miss[3],
         (unsigned long long)g_groom_st.miss[4], (unsigned long long)g_groom_st.miss[5], (unsigned long long)g_groom_st.miss[6],
         double(g_groom_pool_used) / 1048576.0, double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0);
