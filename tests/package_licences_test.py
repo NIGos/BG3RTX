@@ -21,6 +21,7 @@ class PackageLicencesTest(unittest.TestCase):
             shutil.copyfile(ROOT / name, self.root / name)
         (self.root / "scripts").mkdir()
         shutil.copyfile(ROOT / "scripts/package.ps1", self.root / "scripts/package.ps1")
+        shutil.copyfile(ROOT / "scripts/linked-path.ps1", self.root / "scripts/linked-path.ps1")
         shutil.copyfile(ROOT / "scripts/package-third-party.json",
                         self.root / "scripts/package-third-party.json")
         self.release = self.root / "docs/release"

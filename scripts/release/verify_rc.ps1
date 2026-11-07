@@ -27,12 +27,10 @@ function Pass([string]$name, [string]$detail) {
 }
 function Require([bool]$ok, [string]$message) { if (-not $ok) { throw $message } }
 function Hash([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+. (Join-Path $PSScriptRoot '..\linked-path.ps1')
 function NoLinks([string]$path) {
-  for ($p = [IO.Path]::GetFullPath($path); $p; $p = Split-Path $p) {
-    if ((Test-Path -LiteralPath $p) -and ((Get-Item -LiteralPath $p -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-      throw "Refusing linked path: $p"
-    }
-  }
+  $linked = Find-LinkedAncestor $path
+  if ($linked) { throw "Refusing linked path: $linked" }
 }
 function Files([string]$path) {
   @(Get-ChildItem -LiteralPath $path -Recurse -Force -File | ForEach-Object { $_.FullName.Substring($path.Length + 1).Replace('/', '\') } | Sort-Object)

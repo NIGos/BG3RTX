@@ -10,10 +10,10 @@ $PayloadDir = (Resolve-Path -LiteralPath $PayloadDir).Path
 $OutDir = [IO.Path]::GetFullPath($OutDir)
 $scratch = Join-Path $root '.scratch'
 if (-not $OutDir.StartsWith($scratch + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Setup output must be under this checkout .scratch.' }
+. (Join-Path $PSScriptRoot '..\linked-path.ps1')
 foreach ($path in @($OutDir, $PayloadDir)) {
-  for ($p = $path; $p; $p = Split-Path $p) {
-    if ((Test-Path -LiteralPath $p) -and ((Get-Item -LiteralPath $p -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Linked setup path: $p" }
-  }
+  $linked = Find-LinkedAncestor $path
+  if ($linked) { throw "Linked setup path: $linked" }
 }
 $versionLine = Get-Content -LiteralPath (Join-Path $PayloadDir 'VERSION.txt') -TotalCount 1
 if ($versionLine -notmatch '^BG3RTX ([A-Za-z0-9._-]+)$') { throw 'Invalid payload VERSION.txt' }
