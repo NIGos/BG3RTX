@@ -3,6 +3,8 @@
 // (variants, record) and layer/bvhsplit.cpp (the per-frame header after the groom TLAS build). Shader twin:
 // shaders/rt/hair_primary.hlsli (kHp* constants). Header-only, no Vulkan: unit-tested in hair_primary_test.
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -282,6 +284,19 @@ constexpr double kCoverMin = 0.8913102349775665;
 // occlusion samples): the maximum offline ratio 1.0752640637962045 (2631 views) plus the same modelled noise. The live
 // ratio is unique accepted strand pixels over unique card pixels in the same G-buffer pass.
 constexpr double kCoverMax = 1.0752640637962045 + 0.01923694227747121;
+// rt_hair_primary_hold: the offline extreme ratios and the bound's noise formula at a live footprint
+// (S strand, C card samples of one measurement). At the offline footprint (C 9397) it is the 0.0192 above;
+// at 430 card pixels (2026-11-07 hair-flicker, draw 9861) about 0.088, which the strict bound ignores.
+constexpr double kCoverRatioMin = 0.9105471772550376, kCoverRatioMax = 1.0752640637962045;
+inline double cover_sigma(uint64_t strand, uint64_t card) {
+  if (!card) return 0.0;
+  const double s = double(strand), c = double(card);
+  return (std::sqrt(s) + (s / c) * std::sqrt(c)) / c;
+}
+// The hold's age limit: the strict freshness plus one full count readback ring (layer/hair_primary.cpp kCountSlots 4
+// slots, each covering kCountTags tags), the longest a swapping key can go without a new measurement while every
+// count slot is still in flight.
+constexpr uint64_t kHoldCountSlots = 4, kHoldFrames = kFreshFrames + kHoldCountSlots * kCountTags;
 // A tag applied by two G-buffer frames cannot identify a measured frame.
 struct GbFrame { uint64_t frame = 0; uint32_t tag = 0; uint64_t keys[kMaxGrooms] = {}, draw_keys[kDrawSlots] = {}; };
 inline const GbFrame* unique_frame(const GbFrame* frames, uint32_t n, uint32_t tag, bool& ambiguous) {
@@ -334,29 +349,48 @@ struct CoverageGate {
   };
   std::unordered_map<uint64_t, Evidence> latest;
   std::unordered_map<uint64_t, uint64_t> incomplete;
+  // rt_hair_primary_hold (hysteresis, off: the strict gate above, unchanged). swapping: the G-buffer frame of the key's
+  // last strand swap. A measurement with no card pixels (the draw hidden in that counted frame) carries no ratio and
+  // does not replace the previous one. A swapping key keeps swapping while its newest measurement is inside the bounds
+  // widened by that measurement's own count noise (the bound's formula at the live footprint) and at most kHoldFrames
+  // old; it returns to cards on an outside measurement, an invalidation, or when the measurement gets older.
+  bool hold = false;
+  std::unordered_map<uint64_t, uint64_t> swapping;
+  void swapped(uint64_t key, uint64_t frame) { if (key && frame > swapping[key]) swapping[key] = frame; }
+  bool is_swapping(uint64_t key, uint64_t now) const {
+    const auto it = swapping.find(key);
+    return hold && it != swapping.end() && now >= it->second && now - it->second <= 2;   // this or the last 2 G-buffers
+  }
   void invalidate(uint64_t key, uint64_t frame) {
     if (key && frame > incomplete[key]) incomplete[key] = frame;
   }
   void observe(uint64_t key, uint64_t frame, uint64_t card, uint64_t strand) {
     if (!key) return;
+    if (hold && !card) return;
     auto& e = latest[key];
     if (frame >= e.frame) e = {frame, card, strand};
   }
   // Why allow() refuses (the swap-refusal tally of the period line); Ok when it allows.
   enum class Why : uint8_t { Ok, None, Invalidated, Stale, Low, High };
-  Why why(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
+  Why why(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax, bool use_hold = true) const {
     const auto it = latest.find(key);
     if (it == latest.end()) return Why::None;
     const auto& e = it->second;
     const auto bad = incomplete.find(key);
     if (bad != incomplete.end() && e.frame <= bad->second) return Why::Invalidated;
-    if (!e.frame || now < e.frame || now - e.frame > kFreshFrames || !e.card) return Why::Stale;
+    const bool held = use_hold && is_swapping(key, now);
+    if (!e.frame || now < e.frame || now - e.frame > (held ? kHoldFrames : kFreshFrames) || !e.card) return Why::Stale;
+    if (held) {
+      const double s = cover_sigma(e.strand, e.card);
+      bound = (std::min)(bound, kCoverRatioMin - s);
+      upper = (std::max)(upper, kCoverRatioMax + s);
+    }
     return e.ratio() < bound ? Why::Low : e.ratio() > upper ? Why::High : Why::Ok;
   }
   bool allow(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
     return why(key, now, bound, upper) == Why::Ok;
   }
-  void clear() { latest.clear(); incomplete.clear(); }
+  void clear() { latest.clear(); incomplete.clear(); swapping.clear(); }
 };
 
 // Main-view hair draws that kept their cards, by the first gate that refused them (layer/hair_primary.cpp
@@ -457,6 +491,39 @@ struct DrawSlots {
       for (auto& key : keys) if (!key) { key = live[k]; break; }
   }
 };
+
+// rt_hair_groom_primary_current (needs rt_hair_groom_primary_order): the G-buffer pass is recorded before this frame's
+// scene build, so at recording only the previous frame's publish is known (the strands then trail the animated cards
+// by one frame and their motion vectors are the previous frame's motion). The G-buffer instead copies its header from a
+// host-visible slot written at vkQueueSubmit: the record-time publish (always safe), upgraded to this frame's publish
+// when its build is ordered before the G-buffer on the GPU (submitted earlier, or earlier in the same submit) and it
+// carries the same grooms in the same draw slots (the draw-time swap decisions used the record-time ones).
+enum class CurrentPick : uint8_t { Current, NotRecorded, AfterGbuffer, Incompatible, Count };
+inline const char* current_pick_name(CurrentPick p) {
+  static const char* const names[] = {"current", "not recorded", "build after the G-buffer", "different grooms"};
+  return p < CurrentPick::Count ? names[size_t(p)] : "?";
+}
+// recorded: this frame's publish exists; submitted_before: its build went down in an earlier submit; build_index /
+// gbuffer_index: positions in this submit's command buffer list (-1: not in it).
+inline CurrentPick current_pick(bool recorded, bool submitted_before, int build_index, int gbuffer_index, bool compatible) {
+  if (!recorded) return CurrentPick::NotRecorded;
+  if (!submitted_before && (build_index < 0 || gbuffer_index < 0 || build_index >= gbuffer_index)) return CurrentPick::AfterGbuffer;
+  return compatible ? CurrentPick::Current : CurrentPick::Incompatible;
+}
+// The same grooms in the same draw slots (the order of the header rows may differ).
+inline bool same_grooms(const uint64_t* keys_a, const DrawSlots& slots_a, const uint64_t* keys_b, const DrawSlots& slots_b) {
+  for (uint32_t i = 0; i < kDrawSlots; ++i) if (slots_a.keys[i] != slots_b.keys[i]) return false;
+  for (int pass = 0; pass < 2; ++pass) {
+    const uint64_t* x = pass ? keys_b : keys_a;
+    const uint64_t* y = pass ? keys_a : keys_b;
+    for (uint32_t k = 0; k < kMaxGrooms; ++k) if (x[k]) {
+      bool found = false;
+      for (uint32_t j = 0; j < kMaxGrooms && !found; ++j) found = y[j] == x[k];
+      if (!found) return false;
+    }
+  }
+  return true;
+}
 inline uint64_t coverage_bytes(uint32_t width, uint32_t height) {
   return uint64_t(width) * height * (kPixelBytes + 8); // packed card and accepted words
 }

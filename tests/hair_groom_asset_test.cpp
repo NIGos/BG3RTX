@@ -137,6 +137,89 @@ static void test_prepass_gbuffer_bootstrap() {
   g.publish(&k, 1, 5); g.publish(&k, 1, 6);
   CHECK(!g.allow_prepass(k));                        // a reset drops readiness
 }
+// rt_hair_primary_hold (2026-11-07 hair-flicker): draw 9861, about 430 card pixels, measured 0.833..0.925 per window
+// around the 0.891 bound. The strict gate flips strands/cards with the count noise; the hold keeps a swapping key on
+// strands while each measurement is inside the bounds widened by its own noise, and still drops it on a real mismatch.
+static void test_coverage_hold() {
+  using namespace hair_primary;
+  CHECK(std::fabs(cover_sigma(8556, 9397) - 0.01923694227747121) < 2e-4);   // the offline footprint: the bound's sigma
+  CHECK(cover_sigma(379, 430) > 0.08 && cover_sigma(379, 430) < 0.095);     // 9861's footprint
+  CHECK(kHoldFrames == kFreshFrames + 16);
+  const uint64_t key = 0x9861;
+  const uint32_t strand[] = {398, 358, 396, 365, 379, 389, 360, 371, 402, 384};   // 0.926, 0.833, ... of 430
+  for (bool hold : {false, true}) {
+    CoverageGate c;
+    c.hold = hold;
+    unsigned swapped = 0, resumes = 0;
+    bool was = false;
+    uint64_t f = 100;
+    c.observe(key, f, 430, 398);   // the first measurement in bounds: both start swapping
+    for (int i = 0; i < 60; ++i, ++f) {
+      if (i % 2 == 0) c.observe(key, f, 430, strand[(i / 2) % 10]);   // a measurement every other frame
+      const bool on = c.allow(key, f + 1);
+      if (on) c.swapped(key, f + 1), ++swapped;
+      resumes += on && !was && i;
+      was = on;
+    }
+    if (hold) CHECK(swapped == 60 && resumes == 0);
+    else CHECK(swapped < 60 && resumes > 0);   // the strict gate flickers on the same measurements
+  }
+  {   // A real mismatch, an invalidation and an aged measurement still return a held key to cards.
+    CoverageGate c;
+    c.hold = true;
+    c.observe(key, 100, 430, 398);
+    CHECK(c.allow(key, 101));
+    c.swapped(key, 101);
+    c.observe(key, 102, 430, 260);                    // 0.60: outside the widened bound
+    CHECK(c.why(key, 103) == CoverageGate::Why::Low);
+    c.observe(key, 104, 430, 398);
+    c.swapped(key, 105);
+    c.invalidate(key, 104);
+    CHECK(c.why(key, 105) == CoverageGate::Why::Invalidated);
+    c.observe(key, 106, 430, 398);
+    c.swapped(key, 105 + kHoldFrames);   // still swapping two frames before the age limit
+    CHECK(c.allow(key, 106 + kHoldFrames));
+    c.swapped(key, 106 + kHoldFrames);
+    CHECK(c.why(key, 107 + kHoldFrames) == CoverageGate::Why::Stale);
+    // A key not swapping: the strict bound and freshness, as without the hold.
+    c.observe(7, 100, 430, 365);                      // 0.849
+    CHECK(c.why(7, 101) == CoverageGate::Why::Low);
+    c.observe(8, 100, 430, 398);
+    CHECK(c.allow(8, 100 + kFreshFrames) && !c.allow(8, 101 + kFreshFrames));
+    // An empty measurement (no card pixels) keeps the previous one with the hold, replaces it without.
+    c.observe(8, 105, 0, 0);
+    CHECK(c.latest.at(8).card == 430);
+    CoverageGate strict;
+    strict.observe(8, 100, 430, 398); strict.observe(8, 105, 0, 0);
+    CHECK(strict.why(8, 105) == CoverageGate::Why::Stale);
+  }
+}
+// rt_hair_groom_primary_current: the G-buffer is recorded before this frame's build (so only the previous publish is
+// known then); at vkQueueSubmit this frame's publish is used only when its build is ordered first on the GPU.
+static void test_current_pick() {
+  using namespace hair_primary;
+  // One submit [prepass + build, G-buffer]: the build runs first -> this frame's publish.
+  CHECK(current_pick(true, false, 0, 1, true) == CurrentPick::Current);
+  // The build submitted in an earlier vkQueueSubmit.
+  CHECK(current_pick(true, true, -1, 0, true) == CurrentPick::Current);
+  // [G-buffer, build] in one submit, the build in the G-buffer's own command buffer (recorded after it), or a later
+  // submit: the record-time (previous) publish stays.
+  CHECK(current_pick(true, false, 1, 0, true) == CurrentPick::AfterGbuffer);
+  CHECK(current_pick(true, false, 0, 0, true) == CurrentPick::AfterGbuffer);
+  CHECK(current_pick(true, false, -1, 0, true) == CurrentPick::AfterGbuffer);
+  CHECK(current_pick(false, true, 0, 1, true) == CurrentPick::NotRecorded);
+  CHECK(current_pick(true, false, 0, 1, false) == CurrentPick::Incompatible);
+  // Same grooms in the same draw slots, rows in any order; a new, missing or moved groom is incompatible.
+  uint64_t a[kMaxGrooms] = {11, 22, 33}, b[kMaxGrooms] = {33, 11, 22}, c[kMaxGrooms] = {11, 22}, d[kMaxGrooms] = {11, 22, 44};
+  DrawSlots sa, sb;
+  sa.publish(a, 3); sb = sa;
+  CHECK(same_grooms(a, sa, b, sb));
+  CHECK(!same_grooms(a, sa, c, sb) && !same_grooms(c, sa, a, sb) && !same_grooms(a, sa, d, sb));
+  DrawSlots moved;
+  moved.publish(b, 3);   // the same keys put into slots in another order
+  CHECK(moved.find(33) != sa.find(33) && !same_grooms(a, sa, b, moved));
+  CHECK(std::strcmp(current_pick_name(CurrentPick::AfterGbuffer), "build after the G-buffer") == 0);
+}
 // Swap refusal tally (period line) and the coverage gate's refusal reason.
 static void test_refusal_tally() {
   using namespace hair_primary;
@@ -222,7 +305,7 @@ int main() {
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
-  test_prepass_gbuffer_bootstrap(); test_refusal_tally();
+  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_current_pick();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

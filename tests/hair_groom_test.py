@@ -1043,6 +1043,26 @@ def test_primary():
     want = pixel(world - cam1, vp_at(cam1)) - pixel(world - cam0, vp_at(cam0)) - np.array([pjit[0], -pjit[1]])
     check("motion vector of a static point = jitter-free pixel difference (native b70cadc5 form)",
           np.allclose(mv, want, atol=1e-9), (mv, want))
+    # rt_hair_groom_primary_current (2026-11-07 hair-flicker: strands trail the animated head): a strand point on a
+    # card that accelerates (1 cm, then 3 cm per frame), static camera. The card draws at p[2] with MV p[2] - p[1]. The previous frame's
+    # publish (rebased only for the camera) draws the strand at p[1] with that publish's motion p[1] - p[0]: one frame
+    # of motion behind, and an MV that is the previous frame's. This frame's publish: the card's position and MV.
+    p = [world + np.array([0.01 * k * k, 0.0, 0.0]) for k in range(3)]   # accelerating: 1 cm, then 3 cm
+    vp = vp_at(cam1)
+
+    def drawn(point, prev_point):
+        frag_s = pixel(point - cam1, vp) - np.array([jit[0], -jit[1]])
+        return frag_s, primary.motion_vector(frag_s, prev_point - cam1, vp, np.ones(2), np.zeros(2), size, jit, pjit)
+
+    card_xy, card_mv = drawn(p[2], p[1])
+    old_xy, old_mv = drawn(p[1], p[0])
+    cur_xy, cur_mv = drawn(p[2], p[1])
+    lag = np.linalg.norm(card_xy - old_xy)
+    check("previous publish: strands trail the card by its per-frame motion (> 1 px here)", lag > 1.0, lag)
+    check("previous publish: its MV differs from the card's true MV", np.linalg.norm(old_mv - card_mv) > 1e-3,
+          (old_mv, card_mv))
+    check("this frame's publish: strand position and MV equal the card's",
+          np.allclose(cur_xy, card_xy, atol=1e-9) and np.allclose(cur_mv, card_mv, atol=1e-9), (cur_xy, cur_mv))
     check("tracer: G-buffer tangent decodes to +x", np.allclose(primary.oct12_decode(gb["rt3"][rows[0], 32]), [1, 0, 0], atol=1e-3))
 
 
