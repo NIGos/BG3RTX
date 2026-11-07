@@ -74,6 +74,7 @@ std::unordered_set<uint64_t> g_without_slot;
 uint64_t g_published = 0;                                     // frame_index + 1 of the last publish with grooms
 struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, publishes = 0, orphan = 0; } g_st;
 hair_primary::PeriodFailures g_failures;
+hair_primary::RefusalTally g_refusals;        // main-view hair draws kept as cards, by first refusing gate (period line)
 // Keys whose prepass card depth went; native draws must restore it during the frame latch.
 hair_primary::DepthLatch g_depth;
 std::unordered_set<uint64_t> g_depth_safe_keys;
@@ -526,7 +527,7 @@ void hair_primary_stats_reset() {
   std::lock_guard<std::mutex> lock(g_mu);
   g_stats_start = frame_index();
   g_st = Stats{}; g_failures.reset(); g_depth_orphan_count = 0; g_coverage_period.clear();
-  g_part = hair_primary::Participation{};
+  g_part = hair_primary::Participation{}; g_refusals.reset();
   g_ambiguous = 0; g_fallbacks = 0; g_without_slot.clear();
   g_adjacent_window = 0; g_transmit_rows = 0; g_ms_sum = 0; g_ms_frames = 0;
   std::fill_n(g_slot_frame, kTimeSlots, uint64_t(0));
@@ -592,7 +593,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_cascade_clone.clear();
   g_pub_keys.clear();
   g_pub_frame = 0;
-  g_part = hair_primary::Participation{};
+  g_part = hair_primary::Participation{}; g_refusals.reset();
   for (CountSlot& s : g_cnt) {
     if (s.rb) dd->vk.DestroyBuffer(dd->device, s.rb, nullptr);
     if (s.rb_mem) dd->vk.FreeMemory(dd->device, s.rb_mem, nullptr);
@@ -1029,30 +1030,49 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // Native cards receive a masked replay; swapped strands write the same two markers directly.
   const bool probe = pass == Pass::Gbuffer && g_order && g_applied_frame == now + 1 && g_live_keys.count(key) &&
                      !g_load.quiet(now) && dv != g_draw_variants.end() && draw < hair_primary::kDrawSlots && dv->second.probe[draw];
-  bool allowed = !(g_published + 2 < now + 1 || g_load.quiet(now) || !g_coverage.allow(key, now + 1)) &&
-                 (pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
-                                                                                         : g_gate.allow_prepass(key));
+  // The first gate that refuses this draw (period line "swap refusals"); the decision itself is unchanged.
+  using hair_primary::Refusal;
+  Refusal why = Refusal::Count;
+  auto refuse = [&](Refusal r) { if (why == Refusal::Count) why = r; };
+  const auto cover = g_coverage.why(key, now + 1);
+  if (g_published + 2 < now + 1) refuse(Refusal::Publish);
+  else if (g_load.quiet(now)) refuse(Refusal::Quiet);
+  else if (cover != hair_primary::CoverageGate::Why::Ok) refuse(hair_primary::coverage_refusal(cover));
+  else if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
+                                                                                         : g_gate.allow_prepass(key)))
+    refuse(Refusal::Strike);
+  bool allowed = why == Refusal::Count;
   // Header order prepass (rt_hair_groom_primary_order 0): the G-buffer may read another frame's header than the probe
   // proved (hc2 2026-11-04: adjacent tags in 296 of 300 counted frames, the player half bald). Cards, fail closed.
   // Header order prepass: no pass swaps (the G-buffer would read another frame's header than the evidence; a prepass
   // clone without card depth next to card G-buffer draws loses the hair: order turned off after order-1 swaps).
-  if (!g_order || draw == hair_primary::kDrawSlots) allowed = false;
+  if (!g_order || draw == hair_primary::kDrawSlots) { allowed = false; refuse(!g_order ? Refusal::Order : Refusal::NoSlot); }
   const int passes = cfg_int("rt_hair_primary_passes", 15);
   {   // rt_hair_primary_passes (diagnostic bitmask, default 15): 1 G-buffer, 2 velocity, 4 prepass clone, 8 coverage probe
-    if (!(passes & (pass == Pass::Gbuffer ? 1 : pass == Pass::Velocity ? 2 : 4))) allowed = false;
+    if (!(passes & (pass == Pass::Gbuffer ? 1 : pass == Pass::Velocity ? 2 : 4))) { allowed = false; refuse(Refusal::Passes); }
   }
-  if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) allowed = false;
+  if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) {
+    allowed = false; refuse(Refusal::Applied);
+  }
   // The prepass drops the card depth only after a G-buffer pass applied a header holding the key: the most recent
   // G-buffer apply (g_applied_frame: frame_index + 1 of that G-buffer). The game records the next frame's prepass before
   // the present that advances frame_index, so that apply is this frame's number or the next (an equality with now
   // refused every prepass: hv7 2026-11-04, 0 prepass strand draws next to 187 G-buffer ones).
   if (g_order && pass == Pass::Prepass && !hair_primary::prepass_drop_allowed(g_applied_frame, now, g_live_keys.count(key) != 0,
-      g_depth_safe_keys.count(key) != 0, g_depth.allow_prepass(key, now)))
-    allowed = false;
-  if (pass == Pass::Gbuffer && !g_depth.dropped(key, now)) allowed = false;
+      g_depth_safe_keys.count(key) != 0, g_depth.allow_prepass(key, now))) {
+    allowed = false; refuse(Refusal::PrepassDrop);
+  }
+  if (pass == Pass::Gbuffer && !g_depth.dropped(key, now)) { allowed = false; refuse(Refusal::NotDropped); }
   if (pass == Pass::Gbuffer && !probe && !allowed && g_live_keys.count(key)) g_coverage.invalidate(key, now + 1);
   if (pass == Pass::Gbuffer && g_fallback.count(s->pipe[0])) g_depth_safe_keys.insert(key);
-  if (pass == Pass::Gbuffer && (draw == hair_primary::kDrawSlots || dv == g_draw_variants.end() || !dv->second.strand[draw])) allowed = false;
+  if (pass == Pass::Gbuffer && (draw == hair_primary::kDrawSlots || dv == g_draw_variants.end() || !dv->second.strand[draw])) {
+    allowed = false; refuse(Refusal::NoStrand);
+  }
+  if (!allowed) g_refusals.add(pass == Pass::Gbuffer ? 0 : pass == Pass::Velocity ? 1 : 2, why);
+  // Every G-buffer gate passed but the card depth was still there: the next prepass may drop it (SwapGate ready_*).
+  if (pass == Pass::Gbuffer && why == Refusal::NotDropped && draw < hair_primary::kDrawSlots && dv != g_draw_variants.end() &&
+      dv->second.strand[draw])
+    g_gate.gbuffer_ready(key);
   if (pass == Pass::Gbuffer)
     g_depth.observe_pipeline(key, now, draw < hair_primary::kDrawSlots && dv != g_draw_variants.end() && dv->second.strand[draw],
                              g_fallback.count(s->pipe[0]) != 0);
@@ -1238,11 +1258,13 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_adjacent_window = 0;
   }
   if (stats_due(now)) {
+    char refusals[640];
+    g_refusals.format(refusals);
     log_stats("[hair primary] frame %llu: %u grooms published; last %u frames: %llu publishes, %llu prepass, %llu "
         "G-buffer and %llu velocity strand draws, %llu pipelines refused, %llu feedback failures; prepass card depth dropped without its G-buffer "
         "swap %llu; hair draws strand/total: main G-buffer %llu/%llu, velocity %llu/%llu, prepass %llu/%llu; other views "
         "G-buffer %llu, velocity %llu, prepass %llu; instanced %llu; card-only pass groups %u; sun cascade hair card draws "
-        "%llu, without card depth %llu",
+        "%llu, without card depth %llu; swap refusals (main-view hair draws kept as cards, first refusing gate):%s",
         (unsigned long long)now, count, stats_period(300), (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
         (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_failures.refused, (unsigned long long)g_failures.feedback,
         (unsigned long long)g_st.orphan, (unsigned long long)g_part.main_swapped[0], (unsigned long long)g_part.main_total[0],
@@ -1250,7 +1272,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         (unsigned long long)g_part.main_swapped[2], (unsigned long long)g_part.main_total[2],
         (unsigned long long)g_part.other_total[0], (unsigned long long)g_part.other_total[1],
         (unsigned long long)g_part.other_total[2], (unsigned long long)g_part.instanced, g_part.card_only_groups(),
-        (unsigned long long)g_part.cascade_total, (unsigned long long)g_part.cascade_dropped);
+        (unsigned long long)g_part.cascade_total, (unsigned long long)g_part.cascade_dropped, refusals);
     char per[768] = {};
     size_t at = 0;
     for (uint32_t i = 0; i < g_depth_orphan_count; ++i) {
@@ -1280,7 +1302,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (stats_due(now) && g_ms_frames)
     log_stats("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
         g_ms_sum / g_ms_frames, g_ms_frames);
-  if (stats_due(now)) g_part = hair_primary::Participation{};
+  if (stats_due(now)) g_part = hair_primary::Participation{}, g_refusals.reset();
   if (stats_due(now)) g_failures.reset(), g_st.orphan = 0, g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0, g_ms_sum = 0, g_ms_frames = 0;
 }
 
