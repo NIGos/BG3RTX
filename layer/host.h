@@ -650,6 +650,9 @@ bool rt_build_camera(uint64_t frame, float pos[3]);
 // The same for the build being recorded, without the lock: only from inside the scene build (bvh_build and what it
 // calls, e.g. hair_primary_publish), where rt_after_capture already holds the scene lock. false: not this build's frame.
 bool rt_this_build_camera(uint64_t frame, float pos[3]);
+// The build being recorded's camera whatever frame_index() reads now (a present on another thread may advance it
+// between rt_after_capture and the code inside the build); its frame_index in *frame. false: the build has none.
+bool rt_current_build_camera(float pos[3], uint64_t* frame);
 // Scene snapshots: each build writes one slot (its own TLAS for the split, its
 // InstInfo region of the bvhsplit ring, its alpha set and record region), and a
 // slot is reused only once the GPU finished every frame it was handed out in

@@ -988,6 +988,13 @@ bool rt_this_build_camera(uint64_t frame, float pos[3]) {
   return true;
 }
 
+bool rt_current_build_camera(float pos[3], uint64_t* frame) {
+  if (!g_this_build_frame) return false;   // reset at every build's start: never a previous build's camera
+  std::memcpy(pos, g_this_build_cam, sizeof g_this_build_cam);
+  *frame = g_this_build_frame;
+  return true;
+}
+
 bool rt_build_camera(uint64_t frame, float pos[3]) {
   std::lock_guard<std::mutex> lock(g_mu);
   for (const CamHist& h : g_cam_hist)

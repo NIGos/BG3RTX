@@ -301,7 +301,8 @@ inline double cover_sigma(uint64_t strand, uint64_t card) {
 // count slot is still in flight.
 constexpr uint64_t kHoldCountSlots = 4, kHoldFrames = kFreshFrames + kHoldCountSlots * kCountTags;
 // A tag applied by two G-buffer frames cannot identify a measured frame.
-struct GbFrame { uint64_t frame = 0; uint32_t tag = 0; uint64_t keys[kMaxGrooms] = {}, draw_keys[kDrawSlots] = {}; };
+struct GbFrame { uint64_t frame = 0; uint32_t tag = 0; uint64_t keys[kMaxGrooms] = {}, draw_keys[kDrawSlots] = {};
+                 uint32_t swapped_slots = 0; };   // draw slots whose G-buffer draw this frame was swapped to strands
 inline const GbFrame* unique_frame(const GbFrame* frames, uint32_t n, uint32_t tag, bool& ambiguous) {
   const GbFrame* found = nullptr;
   ambiguous = false;
@@ -508,6 +509,35 @@ struct DrawSlots {
 // when its build is ordered before the G-buffer on the GPU (submitted earlier, or earlier in the same submit) and it
 // carries the same grooms in the same draw slots (the draw-time swap decisions used the record-time ones).
 enum class CurrentPick : uint8_t { Current, NotRecorded, AfterGbuffer, Incompatible, Count };
+// Strand dropouts (docs/RTX_HAIR_PRIMARY.md 5h): a draw swapped to strands in a G-buffer frame whose strand pass wrote
+// under a tenth of its card pixels (the same-pass marker counts of hair_primary_count.hlsl). card: the draw's card
+// pixels with that frame's tag, accepted: its strand pixels; last_card: its card pixels in the last counted frame (a
+// draw whose markers are all missing is a dropout only if it had card pixels before); traced / hit: the frame's pixel
+// entries sealed with the counted tag, and those with a strand. The first check that can explain it.
+enum class Dropout : uint8_t { None, NoMarker, NoTrace, Missed, Rejected, Count };
+constexpr uint32_t kDropoutMinCard = 64;   // fewer card pixels: too little evidence (a few pixels at the screen edge)
+inline const char* dropout_name(Dropout d) {
+  static const char* const names[] = {"none", "no card marker (header tag)", "no trace (camera rebase)",
+                                      "rays missed (groom TLAS)", "rejected after the hit (owner, card band, tips)"};
+  return d < Dropout::Count ? names[size_t(d)] : "?";
+}
+inline Dropout dropout_reason(uint32_t card, uint32_t accepted, uint32_t last_card, uint32_t traced, uint32_t hit) {
+  if (card == 0) return last_card >= kDropoutMinCard ? Dropout::NoMarker : Dropout::None;
+  if (card < kDropoutMinCard || uint64_t(accepted) * 10 >= card) return Dropout::None;
+  if (traced == 0) return Dropout::NoTrace;
+  if (hit == 0) return Dropout::Missed;
+  return Dropout::Rejected;
+}
+// The header's flags word (Header::flags, word 15) of packed header bytes.
+inline uint32_t header_flags(const uint8_t* bytes) {
+  uint32_t f;
+  std::memcpy(&f, bytes + 15 * 4, 4);
+  return f;
+}
+// rt_hair_primary_camera_gate: the strand shaders discard every fragment of a header without its build camera
+// (hp_rebase), after the prepass dropped the card depth: such a header is never applied (cards that frame).
+inline bool header_usable(const uint8_t* bytes) { return (header_flags(bytes) & kFlagCamera) != 0; }
+
 inline const char* current_pick_name(CurrentPick p) {
   static const char* const names[] = {"current", "not recorded", "build after the G-buffer", "different grooms"};
   return p < CurrentPick::Count ? names[size_t(p)] : "?";

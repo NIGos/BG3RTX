@@ -491,6 +491,33 @@ a and e have the same lit hair mean 0.4165/0.4169, the matched pair).
   Tangent: median |T.N_guide| on strand pixels <= 0.02 with the tangent on and macro off (fibre normal perpendicular to
   the world tangent; oct12 < 0.1 deg), > 0.05 with it off. Plus by eye: highlights follow the strands.
 
+## 5h. One-frame strand dropouts (offline 2026-11-08, branch claude/hair-dropout)
+Seen live: the hair-ab7 strands burst (frame 8 of 16: 4,689 hair pixels vs ~41,500, normal motion vectors) and the
+220524 dump: the swapped hair draws drew nothing for one frame, cards already gone, so no hair; RR keeps the hair
+difference 3.3x higher for the next 7 frames.
+- Mechanism found by reading: rt_after_capture stores the build camera under frame_index F (rtscene.cpp
+  g_this_build_frame); hair_primary_publish, inside the same build, asks rt_this_build_camera(frame_index()). The
+  present on the queue thread advances frame_index (layer.cpp QueuePresentKHR, ++g_frame) and recording straddles it
+  (the period lines show 106-127 of 300 counted frames with adjacent-tag strand pixels), so the publish can read F + 1:
+  no camera, header without kFlagCamera. hp_rebase then fails for every strand fragment, but no swap gate reads the
+  flag (coverage, depth latch and applied keys all pass): the draws are swapped with their card depth dropped.
+  Not yet proven live: the new counter attributes each dropout.
+- Counter (always on, CPU only): `[hair primary] dropouts (last 300 frames): N swapped G-buffer draws wrote under a
+  tenth of their card pixels (no card marker a, no trace b, rays missed c, rejected after the hit d); first (G-buffer
+  frame:key prefix:card/strand pixels:check): ...; publishes without the build camera n (recovered r); camera gate:
+  headers refused g, submit upgrades kept back u`. From the existing same-pass marker counts (card vs accepted pixels
+  per draw slot and tag) of the counted G-buffer frame, its swapped slots (GbFrame::swapped_slots) and the frame's
+  traced/hit entries; `hair_primary::dropout_reason`, CTest hair_groom_asset_test test_dropout.
+- Fix `rt_hair_primary_camera_gate` (knob exp_hair_primary_camera_gate, Advanced, live, off): the publish takes the
+  build's own camera (rt_current_build_camera: set at the build's start, never a previous build's), and a header
+  without kFlagCamera is never picked in before_pass nor taken by the submit-time upgrade (cards that frame; the
+  fallback pipeline restores the card depth as for any refused swap). Every existing fail-closed rule stays.
+  No shader change.
+- Live check (Test Dialogue1, one session, key on/off/on, with a pan burst in an on window): the dropouts line shows
+  0 swapped draws under a tenth in on windows, "publishes without the build camera" > 0 with "recovered" equal to it;
+  off windows may show dropouts with check "no trace (camera rebase)". In the burst: hair pixels per frame within
+  +-5% of the burst median in all 16 frames.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

@@ -490,6 +490,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_coverage": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_groom_coverage": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_primary_camera_gate", "label": "Strand hair: no bald frames",
+     "description": "Experimental: a strand frame whose groom publish lost its build camera keeps the hair cards for that frame instead of drawing no hair. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: a strand frame whose groom publish lost its build camera keeps the hair cards for that frame instead of drawing no hair. Unqualified.",
+     "details": "5h: CPU only, no cost. The period line [hair primary] dropouts counts the frames it prevents. Watch the hair in Test Dialogue1 for one-frame bald flashes.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_primary_camera_gate": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_camera_gate": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_macro_normal", "label": "Strand hair: card normal",
      "description": "Experimental: on-screen strands give the game's hair lighting the hair card's own normal (the hair volume's surface) instead of a normal facing the camera. Appearance is unqualified.",
      "apply": "restart", "apply_note": "restart to enable; switches live after", "advanced": true, "experimental": true, "developer": true,
