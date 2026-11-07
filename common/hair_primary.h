@@ -4,6 +4,7 @@
 // shaders/rt/hair_primary.hlsli (kHp* constants). Header-only, no Vulkan: unit-tested in hair_primary_test.
 #pragma once
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <unordered_map>
 #include <unordered_set>
@@ -186,7 +187,12 @@ constexpr uint32_t kStrikes = 2;
 constexpr uint64_t kRetryFrames = 600, kRetryMaxFrames = 9600;
 struct SwapGate {
   struct Retired { uint64_t until = 0, wait = 0; };
-  std::unordered_set<uint64_t> published, published_prev, gbuffer_now, gbuffer_prev;
+  // gbuffer_*: the key's G-buffer strand variant drew. ready_*: the G-buffer passed every swap gate except the
+  // prepass card-depth drop (DepthLatch::dropped). The G-buffer swaps only after this key's prepass dropped its card
+  // depth (5f3b8a88), and the prepass drops only after a G-buffer swap: with gbuffer_prev alone neither ever went first
+  // (2026-11-07 hair-noswap: 0 prepass, 0 G-buffer strand draws while the coverage evidence passed). A ready G-buffer
+  // also lets the prepass go first; if that G-buffer then refuses, its card draws take the native-depth fallback.
+  std::unordered_set<uint64_t> published, published_prev, gbuffer_now, gbuffer_prev, ready_now, ready_prev;
   std::unordered_map<uint64_t, Retired> failed;
   std::unordered_map<uint64_t, uint32_t> strikes;
   uint64_t now = 0;   // the frame of the last publish (retirements count from it)
@@ -199,18 +205,26 @@ struct SwapGate {
       if (keys[i]) published.insert(keys[i]);
     gbuffer_prev.swap(gbuffer_now);
     gbuffer_now.clear();
+    ready_prev.swap(ready_now);
+    ready_now.clear();
   }
   // A device or scene reset: the published sets go, retired draws stay retired until their retry frame.
-  void clear() { published.clear(); published_prev.clear(); gbuffer_now.clear(); gbuffer_prev.clear(); strikes.clear(); }
+  void clear() {
+    published.clear(); published_prev.clear(); gbuffer_now.clear(); gbuffer_prev.clear(); ready_now.clear(); ready_prev.clear();
+    strikes.clear();
+  }
   bool retired(uint64_t key) const {
     const auto it = failed.find(key);
     return it != failed.end() && now < it->second.until;
   }
   bool groom_stable(uint64_t key) const { return published.count(key) && published_prev.count(key) && !retired(key); }
   bool allow_gbuffer(uint64_t key) const { return groom_stable(key); }
-  bool allow_prepass(uint64_t key) const { return groom_stable(key) && gbuffer_prev.count(key); }
+  bool allow_prepass(uint64_t key) const {
+    return groom_stable(key) && (gbuffer_prev.count(key) || ready_prev.count(key));
+  }
   bool allow_velocity(uint64_t key) const { return groom_stable(key) && gbuffer_prev.count(key); }
   void gbuffer_drew(uint64_t key) { gbuffer_now.insert(key); }
+  void gbuffer_ready(uint64_t key) { if (key) ready_now.insert(key); }
   // One counted frame of `key`: drew = its G-buffer variant ran that frame; pixels with the counted tag, other with
   // an adjacent frame's. True when it just got retired.
   bool feedback(uint64_t key, bool drew, uint32_t pixels, uint32_t other = 0) {
@@ -328,15 +342,62 @@ struct CoverageGate {
     auto& e = latest[key];
     if (frame >= e.frame) e = {frame, card, strand};
   }
-  bool allow(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
+  // Why allow() refuses (the swap-refusal tally of the period line); Ok when it allows.
+  enum class Why : uint8_t { Ok, None, Invalidated, Stale, Low, High };
+  Why why(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
     const auto it = latest.find(key);
-    if (it == latest.end()) return false;
+    if (it == latest.end()) return Why::None;
     const auto& e = it->second;
     const auto bad = incomplete.find(key);
-    if (bad != incomplete.end() && e.frame <= bad->second) return false;
-    return e.frame && now >= e.frame && now - e.frame <= kFreshFrames && e.card && e.ratio() >= bound && e.ratio() <= upper;
+    if (bad != incomplete.end() && e.frame <= bad->second) return Why::Invalidated;
+    if (!e.frame || now < e.frame || now - e.frame > kFreshFrames || !e.card) return Why::Stale;
+    return e.ratio() < bound ? Why::Low : e.ratio() > upper ? Why::High : Why::Ok;
+  }
+  bool allow(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
+    return why(key, now, bound, upper) == Why::Ok;
   }
   void clear() { latest.clear(); incomplete.clear(); }
+};
+
+// Main-view hair draws that kept their cards, by the first gate that refused them (layer/hair_primary.cpp
+// hair_primary_swap), per pass (0 G-buffer, 1 velocity, 2 prepass). Printed in the 300-frame period line.
+enum class Refusal : uint8_t {
+  Publish, Quiet, CoverNone, CoverInvalidated, CoverStale, CoverLow, CoverHigh, Strike, Order, NoSlot, Passes,
+  Applied, PrepassDrop, NotDropped, NoStrand, Count
+};
+inline const char* refusal_name(Refusal r) {
+  static const char* const names[] = {"publish", "load quiet", "coverage none", "coverage invalidated", "coverage stale",
+                                      "coverage low", "coverage high", "strike", "order 0", "no slot", "passes mask",
+                                      "not applied/live", "prepass drop", "card depth not dropped", "no strand variant"};
+  static_assert(sizeof names / sizeof names[0] == size_t(Refusal::Count), "one name per refusal");
+  return r < Refusal::Count ? names[size_t(r)] : "?";
+}
+inline Refusal coverage_refusal(CoverageGate::Why w) {
+  return w == CoverageGate::Why::None ? Refusal::CoverNone : w == CoverageGate::Why::Invalidated ? Refusal::CoverInvalidated
+       : w == CoverageGate::Why::Stale ? Refusal::CoverStale : w == CoverageGate::Why::Low ? Refusal::CoverLow
+                                                               : Refusal::CoverHigh;
+}
+struct RefusalTally {
+  uint64_t n[3][size_t(Refusal::Count)] = {};
+  void add(int pass, Refusal r) { if (pass >= 0 && pass < 3 && r < Refusal::Count) ++n[pass][size_t(r)]; }
+  void reset() { *this = RefusalTally{}; }
+  // " G-buffer: coverage low 812, strike 3; velocity: ...; prepass: ..." (non-zero reasons only; "none" if empty).
+  template <size_t N> void format(char (&out)[N]) const {
+    static const char* const passes[] = {"G-buffer:", "velocity:", "prepass:"};
+    size_t at = 0;
+    out[0] = 0;
+    for (int p = 0; p < 3; ++p) {
+      bool first = true;
+      for (size_t r = 0; r < size_t(Refusal::Count); ++r) if (n[p][r] && at < N) {
+        const int w = std::snprintf(out + at, N - at, "%s%s %s %llu", first ? (at ? "; " : " ") : ",", first ? passes[p] : "",
+                                    refusal_name(Refusal(r)), (unsigned long long)n[p][r]);
+        if (w > 0) at += size_t(w);
+        if (at >= N) at = N - 1;
+        first = false;
+      }
+    }
+    if (!at) std::snprintf(out, N, " none");
+  }
 };
 
 // rt_hair_groom_primary_order: the header is written in the G-buffer's own command buffer, right before its render

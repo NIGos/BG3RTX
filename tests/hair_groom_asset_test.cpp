@@ -92,6 +92,76 @@ static void test_prepass_drop_decision() {
     drops += prepass_drop_allowed(now + 1, now, true, true, true);
   CHECK(drops == 187);
 }
+// 2026-11-07 hair-noswap: the G-buffer swaps only after this key's prepass dropped its card depth, the prepass drops
+// only after a G-buffer swap; with every other gate passing, neither went first (0 prepass, 0 G-buffer strand draws).
+// A G-buffer that passed every gate but the drop marks the key ready; the next prepass drops, then the G-buffer swaps.
+static unsigned bootstrap_swaps(bool mark_ready, unsigned frames, unsigned* first_swap) {
+  hair_primary::SwapGate gate;
+  hair_primary::DepthLatch latch;
+  const uint64_t key = 0x483b;
+  unsigned swaps = 0;
+  *first_swap = 0;
+  for (uint64_t f = 100; f < 100 + frames; ++f) {
+    // Prepass of frame f (the game records it before the build that publishes f).
+    if (gate.allow_prepass(key) && hair_primary::prepass_drop_allowed(f, f, true, true, latch.allow_prepass(key, f)))
+      latch.prepass(key, f);
+    gate.publish(&key, 1, f);
+    // G-buffer of frame f: every other gate (coverage, order, slot, variant) passes in this fixture.
+    if (!gate.allow_gbuffer(key)) continue;
+    if (latch.dropped(key, f)) {
+      gate.gbuffer_drew(key);
+      if (!swaps++) *first_swap = unsigned(f - 100);
+    } else if (mark_ready) {
+      gate.gbuffer_ready(key);
+    }
+    CHECK(!latch.needs_card_depth(key, f, latch.dropped(key, f)));   // a dropped latch always meets a strand draw here
+  }
+  return swaps;
+}
+static void test_prepass_gbuffer_bootstrap() {
+  unsigned first = 0;
+  CHECK(bootstrap_swaps(false, 300, &first) == 0);   // the deadlock as on main ce8ce8e7
+  CHECK(bootstrap_swaps(true, 300, &first) >= 290);  // ready -> prepass drop -> strand G-buffer, then every frame
+  CHECK(first <= 3);
+  // Velocity still follows only a real G-buffer strand draw; a ready key alone never enables it.
+  hair_primary::SwapGate g;
+  const uint64_t k = 9;
+  g.publish(&k, 1, 1); g.publish(&k, 1, 2);
+  g.gbuffer_ready(k);
+  g.publish(&k, 1, 3);
+  CHECK(g.allow_prepass(k) && !g.allow_velocity(k));
+  g.publish(&k, 1, 4);
+  CHECK(!g.allow_prepass(k));                        // readiness lasts one publish
+  g.gbuffer_ready(k);
+  g.clear();
+  g.publish(&k, 1, 5); g.publish(&k, 1, 6);
+  CHECK(!g.allow_prepass(k));                        // a reset drops readiness
+}
+// Swap refusal tally (period line) and the coverage gate's refusal reason.
+static void test_refusal_tally() {
+  using namespace hair_primary;
+  CoverageGate c;
+  CHECK(c.why(1, 10) == CoverageGate::Why::None);
+  c.observe(1, 10, 100, 95);
+  CHECK(c.why(1, 10) == CoverageGate::Why::Ok && c.allow(1, 10));
+  CHECK(c.why(1, 11 + kFreshFrames) == CoverageGate::Why::Stale);
+  c.observe(2, 10, 100, 80);
+  CHECK(c.why(2, 10) == CoverageGate::Why::Low);
+  c.observe(3, 10, 100, 120);
+  CHECK(c.why(3, 10) == CoverageGate::Why::High);
+  c.invalidate(1, 10);
+  CHECK(c.why(1, 10) == CoverageGate::Why::Invalidated && !c.allow(1, 10));
+  RefusalTally t;
+  char out[256];
+  t.format(out);
+  CHECK(std::strcmp(out, " none") == 0);
+  t.add(0, coverage_refusal(CoverageGate::Why::Low)); t.add(0, coverage_refusal(CoverageGate::Why::Low));
+  t.add(0, Refusal::NotDropped); t.add(2, Refusal::Strike); t.add(3, Refusal::Strike); t.add(1, Refusal::Count);
+  t.format(out);
+  CHECK(std::strcmp(out, " G-buffer: coverage low 2, card depth not dropped 1; prepass: strike 1") == 0);
+  t.reset(); t.format(out);
+  CHECK(std::strcmp(out, " none") == 0);
+}
 static void test_card_accepted_totals() {
   uint32_t cards[256] = {}, accepted[256] = {}, ct[4], at[4];
   cards[0] = 10; cards[1] = 5; accepted[0] = 3;
@@ -152,6 +222,7 @@ int main() {
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
+  test_prepass_gbuffer_bootstrap(); test_refusal_tally();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
