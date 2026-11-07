@@ -817,6 +817,53 @@ def test_coverage_pair_gate_bias():
           ratio[32.0])
 
 
+def test_footprint_rejected():
+    """2026-11-07 item 4 (a primary-only minimum strand footprint, r' = max(r, half a render pixel), hits kept with
+    probability r / r'), decided offline and not built. Thin strands (0.1-0.6 px) on a tile, 18 DLSS jitter phases:
+    accumulated per-pixel residual vs the area coverage, EMA flicker, single-frame 3 x 3 box error. Rejecting the
+    nearest widened hit (no strand behind it) loses coverage where strands overlap; keeping every candidate
+    independently (any-hit) conserves it, and neither beats the thin single ray, which the jitter already stratifies."""
+    rng = np.random.default_rng(11)
+    n, s, phases = 32, 16, 18
+    strands = [(rng.uniform(0, n, 2), rng.uniform(0, np.pi), w) for w in rng.choice([0.1, 0.2, 0.35, 0.6], 28)]
+    py, px = np.mgrid[0:n, 0:n]
+    seq = np.mod(np.sin(px * 12.9898 + py * 78.233) * 43758.5453, 1.0)
+
+    def inside(x, y, c, a, width):
+        d = np.abs(-(x - c[0]) * np.sin(a) + (y - c[1]) * np.cos(a))
+        return (d <= width / 2) & (np.abs((x - c[0]) * np.cos(a) + (y - c[1]) * np.sin(a)) <= 12)
+
+    sub = (np.arange(s) + 0.5) / s
+    ref = sum(np.any([inside(px + a, py + b, c, ang, w) for c, ang, w in strands], 0) for a in sub for b in sub) / s ** 2
+    frames = {"thin": [], "nearest": [], "any": []}
+    for t in range(1, 2 * phases + 1):
+        k = (t - 1) % phases + 1
+        cx, cy = px + primary.halton(k, 2), py + primary.halton(k, 3)
+        thin = np.zeros(px.shape, bool); near = np.zeros(px.shape, bool); taken = np.zeros(px.shape, bool)
+        anyk = np.zeros(px.shape, bool)
+        for i, (c, ang, w) in enumerate(strands):
+            thin |= inside(cx, cy, c, ang, w)
+            wide = inside(cx, cy, c, ang, max(w, 1.0))
+            u = np.mod(seq + 0.6180339887 * t + 0.7548776662 * i, 1.0) < w / max(w, 1.0)
+            near |= wide & ~taken & u
+            taken |= wide
+            anyk |= wide & u
+        frames["thin"].append(thin); frames["nearest"].append(near); frames["any"].append(anyk)
+    edge = (ref > 0.01) & (ref < 0.99)
+    res, mean = {}, {}
+    for name, f in frames.items():
+        f = np.stack(f).astype(float)
+        mean[name] = f.mean(0)[edge].mean()
+        res[name] = np.sqrt(np.mean((f.mean(0) - ref)[edge] ** 2))
+    print(json.dumps({"footprint_rejected": {"ref_mean": ref[edge].mean(), "mean": mean, "residual": res}}))
+    check("footprint: rejecting the nearest widened hit loses more than 5% of the coverage",
+          mean["nearest"] < 0.95 * ref[edge].mean(), (mean, ref[edge].mean()))
+    check("footprint: any-hit candidates conserve the coverage within 3%", abs(mean["any"] / ref[edge].mean() - 1) < 0.03,
+          (mean, ref[edge].mean()))
+    check("footprint: neither widening beats the thin single ray's accumulated residual",
+          res["thin"] <= res["any"] and res["thin"] <= res["nearest"], res)
+
+
 def test_post_depth():
     """M3.4: the D24S8 (and the linear depth made from it) that fog, transparents, water, DoF and the camera motion pass
     read after the G-buffer pass shows the same surface as the colour on every pixel of a strand card."""
@@ -1355,7 +1402,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_coverage, test_coverage_pair_gate_bias, test_footprint_rejected, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
