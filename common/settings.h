@@ -771,6 +771,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom_primary_current", "0"},
     {"rt_hair_primary_passes", "15"},
     {"rt_hair_primary_hold", "0"},
+    {"rt_hair_coverage_footprint", "0"},
     {"rt_hair_groom_tips", "0"},
     {"rt_hair_groom_coverage", "0"},
     {"rt_hair_groom_cascade_drop", "0"},
