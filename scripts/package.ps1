@@ -134,11 +134,9 @@ if (-not $Diagnostics) {
 
 # Never replace/recursively clean a previous package: it could contain a junction.
 $out = [IO.Path]::GetFullPath($out)
-for ($p = $out; $p; $p = Split-Path $p) {
-  if ((Test-Path -LiteralPath $p) -and ((Get-Item -LiteralPath $p -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-    throw "linked package output: $p"
-  }
-}
+. (Join-Path $PSScriptRoot "linked-path.ps1")
+$linked = Find-LinkedAncestor $out
+if ($linked) { throw "linked package output: $linked" }
 if (Test-Path -LiteralPath $out) { throw "$out already exists: choose a fresh output/version" }
 New-Item -ItemType Directory -Path $out | Out-Null
 $payload = New-Object System.Collections.Generic.List[object]
