@@ -1,4 +1,4 @@
-﻿"""Where strand hair turns grainy: high-frequency energy per image-chain stage over the hair region.
+"""Where strand hair turns grainy: high-frequency energy per image-chain stage over the hair region.
 
 Reads trace folders (layer/dump.cpp: dumps.json + img/*.png previews + *_p.f32), finds each stage by pass
 fragment shader + slot (image ids differ between runs), builds the hair region from the G-buffer class
