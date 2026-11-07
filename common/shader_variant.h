@@ -45,8 +45,8 @@ enum SpecId : unsigned {
   // Retired: 1022 alpha metadata cache, 1023 empty water tiles, 1024 compact hit state. Never reuse.
   kSpecIdWaterSurfaceFresnel = 1025, // M5.6 clean interface / column partition
   kSpecIdHairGroomShadowT = 1026,    // C2: strand shadow transmittance, default pre-C2 opaque query
-  // Hair stream B (branch claude/hair-m2-m4-light) takes ids from 1042 up (1040/1041 are retired).
-  kSpecIdHairGroomAoT = 1042,        // M2.3: strand AO/GI ray transmittance, default opaque strands
+  // Hair stream B (branch claude/hair-m2-m4-light) takes ids from 1044 up (1040/1041 retired, 1042/1043 stream A).
+  kSpecIdHairGroomAoT = 1044,        // M2.3: strand AO/GI ray transmittance, default opaque strands
   kSpecIdRfCompactProbeState = 1031, // RF: evaluate receiver probes after hit shading
   // Retired: 1041 rf_fast (paired saving, sustained replay exactness failed). Never reuse.
   // Retired: 1037 group-shared origin depth (no paired saving). Never reuse.
