@@ -43,6 +43,13 @@ struct Push {
 };
 [[vk::push_constant]] Push pc;
 
+// M3.3 rr_hair_guides (common/shader_variant.h kSpecIdRrHairGuides, layer/ngx.cpp): class 5 (Marschner hair, cards and
+// strands) reads RT2 as the game's hair lighting does (bg3_materials.hlsli bg3_mat_setup, 3033c895): x the fibre
+// roughness (>= 0.09), z the backlit factor (not metalness: hair is a dielectric, metalness forced to 0), so the diffuse
+// guide is the base colour and the specular guide the fibre's Fresnel (the game's R lobe F0, eta 1.55). 0: as before.
+[[vk::constant_id(1043)]] const uint kRrHairGuides = 0u;
+static const float kFibreF0 = 0.046520568;   // 3033c895 fR = 0.046520568 + 0.95347941 (1 - cos)^5
+
 bool is_sky(float d) { return pc.depth_inverted != 0 ? d <= 0.0 : d >= 1.0; }
 
 [numthreads(8, 8, 1)]
@@ -79,6 +86,15 @@ void main(uint3 id : SV_DispatchThreadID) {
     NoV = pc.nov > 0.0 ? pc.nov : saturate(abs(n.z));
   }
 
+  if (kRrHairGuides != 0u && (uint(round(m.w * 255.0)) & 7u) == 5u) {
+    // Its own writes and return: at constant 0 the block is dead as a whole (no select left in the ordinary path).
+    const float hair_rough = max(0.09, rough);
+    ODiffuse[id.xy] = float4(base, 1.0);
+    OSpecular[id.xy] = float4(env_brdf_approx2(kFibreF0.xxx, hair_rough * hair_rough, max(abs(NoV), 1e-3)),
+                              pc.show == 7 ? NoV : 1.0);
+    ONormalRough[id.xy] = float4(n_out, hair_rough);
+    return;
+  }
   float3 f0 = bg3_f0(base, spec, metal);
   ODiffuse[id.xy] = float4(base * (1.0 - metal), 1.0);
   // env_brdf_approx2 uses |N.V|; the alpha channel carries the signed N.V for

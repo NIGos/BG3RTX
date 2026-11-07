@@ -37,14 +37,17 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "hair-groom-batch-4"   # 4: geometry roots when the mask root channel does not follow rows
+VERSION = "hair-groom-batch-5"   # 5: 2-D curve tracer for curly atlases (root check along the traced strands)
 # Bump for converter/mesh/mask interpretation changes; validation-only edits bump VERSION alone.
-CONVERTER_VERSION = "hair-groom-converter-1"
+CONVERTER_VERSION = "hair-groom-converter-2"   # 2: curves2d for atlases whose rows do not run root to tip
 # Verdict thresholds (derived from the Shadowheart reference: IoU 0.92-0.94 at 0.5 mm, 0.89-0.92 at 2 mm,
 # unmapped samples 0.001%, root/row correlation 0.89-0.96). Cards spanning tiles are reported, not judged: the
 # converter places the strands of every tile a card touches, and IoU / unmapped samples measure the result.
 IOU_PASS, IOU_REJECT = 0.85, 0.70
 ROOT_REJECT = 0.3
+# Curly atlases (root/row correlation below ROOT_REJECT) are traced in 2-D (convert.is_curly); their root check is the
+# same correlation taken along each traced strand (root channel vs arc length), the row check's quantity where the
+# strands do not follow the rows.
 # Review: coverage or radiance off by more than the spread of the Shadowheart views (coverage +0.02..+0.05,
 # radiance -3..+2% at 2 mm) with margin; a quarter of the cards with the root away from the head (bun or
 # reversed cards: root/tip shading only). Unmapped samples are reported only: with several tiles per card the
@@ -266,6 +269,8 @@ def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=F
             grid, fit = convert.detect_tile_grid(ref)
             root_corr = analysis.root_channel_check(mask, grid)
             groom, rep = convert.convert(hair, mask, tile_grid=grid)
+            if rep.get("tracer") == "2d":
+                root_corr = rep["strand_root_corr"]
             groom, dropped = convert.dedupe(groom)
             head = head_proxy(hair)
             try:
@@ -282,6 +287,8 @@ def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=F
             rec.update(root_source="geometry", root_reversed_strands=reversed_, root_decided_strands=decided)
         orient = analysis.orientation(groom, head[0]) if head[1][0] > 0.01 else {}
         unmapped = rep["unmapped_samples"] / max(rep["samples"], 1)
+        if rep.get("tracer"):
+            rec["tracer"] = rep["tracer"]
         rec.update(tile_grid=list(grid), cards=rep["cards"], triangles=rep["triangles"], cards_in_one_tile=round(fit, 4),
                    mixed_winding_cards=rep["mixed_winding_cards"], uv_overlap_samples=rep["uv_overlap_samples"],
                    unmapped_share=round(unmapped, 5), root_row_corr_median=round(float(np.median(root_corr)), 3) if root_corr else None,

@@ -22,10 +22,10 @@ C4 = M4.1, C5 = M1 (+ M7 content), C6 = M5, C7 = M8.
 | Milestone | State | Commits / branch | Live |
 |---|---|---|---|
 | M0 stability (C1) | ready: strike rule, header order + A/B in hv5, strand-draw gates | 51956f86, f659b5ee, 4661e4bc (bundle12) | L1: hv5 + hair_crowd after bundle12 |
-| M1 conversion (C5) | done offline: converter 2.4-3.4x, renders 1.8x (bit-identical), caches, 80-style set, fibre reference, radial orientation, root from geometry; LOD1 transfer rejected by its gates; full rerun done: 877 pass / 295 review / 45 reject (was 745 / 346 / 126) | 068ff6e4 .. 71de9bc1 (claude/hair-batch-lod) | none (counts offline) |
-| M2 shadows (C2) | M2.1 transmittance done offline (spec 1026, in main); M2.2 audited: cascade fallback retains card shadows, safe replacement not implemented ([analysis](RTX_HAIR_SHADOW_MAPS.md), [audit](progress/claude-hair-cascade.md)); M2.3 AO not started | 048d60d5 (claude/hair-shadow-transmittance) | L2; M2.2 not ready |
-| M3 image (C3) | M3.1 tips done offline (rt_hair_groom_tips); M3.2 sub-pixel, M3.3 RR guides, M3.4 post depth not started | 795f6008 (claude/hair-tips) | L2 |
-| M4 indirect (C4) | not started | | L3 |
+| M1 conversion (C5) | done offline: converter 2.4-3.4x, renders 1.8x (bit-identical), caches, 80-style set, fibre reference, radial orientation, root from geometry; LOD1 transfer rejected by its gates; full rerun done: 877 pass / 295 review / 45 reject (was 745 / 346 / 126); 2-D curve tracer for curly atlases (converter 2, batch 5): representative set + HAIR_Afro_B 50 / 60 / 9 -> 69 / 47 / 3, Afro_B 0 / 38 / 4 -> 17 / 25 / 0, other styles bit-identical; next full rerun justified (~1 h, 4 jobs) | 068ff6e4 .. 71de9bc1 (claude/hair-batch-lod), claude/hair-m1-curly | none (counts offline) |
+| M2 shadows (C2) | M2.1 transmittance done offline (spec 1026, in main); M2.2 audited: cascade fallback retains card shadows, safe replacement not implemented ([analysis](RTX_HAIR_SHADOW_MAPS.md), [audit](progress/claude-hair-cascade.md)); M2.3 AO transmittance done offline (spec 1044, rt_hair_groom_ao_t; RTX_HAIR_PRIMARY 8 "M2.3") | 048d60d5 (claude/hair-shadow-transmittance); claude/hair-m2-m4-light | L2; M2.2 not ready |
+| M3 image (C3) | M3.1 tips done offline (rt_hair_groom_tips); M3.2 two-ray coverage done offline (rt_hair_groom_coverage, spec 1042: unbiased, box error -4 to -7%, 2x strand trace); M3.3 RR hair guides done offline (rr_hair_guides, spec 1043: class 5 metalness 0, fibre F0); M3.4 post depth not started | 795f6008 (claude/hair-tips), claude/hair-m3-image | L2 |
+| M4 indirect (C4) | M4.1 diffuse done offline (rt_hair_fibre_gi, in main); M4.2 specular done offline (rt_hair_fibre_spec, pass after D-RF; RTX_HAIR_PRIMARY 3 "M4.2"); M4.3, M4.4 not started | claude/hair-m2-m4-light | L3 |
 | M5 views (C6) | not started | | L3 |
 | M6 performance | not started (SER applies to ray-tracing pipelines, not to the inline queries the strand passes use: half-resolution traces and the crowd budget are the levers) | | L4 |
 | M7 content | beards and hat hair through M1's rerun; dyes need a live check | | L4 |
@@ -64,7 +64,11 @@ renders 7.6 / 1.7 / 10.3 s, GR2 dump 2.7 / 1.5 / 5.0 s; 22 s CPU per style on av
      LOD1 pass -> review) while the own LOD1 conversion already passes ordinary hair (Shadowheart LOD1 IoU 0.94).
      LOD1 keeps its own conversion;
    - a 2-D curve tracer for curly atlases whose curls do not run along the rows (HAIR_Afro_B: 32 styles fail the
-     root channel);
+     root channel). Done (claude/hair-m1-curly, tools/hair_groom/curves2d.py): atlases whose root channel does not
+     follow the rows (median root/row correlation < 0.3, the old reject threshold) are traced along each strand, through
+     crossings by direction, curvature and the R (ID) channel; strands ordered root to tip by B; the root check is the
+     same correlation along the traced strands. Afro_B 0 / 38 / 4 -> 17 / 25 / 0 (left: silhouette IoU 0.79-0.85 of the
+     B helmets, as before, and hat hair with roots on the helmet rim); the Bugbear beard (corr 0.24) reject -> pass;
    - the fibre reference (done, 068ff6e4).
 Gate: the representative set first, then one full rerun with the counts per category in RTX_HAIR_PRIMARY 5a.
 
@@ -90,8 +94,13 @@ camera; PT reference on the bench fixture.
 2. Sub-pixel coverage: strands thinner than a pixel rely on the jittered camera ray plus TAA/RR. Measure the flicker
    with the edge-flicker detector; if it is above the cards, use two rays per strand pixel or a coverage estimate
    from the capsule distance.
+   Done offline (2026-11-07, RTX_HAIR_PRIMARY 5d): two stratified rays (the footprint estimate needs a widened
+   second BLAS). Unbiased; 3 x 3 box error -4 to -7% against an 8 x 8 area reference, at twice the strand trace.
+   Binary G-buffer pixels bound the gain; L2 decides with the edge-flicker detector.
 3. DLSS RR guides: hair material class, specular albedo and roughness of the fibre, hit distance; qualify the "RR
    hair resolve" candidate with strands.
+   Done offline (2026-11-07, RTX_HAIR_PRIMARY 4): class 5 guides read RT2.z as backlit, not metalness (it fed RR a
+   metal before); fibre F0 0.0465, roughness >= 0.09. Hit distance stays D-RF's kNoHit on hair (not traced).
 4. Depth of field, fog and water: the post passes read the strand depth written by the G-buffer variant; check halos.
 Gate: edge-flicker metric on hair pixels at most the cards' in one run; no energy change; no DoF halo in PNG pairs.
 

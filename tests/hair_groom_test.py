@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.low_priority import lower_priority
 lower_priority()
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, sample, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, curves2d, dual, geom, mesh, primary, render, sample, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -104,6 +104,82 @@ def test_stitch():
     c = strands2d.Strand2D(list(np.full(50, 30.0)), list(range(60, 110)), [3] * 50)
     out = strands2d.stitch([a, b, c])
     check("stitch joins the aligned piece only", sorted(len(s.y) for s in out) == [50, 100], [len(s.y) for s in out])
+
+
+def curl_fixture(size=192, width=4):
+    """A synthetic curly mask (R id, G 0, B root..tip, A coverage) and its painted centrelines (root to tip).
+
+    Strand 1 is a curl running sideways (a prolate cycloid: a loop that crosses itself, then up again, so its rows do
+    not run root to tip; tightest radius of curvature (d - r)^2 / d = 20 px, five strand widths, as the curls of
+    HAIR_Afro_B); strand 2 rises from the bottom left and crosses it on top with another ID."""
+    t = np.linspace(0, 1, 6000)
+    s = 2.6 * np.pi * t
+    curl = np.stack([45 + 12.0 * s - 40 * np.sin(s), 96 + 40 * np.cos(s)], 1)
+    cross = np.stack([20 + 160 * t, 180 - 160 * t], 1)
+    m = np.zeros((size, size, 4), np.uint8)
+    yy, xx = np.mgrid[0:size, 0:size]
+    for sid, c in ((90, curl), (200, cross)):
+        arc = np.r_[0, np.cumsum(np.hypot(*np.diff(c, axis=0).T))]
+        for (x, y), a in zip(c[::4], arc[::4] / arc[-1]):
+            disc = (xx - x) ** 2 + (yy - y) ** 2 <= (width / 2) ** 2
+            m[disc] = (sid, 0, int(round(a * 255)), 255)
+    return m, [curl, cross]
+
+
+def test_curves2d():
+    m, truth = curl_fixture()
+    corr = curves2d.root_row_correlation(m, (1, 1))
+    rows = np.zeros((128, 128, 4), np.uint8)
+    rows[..., 3] = strand_mask(128, 128, [lambda y: 30.0, lambda y: 90.0], 4)
+    rows[..., 2] = np.linspace(0, 255, 128)[:, None].astype(np.uint8)
+    check("curly detection: the curl's root channel does not run along the rows", corr is not None and corr < convert.CURLY_ROOT_CORR
+          and convert.is_curly(m, (1, 1)) and not convert.is_curly(rows, (1, 1)), corr)
+    curves, typ, claimed = curves2d.trace(m)
+    cov = m[..., 3] >= 128
+    length = [float(np.hypot(np.diff(c.x), np.diff(c.y)).sum()) for c in curves]
+    long_ = [c for c, n in zip(curves, length) if n > 40]
+    check("curves2d: two strands, the curl not cut at its crossings", len(long_) == 2, sorted(length))
+    check("curves2d: typical width (painted discs are 2 r + 1 = 5 px across)", np.all((typ >= 4) & (typ <= 7)), np.unique(typ))
+    check("curves2d: recall", (claimed & cov).sum() / cov.sum() > 0.9, (claimed & cov).sum() / cov.sum())
+    for k, true in enumerate(truth):
+        tl = np.hypot(*np.diff(true, axis=0).T).sum()
+        # The traced curve closest to this painted strand: centreline distance and covered length.
+        best = min(long_, key=lambda c: np.mean(np.min(np.hypot(c.x[:, None] - true[None, ::20, 0], c.y[:, None] - true[None, ::20, 1]), 1)))
+        d = np.min(np.hypot(best.x[:, None] - true[None, ::4, 0], best.y[:, None] - true[None, ::4, 1]), 1)
+        rx, ry = curves2d.resample(best, 4, 0.25)[:2]   # smoothed: the raw centres zigzag by half a texel
+        got = np.hypot(np.diff(rx), np.diff(ry)).sum()
+        check(f"curves2d strand {k}: on the painted centreline", np.median(d) < 0.75 and np.percentile(d, 95) < 1.5,
+              (np.median(d), np.percentile(d, 95)))
+        check(f"curves2d strand {k}: full length", 0.85 * tl < got < 1.1 * tl, (got, tl))
+        check(f"curves2d strand {k}: root to tip", np.hypot(best.x[0] - true[0, 0], best.y[0] - true[0, 1]) < 4
+              and np.hypot(best.x[-1] - true[-1, 0], best.y[-1] - true[-1, 1]) < 4 and best.root_corr > 0.95,
+              ((best.x[0], best.y[0]), (best.x[-1], best.y[-1]), best.root_corr))
+    # Resampling keeps the centreline within a quarter width and spaces points at most `step` apart.
+    c = max(curves, key=lambda c: len(c.x))
+    x, y, w, nx, ny = curves2d.resample(c, 16, 1.0)
+    seg = np.hypot(np.diff(x), np.diff(y))
+    check("curves2d resample: spacing and unit normals", seg.max() <= 16.5 and np.allclose(np.hypot(nx, ny), 1), seg.max())
+    # Converter: a square card (isotropic texels, 0.1 m across the mask) holds the curl; the 2-D tracer is chosen
+    # automatically and the radius is the painted width whichever way the strand runs in the texture.
+    card = card_mesh(length=0.1, width=0.1)
+    groom, rep = convert.convert(card, m, tile_grid=(1, 1), step=16)
+    # The painted width: covered texels per texel of painted centreline (the crossings overlap a little).
+    painted = cov.sum() / sum(np.hypot(*np.diff(c, axis=0).T).sum() for c in truth)
+    expect = painted / 2 * 0.1 / m.shape[0]
+    p5, p50, p95 = np.percentile(groom.radii, [5, 50, 95]) / expect
+    check("convert auto picks the 2-D tracer on a curly mask", rep.get("tracer") == "2d" and groom.strands >= 2, rep.get("tracer"))
+    check("convert curly: radius = painted width in every direction", abs(p50 - 1) < 0.15 and p5 > 0.7 and p95 < 1.3,
+          (p5, p50, p95, painted))
+    first = groom.offsets[:-1]
+    last = groom.offsets[1:] - 1
+    check("convert curly: root channel increases root to tip", np.all(groom.root_param[last] > groom.root_param[first]))
+    emb = np.einsum("pk,pkd->pd", groom.bary, card.positions[card.tris[groom.triangle]])
+    check("convert curly: embedding reproduces the points", np.allclose(emb, groom.points, atol=1e-6))
+    # The row path is untouched: on a mask whose rows run root to tip, "auto" is bit-identical to "rows".
+    g_auto, r_auto = convert.convert(card_mesh(), rows[:, :64].copy(), tile_grid=(1, 1), step=16)
+    g_rows, r_rows = convert.convert(card_mesh(), rows[:, :64].copy(), tile_grid=(1, 1), step=16, tracer="rows")
+    check("convert auto on a row atlas is bit-identical to the row tracer", r_auto == r_rows and all(
+        np.array_equal(getattr(g_auto, f.name), getattr(g_rows, f.name)) for f in dataclasses.fields(g_auto)))
 
 
 def card_mesh(length=0.2, width=0.02, rows=4):
@@ -589,6 +665,32 @@ def test_bsdf():
     check("chiang forward scattering (TT) above back scattering", ch[-1].mean() > 5 * ch[0].mean(), ch[[0, -1]])
     w = bsdf.slab_albedo((1, 1, 1), 0.41, n=2000, bounces=4000)
     check("white fibre slab reflects nearly everything", np.all(w > 0.9), w)
+    # M4.2 R lobe (sample_r, the strand specular indirect): the white furnace (estimator = quadrature of r_lobe within
+    # 3%) and the sampled directions' distribution: E[A_0 g(wi)] against the quadrature of r_lobe g for a test function
+    # g that varies over the lobe (within 4 standard errors plus 1% for the quadrature grid; furnace: 0.2%).
+    rng = np.random.default_rng(23)
+    for beta, theta in ((0.09, 30.0), (0.41, 0.0), (0.41, 60.0), (0.7, 80.0)):
+        e, se, q = bsdf.r_furnace(beta, theta, n=60000, n_quad=(121, 240), n_h=24)
+        check(f"R lobe white furnace beta {beta} theta_o {theta}: {e:.5f} vs {q:.5f}", abs(e / q - 1) < 0.03, (e, se, q))
+    t, to = np.array([0.0, 0.0, 1.0]), np.radians(40.0)
+    wo = np.array([np.cos(to), 0.0, np.sin(to)])
+    axis = np.array([0.3, -0.5, 0.8]) / np.linalg.norm([0.3, -0.5, 0.8])
+    gfun = lambda d: (1 + d @ axis) ** 2
+    n = 80000
+    h = rng.uniform(-1, 1, n)
+    wi, a0 = bsdf.sample_r(np.tile(t, (n, 1)), np.tile(wo, (n, 1)), h, 0.41, rng.uniform(size=(n, 3)))
+    est, est_se = (a0 * gfun(wi)).mean(), (a0 * gfun(wi)).std() / np.sqrt(n)
+    TH, PH = np.meshgrid((np.arange(121) + 0.5) / 121 * np.pi - np.pi / 2, (np.arange(240) + 0.5) / 240 * 2 * np.pi - np.pi,
+                         indexing="ij")
+    grid = np.stack([np.cos(TH) * np.cos(PH), np.cos(TH) * np.sin(PH), np.sin(TH)], -1).reshape(-1, 3)
+    dw = (np.cos(TH) * (np.pi / 121) * (2 * np.pi / 240)).reshape(-1)
+    x, wx = np.polynomial.legendre.leggauss(24)
+    m = len(grid)
+    quad = sum(wk * (np.pi / 2) * np.cos(gk) / 2 * np.sum(
+        bsdf.r_lobe(np.tile(t, (m, 1)), np.tile(wo, (m, 1)), grid, np.full(m, np.sin(gk)), 0.41) * gfun(grid) * dw)
+        for gk, wk in zip(x * np.pi / 2, wx))
+    check(f"R lobe sampled directions follow r_lobe: {est:.5f} +- {est_se:.5f} vs {quad:.5f}",
+          abs(est - quad) <= 4 * est_se + 0.01 * quad, (est, est_se, quad))
 
 def test_tips_dither():
     # Pixel centres over 4 x 5, all four frame phases, and a uniform sweep of
@@ -630,6 +732,78 @@ def test_strand_source_safety():
           'if (hp_tips_keep(card_M.w * grazing, pos.xy, tag, aux.x))\n    vk::RawBufferStore<uint>(marker, packed_marker, 4);' in src
           and src.index('const float4 card_M = max(sign(card_ma), sign(card_mb))') < src.index('hp_tips_keep(card_M.w')
           < src.index('if (e.x == hair_primary_no_strand)'))
+
+
+def test_coverage():
+    """M3.2 (rt_hair_groom_coverage): the pair's twins and its offline gate against the supersampled area coverage."""
+    py, px = np.mgrid[0:4, 0:4]
+    a, b = primary.coverage_offset(px, py, 0), primary.coverage_offset(px, py, 1)
+    check("coverage offsets: antithetic, a quarter pixel on both axes", np.allclose(a + b, 0) and np.allclose(np.abs(a), 0.25))
+    check("coverage offsets: the diagonal alternates with the checkerboard parity",
+          np.allclose(a[0, 0], (-0.25, -0.25)) and np.allclose(a[0, 1], (-0.25, 0.25)) and np.allclose(a[1, 1], a[0, 0]))
+    t = lambda *v: np.array(v, bool)
+    zeros = np.zeros(3, int)
+    both = primary.coverage_pick(t(1, 1, 1), t(1, 1, 1), np.array([1.0, 2.0, 1.0]), np.array([2.0, 1.0, 1.0]), zeros, zeros, 7)
+    check("coverage pick: both hit keeps the nearer, a tie ray A", list(both) == [0, 1, 0], both)
+    none = primary.coverage_pick(t(0), t(0), np.zeros(1), np.zeros(1), zeros[:1], zeros[:1], 7)
+    check("coverage pick: no hit keeps none", list(none) == [2])
+    same = True
+    for tag in range(1, 65):
+        ka = primary.coverage_pick(np.ones((4, 4), bool), np.zeros((4, 4), bool), 0.0, 0.0, px, py, tag)
+        kb = primary.coverage_pick(np.zeros((4, 4), bool), np.ones((4, 4), bool), 0.0, 0.0, px, py, tag)
+        same &= bool(np.array_equal(ka == 0, kb == 1) and set(np.unique(ka)) <= {0, 2} and set(np.unique(kb)) <= {1, 2})
+        if tag <= 4:
+            kept = ka != 2
+            check(f"coverage pick tag {tag}: one hit kept on exactly half the pixels, a checkerboard",
+                  kept.sum() == 8 and np.all(kept[:, 1:] != kept[:, :-1]), ka)
+    check("coverage pick: the one-hit decision does not depend on which ray hit", same)
+    phases = [int(primary.coverage_pick(t(1), t(0), 0.0, 0.0, zeros[:1], zeros[:1], tag)[0] == 0) for tag in range(1, 257)]
+    # The frame phase is a hash: over 256 tags its share is 0.5 within 4 binomial sigma (sigma = 1/32).
+    check("coverage pick: frame phase keeps about half of the tags", abs(np.mean(phases) - 0.5) <= 4 / 32, np.mean(phases))
+    pts, rad, offs, cam = primary.subpixel_fixture(seed=1)
+    ref = primary.coverage_reference(pts, rad, offs, cam)
+    frames = 16
+    single = primary.coverage_metrics(primary.coverage_frames(pts, rad, offs, cam, frames, False), ref)
+    pair = primary.coverage_metrics(primary.coverage_frames(pts, rad, offs, cam, frames, True), ref)
+    print(json.dumps({"coverage_single": single, "coverage_pair": pair}))
+    # Energy: the mean over 16 frames is unbiased; tolerance 4 binomial sigma of one sample per pixel per frame (the pair
+    # has two, stratified: conservative for it).
+    tol = 4 * pair["bias_sigma"] / np.sqrt(frames)
+    check(f"coverage pair unbiased: total {pair['bias']:+.4f} within {tol:.4f} (4 sigma)", abs(pair["bias"]) <= tol)
+    check(f"coverage single ray unbiased: total {single['bias']:+.4f} within {tol:.4f}", abs(single["bias"]) <= tol)
+    check(f"coverage pair: 3 x 3 box error {pair['box_rmse']:.4f} below the single ray's {single['box_rmse']:.4f}",
+          pair["box_rmse"] < single["box_rmse"])
+    check(f"coverage pair: 3 x 3 box flicker {pair['box_temporal_std']:.4f} below the single ray's "
+          f"{single['box_temporal_std']:.4f}", pair["box_temporal_std"] < single["box_temporal_std"])
+    src = (ROOT / "shaders/rt/hair_primary_gbuffer.hlsl").read_text()
+    pair_if = "if (kHairGroomCoverage != 0u && (ld(rec + 60u) & hair_primary_flag_coverage) != 0u && e.w != hp_seal(e.xyz, tag))"
+    check("G-buffer pair behind specialization 1042 and header flag 8, before the single ray's unchanged block",
+          "[[vk::constant_id(1042)]] const uint kHairGroomCoverage = 0u;" in src and pair_if in src
+          and src.index(pair_if) < src.index("RayQuery<RAY_FLAG_FORCE_OPAQUE> q;\n    q.TraceRayInline"))
+    layer = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
+    check("layer specializes the strand G-buffer pipelines and sets header flag kFlagCoverage from rt_hair_groom_coverage",
+          layer.count("shader_variant::kSpecIdHairGroomCoverage") == 2 and "hair_primary::kFlagCoverage" in layer)
+
+
+def test_rr_hair_guides():
+    """M3.3 (rr_hair_guides): class 5 guides read RT2 as the game's hair lighting (bg3_materials.hlsli class 5)."""
+    guides = (ROOT / "shaders/rr_guides.hlsl").read_text()
+    mats = (ROOT / "shaders/rt/bg3_materials.hlsli").read_text()
+    check("hair lighting: class 5 roughness max(0.09, RT2.x), backlit RT2.z, metalness 0",
+          "m.hair_rough = max(0.09, mat.x);" in mats and "m.backlit = mat.z;" in mats and "sf.diff_col = albedo;" in mats)
+    check("hair Fresnel F0 of the game's R lobe", "0.046520568 + 0.95347941" in mats)
+    check("RR guides: class 5 behind specialization 1043 uses the same terms",
+          "[[vk::constant_id(1043)]] const uint kRrHairGuides = 0u;" in guides and
+          "if (kRrHairGuides != 0u && (uint(round(m.w * 255.0)) & 7u) == 5u) {" in guides and
+          "const float hair_rough = max(0.09, rough);" in guides and "ODiffuse[id.xy] = float4(base, 1.0);" in guides and
+          "env_brdf_approx2(kFibreF0.xxx, hair_rough * hair_rough" in guides and
+          "static const float kFibreF0 = 0.046520568;" in guides)
+    # The fibre F0 is the Fresnel reflectance at normal incidence of eta 1.55 (keratin), as the game's constant.
+    check("fibre F0 = ((1.55 - 1) / (1.55 + 1))^2", abs(((1.55 - 1) / 2.55) ** 2 - 0.046520568) < 1e-6)
+    ngx = (ROOT / "layer/ngx.cpp").read_text(encoding="utf-8")
+    check("ngx specializes the guide pipeline from rr_hair_guides and rebuilds on a change",
+          "shader_variant::kSpecIdRrHairGuides" in ngx and ngx.count('"rr_guides.hlsl", rr_hair_guides())') == 2
+          and "(blob.generation << 1) | (hair_guides & 1u)" in ngx)
 
 
 def test_publish_lock():
@@ -1106,7 +1280,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_coverage, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

@@ -123,13 +123,59 @@ Build succeeds and 145/146 CTests pass, including both hair tests. The inherited
 HEAD 97e2487. The unmodified water gate passes with `--baseline HEAD` (16/16 OFF, 2/2 ordinary, 16/16
 production validation). Full-suite acceptance remains blocked by that unrelated baseline difference.
 
+### M4.2: specular indirect on strand pixels (offline, 2026-11-07, branch claude/hair-m2-m4-light)
+
+`rt_hair_fibre_spec=0/1` (knob `exp_hair_fibre_spec`, Advanced, experimental, dev only), off everywhere. Needs
+`rt_hair_groom_primary` and D-RF. A separate pass, `gi/hair_fibre_spec.hlsl`, runs right after D-RF on D-RF's
+layout, sets and push constants (core/gi.cpp `hair_spec_dispatch`, inside D-RF's timed region), on pixels whose
+G-buffer sample is a strand of this frame (`gi/hair_strand_pixel.hlsli`, shared with hair_fibre.hlsl):
+
+```
+b11 += A_0 L(wi) - Tp
+```
+
+- Tp: the game's class-5 specular ambient, transcribed from the lighting permutation 3033c895: two-sided, 0.3 of
+  the probes about R = reflect(-V, N) and 0.7 about -R, each times F0 DFG.x + DFG.y at max(|N.V|, 1/512); local
+  probes mixed the same way per probe; times k = b13[0] 100 and Lagarde's SO. D-RF leaves class 5 alone
+  (`rf_models=3`), so b11 still holds exactly this term. Aerial perspective is not modelled, as in D-RF.
+- wi: one exact R-lobe sample at a uniform offset h (`hair_bsdf.hlsli hb_sample_r`, twin `bsdf.py sample_r`): the
+  d'Eon longitudinal lobe as the marginal of a von Mises-Fisher ring about the tilted cone, the trimmed logistic
+  azimuth about -2 gamma_o by inverse CDF. Weight A_0 = Fresnel(cos theta_o cos gamma_o).
+- L: D-RF's tier (a) (an on-screen hit the camera sees: last frame's radiance, screen-edge fade w), else (and for
+  1 - w) the game's own probes in direction wi at its sharpest roughness 0.09, times k and SO.
+- TT, TRT and multiple scattering of indirect light stay M4.1's volume response. Known overlap: M4.1's A also
+  contains single-scattered R of the near-field GI bounce (a few per cent of A).
+
+Gates (offline): R-lobe white furnace, sampled estimator against an independent quadrature of `bsdf.r_lobe`
+(Gauss-Legendre in gamma), beta 0.09/0.41/0.7 x theta_o 0/30/60/80: worst 0.30% (limit 3%). Sampled directions
+follow r_lobe (a test function's mean within 4 SE + 1%). GPU vs CPU, 16,000 samples: direction error p99 9.1e-7,
+max 1.9e-5; weight relative error max 2.4e-5. Key off: the pass is not dispatched; ordinary requests untouched
+(below). Request delta +2 (`gi/hair_fibre_spec.hlsl` with and without OMM). The Tp transcription has no offline
+reference (no capture of b11 on strand pixels): live check is part of L3 (below). Cost unmeasured.
+
 ## 4. RR, DLSS-G, DoF
 RR guides are built from the G-buffer at its pass end (`layer/ngx.cpp record_guides_at_gbuffer`): strands
-there are ordinary pixels (albedo, normal, roughness). Specular hit distance: D-RF's, unchanged. Motion
-vectors from the velocity variant; depth from the prepass/G-buffer variants: DLSS-G gets consistent
-depth/MV. DoF reads the game's depth: strands are in it. Sub-pixel strands (0.25 mm, sub-pixel beyond about
-1 m) alias per frame; the game's per-frame jitter plus DLSS accumulate the coverage like the card dither.
-Measure the temporal variance on hair pixels (live metric) before adding more rays per pixel.
+there are ordinary pixels (albedo, normal, roughness). Motion vectors from the velocity variant; depth from the
+prepass/G-buffer variants: DLSS-G gets consistent depth/MV. DoF reads the game's depth: strands are in it.
+Sub-pixel strands: section 5d (M3.2).
+
+**M3.3 hair guides (`rr_hair_guides`, specialization 1043 `kSpecIdRrHairGuides`, live, off; offline 2026-11-07).**
+Found: `rr_guides.hlsl` read RT2 as (roughness, specular, metalness) for every class. On class 5 (cards and strands)
+RT2.z is the backlit factor (`bg3_mat_setup`, 3033c895: metalness forced to 0), so a backlit hair pixel fed RR a
+metal: diffuse guide base (1 - backlit), specular guide the base colour. With the key: class 5 (RT2.w bits 0-2)
+gets metalness 0 (diffuse guide = base colour, as `sf.diff_col = albedo` in the game's hair lighting), roughness
+max(0.09, RT2.x) (the lighting's clamp), specular guide `env_brdf_approx2(F0 0.046520568, rough^2, N.V)` (the game's
+R-lobe Fresnel constant, eta 1.55). The normal guide is RT0: the fibre normal on strands (section 2), the card
+normal on cards. There is no material-class input in DLSSD (`nvsdk_ngx_defs_dlssd.h`); the class acts through
+these guides only. Specular hit distance: D-RF's, unchanged: `rf_models=3` does not trace class 5, so hair pixels
+carry kNoHit (the hair specular is direct light from R/TT/TRT, not a traced reflection); a hair hit distance
+would need a gi/ change (another stream's files). Pipeline: `layer/ngx.cpp build_pipeline` passes the constant and
+keys the pipeline on (shader generation, value), so a toggle rebuilds the compute pipeline like a shader edit.
+Gates: CTest `hair_groom_test` test_rr_hair_guides (the terms match `bg3_materials.hlsli`, F0 of eta 1.55, the
+layer wiring). Key off: rr_guides.hlsl strictly equivalent with 1043 fixed to 0 (identity numbers in 5d).
+Live check (L2, Test Dialogue1): with `rr_hair_guides` toggled in one run, hair highlights stay put and the mean
+hair luminance of the pre-post colour is unchanged within noise (guides change demodulation, not energy); hair
+noise/smear under RR is the observable.
 
 ## 5. Cost model (bench numbers, RTX 5090)
 Groom LOD 0: 0.25 ns per ray on hair (3.7M rays 0.91 ms, shadow-like). Primary rays are coherent, so this is
@@ -332,6 +378,31 @@ pattern alone is not uniform. Shader request delta: 0. Live appearance, matching
 and GPU cost remain unmeasured. In Test Dialogue1, enable on-screen strands only after the
 reload safety fix is qualified, then toggle tips and inspect fading tips and temporal edges.
 
+## 5d. Sub-pixel strand coverage (M3.2, offline 2026-11-07)
+`rt_hair_groom_coverage` is specialization 1042 (`kSpecIdHairGroomCoverage`), off in every preset, needs
+rt_hair_groom_primary. Compiled into the strand G-buffer pipelines when on at their creation (restart to enable);
+header word 15 bit 3 (`kFlagCoverage`, set from the key every frame) switches it off live, so an L2 A/B is
+1 -> 0 -> 1 inside one run. Footprint inflation was the preferred design but needs a second groom BLAS: the LSS
+radius lives in the BLAS (`bvhsplit.cpp` radiusData), shared by the shadow/GI queries, so a ray cannot test a
+capsule widened to the pixel footprint. Implemented instead: two rays per strand candidate pixel
+(`shaders/rt/hair_primary_coverage.hlsli`): a quarter pixel either side of the jittered centre on the diagonal of
+the pixel's checkerboard parity (mean offset 0: a symmetric 2-tap prefilter, no image shift). Both hit: the nearer;
+one hit: kept on a checkerboard whose phase is a hash of the frame tag (not its parity: Halton jitter correlates
+with frame parity); none: discard. Expected coverage = (h_A + h_B) / 2, unbiased. The pair is traced once per
+pixel by the first fragment and sealed like the single ray's entry (velocity, count and later fragments
+unchanged); spec 0 leaves the single-ray block untouched.
+
+Offline gate (CTest `hair_groom_test` test_coverage; CPU reference `primary.coverage_reference`, 8 x 8 stratified
+rays per pixel; `primary.subpixel_fixture`: 200 wavy 0.25 mm strands at 0.6-3 m, 256 px, 20 degrees; 16 Halton
+frames). Single ray / pair: total coverage bias +0.10% / +0.63% (4 sigma 2.8%); 3 x 3 box RMS error 0.0649 /
+0.0603 (-7%); 3 x 3 box temporal std 0.0567 / 0.0531 (-6%). Seeds 2 and 3: -4% / -5%. The gain is small because a
+G-buffer pixel stays binary (opaque, no blend): any per-pixel scheme keeps the Bernoulli variance c (1 - c); four
+rays measured the same as two. GPU vs CPU (CTest `hair_primary_gpu_test`, `-DHP_CHECK_COVERAGE=1` build of the check shader, LSS on the RTX 5090): the GPU pick equals the twin on >= 99.95% of the pixels any ray hits in every frame; GPU masks give bias +0.63% and box error 0.0603, as the CPU.
+Cost: two traces instead of one per strand candidate pixel (bench: ~0.4 ms at a 1.6M-pixel close-up, so about
++0.4 ms); unmeasured live. Recommendation: keep off unless the L2 edge-flicker detector shows strands above the
+cards and the pair measurably below them in the same run.
+Key off (both keys): 215/218 requests byte-identical to main 2dcf0a88 (identical inputs); the other 3 (rr_guides.hlsl, rt/hair_primary_gbuffer.hlsl as file and manifest entry) strictly equivalent with 1042 and 1043 fixed to 0 (`tools/release_shader_equivalence.py --freeze-spec 1042 --freeze-spec 1043`, cascade control PASS); spirv-val 5/5 modules. Request delta 0.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.
@@ -426,6 +497,25 @@ at default, zero failures. Request delta 0. Unchanged water_surface_shader_test 
 009f60f: 16/16 OFF accepted, 16/16 production validated. Full build: 147/147 CTests passed.
 GPU shadow bench: 3000/3000 crossing counts match CPU; 174623 transmitted trials vs 175064.4
 expected, sigma 353.2 (1.25 sigma error). These are offline gates; live GPU cost remains pending.
+
+### M2.3 AO transmittance (2026-11-07, branch claude/hair-m2-m4-light)
+`rt_hair_groom_ao_t` is specialization 1044 (`kSpecIdHairGroomAoT`, knob `exp_hair_groom_ao_t`), default 0.
+Before: every AO/GI hemisphere ray that sees the groom TLAS stopped at the closest strand (opaque): the GI trace
+(`gi_trace_rt*`, rt_closest / rt_closest_hit), AO at RT hits (`native_hit_ao`, `native_hit_ao_gi`). The game's
+SSAO sees the card depth (unchanged). At 1, those rays (marked by `g_rt_groom_ao` around the call) keep the
+closest strand hit with probability 1 - d_f lum(prod a_f) over the crossings in front of the scene hit
+(`rt_groom_blocks`, the C2 estimator and hp_crossing dedup), else pass on to the scene hit or the miss. A
+blocked ray keeps the closest strand's distance for the fade and its screen radiance for the bounce. The layer
+packs a_f into groom row word 2 when either key is on (`hair_primary_transmit`; layer change: restart).
+GI pipelines carry 1044 in their specialization key; no request or ABI change. Identity (tools/hair_shadow_check.py
+--allow-new gi/hair_fibre_spec.hlsl, vs main 2dcf0a88): 160/210 ordinary requests byte-identical, 50 strictly equivalent
+with 1026/1044 fixed at 0, 0 failed; hair_fibre.hlsl requests (strand-pixel header moved) 3/3 byte-identical.
+GPU bench (tests/hair_primary_gpu_test.py, 3000 rays): crossings 3000/3000 equal to CPU; closest strand t
+against the CPU capsule entry max 9.8e-8 m; mean occlusion with a_f = 0.5 1767.65 against 1765.57 expected,
+sigma 1.04 (2.0 sigma; the same trials as the shadow line, 174332 lit vs 175064.4, -2.1 sigma). Opaque
+strands would give 2278.5: the transmittance removes 22% of the strands' AO on this fixture.
+For the user's colours (dual.averages_table at beta 0.41): one crossing passes 41% (CHAR_Hair), 56% (auburn),
+58% (blond); four crossings 9% / 29% / 32%.
 
 
 ## 9. Known failure modes and offline proofs

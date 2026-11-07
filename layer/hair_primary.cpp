@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "../common/hair_primary.h"
+#include "../common/shader_variant.h"
 #include "hair_groom.h"
 
 namespace bg3 {
@@ -674,9 +675,13 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     }
     std::vector<VkPipelineShaderStageCreateInfo> stages(ci.pStages, ci.pStages + ci.stageCount);
     VkShaderModule mod = VK_NULL_HANDLE;
-    const uint32_t spec_words[2] = {uint32_t(g_header.addr), uint32_t(g_header.addr >> 32)};
-    const VkSpecializationMapEntry spec_map[2] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4}};
-    const VkSpecializationInfo spec{2, spec_map, sizeof spec_words, spec_words};
+    // M3.2 rt_hair_groom_coverage: the two-ray pair is compiled in when the key is on at pipeline creation (header flag
+    // kFlagCoverage then switches it live); the velocity FS has no constant 1042, Vulkan ignores the entry there.
+    const uint32_t coverage = cfg_int("rt_hair_groom_coverage", 0) != 0 ? 1u : 0u;
+    const uint32_t spec_words[3] = {uint32_t(g_header.addr), uint32_t(g_header.addr >> 32), coverage};
+    const VkSpecializationMapEntry spec_map[3] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4},
+                                                  {shader_variant::kSpecIdHairGroomCoverage, 8, 4}};
+    const VkSpecializationInfo spec{3, spec_map, sizeof spec_words, spec_words};
     VkPipelineDepthStencilStateCreateInfo dsv = *ds;
     if (pass != Pass::Prepass) {
       Bg3ShaderBlob blob{};
@@ -743,9 +748,10 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
         dsv.front = ds->front; dsv.back = ds->back;
         // Pipeline specialization supplies exact draw-key attribution before tracing,
         // without changing the game's descriptor or push-constant layouts.
-        const uint32_t words[3] = {spec_words[0], spec_words[1], k};
-        const VkSpecializationMapEntry map[3] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4}};
-        const VkSpecializationInfo draw_spec{3, map, sizeof words, words};
+        const uint32_t words[4] = {spec_words[0], spec_words[1], k, coverage};
+        const VkSpecializationMapEntry map[4] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
+                                                 {shader_variant::kSpecIdHairGroomCoverage, 12, 4}};
+        const VkSpecializationInfo draw_spec{4, map, sizeof words, words};
         stages[size_t(fs)].pSpecializationInfo = &draw_spec;
         dsv.depthWriteEnable = VK_TRUE;
         vci.pColorBlendState = ci.pColorBlendState;
@@ -789,7 +795,8 @@ void hair_primary_forget_pipeline(VkPipeline p) {
 }
 
 uint32_t hair_primary_transmit(uint64_t key) {
-  if (!key || cfg_int("rt_hair_groom_shadow_t", 0) == 0) return 0u;
+  // Word 2 serves both rt_hair_groom_shadow_t (shadow rays) and rt_hair_groom_ao_t (AO/GI rays, M2.3).
+  if (!key || (cfg_int("rt_hair_groom_shadow_t", 0) == 0 && cfg_int("rt_hair_groom_ao_t", 0) == 0)) return 0u;
   std::lock_guard<std::mutex> lock(g_mu);
   const auto it = g_transmit.find(key);
   const uint32_t w = it == g_transmit.end() ? 0u : it->second.packed();
@@ -1082,6 +1089,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   hair_primary::Header h{};
   h.tag = uint32_t(now + 1);
   h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
+  if (cfg_int("rt_hair_groom_coverage", 0) != 0) h.flags |= hair_primary::kFlagCoverage;   // M3.2, live off-switch
   h.width = width;
   h.height = height;
   h.tlas = tlas;
@@ -1173,7 +1181,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         stats_period(300), at ? per : " none");
     g_depth_orphan_count = 0;
   }
-  if (stats_due(now) && cfg_int("rt_hair_groom_shadow_t", 0) != 0) {
+  if (stats_due(now) && (cfg_int("rt_hair_groom_shadow_t", 0) != 0 || cfg_int("rt_hair_groom_ao_t", 0) != 0)) {
     // rt_hair_groom_shadow_t participation: the draws with a measured a_f and the groom rows that carried one.
     float lo = 1.0f, hi = 0.0f, sum[3] = {0, 0, 0};
     for (const auto& [key, t] : g_transmit) {

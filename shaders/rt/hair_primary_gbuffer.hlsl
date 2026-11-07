@@ -13,7 +13,11 @@
 // Same descriptor bindings as the native FS (a subset of the game's pipeline layout); the record address comes
 // from specialization constants 1100/1101.
 #include "hair_primary_rebase.hlsli"
+#include "hair_primary_coverage.hlsli"
 
+// M3.2 (rt_hair_groom_coverage, common/shader_variant.h kSpecIdHairGroomCoverage): two stratified rays per pixel.
+// 0: the single pixel ray below, unchanged; 1: the pair, when header flag 8 is also set (live off-switch).
+[[vk::constant_id(1042)]] const uint kHairGroomCoverage = 0u;
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
 [[vk::constant_id(1102)]] const uint kDrawSlot = 16u;
@@ -59,6 +63,35 @@ uint64_t addr2(uint2 a) { return (uint64_t(a.y) << 32) | uint64_t(a.x); }
 uint ld(uint64_t a) { return vk::RawBufferLoad<uint>(a, 4); }
 uint2 ld2(uint64_t a) { return vk::RawBufferLoad<uint2>(a, 4); }
 float3 ldf3(uint64_t a) { return asfloat(vk::RawBufferLoad<uint3>(a, 4)); }
+
+// M3.2: one ray of the coverage pair, the same trace and validation as the single pixel ray in main. false: no valid
+// strand (a miss, or a hit whose groom/segment fails the bounds, which the single ray also stores as no strand).
+bool hp_cov_trace(uint64_t rec, float3 org, float3 dir, uint grooms, uint64_t pool, uint pool_bytes, uint64_t crumbs,
+                  uint64_t pool_end, out uint3 e, out float t) {
+  e = uint3(hair_primary_no_strand, 0u, 0u);
+  t = 0.0;
+  RayDesc r;
+  r.Origin = org;
+  r.TMin = 0.0;
+  r.Direction = dir;
+  r.TMax = 1.0e5;
+  RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+  q.TraceRayInline(hp_tlas(ld2(rec + 16u)), 0u, 0xFFu, r);
+  while (q.Proceed()) {}
+  if (q.CommittedStatus() == COMMITTED_NOTHING) return false;
+  const uint k = q.CommittedInstanceIndex(), seg = q.CommittedPrimitiveIndex();
+  if (k >= grooms || seg > hair_primary_max_segment) return false;
+  const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
+  uint i0;
+  if (!hp_segment(pool, pool_bytes, row, seg, i0) ||
+      !hp_crumb_ok(crumbs, 3u, hp_at(pool, row.x, i0, 12u), 24u, pool, pool_end)) return false;
+  const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
+  t = q.CommittedRayT();
+  const float3 hit = dir * t;   // this frame's camera-relative point
+  const float4 c = mul(float4(hit, 1.0), gCam.vp);
+  e = uint3((k << 24) | seg, asuint(hp_segment_param(hit + org, p0, p1)), asuint(c.z / c.w));
+  return true;
+}
 
 struct Out {
   float4 rt0 : SV_Target0;
@@ -139,6 +172,23 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   }
   if (!hp_crumb_ok(crumbs, 1u, at, 16u, pixels, pixel_end)) { discard; return o; }
   uint4 e = vk::RawBufferLoad<uint4>(at, 16);
+  if (kHairGroomCoverage != 0u && (ld(rec + 60u) & hair_primary_flag_coverage) != 0u && e.w != hp_seal(e.xyz, tag)) {
+    // M3.2: rays A and B at hp_cov_offset of the jittered pixel centre; hp_cov_pick keeps one hit or none. The pair is
+    // traced once per pixel and sealed like the single ray's entry, so later fragments, velocity and count read it.
+    uint3 hit_e[2];
+    float hit_t[2];
+    bool hit[2];
+    [unroll] for (uint i = 0; i < 2u; ++i) {
+      const float2 nd = ((pos.xy + hp_cov_offset(px, i) - view.xy) / view.zw * 2.0 - 1.0) * float2(1.0, -1.0);
+      const float4 rh = mul(float4(nd, 1.0, 1.0), inv);
+      hit[i] = hp_cov_trace(rec, org, normalize(rh.xyz / rh.w), grooms, pool, pool_bytes, crumbs, pool_end, hit_e[i],
+                            hit_t[i]);
+    }
+    const uint pick = hp_cov_pick(hit[0], hit[1], hit_t[0], hit_t[1], px, tag);
+    e.xyz = pick == 0u ? hit_e[0] : pick == 1u ? hit_e[1] : uint3(hair_primary_no_strand, 0u, 0u);
+    e.w = hp_seal(e.xyz, tag);
+    vk::RawBufferStore<uint4>(at, e, 16);
+  }
   if (e.w != hp_seal(e.xyz, tag)) {
     RayDesc r;
     r.Origin = org;

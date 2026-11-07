@@ -45,6 +45,8 @@ enum SpecId : unsigned {
   // Retired: 1022 alpha metadata cache, 1023 empty water tiles, 1024 compact hit state. Never reuse.
   kSpecIdWaterSurfaceFresnel = 1025, // M5.6 clean interface / column partition
   kSpecIdHairGroomShadowT = 1026,    // C2: strand shadow transmittance, default pre-C2 opaque query
+  // Hair stream B (branch claude/hair-m2-m4-light) takes ids from 1044 up (1040/1041 retired, 1042/1043 stream A).
+  kSpecIdHairGroomAoT = 1044,        // M2.3: strand AO/GI ray transmittance, default opaque strands
   kSpecIdRfCompactProbeState = 1031, // RF: evaluate receiver probes after hit shading
   // Retired: 1041 rf_fast (paired saving, sustained replay exactness failed). Never reuse.
   // Retired: 1037 group-shared origin depth (no paired saving). Never reuse.
@@ -55,6 +57,9 @@ enum SpecId : unsigned {
   kSpecIdGiFarRoofEarly = 1038,     // exact far hidden-hit roof rejection; diagnostics force OFF
   kSpecIdCompactHitState = 1029,    // GI: retain the normal instead of the full hit across direct lighting
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
+  // 1030 is left free on purpose: the hair AO/indirect stream (M2.3/M4) picks ids in parallel.
+  kSpecIdHairGroomCoverage = 1042,   // M3.2 rt_hair_groom_coverage: two stratified strand rays per pixel (rt/hair_primary_gbuffer)
+  kSpecIdRrHairGuides = 1043,        // M3.3 rr_hair_guides: class 5 RR guides (rr_guides.hlsl), metalness 0, fibre f0
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;
@@ -127,7 +132,9 @@ inline bool cascade_entry(const char* file) {
       "gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
       "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl", "gi/rt_occ_stats.hlsl",
       // rt_hair_fibre: the strand-pixel pass after D-LS traces the same local-light rays
-      "gi/hair_fibre.hlsl"};
+      "gi/hair_fibre.hlsl",
+      // rt_hair_fibre_spec: the strand-pixel pass after D-RF traces its reflection rays with D-RF's masks
+      "gi/hair_fibre_spec.hlsl"};
   for (const char* n : names)
     if (std::strcmp(n, file) == 0) return true;
   return false;

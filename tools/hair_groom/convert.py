@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from . import geom, strands2d
+from . import curves2d, geom, strands2d
 
 EPS = 1e-4
 # Largest strand radius kept (metres): the widest painted clump of the reference LOD0 conversion is 1.14 mm;
@@ -19,6 +19,12 @@ EPS = 1e-4
 MAX_RADIUS = 0.002
 # The layer's parser rejects radii >= 10 mm (common/hair_groom_asset.h): thinned LODs stay below.
 MAX_THIN_RADIUS = 0.009
+# Rows run root to tip when the root channel correlates with the row at least this much (median over tiles; the
+# batch's ROOT_REJECT): below it the row tracer cannot follow the strands and the 2-D curve tracer is used.
+CURLY_ROOT_CORR = 0.3
+# The 2-D tracer measures the strand width per block of 1/8 x 1/8 of the atlas (curly atlases are not regular grids).
+CURVE_BLOCKS = (8, 8)
+_curve_memo = {}
 
 
 @dataclass
@@ -151,6 +157,56 @@ def tile_strands(mask, tile_grid, step, threshold=128):
     return out, stats
 
 
+def is_curly(mask, tile_grid, threshold=128):
+    corr = curves2d.root_row_correlation(mask, tile_grid, threshold)
+    return corr is not None and corr < CURLY_ROOT_CORR
+
+
+def curve_strands(mask, tile_grid, step, threshold=128):
+    """Strands of a curly atlas by the 2-D tracer (curves2d): ([(u, v, width, slope, root, depth, normal)], (lo, hi)
+    UV boxes, per-tile stats, per-tile strand root correlation). Width in UV u units across the strand, slope 0, normal
+    (N, 2) the unit direction of the width in pixels. Points keep the centreline within a quarter of the strand width
+    (the swept sphere stays inside the painted strand) and are at most `step` pixels apart. The trace is memoised per
+    mask (the atlas grid only groups the statistics)."""
+    import hashlib
+    key = (hashlib.sha1(np.ascontiguousarray(mask).tobytes()).hexdigest(), step, threshold)
+    h, w = mask.shape[:2]
+    if key not in _curve_memo:
+        curves, typ, claimed = curves2d.trace(mask, threshold, tile_grid=CURVE_BLOCKS)
+        rows, lo, hi, length = [], [], [], []
+        for c in curves:
+            t = float(typ[int(round(c.y[0])), int(round(c.x[0]))])
+            x, y, wd, nx, ny = curves2d.resample(c, step, max(0.5, t / 4))
+            xi, yi = np.clip(np.rint(x).astype(int), 0, w - 1), np.clip(np.rint(y).astype(int), 0, h - 1)
+            u, v = (x + 0.5) / w, (y + 0.5) / h
+            rows.append((u, v, wd / w, np.zeros_like(x), mask[yi, xi, 2] / 255.0, mask[yi, xi, 1] / 255.0,
+                         np.stack([nx, ny], 1)))
+            lo.append((u.min(), v.min()))
+            hi.append((u.max(), v.max()))
+            length.append(float(np.hypot(np.diff(c.x), np.diff(c.y)).sum()))
+        _curve_memo.clear()
+        _curve_memo[key] = (curves, typ, claimed, rows, np.array(lo).reshape(-1, 2), np.array(hi).reshape(-1, 2), length)
+    curves, typ, claimed, rows, lo, hi, length = _curve_memo[key]
+    root_tile = [(min(int(c.x[0] * tile_grid[0] / w), tile_grid[0] - 1), min(int(c.y[0] * tile_grid[1] / h), tile_grid[1] - 1))
+                 for c in curves]
+    th, tw = h // tile_grid[1], w // tile_grid[0]
+    stats, corr = {}, []
+    for ty in range(tile_grid[1]):
+        for tx in range(tile_grid[0]):
+            cov = mask[ty * th:(ty + 1) * th, tx * tw:(tx + 1) * tw, 3] >= threshold
+            got = claimed[ty * th:(ty + 1) * th, tx * tw:(tx + 1) * tw] & cov
+            mine = [i for i, rt in enumerate(root_tile) if rt == (tx, ty)]
+            stats[(tx, ty)] = {"strands": len(mine), "typical_px": float(np.median(typ[ty * th:(ty + 1) * th, tx * tw:(tx + 1) * tw])),
+                               "recall": float(got.sum() / max(cov.sum(), 1))}
+            if mine:
+                # Length-weighted median of the strands' root/arc correlation: the row check's quantity along the strands.
+                cc = np.array([curves[i].root_corr for i in mine])
+                ll = np.array([length[i] for i in mine])
+                o = np.argsort(cc)
+                corr.append(float(cc[o][np.searchsorted(np.cumsum(ll[o]), ll.sum() / 2)]))
+    return rows, (lo, hi), stats, corr
+
+
 def run_radii(hit, sid, width):
     """Mapped runs with at least two samples: point indices, lengths, radii and widthless count."""
     ok = hit >= 0
@@ -186,7 +242,7 @@ def run_radii(hit, sid, width):
 
 
 def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diameter=None,
-            depth_offset=None, head_centre=None):
+            depth_offset=None, head_centre=None, tracer="auto"):
     """Groom + report of one hair mesh with its ID_Depth_Root_Alpha mask (H, W, 4 uint8).
 
     max_fibre_diameter: a painted strand wider than this (metres, at its widest sample on the card)
@@ -194,14 +250,22 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
       width: coverage is kept and no fibre is thicker than a real hair.
     depth_offset: metres per unit of the mask's depth channel (the material's PixelDepthOffset);
       each point moves that far along the card normal toward head_centre. Off when None.
+    tracer: "rows" (strands2d, down the texture rows), "2d" (curves2d, curly atlases), or "auto": "2d" when the root
+      channel does not run along the rows (is_curly).
     """
     count, card_of = cards(mesh.tris, len(mesh.positions))
-    per_tile, tile_stats = tile_strands(mask, tile_grid, step, threshold)
+    curly = tracer == "2d" or (tracer == "auto" and is_curly(mask, tile_grid, threshold))
+    if curly:
+        curve_rows, (box_lo, box_hi), tile_stats, strand_root = curve_strands(mask, tile_grid, step, threshold)
+    else:
+        per_tile, tile_stats = tile_strands(mask, tile_grid, step, threshold)
     H, W = mask.shape[:2]
     pts, rad, jnt, wgt, root, offsets, card_ids, emb_t, emb_b, emb_n = [], [], [], [], [], [], [], [], [], []
     report = {"cards": int(count), "triangles": int(len(mesh.tris)), "tiles": {f"{k[0]},{k[1]}": v for k, v in tile_stats.items()},
               "cards_spanning_tiles": 0, "uv_overlap_samples": 0, "samples": 0, "unmapped_samples": 0,
               "mixed_winding_cards": 0, "split_strands": 0, "fibres_from_splits": 0}
+    if curly:
+        report.update(tracer="2d", strand_root_corr=strand_root)
     for c in range(count):
         tri_ids = np.flatnonzero(card_of == c)
         tris = mesh.tris[tri_ids]
@@ -217,11 +281,27 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
         sign = np.sign(e0[:, 0] * e1[:, 1] - e0[:, 1] * e1[:, 0])
         if (sign > 0).any() and (sign < 0).any():
             report["mixed_winding_cards"] += 1
-        rows = [r for tx in range(t0[0], t1[0] + 1) for ty in range(t0[1], t1[1] + 1) for r in per_tile.get((tx, ty), [])]
+        if curly:
+            # Every traced strand whose UV box meets the card's (curly atlases are not regular grids); samples outside
+            # the card are cut by locate as usual.
+            near = np.flatnonzero(np.all(box_lo <= hi, 1) & np.all(box_hi >= lo, 1))
+            rows = [curve_rows[i] for i in near]
+        else:
+            rows = [r for tx in range(t0[0], t1[0] + 1) for ty in range(t0[1], t1[1] + 1) for r in per_tile.get((tx, ty), [])]
         if not rows:
             continue
         u, v, wd, slope, rp, dp = (np.concatenate([r[k] for r in rows]) for k in range(6))
+        nrm = np.concatenate([r[6] for r in rows]) if curly else None
         sid = np.repeat(np.arange(len(rows)), [len(r[0]) for r in rows])
+        if curly:
+            # Long curly strands cross many cards: keep only the samples inside this card's UV box (a sample outside
+            # it lies in none of its triangles), each inside stretch a strand of its own (as locate would cut it).
+            inb = (u >= lo[0] - EPS) & (u <= hi[0] + EPS) & (v >= lo[1] - EPS) & (v <= hi[1] + EPS)
+            start = inb & np.r_[True, ~inb[:-1] | (sid[1:] != sid[:-1])]
+            sid = (np.cumsum(start) - 1)[inb]
+            u, v, wd, slope, rp, dp, nrm = u[inb], v[inb], wd[inb], slope[inb], rp[inb], dp[inb], nrm[inb]
+            if not len(u):
+                continue
         hit, bary, inside = locate(uv, tris, np.stack([u, v], 1))
         report["samples"] += len(u)
         report["unmapped_samples"] += int((hit < 0).sum())
@@ -232,8 +312,15 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
         # The Jacobian only depends on the triangle, not the sample placed on it.
         scale = np.linalg.norm(jacobian_u(mesh, tris), axis=1)
         width = wd * cos * scale[np.maximum(hit, 0)]
+        if curly:
+            # The width runs along the strand's normal, in any texture direction: push the whole cross-section
+            # vector through the UV -> position Jacobian (the row tracer's width runs along u).
+            hc = np.maximum(hit, 0)
+            across_px = wd * W
+            width = np.linalg.norm(jacobian_u(mesh, tris)[hc] * (across_px * nrm[:, 0] / W)[:, None]
+                                   + jacobian_v(mesh, tris)[hc] * (across_px * nrm[:, 1] / H)[:, None], axis=1)
         if max_fibre_diameter:
-            widest = np.zeros(len(rows))
+            widest = np.zeros(int(sid.max()) + 1)
             np.maximum.at(widest, sid, np.where(hit >= 0, width, 0))
             per_strand = np.maximum(1, np.ceil(widest / max_fibre_diameter - 1e-9)).astype(int)
             report["split_strands"] += int((per_strand > 1).sum())
@@ -247,8 +334,12 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
             fibre = sid[rep] * int(per_strand.max()) + i
             order = np.lexsort((rep, fibre))
             rep, across, sid = rep[order], across[order], fibre[order]
-            u = u[rep] + across * cos[rep] / W
-            v = v[rep] - across * slope[rep] * cos[rep] / H
+            if curly:
+                u = u[rep] + across * nrm[rep, 0] / W
+                v = v[rep] + across * nrm[rep, 1] / H
+            else:
+                u = u[rep] + across * cos[rep] / W
+                v = v[rep] - across * slope[rep] * cos[rep] / H
             width = (width / k)[rep]
             rp, dp = rp[rep], dp[rep]
             hit, bary, _ = locate(uv, tris, np.stack([u, v], 1))
@@ -325,6 +416,16 @@ def jacobian_u(mesh, tv):
     det = du1[:, 0] * du2[:, 1] - du1[:, 1] * du2[:, 0]
     det = np.where(np.abs(det) < 1e-12, np.nan, det)
     return (dp1 * du2[:, 1:2] - dp2 * du1[:, 1:2]) / det[:, None]
+
+
+def jacobian_v(mesh, tv):
+    """dP/dv of each triangle (rows of tv): world displacement per unit of UV v."""
+    p, t = mesh.positions[tv].astype(np.float64), mesh.uv[tv].astype(np.float64)
+    dp1, dp2 = p[:, 1] - p[:, 0], p[:, 2] - p[:, 0]
+    du1, du2 = t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]
+    det = du1[:, 0] * du2[:, 1] - du1[:, 1] * du2[:, 0]
+    det = np.where(np.abs(det) < 1e-12, np.nan, det)
+    return (dp2 * du1[:, 0:1] - dp1 * du2[:, 0:1]) / det[:, None]
 
 
 def thin(groom, keep_fraction, seed=0x9E3779B9):

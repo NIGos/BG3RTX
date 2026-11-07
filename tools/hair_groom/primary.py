@@ -8,6 +8,9 @@ fibre shading normal, and the G-buffer encodings that the game's decoders read b
 the groom's segments as capsules (radius = mean of the two point radii; the hardware sweeps a linearly varying
 radius, so edge pixels may differ by one) -> per pixel hit, distance, segment, parameter along it, tangent.
 The CLI writes coverage, depth and tangent images and report.json for one groom (the GPU bench compares to them).
+M3.2 sub-pixel coverage (shaders/rt/hair_primary_coverage.hlsli, key rt_hair_groom_coverage): coverage_offset and
+coverage_pick are the shader's twins; coverage_reference supersamples the pixel area (n x n stratified rays) and
+coverage_metrics scores a sequence of per-frame strand masks against it (--coverage FRAMES on the CLI).
 """
 from __future__ import annotations
 
@@ -167,12 +170,20 @@ class Camera:
         return r, np.cross(f, r), f   # right, up, forward: view space x, y, z (z into the screen)
 
     def rays(self, jitter=(0.0, 0.0)):
+        """Unit ray per pixel through its centre plus `jitter` (pixels, y down): one (2,) offset for the frame, or an
+        (h, w, 2) offset per pixel (the coverage pair)."""
         w, h = self.size
         r, u, f = self.basis()
         k = np.tan(self.fov_y / 2) / (h / 2)
-        x = (np.arange(w) + 0.5 + jitter[0] - w / 2) * k
-        y = -(np.arange(h) + 0.5 + jitter[1] - h / 2) * k
-        d = f[None, None] + x[None, :, None] * r[None, None] + y[:, None, None] * u[None, None]
+        j = np.asarray(jitter, np.float64)
+        if j.ndim == 1:
+            x = (np.arange(w) + 0.5 + j[0] - w / 2) * k
+            y = -(np.arange(h) + 0.5 + j[1] - h / 2) * k
+            d = f[None, None] + x[None, :, None] * r[None, None] + y[:, None, None] * u[None, None]
+        else:
+            x = (np.arange(w)[None, :] + 0.5 + j[..., 0] - w / 2) * k
+            y = -(np.arange(h)[:, None] + 0.5 + j[..., 1] - h / 2) * k
+            d = f + x[..., None] * r + y[..., None] * u
         return (d / np.linalg.norm(d, axis=-1, keepdims=True)).reshape(-1, 3)
 
     def project(self, p):
@@ -267,6 +278,8 @@ def trace(points, radii, offsets, cam, jitter=(0.0, 0.0), chunk=2_000_000):
         t, v = capsule_hits(np.broadcast_to(cam.position, (len(si), 3)), rays[pix], p0[si], p1[si], rad[si])
         m = np.isfinite(t)
         pix, t, v, si = pix[m], t[m], v[m], si[m]
+        if not len(pix):   # a chunk without any hit (sub-pixel strands missed by every ray)
+            continue
         order = np.lexsort((t, pix))
         pix, t, v, si = pix[order], t[order], v[order], si[order]
         first = np.r_[True, pix[1:] != pix[:-1]]
@@ -279,6 +292,107 @@ def trace(points, radii, offsets, cam, jitter=(0.0, 0.0), chunk=2_000_000):
     tan[hit] = d / np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-12)
     return Hits(hit.reshape(h, w), best_t.reshape(h, w), best_s.reshape(h, w), best_v.reshape(h, w),
                 tan.reshape(h, w, 3))
+
+
+# ---- M3.2 sub-pixel coverage: twins of shaders/rt/hair_primary_coverage.hlsli and its reference ----
+def coverage_offset(px, py, i):
+    """hp_cov_offset: (..., 2) pixel offset of ray i (0 A, 1 B), a quarter pixel either side of the jittered centre on
+    the diagonal of the pixel's checkerboard parity."""
+    s = -0.25 if i == 0 else 0.25
+    odd = ((np.asarray(px) + np.asarray(py)) & 1) != 0
+    return np.stack([np.full(odd.shape, s), np.where(odd, -s, s)], -1)
+
+
+def coverage_pick(hit_a, hit_b, t_a, t_b, px, py, tag):
+    """hp_cov_pick: 0 keeps ray A's hit, 1 ray B's, 2 none. Both hit: the nearer; one hit: a checkerboard whose phase is
+    hashed per frame keeps half of them, so the expected coverage is (h_A + h_B) / 2."""
+    hit_a, hit_b = np.asarray(hit_a, bool), np.asarray(hit_b, bool)
+    keep = (((np.asarray(px) + np.asarray(py)) ^ _mix(int(tag))) & 1) == 0
+    pick = np.full(hit_a.shape, 2)
+    pick = np.where(hit_a & hit_b, np.where(np.asarray(t_b) < np.asarray(t_a), 1, 0), pick)
+    return np.where((hit_a ^ hit_b) & keep, np.where(hit_a, 0, 1), pick)
+
+
+def halton(i, base):
+    """Radical inverse of i in `base` (the DLSS jitter sequence uses bases 2 and 3, from index 1)."""
+    f, r = 1.0, 0.0
+    while i > 0:
+        f /= base
+        r += f * (i % base)
+        i //= base
+    return r
+
+
+def jitter(frame):
+    """Sub-pixel camera jitter of frame `frame` (0-based): Halton (2, 3) from index 1, centred, pixels."""
+    return np.array([halton(frame + 1, 2) - 0.5, halton(frame + 1, 3) - 0.5])
+
+
+def subpixel_fixture(seed=1, n=200, size=256, fov_deg=20.0):
+    """Wavy 0.25 mm strands (radius 0.125 mm) 0.6-3 m in front of a camera at the origin: sub-pixel at every distance
+    (pixel 1.4-7 mm at 256 pixels and 20 degrees). Returns (points, radii, offsets, camera)."""
+    rng = np.random.default_rng(seed)
+    pts, rad, offs = [], [], [0]
+    for _ in range(n):
+        dist = rng.uniform(0.6, 3.0)
+        root = np.array([*rng.uniform(-0.18, 0.18, 2) * dist, dist])
+        d = rng.normal(size=3)
+        d[2] *= 0.3
+        d /= np.linalg.norm(d)
+        s = np.linspace(0, 0.1, 12)[:, None]
+        p = root + s * d + 0.003 * np.sin(s * 80 + rng.uniform(0, 6)) * np.array([[0.0, 1.0, 0.0]])
+        pts.append(p)
+        rad.append(np.full(len(p), 0.000125))
+        offs.append(offs[-1] + len(p))
+    cam = Camera(np.zeros(3), np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]), np.radians(fov_deg), (size, size))
+    return np.concatenate(pts), np.concatenate(rad), np.array(offs), cam
+
+
+def coverage_reference(points, radii, offsets, cam, n=8):
+    """Area coverage of every pixel by the strands: the hit share of n x n stratified rays per pixel."""
+    acc = np.zeros(cam.size[::-1])
+    for i in range(n):
+        for j in range(n):
+            acc += trace(points, radii, offsets, cam, ((i + 0.5) / n - 0.5, (j + 0.5) / n - 0.5)).hit
+    return acc / (n * n)
+
+
+def coverage_frames(points, radii, offsets, cam, frames=16, pair=False):
+    """Per-frame strand masks (frames, h, w) with the frame jitter: the single pixel ray, or with `pair` the two rays
+    and hp_cov_pick (tag = frame + 1, as the layer's header tag is frame index + 1)."""
+    w, h = cam.size
+    py, px = np.mgrid[0:h, 0:w]
+    out = []
+    for f in range(frames):
+        j = jitter(f)
+        if not pair:
+            out.append(trace(points, radii, offsets, cam, j).hit)
+            continue
+        a = trace(points, radii, offsets, cam, j + coverage_offset(px, py, 0))
+        b = trace(points, radii, offsets, cam, j + coverage_offset(px, py, 1))
+        out.append(coverage_pick(a.hit, b.hit, a.t, b.t, px, py, f + 1) != 2)
+    return np.array(out)
+
+
+def box_mean(x, r=1):
+    """Mean over the (2r + 1)^2 pixel box (zero outside the image) of the last two axes."""
+    from numpy.lib.stride_tricks import sliding_window_view
+    p = np.pad(np.asarray(x, np.float64), [(0, 0)] * (np.ndim(x) - 2) + [(r, r), (r, r)])
+    return sliding_window_view(p, (2 * r + 1, 2 * r + 1), axis=(-2, -1)).mean((-1, -2))
+
+
+def coverage_metrics(masks, ref, r=1):
+    """Scores of per-frame strand masks against the area coverage: relative bias of the total (energy), RMS error of the
+    box-filtered coverage per frame (what a small reconstruction filter sees; aliasing) and its temporal standard
+    deviation (flicker), both over the pixels whose box holds any strand."""
+    m = np.asarray(masks, np.float64)
+    b, rb = box_mean(m, r), box_mean(ref, r)
+    roi = rb > 0
+    return {"frames": int(len(m)), "reference_coverage": float(ref.sum()),
+            "bias": float((m.mean(0).sum() - ref.sum()) / max(ref.sum(), 1e-12)),
+            "box_rmse": float(np.sqrt(((b - rb) ** 2)[:, roi].mean())),
+            "box_temporal_std": float(b.std(0)[roi].mean()),
+            "bias_sigma": float(np.sqrt(np.sum(ref * (1.0 - ref))) / max(ref.sum(), 1e-12))}
 
 
 def gbuffer(hits, cam, near=0.1, far=1000.0):
@@ -304,6 +418,8 @@ def main():
     ap.add_argument("--size", type=int, default=512)
     ap.add_argument("--distance", type=float, default=0.9)
     ap.add_argument("--fov", type=float, default=30.0, help="vertical field of view, degrees")
+    ap.add_argument("--coverage", type=int, default=0, metavar="FRAMES",
+                    help="also score the single ray and the M3.2 pair over FRAMES jittered frames (8 x 8 reference)")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=False)
     g = np.load(args.groom)
@@ -322,6 +438,11 @@ def main():
                         tangent=hits.tangent, depth=gb["depth"], rt0=gb["rt0"], rt3=gb["rt3"])
     report = {"size": args.size, "distance_m": args.distance, "fov_deg": args.fov, "hair_pixels": int(cov.sum()),
               "coverage": float(cov.mean()), "t_min": float(lo), "t_max": float(hi)}
+    if args.coverage:
+        ref = coverage_reference(g["points"], g["radii"], g["offsets"], cam)
+        report["subpixel"] = {name: coverage_metrics(coverage_frames(g["points"], g["radii"], g["offsets"], cam,
+                                                                     args.coverage, pair), ref)
+                              for name, pair in (("single", False), ("pair", True))}
     (args.out / "report.json").write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
     print(json.dumps(report))
 
