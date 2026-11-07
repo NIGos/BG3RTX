@@ -466,7 +466,9 @@ closest strand hit with probability 1 - d_f lum(prod a_f) over the crossings in 
 (`rt_groom_blocks`, the C2 estimator and hp_crossing dedup), else pass on to the scene hit or the miss. A
 blocked ray keeps the closest strand's distance for the fade and its screen radiance for the bounce. The layer
 packs a_f into groom row word 2 when either key is on (`hair_primary_transmit`; layer change: restart).
-GI pipelines carry 1044 in their specialization key; no request or ABI change.
+GI pipelines carry 1044 in their specialization key; no request or ABI change. Identity (tools/hair_shadow_check.py
+--allow-new gi/hair_fibre_spec.hlsl, vs main 2dcf0a88): 160/210 ordinary requests byte-identical, 50 strictly equivalent
+with 1026/1044 fixed at 0, 0 failed; hair_fibre.hlsl requests (strand-pixel header moved) 3/3 byte-identical.
 GPU bench (tests/hair_primary_gpu_test.py, 3000 rays): crossings 3000/3000 equal to CPU; closest strand t
 against the CPU capsule entry max 9.8e-8 m; mean occlusion with a_f = 0.5 1767.65 against 1765.57 expected,
 sigma 1.04 (2.0 sigma; the same trials as the shadow line, 174332 lit vs 175064.4, -2.1 sigma). Opaque

@@ -380,6 +380,7 @@ VkDescriptorSetLayout g_rf_set_layout = VK_NULL_HANDLE, g_rf_game_layout = VK_NU
 VkPipelineLayout g_rf_layout = VK_NULL_HANDLE;
 Pipe g_rf;
 Pipe g_hair_fibre_spec;   // gi/hair_fibre_spec.hlsl (rt_hair_fibre_spec, M4.2): strand pixels' specular indirect, after D-RF
+// (refresh keys its variants by layout: a rebuilt D-RF layout gets a fresh variant; all are destroyed at shutdown.)
 // rf_hit_shade (M4.2 tier b, common/native_hit_rf_bindings.h): D-RF's push set, the material
 // AlphaDSL as set 1, the game's lighting set 1 as set 2, the D-LS sun set as set 3 (+ SHaRC set 4).
 // Built over g_rf_set_layout and g_rf_game_layout: ensure_rf_layout drops them with those.
@@ -849,8 +850,6 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
   if (!make_layout(kRfBindings, &next_set, &next_layout, host_layout, game)) return false;
   if (g_rf_layout) {
     for (const auto& [slot, v] : g_rf.variants) host->defer_destroy(BG3_DEFER_PIPELINE, uint64_t(v.pipeline));
-    for (const auto& [slot, v] : g_hair_fibre_spec.variants) host->defer_destroy(BG3_DEFER_PIPELINE, uint64_t(v.pipeline));
-    g_hair_fibre_spec = Pipe{};
     defer_layout_destroy(uint64_t(g_rf_layout));
     host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rf_set_layout);
     g_rf = Pipe{};
