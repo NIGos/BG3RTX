@@ -24,7 +24,7 @@ C4 = M4.1, C5 = M1 (+ M7 content), C6 = M5, C7 = M8.
 | M0 stability (C1) | ready: strike rule, header order + A/B in hv5, strand-draw gates | 51956f86, f659b5ee, 4661e4bc (bundle12) | L1: hv5 + hair_crowd after bundle12 |
 | M1 conversion (C5) | done offline: converter 2.4-3.4x, renders 1.8x (bit-identical), caches, 80-style set, fibre reference, radial orientation, root from geometry; LOD1 transfer rejected by its gates; full rerun done: 877 pass / 295 review / 45 reject (was 745 / 346 / 126) | 068ff6e4 .. 71de9bc1 (claude/hair-batch-lod) | none (counts offline) |
 | M2 shadows (C2) | M2.1 transmittance done offline (spec 1026, in main); M2.2 audited: cascade fallback retains card shadows, safe replacement not implemented ([analysis](RTX_HAIR_SHADOW_MAPS.md), [audit](progress/claude-hair-cascade.md)); M2.3 AO not started | 048d60d5 (claude/hair-shadow-transmittance) | L2; M2.2 not ready |
-| M3 image (C3) | M3.1 tips done offline (rt_hair_groom_tips); M3.2 sub-pixel, M3.3 RR guides, M3.4 post depth not started | 795f6008 (claude/hair-tips) | L2 |
+| M3 image (C3) | M3.1 tips done offline (rt_hair_groom_tips); M3.2 two-ray coverage done offline (rt_hair_groom_coverage, spec 1042: unbiased, box error -4 to -7%, 2x strand trace); M3.3 RR hair guides done offline (rr_hair_guides, spec 1043: class 5 metalness 0, fibre F0); M3.4 post depth not started | 795f6008 (claude/hair-tips), claude/hair-m3-image | L2 |
 | M4 indirect (C4) | not started | | L3 |
 | M5 views (C6) | not started | | L3 |
 | M6 performance | not started (SER applies to ray-tracing pipelines, not to the inline queries the strand passes use: half-resolution traces and the crowd budget are the levers) | | L4 |
@@ -90,8 +90,13 @@ camera; PT reference on the bench fixture.
 2. Sub-pixel coverage: strands thinner than a pixel rely on the jittered camera ray plus TAA/RR. Measure the flicker
    with the edge-flicker detector; if it is above the cards, use two rays per strand pixel or a coverage estimate
    from the capsule distance.
+   Done offline (2026-11-07, RTX_HAIR_PRIMARY 5d): two stratified rays (the footprint estimate needs a widened
+   second BLAS). Unbiased; 3 x 3 box error -4 to -7% against an 8 x 8 area reference, at twice the strand trace.
+   Binary G-buffer pixels bound the gain; L2 decides with the edge-flicker detector.
 3. DLSS RR guides: hair material class, specular albedo and roughness of the fibre, hit distance; qualify the "RR
    hair resolve" candidate with strands.
+   Done offline (2026-11-07, RTX_HAIR_PRIMARY 4): class 5 guides read RT2.z as backlit, not metalness (it fed RR a
+   metal before); fibre F0 0.0465, roughness >= 0.09. Hit distance stays D-RF's kNoHit on hair (not traced).
 4. Depth of field, fog and water: the post passes read the strand depth written by the G-buffer variant; check halos.
 Gate: edge-flicker metric on hair pixels at most the cards' in one run; no energy change; no DoF halo in PNG pairs.
 

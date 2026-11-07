@@ -47,7 +47,9 @@ def synthetic(seed=3):
     return np.concatenate(pts), np.concatenate(rad), np.array(offs)
 
 
-def push_block(cam, near=0.1, far=1000.0):
+def push_block(cam, near=0.1, far=1000.0, jitter=None, tag=0):
+    """The 128-byte push block. jitter (pixels, y down) is folded into the ray basis' forward vector (the depth matrix
+    keeps the unjittered forward); tag goes to forward.w as uint bits (coverage mode)."""
     r, u, f = cam.basis()
     w, h = cam.size
     k = np.tan(cam.fov_y / 2) / (h / 2)
@@ -56,15 +58,16 @@ def push_block(cam, near=0.1, far=1000.0):
     vp = np.zeros((4, 4))
     vp[:3, 0], vp[:3, 1], vp[:3, 2], vp[3, 2], vp[:3, 3] = r, u, a * f, b, f
     head = struct.pack("<4f", *cam.position, k) + struct.pack("<3fI", *r, w) + struct.pack("<3fI", *u, h)
-    return head + struct.pack("<4f", *f, 0.0) + vp.astype("<f4").tobytes()
+    fwd = f if jitter is None else f + jitter[0] * k * r - jitter[1] * k * u
+    return head + struct.pack("<3fI", *fwd, tag) + vp.astype("<f4").tobytes()
 
 
-def run(exe, spv, points, radii, offsets, cam):
+def run(exe, spv, points, radii, offsets, cam, push=None):
     s0, _ = primary.segments(points, radii, offsets)
     w, h = cam.size
     with tempfile.TemporaryDirectory() as d:
         inp, out = Path(d) / "in.bin", Path(d) / "out.bin"
-        inp.write_bytes(b"HPGC" + struct.pack("<7I", 1, len(points), len(s0), w, h, 0, 0) + push_block(cam) +
+        inp.write_bytes(b"HPGC" + struct.pack("<7I", 1, len(points), len(s0), w, h, 0, 0) + (push or push_block(cam)) +
                         np.asarray(points, "<f4").tobytes() + np.asarray(radii, "<f4").tobytes() +
                         s0.astype("<u4").tobytes())
         p = subprocess.run([str(exe), str(inp), str(spv), str(out)], capture_output=True, text=True)
@@ -258,6 +261,40 @@ def shadow_check(exe, spv, pts, rad, offs, cam, n_rays=3000, seed=17):
     check("shadow transmittance: mean visibility = d_f a_f^n within 4 sigma (binomial)", abs(err) <= 4 * sigma, (err, sigma))
 
 
+def coverage_check(exe, spv, frames=16):
+    """M3.2: the two rays and hp_cov_pick on the GPU (HP_CHECK_COVERAGE build of the check shader) against the CPU twins
+    on the sub-pixel fixture, frame by frame with the Halton jitter, then the GPU masks against the supersampled area
+    coverage (the offline gate of tests/hair_groom_test.py test_coverage)."""
+    pts, rad, offs, cam = primary.subpixel_fixture(seed=1)
+    w, h = cam.size
+    py, px = np.mgrid[0:h, 0:w]
+    ref = primary.coverage_reference(pts, rad, offs, cam)
+    masks, agree = [], []
+    for fi in range(frames):
+        j = primary.jitter(fi)
+        g = run(exe, spv, pts, rad, offs, cam, push_block(cam, jitter=j, tag=fi + 1))
+        if g is None:
+            return
+        a = primary.trace(pts, rad, offs, cam, j + primary.coverage_offset(px, py, 0))
+        b = primary.trace(pts, rad, offs, cam, j + primary.coverage_offset(px, py, 1))
+        cpu = primary.coverage_pick(a.hit, b.hit, a.t, b.t, px, py, fi + 1)
+        gpu = g[..., 1].astype(int)
+        any_hit = a.hit | b.hit | (g[..., 3] != 0)
+        agree.append(float((cpu == gpu)[any_hit].mean()) if any_hit.any() else 1.0)
+        masks.append(gpu != 2)
+    single = primary.coverage_metrics(primary.coverage_frames(pts, rad, offs, cam, frames, False), ref)
+    rep = primary.coverage_metrics(np.array(masks), ref)
+    rep["pick_agreement_min"] = min(agree)
+    print(json.dumps({"coverage_gpu": rep, "coverage_cpu_single": single}))
+    # Constant radius: the same capsules; only float32 vs float64 at grazing edges can flip a pixel (as the IoU gate).
+    check("coverage GPU pick equals the CPU twin on >= 99% of the pixels any ray hits, every frame",
+          rep["pick_agreement_min"] >= 0.99, rep["pick_agreement_min"])
+    tol = 4 * rep["bias_sigma"] / np.sqrt(frames)
+    check(f"coverage GPU pair unbiased against the 8 x 8 area coverage (4 sigma {tol:.4f})", abs(rep["bias"]) <= tol, rep["bias"])
+    check("coverage GPU pair: 3 x 3 box error below the CPU single ray's", rep["box_rmse"] < single["box_rmse"],
+          (rep["box_rmse"], single["box_rmse"]))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -268,6 +305,7 @@ def main():
     ap.add_argument("--bsdf-spv", type=Path, help="also compare shaders/rt/hair_bsdf.hlsli with tools/hair_groom/bsdf.py")
     ap.add_argument("--dual-spv", type=Path, help="also compare shaders/rt/hair_dual.hlsli with tools/hair_groom/dual.py")
     ap.add_argument("--shadow-spv", type=Path, help="also count strand crossings per ray (tools/hair_shadow_gpu_check.hlsl)")
+    ap.add_argument("--coverage-spv", type=Path, help="also check the M3.2 coverage pair (HP_CHECK_COVERAGE build)")
     a = ap.parse_args()
     if a.groom:
         gr = np.load(a.groom)
@@ -288,6 +326,8 @@ def main():
         dual_check(a.exe, a.dual_spv)
     if a.shadow_spv:
         shadow_check(a.exe, a.shadow_spv, pts, rad, offs, cam)
+    if a.coverage_spv:
+        coverage_check(a.exe, a.coverage_spv)
     print(f"{len(FAILS)} failures" if FAILS else "all passed")
     sys.exit(1 if FAILS else 0)
 

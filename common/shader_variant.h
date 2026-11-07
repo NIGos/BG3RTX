@@ -55,6 +55,9 @@ enum SpecId : unsigned {
   kSpecIdGiFarRoofEarly = 1038,     // exact far hidden-hit roof rejection; diagnostics force OFF
   kSpecIdCompactHitState = 1029,    // GI: retain the normal instead of the full hit across direct lighting
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
+  // 1030 is left free on purpose: the hair AO/indirect stream (M2.3/M4) picks ids in parallel.
+  kSpecIdHairGroomCoverage = 1042,   // M3.2 rt_hair_groom_coverage: two stratified strand rays per pixel (rt/hair_primary_gbuffer)
+  kSpecIdRrHairGuides = 1043,        // M3.3 rr_hair_guides: class 5 RR guides (rr_guides.hlsl), metalness 0, fibre f0
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;

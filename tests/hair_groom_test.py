@@ -632,6 +632,78 @@ def test_strand_source_safety():
           < src.index('if (e.x == hair_primary_no_strand)'))
 
 
+def test_coverage():
+    """M3.2 (rt_hair_groom_coverage): the pair's twins and its offline gate against the supersampled area coverage."""
+    py, px = np.mgrid[0:4, 0:4]
+    a, b = primary.coverage_offset(px, py, 0), primary.coverage_offset(px, py, 1)
+    check("coverage offsets: antithetic, a quarter pixel on both axes", np.allclose(a + b, 0) and np.allclose(np.abs(a), 0.25))
+    check("coverage offsets: the diagonal alternates with the checkerboard parity",
+          np.allclose(a[0, 0], (-0.25, -0.25)) and np.allclose(a[0, 1], (-0.25, 0.25)) and np.allclose(a[1, 1], a[0, 0]))
+    t = lambda *v: np.array(v, bool)
+    zeros = np.zeros(3, int)
+    both = primary.coverage_pick(t(1, 1, 1), t(1, 1, 1), np.array([1.0, 2.0, 1.0]), np.array([2.0, 1.0, 1.0]), zeros, zeros, 7)
+    check("coverage pick: both hit keeps the nearer, a tie ray A", list(both) == [0, 1, 0], both)
+    none = primary.coverage_pick(t(0), t(0), np.zeros(1), np.zeros(1), zeros[:1], zeros[:1], 7)
+    check("coverage pick: no hit keeps none", list(none) == [2])
+    same = True
+    for tag in range(1, 65):
+        ka = primary.coverage_pick(np.ones((4, 4), bool), np.zeros((4, 4), bool), 0.0, 0.0, px, py, tag)
+        kb = primary.coverage_pick(np.zeros((4, 4), bool), np.ones((4, 4), bool), 0.0, 0.0, px, py, tag)
+        same &= bool(np.array_equal(ka == 0, kb == 1) and set(np.unique(ka)) <= {0, 2} and set(np.unique(kb)) <= {1, 2})
+        if tag <= 4:
+            kept = ka != 2
+            check(f"coverage pick tag {tag}: one hit kept on exactly half the pixels, a checkerboard",
+                  kept.sum() == 8 and np.all(kept[:, 1:] != kept[:, :-1]), ka)
+    check("coverage pick: the one-hit decision does not depend on which ray hit", same)
+    phases = [int(primary.coverage_pick(t(1), t(0), 0.0, 0.0, zeros[:1], zeros[:1], tag)[0] == 0) for tag in range(1, 257)]
+    # The frame phase is a hash: over 256 tags its share is 0.5 within 4 binomial sigma (sigma = 1/32).
+    check("coverage pick: frame phase keeps about half of the tags", abs(np.mean(phases) - 0.5) <= 4 / 32, np.mean(phases))
+    pts, rad, offs, cam = primary.subpixel_fixture(seed=1)
+    ref = primary.coverage_reference(pts, rad, offs, cam)
+    frames = 16
+    single = primary.coverage_metrics(primary.coverage_frames(pts, rad, offs, cam, frames, False), ref)
+    pair = primary.coverage_metrics(primary.coverage_frames(pts, rad, offs, cam, frames, True), ref)
+    print(json.dumps({"coverage_single": single, "coverage_pair": pair}))
+    # Energy: the mean over 16 frames is unbiased; tolerance 4 binomial sigma of one sample per pixel per frame (the pair
+    # has two, stratified: conservative for it).
+    tol = 4 * pair["bias_sigma"] / np.sqrt(frames)
+    check(f"coverage pair unbiased: total {pair['bias']:+.4f} within {tol:.4f} (4 sigma)", abs(pair["bias"]) <= tol)
+    check(f"coverage single ray unbiased: total {single['bias']:+.4f} within {tol:.4f}", abs(single["bias"]) <= tol)
+    check(f"coverage pair: 3 x 3 box error {pair['box_rmse']:.4f} below the single ray's {single['box_rmse']:.4f}",
+          pair["box_rmse"] < single["box_rmse"])
+    check(f"coverage pair: 3 x 3 box flicker {pair['box_temporal_std']:.4f} below the single ray's "
+          f"{single['box_temporal_std']:.4f}", pair["box_temporal_std"] < single["box_temporal_std"])
+    src = (ROOT / "shaders/rt/hair_primary_gbuffer.hlsl").read_text()
+    pair_if = "if (kHairGroomCoverage != 0u && (ld(rec + 60u) & hair_primary_flag_coverage) != 0u && e.w != hp_seal(e.xyz, tag))"
+    check("G-buffer pair behind specialization 1042 and header flag 8, before the single ray's unchanged block",
+          "[[vk::constant_id(1042)]] const uint kHairGroomCoverage = 0u;" in src and pair_if in src
+          and src.index(pair_if) < src.index("RayQuery<RAY_FLAG_FORCE_OPAQUE> q;\n    q.TraceRayInline"))
+    layer = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
+    check("layer specializes the strand G-buffer pipelines and sets header flag kFlagCoverage from rt_hair_groom_coverage",
+          layer.count("shader_variant::kSpecIdHairGroomCoverage") == 2 and "hair_primary::kFlagCoverage" in layer)
+
+
+def test_rr_hair_guides():
+    """M3.3 (rr_hair_guides): class 5 guides read RT2 as the game's hair lighting (bg3_materials.hlsli class 5)."""
+    guides = (ROOT / "shaders/rr_guides.hlsl").read_text()
+    mats = (ROOT / "shaders/rt/bg3_materials.hlsli").read_text()
+    check("hair lighting: class 5 roughness max(0.09, RT2.x), backlit RT2.z, metalness 0",
+          "m.hair_rough = max(0.09, mat.x);" in mats and "m.backlit = mat.z;" in mats and "sf.diff_col = albedo;" in mats)
+    check("hair Fresnel F0 of the game's R lobe", "0.046520568 + 0.95347941" in mats)
+    check("RR guides: class 5 behind specialization 1043 uses the same terms",
+          "[[vk::constant_id(1043)]] const uint kRrHairGuides = 0u;" in guides and
+          "if (kRrHairGuides != 0u && (uint(round(m.w * 255.0)) & 7u) == 5u) {" in guides and
+          "const float hair_rough = max(0.09, rough);" in guides and "ODiffuse[id.xy] = float4(base, 1.0);" in guides and
+          "env_brdf_approx2(kFibreF0.xxx, hair_rough * hair_rough" in guides and
+          "static const float kFibreF0 = 0.046520568;" in guides)
+    # The fibre F0 is the Fresnel reflectance at normal incidence of eta 1.55 (keratin), as the game's constant.
+    check("fibre F0 = ((1.55 - 1) / (1.55 + 1))^2", abs(((1.55 - 1) / 2.55) ** 2 - 0.046520568) < 1e-6)
+    ngx = (ROOT / "layer/ngx.cpp").read_text(encoding="utf-8")
+    check("ngx specializes the guide pipeline from rr_hair_guides and rebuilds on a change",
+          "shader_variant::kSpecIdRrHairGuides" in ngx and ngx.count('"rr_guides.hlsl", rr_hair_guides())') == 2
+          and "(blob.generation << 1) | (hair_guides & 1u)" in ngx)
+
+
 def test_publish_lock():
     # hair_primary_publish runs inside the scene build, where rt_after_capture holds rtscene's g_mu: a locking camera
     # read there killed the game at the first publish (hv6 2026-11-04, exit 0xFFFF7001, no crash log).
@@ -1106,7 +1178,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_coverage, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

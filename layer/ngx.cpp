@@ -19,6 +19,7 @@
 #include "host.h"
 #include <algorithm>
 #include "dlss5.h"
+#include "../common/shader_variant.h"
 
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_defs_dlssd.h>
@@ -627,17 +628,25 @@ static bool ensure_layouts(DeviceData* dd) {
   return true;
 }
 
-static VkPipeline build_pipeline(DeviceData* dd, const char* entry, uint64_t& gen, VkPipeline current, const char* source = "rr_guides.hlsl") {
+// M3.3 rr_hair_guides (specialization kSpecIdRrHairGuides of rr_guides.hlsl): class 5 hair guides. Read per frame;
+// a change rebuilds the guide pipeline like a shader edit, so the key toggles live.
+static uint32_t rr_hair_guides() { return cfg_int("rr_hair_guides", 0) != 0 ? 1u : 0u; }
+
+static VkPipeline build_pipeline(DeviceData* dd, const char* entry, uint64_t& gen, VkPipeline current, const char* source = "rr_guides.hlsl",
+                                 uint32_t hair_guides = 0) {
   Bg3ShaderBlob blob{};
   if (!shader_get(source, entry, "cs_6_0", &blob)) return current;
-  if (current && blob.generation == gen) return current;
+  const uint64_t key = (blob.generation << 1) | (hair_guides & 1u);   // the shader generation and the constant
+  if (current && key == gen) return current;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
   VkShaderModule mod = VK_NULL_HANDLE;
   if (dd->vk.CreateShaderModule(dd->device, &mci, nullptr, &mod) != VK_SUCCESS) return current;
   VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-  ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, entry};
+  const VkSpecializationMapEntry spec_entry{shader_variant::kSpecIdRrHairGuides, 0, sizeof hair_guides};
+  const VkSpecializationInfo spec{1, &spec_entry, sizeof hair_guides, &hair_guides};
+  ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, entry, &spec};
   ci.layout = g_pl;
   VkPipeline p = VK_NULL_HANDLE;
   VkResult r = dd->vk.CreateComputePipelines(dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &p);
@@ -647,8 +656,9 @@ static VkPipeline build_pipeline(DeviceData* dd, const char* entry, uint64_t& ge
     return current;
   }
   if (current) defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)current);
-  gen = blob.generation;
-  log("[ngx] %s:%s pipeline built (generation %llu)", source, entry, (unsigned long long)gen);
+  gen = key;
+  log("[ngx] %s:%s pipeline built (generation %llu, hair guides %u)", source, entry, (unsigned long long)blob.generation,
+      hair_guides);
   return p;
 }
 
@@ -908,7 +918,7 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
     if (x.w == p.width && x.h == p.height && !x.rr_failed) f = &x;
   if (!f) return;
   if (!ensure_layouts(dd) || !ensure_guides(dd, p.width, p.height)) return;
-  g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe);
+  g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe, "rr_guides.hlsl", rr_hair_guides());
   if (!g_pipe) return;
 
   bool known = depth_layout != VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1273,7 +1283,7 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   const uint32_t w = f.w, h = f.h;
   if (!gb.rt[0] || gb.w != w || gb.h != h) return refuse("no G-buffer pass at the render resolution seen yet");
   if (!ensure_layouts(dd) || !ensure_guides(dd, w, h)) return refuse("guide resources unavailable");
-  g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe);
+  g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe, "rr_guides.hlsl", rr_hair_guides());
   if (!g_pipe) return refuse("rr_guides.hlsl has not compiled");
 
   int show = cfg_int("rr_show", 0);
