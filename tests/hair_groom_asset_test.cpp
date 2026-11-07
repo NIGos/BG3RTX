@@ -311,7 +311,7 @@ static void test_upgrade_safe() {
 
 // 5i: a LOD switch to a LOD still uploading (groom_lod stages it and returns nothing for 2-3 frames).
 static void test_lod_keep() {
-  using hair_groom::lod_this_frame;
+  using bg3::hair_groom::lod_this_frame;
   CHECK(lod_this_frame(1, 0, true, true, false) == 1);     // resident: switch
   CHECK(lod_this_frame(1, 0, false, true, false) == -1);   // without the key: the groom leaves the scene (cards)
   CHECK(lod_this_frame(1, 0, false, true, true) == 0);     // with it: keep LOD 0 until LOD 1 is resident

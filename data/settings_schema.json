@@ -490,18 +490,31 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_coverage": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_groom_coverage": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
-    {"id": "exp_hair_primary_camera_gate", "label": "Strand hair: no bald frames",
-     "description": "Experimental: a strand frame whose groom publish lost its build camera keeps the hair cards for that frame instead of drawing no hair. Unqualified.",
+    {"id": "exp_hair_primary_frame_tag", "label": "Strand hair: per-frame trace tags",
+     "description": "Experimental: every frame traces its own strands, never reusing an earlier frame's strand hits when it falls back to the previous groom publish. Unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: a strand frame whose groom publish lost its build camera keeps the hair cards for that frame instead of drawing no hair. Unqualified.",
-     "details": "5h: CPU only, no cost. The period line [hair primary] dropouts counts the frames it prevents. Watch the hair in Test Dialogue1 for one-frame bald flashes.",
+     "category": "Advanced", "summary": "Experimental: every frame traces its own strands, never reusing an earlier frame's strand hits when it falls back to the previous groom publish. Unqualified.",
+     "details": "5i: CPU only, no cost. The coverage line's ambiguous tags drop to 0. Move the camera or watch a moving character in Test Dialogue1: no strand flashes.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {},
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_primary_camera_gate": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_camera_gate": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_primary_frame_tag": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_frame_tag": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "exp_hair_groom_lod_keep", "label": "Strand hair: keep LOD while loading",
+     "description": "Experimental: a groom whose detail level changes keeps its current strands until the new level is loaded, instead of showing its hair cards for those frames. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: a groom whose detail level changes keeps its current strands until the new level is loaded, instead of showing its hair cards for those frames. Unqualified.",
+     "details": "5i: CPU only, no cost. The [hair groom] line counts LOD switches kept vs groom dropped. Zoom or pan in the isometric view with characters on screen.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_lod_keep": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_lod_keep": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_macro_normal", "label": "Strand hair: card normal",
      "description": "Experimental: on-screen strands give the game's hair lighting the hair card's own normal (the hair volume's surface) instead of a normal facing the camera. Appearance is unqualified.",
