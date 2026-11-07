@@ -491,6 +491,39 @@ struct DrawSlots {
       for (auto& key : keys) if (!key) { key = live[k]; break; }
   }
 };
+
+// rt_hair_groom_primary_current (needs rt_hair_groom_primary_order): the G-buffer pass is recorded before this frame's
+// scene build, so at recording only the previous frame's publish is known (the strands then trail the animated cards
+// by one frame and their motion vectors are the previous frame's motion). The G-buffer instead copies its header from a
+// host-visible slot written at vkQueueSubmit: the record-time publish (always safe), upgraded to this frame's publish
+// when its build is ordered before the G-buffer on the GPU (submitted earlier, or earlier in the same submit) and it
+// carries the same grooms in the same draw slots (the draw-time swap decisions used the record-time ones).
+enum class CurrentPick : uint8_t { Current, NotRecorded, AfterGbuffer, Incompatible, Count };
+inline const char* current_pick_name(CurrentPick p) {
+  static const char* const names[] = {"current", "not recorded", "build after the G-buffer", "different grooms"};
+  return p < CurrentPick::Count ? names[size_t(p)] : "?";
+}
+// recorded: this frame's publish exists; submitted_before: its build went down in an earlier submit; build_index /
+// gbuffer_index: positions in this submit's command buffer list (-1: not in it).
+inline CurrentPick current_pick(bool recorded, bool submitted_before, int build_index, int gbuffer_index, bool compatible) {
+  if (!recorded) return CurrentPick::NotRecorded;
+  if (!submitted_before && (build_index < 0 || gbuffer_index < 0 || build_index >= gbuffer_index)) return CurrentPick::AfterGbuffer;
+  return compatible ? CurrentPick::Current : CurrentPick::Incompatible;
+}
+// The same grooms in the same draw slots (the order of the header rows may differ).
+inline bool same_grooms(const uint64_t* keys_a, const DrawSlots& slots_a, const uint64_t* keys_b, const DrawSlots& slots_b) {
+  for (uint32_t i = 0; i < kDrawSlots; ++i) if (slots_a.keys[i] != slots_b.keys[i]) return false;
+  for (int pass = 0; pass < 2; ++pass) {
+    const uint64_t* x = pass ? keys_b : keys_a;
+    const uint64_t* y = pass ? keys_a : keys_b;
+    for (uint32_t k = 0; k < kMaxGrooms; ++k) if (x[k]) {
+      bool found = false;
+      for (uint32_t j = 0; j < kMaxGrooms && !found; ++j) found = y[j] == x[k];
+      if (!found) return false;
+    }
+  }
+  return true;
+}
 inline uint64_t coverage_bytes(uint32_t width, uint32_t height) {
   return uint64_t(width) * height * (kPixelBytes + 8); // packed card and accepted words
 }

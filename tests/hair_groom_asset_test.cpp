@@ -194,6 +194,32 @@ static void test_coverage_hold() {
     CHECK(strict.why(8, 105) == CoverageGate::Why::Stale);
   }
 }
+// rt_hair_groom_primary_current: the G-buffer is recorded before this frame's build (so only the previous publish is
+// known then); at vkQueueSubmit this frame's publish is used only when its build is ordered first on the GPU.
+static void test_current_pick() {
+  using namespace hair_primary;
+  // One submit [prepass + build, G-buffer]: the build runs first -> this frame's publish.
+  CHECK(current_pick(true, false, 0, 1, true) == CurrentPick::Current);
+  // The build submitted in an earlier vkQueueSubmit.
+  CHECK(current_pick(true, true, -1, 0, true) == CurrentPick::Current);
+  // [G-buffer, build] in one submit, the build in the G-buffer's own command buffer (recorded after it), or a later
+  // submit: the record-time (previous) publish stays.
+  CHECK(current_pick(true, false, 1, 0, true) == CurrentPick::AfterGbuffer);
+  CHECK(current_pick(true, false, 0, 0, true) == CurrentPick::AfterGbuffer);
+  CHECK(current_pick(true, false, -1, 0, true) == CurrentPick::AfterGbuffer);
+  CHECK(current_pick(false, true, 0, 1, true) == CurrentPick::NotRecorded);
+  CHECK(current_pick(true, false, 0, 1, false) == CurrentPick::Incompatible);
+  // Same grooms in the same draw slots, rows in any order; a new, missing or moved groom is incompatible.
+  uint64_t a[kMaxGrooms] = {11, 22, 33}, b[kMaxGrooms] = {33, 11, 22}, c[kMaxGrooms] = {11, 22}, d[kMaxGrooms] = {11, 22, 44};
+  DrawSlots sa, sb;
+  sa.publish(a, 3); sb = sa;
+  CHECK(same_grooms(a, sa, b, sb));
+  CHECK(!same_grooms(a, sa, c, sb) && !same_grooms(c, sa, a, sb) && !same_grooms(a, sa, d, sb));
+  DrawSlots moved;
+  moved.publish(b, 3);   // the same keys put into slots in another order
+  CHECK(moved.find(33) != sa.find(33) && !same_grooms(a, sa, b, moved));
+  CHECK(std::strcmp(current_pick_name(CurrentPick::AfterGbuffer), "build after the G-buffer") == 0);
+}
 // Swap refusal tally (period line) and the coverage gate's refusal reason.
 static void test_refusal_tally() {
   using namespace hair_primary;
@@ -279,7 +305,7 @@ int main() {
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
-  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold();
+  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_current_pick();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
