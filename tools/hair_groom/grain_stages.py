@@ -167,9 +167,11 @@ def stages(d: Path):
         else:
             out["compose (pre-RR)"] = ("s", lum(undo_preview(load_png(d, co), co)))
     z = [v for v in D.values() if v["pass_fs"] == "0000000000000000" and v["slot"] != "depth"]
-    ords = sorted({v["pass_ordinal"] for v in z})
-    if len(ords) >= 2:
-        pg, pr = ords[-2], ords[-1]
+    # The guide pass: our pass whose slot 2 is the RGBA16F normal guide at render size; RR's pass follows it (not
+    # dumped in every set: the 2026-11-07 22:05 runs end with the guides).
+    guide = [v["pass_ordinal"] for v in z if v["slot"] == 2 and v["fmt"] == "RGBA16F" and v["w"] == cls.shape[1]]
+    if guide:
+        pg, pr = guide[-1], guide[-1] + 1
         gd = [v for v in z if v["pass_ordinal"] == pg and v["slot"] == 0]
         gs = [v for v in z if v["pass_ordinal"] == pg and v["slot"] == 1]
         rin = [v for v in z if v["pass_ordinal"] == pr and v["slot"] == 0]
@@ -229,7 +231,7 @@ def tangent_normal(d: Path):
     return float(np.median(np.abs((t[m] * nn).sum(-1))))
 
 
-def ab(dirs, labels):
+def ab(dirs, labels, tangent_labels=None):
     """Gates of the 5g live A/B (one session; labels on/off per window, e.g. on,off,on; RTX_HAIR_PRIMARY 5g):
     macro normal: lit coherence of every on window above every off window by >= max(0.01, 2 |on - on|) (0.01: the
     strand repeat spread of 2026-11-07, 0.009); RR specular-guide HF on/off >= 1.5 (cards/strands 2.8 on 2026-11-07);
@@ -240,13 +242,19 @@ def ab(dirs, labels):
         r = measure(d)
         R.append({"coh": r["lit (deferred)"]["mask_coh"] if "lit (deferred)" in r else r["compose (pre-RR)"]["mask_coh"],
                   "spec": r["RR guide specular"]["mask"], "mean": r["compose (pre-RR)"]["hull_mean"],
-                  "tn": tangent_normal(d)})
+                  "tn": tangent_normal(d), "px": r["_pixels"]})
+    # A window whose hair mask is under half the median (strands not yet swapped in: a warm-up dump) is no evidence.
+    med = float(np.median([r["px"] for r in R]))
+    for l, r in zip(labels, R):
+        if r["px"] < 0.5 * med:
+            print(f"INVALID {l}: {r['px']} hair pixels, median {med:.0f} (warm-up dump): excluded")
+    keep = [r["px"] >= 0.5 * med for r in R]
     print("window   lit-COH  spec-HF  hair-mean  |T.N|")
     for l, r in zip(labels, R):
         tn = "-" if r["tn"] is None else f"{r['tn']:.4f}"
         print(f"{l:8s} {r['coh']:7.4f} {r['spec']:8.4f} {r['mean']:10.4f}  {tn}")
-    on = [r for l, r in zip(labels, R) if l.startswith("on")]
-    off = [r for l, r in zip(labels, R) if l.startswith("off")]
+    on = [r for l, r, k in zip(labels, R, keep) if k and l.startswith("on")]
+    off = [r for l, r, k in zip(labels, R, keep) if k and l.startswith("off")]
     if on and off:
         rep = max(on, key=lambda r: r["coh"])["coh"] - min(on, key=lambda r: r["coh"])["coh"] if len(on) > 1 else 0.0
         margin = max(0.01, 2 * rep)
@@ -255,8 +263,11 @@ def ab(dirs, labels):
         ratio = np.mean([r["spec"] for r in on]) / max(np.mean([r["spec"] for r in off]), 1e-9)
         print(f"GATE spec guide HF on/off = {ratio:.2f} >= 1.5: {'PASS' if ratio >= 1.5 else 'FAIL'}")
         print(f"INFO hair mean on/off = {np.mean([r['mean'] for r in on]) / np.mean([r['mean'] for r in off]):.3f}")
-        tn_on = [r["tn"] for r in on if r["tn"] is not None]
-        tn_off = [r["tn"] for r in off if r["tn"] is not None]
+        # The tangent gate has its own grouping (--tangent on,off,...): its on windows need the macro normal off,
+        # since only the fibre normal is perpendicular to the strand tangent.
+        tl = tangent_labels or labels
+        tn_on = [r["tn"] for l, r, k in zip(tl, R, keep) if k and l.startswith("on") and r["tn"] is not None]
+        tn_off = [r["tn"] for l, r, k in zip(tl, R, keep) if k and l.startswith("off") and r["tn"] is not None]
         if tn_on and tn_off:
             ok = max(tn_on) <= 0.02 and min(tn_off) > 0.05
             print(f"GATE tangent |T.N| on max {max(tn_on):.4f} <= 0.02, off min {min(tn_off):.4f} > 0.05: "
@@ -268,7 +279,13 @@ def main(argv):
     if "--ab" in argv:   # --ab on,off,on <dirs>: the 5g live gates
         i = argv.index("--ab")
         labels = argv[i + 1].split(",")
-        return ab([Path(a) for a in argv[:i] + argv[i + 2:]], labels)
+        argv = argv[:i] + argv[i + 2:]
+        tangent = None
+        if "--tangent" in argv:   # the tangent gate's own on/off labels (macro-off windows as "on")
+            j = argv.index("--tangent")
+            tangent = argv[j + 1].split(",")
+            argv = argv[:j] + argv[j + 2:]
+        return ab([Path(a) for a in argv], labels, tangent)
     labels = None
     if "--label" in argv:
         i = argv.index("--label")
