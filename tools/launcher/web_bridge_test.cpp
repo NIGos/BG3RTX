@@ -226,6 +226,13 @@ int main(int argc,char** argv){
   db.handle("{\"type\":\"set\",\"id\":\"local_shadows\",\"value\":3}");
   int hidden_choice=st::knob_index("local_shadows");if(hidden_choice>=0)check(dependencies.values[hidden_choice]!=3);
   launcher::GraphicsInspection multiple;multiple.adapters.resize(2);multiple.adapters[0].gpu.name="First";multiple.adapters[1].gpu.name="Second";db.set_compatibility(multiple);check(!dependencies.have_gpu);db.handle("{\"type\":\"adapter\",\"value\":1}");check(dependencies.have_gpu&&dependencies.gpu.name=="Second");
+  // Integrated AMD next to a discrete RTX (the user's PC after a driver reinstall): the RTX is chosen without asking.
+  launcher::GraphicsInspection hybrid;hybrid.adapters.resize(2);hybrid.adapters[0].gpu.name="AMD Radeon(TM) Graphics";hybrid.adapters[0].gpu.vendor=0x1002;hybrid.adapters[0].gpu.ray_query=true;
+  hybrid.adapters[1].gpu.name="NVIDIA GeForce RTX 5090";hybrid.adapters[1].gpu.vendor=0x10DE;hybrid.adapters[1].gpu.discrete=hybrid.adapters[1].gpu.ray_query=true;
+  check(launcher::default_adapter(hybrid)==1);db.set_compatibility(hybrid);check(dependencies.have_gpu&&dependencies.gpu.name=="NVIDIA GeForce RTX 5090");check(db.state_json().find("\"selected\":1")!=std::string::npos);
+  // Two equal discrete RTX cards stay a user choice; one adapter is always taken.
+  launcher::GraphicsInspection twin;twin.adapters.resize(2);for(auto& a:twin.adapters){a.gpu.vendor=0x10DE;a.gpu.discrete=a.gpu.ray_query=true;}check(launcher::default_adapter(twin)==-1);
+  launcher::GraphicsInspection single;single.adapters.resize(1);check(launcher::default_adapter(single)==0);check(launcher::default_adapter(launcher::GraphicsInspection{})==-1);
   if(hidden_choice<0)return 2;dependencies.values[hidden_choice]=3;launcher::web::Bridge legacy(dependencies);check(dependencies.values[hidden_choice]==-1);check(legacy.dirty()==0);
   launcher::State pending;pending.caps=~0u;pending.preset=st::kHigh;
   pending.base=st::code_defaults();pending.base["rt_alpha"]="0";

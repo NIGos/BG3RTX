@@ -346,7 +346,7 @@ static void command(int id,int code,HWND source) {
     case NOTICES:{auto path=root_dir()+L"\\THIRD_PARTY.md";if(!file_exists(path))path=root_dir()+L"\\docs\\release\\THIRD_PARTY.md";ShellExecuteW(g.wnd,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL);break;}
     case REPORT:report_problem();break;
     case ERROR_DETAILS:if(launcher::web::action_dialog(g.wnd,L"Error details",g.message+L"\n\nOpen a problem report?",{{IDYES,L"Report a problem"},{IDCANCEL,L"Close"}})==IDYES)report_problem();break;
-    case RETRY:g.st.have_gpu=false;g.st.caps=0;g.gpu_err.clear();detect_gpu(g.st,&g.gpu_err);g_inspection=inspect_graphics();g_adapter=g_inspection.adapters.size()==1?0:-1;g.st.caps=assess_compatibility(g_inspection,g_adapter).caps;rebuild();break;
+    case RETRY:g.st.have_gpu=false;g.st.caps=0;g.gpu_err.clear();detect_gpu(g.st,&g.gpu_err);g_inspection=inspect_graphics();g_adapter=default_adapter(g_inspection);g.st.caps=assess_compatibility(g_inspection,g_adapter).caps;rebuild();break;
     case LOG:ShellExecuteW(g.wnd,L"open",(root_dir()+L"\\bg3rtx.log").c_str(),nullptr,nullptr,SW_SHOWNORMAL);break;
     case FOLDER:ShellExecuteW(g.wnd,L"open",root_dir().c_str(),nullptr,nullptr,SW_SHOWNORMAL);break;
   }
@@ -410,7 +410,7 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   g.font=CreateFontW(-S(15),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,g.high_contrast||!have_font?L"Segoe UI":L"Lato");
   g.bold=CreateFontW(-S(21),0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,g.high_contrast||!have_font?L"Segoe UI":L"Lato");g.bg=CreateSolidBrush(background());
   load_state(g.st);g.st.caps=0;detect_gpu(g.st,&g.gpu_err);g.dev=st::dev_mode(st::lookup(saved_settings(),"dev"));
-  g_inspection=inspect_graphics();g_adapter=g_inspection.adapters.size()==1?0:-1;g.st.caps=assess_compatibility(g_inspection,g_adapter).caps;
+  g_inspection=inspect_graphics();g_adapter=default_adapter(g_inspection);g.st.caps=assess_compatibility(g_inspection,g_adapter).caps;
   g.experimental=st::map_int(saved_settings(),"experimental_options",0)==1;
   g.saved_experimental=g.experimental;
   g.st.values=st::presentation_values(saved_settings(),g.dev,opt_in());g.saved=g.st.values;g.saved_preset=g.st.preset;

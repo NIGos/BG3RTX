@@ -2,6 +2,18 @@
 #include <sstream>
 
 namespace launcher {
+int default_adapter(const GraphicsInspection& probe) {
+  int best = -1, best_score = -1;
+  bool tie = false;
+  for (int i = 0; i < int(probe.adapters.size()); ++i) {
+    const auto& g = probe.adapters[i].gpu;
+    const int score = (g.discrete ? 4 : 0) + (g.ray_query ? 2 : 0) + (g.vendor == 0x10DE ? 1 : 0);
+    if (score > best_score) best = i, best_score = score, tie = false;
+    else if (score == best_score) tie = true;
+  }
+  return tie ? -1 : best;
+}
+
 Compatibility assess_compatibility(const GraphicsInspection& probe, int selected) {
   Compatibility c;
   c.hardware_text = "Graphics check failed. Recheck graphics or create a report.";
