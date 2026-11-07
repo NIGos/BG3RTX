@@ -93,6 +93,33 @@ def fibre_normal(tangent, to_camera):
     return n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-12)
 
 
+# ---- 5g: the spaces of the native hair card's G-buffer (VS 41a168e2 -> FS 42a95e17) ----
+# The VS (row vectors, v * M): n = cross(T, B) sign * world3; location 1 = n * view3 (view space), location 3 =
+# normalize(n) and locations 4/5 = normalize(B/T * world3) (world space). The FS writes RT0 = stereo(normalize(loc1)
+# * facing) and RT3 = oct12(normalize(mat3(loc5, loc3 * facing, loc4) (0, shift, 1))): a view-space normal and a
+# world-space tangent. The game's hair lighting (3033c895) reads that tangent without rotation.
+def native_card_frame(n_obj, b_obj, t_obj, world3, view3):
+    """VS 41a168e2 outputs (location 1, 3, 4, 5) for object-space normal/bitangent/tangent rows."""
+    n = np.asarray(n_obj, np.float64) @ world3
+    unit = lambda v: v / np.linalg.norm(v, axis=-1, keepdims=True)
+    return n @ view3, unit(n), unit(np.asarray(b_obj, np.float64) @ world3), unit(np.asarray(t_obj, np.float64) @ world3)
+
+
+def macro_normal(card_n_world, view3):
+    """rt_hair_macro_normal: RT0's normal from the card fragment's world normal (gbuffer.hlsl, view = gCam.view)."""
+    n = np.asarray(card_n_world, np.float64) @ view3
+    return n / np.linalg.norm(n, axis=-1, keepdims=True)
+
+
+def card_grazing(t, n, b, to_cam):
+    """The card alpha's grazing factor (5a03e5b6: saturate(|N . V'| 5), V' the view vector projected on the frame and
+    back; gbuffer.hlsl card_to_cam). The frame rows and the view vector must share one space."""
+    basis = np.stack([t, n, b], -2)
+    v = np.einsum("...ij,...i->...j", basis, np.einsum("...ij,...j->...i", basis, to_cam))
+    v /= np.linalg.norm(v, axis=-1, keepdims=True)
+    return np.clip(np.abs((v * n).sum(-1) / np.linalg.norm(n, axis=-1)) * 5.0, 0.0, 1.0)
+
+
 def depth_a(near, far):
     """A of the native perspective depth D = A + B / w (NATIVE_HAIR "Native fragment depth")."""
     return near / (near - far)

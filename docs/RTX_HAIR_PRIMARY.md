@@ -37,7 +37,7 @@ Options considered:
   hit or discard; depth = the hit projected with the same `m2` (the clone tests GREATER_OR_EQUAL with writes).
   Writes RT0 = stereographic view-space fibre normal, RT1/RT2/RT3.w = the native material code evaluated at the
   strand's own UV (card UV at its embedding point; gradients from the card UV), RT3.xyz = view-space strand
-  tangent (the native FS writes its tangent in the same space; root-to-tip sign: open item), RT2.w = class 5 |
+  tangent (but the native FS writes a world-space tangent: 5g, key rt_hair_tangent_world), RT2.w = class 5 |
   the draw's light channel. The draw's own material descriptors are bound (same pipeline layout).
 - **Velocity (Velocity FS b70cadc5, `shaders/rt/hair_primary_velocity.hlsl`).** Reads the pixel entry (no
   trace), evaluates the strand point at the same parameter in last frame's points (the groom update copies
@@ -458,9 +458,43 @@ and the portrait character's hair in the groom set (the groom follows the main p
 one groom per instance (the groom set is keyed per draw index range). Next step: run the counters in a live to learn
 which views draw hair at all before building the second record.
 
+## 5g. Grain attribution (offline 2026-11-07, branch claude/hair-grain: two keys, off)
+Tool: `tools/hair_groom/grain_stages.py <trace dirs>` (per-stage HF and structure-tensor coherence over the class-5
+mask of each trace). Data: the 2026-11-07 Test Dialogue1 A/B traces (strands a, f, fp0, fp2; cards e = rt_hair_groom 0;
+a and e have the same lit hair mean 0.4165/0.4169, the matched pair).
+- Per-frame HF energy: strands never exceed cards. Ratio a/e: albedo 0.99, roughness 0.92, tangent 0.95, lit 0.91
+  (mask) / 0.65 (hull), RR output 0.78, final 0.96. Demodulated shading bands (fine to coarse) a 0.48/0.11/0.08/0.06
+  vs e 0.49/0.11/0.08/0.07. Motion vectors vary 2.1x more per pixel (0.14 vs 0.066 px) but are clean: outliers
+  > 0.5 px from the 9x9 median 1.1-1.2% on both. The previews' pixel grain is therefore not where strands differ.
+- Line structure (coherence) is where they differ: albedo 0.313-0.333 vs 0.348 (strand spread 0.021), deferred
+  lighting 0.277-0.286 vs 0.320 (spread 0.009: gap 4x the spread), RR output 0.753-0.796 vs 0.842, final 0.749-0.792
+  vs 0.839. The loss doubles in the lighting, whose strand-only input is the fibre normal (gbuffer.hlsl:248, :294):
+  N = V made perpendicular to T, so N.V = 1 on every strand pixel (RR specular guide, env_brdf(N.V), HF 0.11 vs 0.31,
+  mean 0.047 vs 0.058). The game's hair diffuse `bg3_hair_diff` weights wrap(N.L) 0.67; ambient, probes and the RR
+  normal guide use N too; the Marschner lobes (`bg3_hair_spec`) use only T. A view-facing N removes the
+  clump-aligned shading the card normal gives: the hair reads as speckle instead of strands.
+- Implemented (branch claude/hair-grain, offline): specialization 1045 `kSpecIdHairShadingSpace`, compiled into the
+  strand G-buffer pipelines when `rt_hair_macro_normal` or `rt_hair_tangent_world` is on at their creation (restart to
+  enable), then header flags 16 / 32 switch each one live (on/off/on in one session works if the session starts on).
+  `rt_hair_macro_normal=1`: RT0 = the card fragment's normal, view(card_n), which is exactly the native RT0 (VS 41a168e2:
+  location 1 = view(n), location 3 = normalize(n)). The tangent stays per fibre, so R/TT/TRT stay per fibre.
+- Found while checking the grazing side note: the VS 41a168e2 outputs locations 3-5 (normal, bitangent, tangent) in
+  world space and only location 1 in view space. So the card grazing term (gbuffer.hlsl:154-157, world frame with
+  the world ray `dir`) is consistent: no bug, no change (twin `primary.card_grazing`, test_shading_spaces). But the
+  native RT3 tangent is world space (3033c895 reads class 5 T unrotated, correctly), while the strand variant wrote a
+  view-space tangent (gbuffer.hlsl:247/298): the strands' Marschner lobes used a tangent off by the view rotation
+  (median > 1 deg on random frames; on screen the whole camera rotation). `rt_hair_tangent_world=1` writes t_world.
+- Live A/B (Test Dialogue1, one session started with both keys on; `grain_stages.py --ab <labels> <dirs>` prints the
+  gates): windows macro+tangent on / both off / tangent only (macro off) / both on, with `dump_raw=1` for the tangent
+  gate. Macro normal: lit coherence min(on) - max(off) >= max(0.01, 2 |on - on|) (expected ~0.28 -> toward the cards'
+  0.32); RR specular-guide HF on/off >= 1.5 (strands 0.11, cards 0.31); hair mean reported (shading-model change).
+  Tangent: median |T.N_guide| on strand pixels <= 0.02 with the tangent on and macro off (fibre normal perpendicular to
+  the world tangent; oct12 < 0.1 deg), > 0.05 with it off. Plus by eye: highlights follow the strands.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
-   built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.
+   built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
+   normal, is view space; 5g). Open: the root-to-tip sign of that frame.
 2. Depth compare op / dynamic depth state and stencil of the hair pipelines: the clone overrides compare and
    write; a dynamic compare op would need a CmdSetDepthCompareOp around the draw (log it at clone time).
 3. shaderInt64 and fragment stores (water's precedent: `sharc_device=1`); refuse the variant otherwise.

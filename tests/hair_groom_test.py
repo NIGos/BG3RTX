@@ -734,6 +734,56 @@ def test_strand_source_safety():
           < src.index('if (e.x == hair_primary_no_strand)'))
 
 
+def rotation(rng):
+    q, r = np.linalg.qr(rng.normal(size=(3, 3)))
+    return q * np.sign(np.diag(r))
+
+
+def test_shading_spaces(rng):
+    """5g: the spaces of the native card G-buffer (VS 41a168e2 decompiled; primary.native_card_frame) and the strand
+    variant's keys rt_hair_macro_normal / rt_hair_tangent_world (specialization 1045, header flags 16 / 32)."""
+    world3, view3 = rotation(rng), rotation(rng)
+    n_obj, b_obj = rng.normal(size=(300, 3)), rng.normal(size=(300, 3))
+    n_obj /= np.linalg.norm(n_obj, axis=1, keepdims=True)
+    b_obj -= n_obj * (b_obj * n_obj).sum(1, keepdims=True)   # an orthogonal frame, as the card's
+    b_obj /= np.linalg.norm(b_obj, axis=1, keepdims=True)
+    t_obj = np.cross(b_obj, n_obj)
+    loc1, loc3, loc4, loc5 = primary.native_card_frame(n_obj, b_obj, t_obj, world3, view3)
+    native_rt0 = loc1 / np.linalg.norm(loc1, axis=1, keepdims=True)
+    check("macro normal from the world card normal equals the native RT0 normal (view space)",
+          np.abs(primary.macro_normal(loc3, view3) - native_rt0).max() < 1e-12)
+    # A strand tangent in world space against the world card frame: the native RT3 is world (loc3-5), so the strand's
+    # world tangent is comparable to it; the old view-space RT3 differs by the view rotation.
+    t_world = loc4
+    rt3_world = primary.oct12_decode(primary.oct12_encode(t_world))
+    rt3_view = primary.oct12_decode(primary.oct12_encode(t_world @ view3))
+    err = lambda a, b: np.degrees(np.arccos(np.clip(np.abs((a * b).sum(1)), 0, 1)))
+    check("RT3 world tangent decodes to the native frame's direction (< 0.1 deg)", err(rt3_world, loc4).max() < 0.1)
+    check("RT3 view tangent read as world (the old path) is off by the view rotation (> 1 deg median)",
+          np.median(err(rt3_view, loc4)) > 1.0, np.median(err(rt3_view, loc4)))
+    # The card grazing term: the frame (loc5, loc3, loc4) and the ray direction (gbuffer.hlsl dir, camera-relative
+    # world) are both world vectors, so it is the native |N.V|; it is invariant under a common rotation.
+    to_cam = rng.normal(size=(300, 3))
+    g = primary.card_grazing(loc5, loc3, loc4, to_cam)
+    ref = np.clip(np.abs((to_cam / np.linalg.norm(to_cam, axis=1, keepdims=True) * loc3).sum(1)) * 5, 0, 1)
+    check("card grazing in one space is the native saturate(|N.V| 5) (orthonormal frame)",
+          np.abs(g - ref).max() < 1e-9, np.abs(g - ref).max())
+    check("card grazing is invariant under a common rotation of frame and ray",
+          np.abs(primary.card_grazing(loc5 @ view3, loc3 @ view3, loc4 @ view3, to_cam @ view3) - g).max() < 1e-9)
+    src = (ROOT / "shaders/rt/hair_primary_gbuffer.hlsl").read_text()
+    check("G-buffer: RT0/RT3 spaces behind specialization 1045 and header flags 16/32",
+          "[[vk::constant_id(1045)]] const uint kHairShadingSpace = 0u;" in src
+          and "if ((flags & hair_primary_flag_macro_normal) != 0u) rt0_n = normalize(mul(float4(card_n, 0.0), gCam.view).xyz);" in src
+          and "if ((flags & hair_primary_flag_tangent_world) != 0u) rt3_t = t_world;" in src
+          and "hair_primary_flag_macro_normal = 16u" in src and "hair_primary_flag_tangent_world = 32u" in src)
+    layer = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
+    header = (ROOT / "common/hair_primary.h").read_text(encoding="utf-8")
+    check("layer specializes 1045 on both G-buffer pipeline kinds and sets the two header flags",
+          layer.count("shader_variant::kSpecIdHairShadingSpace") == 2 and "hair_primary::kFlagMacroNormal" in layer
+          and "hair_primary::kFlagTangentWorld" in layer
+          and "kFlagMacroNormal = 1u << 4, kFlagTangentWorld = 1u << 5" in header)
+
+
 def test_coverage():
     """M3.2 (rt_hair_groom_coverage): the pair's twins and its offline gate against the supersampled area coverage."""
     py, px = np.mgrid[0:4, 0:4]
@@ -1000,6 +1050,7 @@ def test_primary():
     n = primary.fibre_normal(t, to_cam)
     check("fibre normal perpendicular to the tangent, facing the camera",
           np.abs((n * t).sum(1)).max() < 1e-9 and np.all((n * to_cam).sum(1) >= -1e-12))
+    test_shading_spaces(rng)
     # Tracer: one horizontal strand of radius 2 mm, 1 m in front of a 65 px camera (row 32 on the axis), 10 deg field.
     r = 0.002
     pts = np.array([[-0.05, 0.0, 1.0], [0.05, 0.0, 1.0]])
