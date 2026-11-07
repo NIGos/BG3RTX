@@ -383,7 +383,7 @@ with tempfile.TemporaryDirectory() as td:
     with patch.object(hr, 'compile_requests', return_value={'changed': module}) as compile_mock, \
          patch.object(hr, 'compare_retired', return_value='') as compare_mock, quiet:
         proofs = hr.retirement_fallback(rows, SimpleNamespace(label='base'), SimpleNamespace(label='new'), None, None, 'test')
-    check([p['path'] for p in proofs] == ['raw identity', 'retirement/default equivalence (1001/1002/1005/1006/1016-1019/1021-1024=0 baseline; 1026/1044=0 both)', 'failed'],
+    check([p['path'] for p in proofs] == ['raw identity', 'retirement/default equivalence (1001/1002/1005/1006/1016-1019/1021-1024=0 baseline; 1026/1030/1044=0 both)', 'failed'],
           'only DIFFERENT uses fallback, raw identity and failures retain their paths')
     check(compare_mock.call_count == 1 and all(c.args[1] == ['changed'] for c in compile_mock.call_args_list),
           'fallback compiles only differing identical request spellings')

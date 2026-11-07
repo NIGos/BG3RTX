@@ -14,6 +14,7 @@ The matrix assumes ordinary sun, D-LS enabled and valid rays. Mixed sources can 
 - [S] `shaders/gi/rt_shadow.hlsl:124`, `:198`; `shaders/gi/rt_sun_resolve.hlsl:39`: S plus G until fully trusted replacement; G for unknown rays.
 - [L] `shaders/gi/rt_local_shadows.hlsl:674`, `:838`: mapped locals replace G, or use min(S,G) under atlas fallback; unknown keeps G.
 - [H] `shaders/gi/rt_local_shadows.hlsl:412`, `:807`: mapped local lights never replace class-5 hair lighting.
+  (rt_hair_fibre_mapped, M4.3: the fibre pass replaces them on strand pixels where D-LS trusts the trace.)
 - [U] `shaders/gi/rt_local_shadows.hlsl:810`, `:821`: unmapped locals use RT where selected; skipped/unknown lights remain unshadowed.
 - [R] `shaders/rt/rt_common.hlsli:1373`, `:1444`: matched procedural cards skipped; groom TLAS supplies shadow hits.
 - [F] `shaders/gi/hair_fibre.hlsl:126`, `:149`: optional fibre replacement skips mapped locals; sun uses E visibility and strand counts.
@@ -70,6 +71,26 @@ Cost: more visibility/count rays and term reconstruction; up to eight groom quer
 Risk: leaks, self-intersection, changed energy and unsupported terms. GPU ms unmeasured.
 3. Accept/document the matrix: zero added cost, visible ribbon shadows remain. It does not meet full closure.
 No existing toggle guarantees all-S or all-none. All-none must omit groom and card casters in every path.
+
+## Option 1 implemented (2026-11-07, branch claude/hair-m5-m2, key `rt_hair_groom_cascade_drop`, off, live)
+
+Smallest safe step: no receiver-side change. In a sun cascade pass (`geo_cascade_layer`: depth-only D16 cascade array
+layer) a static hair card draw (DepthShadow FS 34951669ed4b3b0f) whose draw key (index range; the same key as its
+camera draws) is in the groom set published this or the previous frame is drawn with a clone of its pipeline
+without depth writes. Vertex stage, XFB capture (RT cascade casters) and every other state stay native. Not
+touched: instanced hair (8dddc0bc49e56efc), local-light atlases (tetrahedron FS, other passes), unpublished styles.
+Attribution: the cascade draw key is the camera key (same index buffer, offset, range, vertex offset), so no new
+join is needed; a key shared by two characters of the same style drops both cards while both grooms usually publish
+(risk documented above: wrong-instance shadows). Requires rt_hair_groom_primary (the publish).
+What it changes per receiver domain: trusted RT pixels use strand visibility already (no change); roof pixels
+(native mask x RT) lose the double card x strand shadow; the off-screen trust blend keeps the strand part only;
+unknown rays keep the native mask, which now lacks the hair (no hair shadow there). The key trades ribbons and double
+shadows for missing hair shadows in the fallback domains: the user decides with the L2 PNG pairs.
+Counters: the period line `[hair primary] frame N: ...` ends with `sun cascade hair card draws T, without card depth D`.
+Offline proof: CTest `hair_groom_asset_test` test_cascade_card_drop (all four conditions, publish freshness of one
+frame). No shader change: 221/221 requests byte-identical to main, request delta 0. Cost: none on the GPU (fewer
+depth writes), one hash lookup per cascade draw. Live predicted: D = T for published styles; neck/shoulder card
+silhouettes gone under the sun with RT sun replacement; no change on unpublished styles.
 
 ## Required live gate, after offline implementation and fresh authorization
 

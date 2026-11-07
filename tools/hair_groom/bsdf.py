@@ -177,6 +177,20 @@ def game_hair(t, wo, wi, color, roughness, scatter, backlit):
     return R[:, None] + TT + TRT + diff
 
 
+def game_hair_light(t, n, wo, wi, color, roughness, scatter, backlit, S):
+    """The game's hair term of one local light per unit irradiance with its self-shadow / atlas term S (N,): what
+    gi/hair_fibre.hlsl removes for a light with a game shadow map (M4.3): S (bg3_hair_spec + bg3_hair_diff with
+    N.L = n . wi and texp = 1 - S). Twin of tools/hair_game_light_gpu_check.hlsl."""
+    c = np.asarray(color, float)
+    spec = game_hair(t, wo, wi, color, roughness, 0.0, backlit)   # scatter 0: the R + TT + TRT lobes alone
+    nl = np.einsum("nd,nd->n", n, wi)
+    tl = np.einsum("nd,nd->n", t, wi)
+    k = 0.31830987 * ((1 - 0.33) * np.clip((nl + 1) * 0.25, 0, 1) + 0.33 * (1 - np.abs(tl))) * scatter
+    base = np.maximum(np.abs(c / (c @ np.array([0.3, 0.59, 0.11]))), 1e-4)
+    tint = base[None, :] ** (1 - np.asarray(S, float))[:, None]
+    return np.asarray(S, float)[:, None] * (spec + np.sqrt(c)[None, :] * k[:, None] * tint)
+
+
 def lambert_fibre(t, wo, wi, h, color):
     """The current GI/reflection hit shading on hair (gi_common.hlsli mat_reply: Lambert with the albedo),
     applied to the fibre's round cross-section: normal at offset h, per unit irradiance."""

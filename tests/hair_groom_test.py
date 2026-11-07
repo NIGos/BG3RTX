@@ -785,6 +785,29 @@ def test_coverage():
           layer.count("shader_variant::kSpecIdHairGroomCoverage") == 2 and "hair_primary::kFlagCoverage" in layer)
 
 
+def test_post_depth():
+    """M3.4: the D24S8 (and the linear depth made from it) that fog, transparents, water, DoF and the camera motion pass
+    read after the G-buffer pass shows the same surface as the colour on every pixel of a strand card."""
+    pts, rad, offs, cam, card = primary.card_fixture()
+    strands = primary.post_depth(pts, rad, offs, cam, card)
+    rep = primary.post_depth_report(strands)
+    cards = primary.post_depth_report(primary.post_depth(pts, rad, offs, cam, card, keep_card_depth=True))
+    print(json.dumps({"post_depth_strands": rep, "post_depth_card_depth_kept": cards}))
+    check("post depth fixture has strand pixels and alpha-tested card pixels",
+          rep["strand_pixels"] > 100 and rep["card_alpha_pixels"] > rep["strand_pixels"])
+    check(f"post depth: strand path has no halo pixel (depth error {rep['max_err_mm']:.5f} mm within one D24 step "
+          f"{rep['max_step_mm']:.5f} mm)", rep["halo_pixels"] == 0)
+    check("post depth: kept card depth would put a halo on every alpha-tested card pixel (control)",
+          cards["halo_pixels"] == cards["card_alpha_pixels"] and cards["halo_background_pixels"] > 0)
+    layer = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
+    gb = (ROOT / "shaders/rt/hair_primary_gbuffer.hlsl").read_text()
+    check("prepass clone writes no card depth; strand G-buffer tests GREATER_OR_EQUAL with writes; velocity no writes",
+          "dsv.depthWriteEnable = VK_FALSE;" in layer and "dsv.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;" in layer
+          and "dsv.depthWriteEnable = pass == Pass::Gbuffer ? VK_TRUE : VK_FALSE;" in layer)
+    check("strand G-buffer depth is the cached hit's depth (SV_Depth = e.z, the hit projected with the pass's vp)",
+          "o.depth = asfloat(e.z);" in gb and "asuint(c.z / c.w)" in gb)
+
+
 def test_rr_hair_guides():
     """M3.3 (rr_hair_guides): class 5 guides read RT2 as the game's hair lighting (bg3_materials.hlsli class 5)."""
     guides = (ROOT / "shaders/rr_guides.hlsl").read_text()
@@ -1280,7 +1303,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_coverage, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_coverage, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

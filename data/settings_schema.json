@@ -382,6 +382,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_fibre_spec": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_fibre_spec": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_fibre_mapped", "label": "Strand shading for shadow-mapped lights",
+     "description": "Experimental: physical strand shading also for local lights that have a game shadow map, with ray-traced shadows through the strands instead of the card shadow map. Appearance and cost are unqualified.",
+     "apply": "live", "apply_note": "live; needs Physical strand shading", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: physical strand shading also for local lights that have a game shadow map, with ray-traced shadows through the strands instead of the card shadow map. Appearance and cost are unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_fibre_mapped": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_fibre_mapped": "1"}, "needs": {"exp_hair_fibre": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_groom_crowd", "label": "Strand hair crowd budget",
      "description": "Experimental: gives nearby characters finer strands and reduces distant hair detail.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": true,
@@ -476,6 +489,19 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_coverage": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_groom_coverage": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "exp_hair_groom_cascade_drop", "label": "Strand hair: no card shadows",
+     "description": "Experimental: hair whose strands are in the ray-traced scene stops casting its card silhouette into the game's sun shadow maps. Where the game's shadow is still used, that hair casts no shadow. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: hair whose strands are in the ray-traced scene stops casting its card silhouette into the game's sun shadow maps. Where the game's shadow is still used, that hair casts no shadow. Unqualified.",
+     "details": "M2.2: removes ribbon and double shadows under roofs. Compare the neck and shoulders under hair in Test Dialogue1, then the ground in Campsite.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_cascade_drop": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_cascade_drop": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_rr_hair_guides", "label": "RR hair guides",
      "description": "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",

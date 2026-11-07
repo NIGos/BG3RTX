@@ -153,6 +153,29 @@ max 1.9e-5; weight relative error max 2.4e-5. Key off: the pass is not dispatche
 (below). Request delta +2 (`gi/hair_fibre_spec.hlsl` with and without OMM). The Tp transcription has no offline
 reference (no capture of b11 on strand pixels): live check is part of L3 (below). Cost unmeasured.
 
+### M4.3: every traced local light on strand pixels (offline, 2026-11-08, branch claude/hair-m4-locals)
+
+`rt_hair_fibre_mapped=0/1` (specialization 1030, knob `exp_hair_fibre_mapped`, Advanced, dev only), off; needs
+`rt_hair_fibre=1`. Before: gi/hair_fibre.hlsl replaced the sun and every light without a game shadow map; lights
+with a map kept the game's hair term with the cards' atlas shadow (RTX_HAIR_SHADOW_MAPS [H]). Now those too:
+the buffer holds E S (bg3_hair_spec + bg3_hair_diff, texp = 1 - S) with the game's hair atlas term S
+(3033c895: sampled from P + L 3.5 nb sqrt(d2), no N.L gate; `hf_atlas_hair`), and it becomes E F(n) v with the
+scene's traced visibility v and the strand count n, as for every other traced light. Only where D-LS trusts
+the trace for mapped lights (`ls_shadowed` 1, or 3 with the light on screen) and the ray is known; elsewhere the
+game's term stays. Unmapped lights were already exact per light (the pass loops over every froxel light; D-LS's
+RIS selection is unbiased against it). No request or ABI change.
+Gates: the removed game term GPU (bg3_materials lobes) vs `bsdf.game_hair_light`, 12,000 samples: relative
+error p99 9.5e-7, max 5.4e-6. N-light fixture (20,000 lights on a sphere, 4 pi / N each): white single
+scattering sums to 0.99973 / 0.99997 (beta 0.41 / 0.7; analytic 1); the dual response summed over the lights
+equals its CPU twin within 3.4e-7 at n = 0, 1, 3. (Its full-sphere sum at fixed n is 3.4-7.0 for colour
+(0.85, 0.7, 0.5): fixed n over the whole sphere is not a volume, so this is not an energy bound; the dual
+model's calibration is the path-traced slab of 3b.) Identity: 218/221 requests byte-identical to main 7f86f343;
+the 3 hair_fibre.hlsl requests strictly equivalent at 1030 = 0. Cost (estimate, unmeasured): per strand pixel and
+mapped light one 12-tap atlas PCF, one scene ray, one groom query (at most 8 crossings) and one dual evaluation,
+the same as an unmapped traced light; the pass cost grows by the mapped share of the froxel's lights.
+Check in game: Test Dialogue1 / Campsite with torches (shadow-mapped lights), hair lit by them: the card-shaped
+self-shadow on the hair is replaced by strand shadows; key on vs off in one run.
+
 ## 4. RR, DLSS-G, DoF
 RR guides are built from the G-buffer at its pass end (`layer/ngx.cpp record_guides_at_gbuffer`): strands
 there are ordinary pixels (albedo, normal, roughness). Motion vectors from the velocity variant; depth from the
@@ -402,6 +425,38 @@ Cost: two traces instead of one per strand candidate pixel (bench: ~0.4 ms at a 
 +0.4 ms); unmeasured live. Recommendation: keep off unless the L2 edge-flicker detector shows strands above the
 cards and the pair measurably below them in the same run.
 Key off (both keys): 215/218 requests byte-identical to main 2dcf0a88 (identical inputs); the other 3 (rr_guides.hlsl, rt/hair_primary_gbuffer.hlsl as file and manifest entry) strictly equivalent with 1042 and 1043 fixed to 0 (`tools/release_shader_equivalence.py --freeze-spec 1042 --freeze-spec 1043`, cascade control PASS); spirv-val 5/5 modules. Request delta 0.
+
+## 5e. Strand depth in post (M3.4, offline 2026-11-07: no mismatch, no change)
+Every post consumer runs after the G-buffer pass (FRAME_MAP steps 4-14): linear depth (step 4, from the D24S8),
+the camera motion-vector pass (6b), AO/SSR (8-9), fog, transparents and water (13), DoF (14). They all read the
+D24S8 as the G-buffer leaves it, or the linear depth made from it. With strands: the prepass clone writes no card
+depth, the strand G-buffer variant writes the cached hit's depth (SV_Depth = the hit projected with the pass's own
+vp, GREATER_OR_EQUAL with writes) and discards elsewhere, so a pixel's depth and colour come from the same surface:
+the strand, or what lies behind the card (skin, wall). Kept-card draws use the native fallback pipeline, which
+restores the card depth with the card colour (5b, DepthLatch).
+CPU proof (`primary.card_fixture` / `post_depth` / `post_depth_report`, CTest `hair_groom_test` test_post_depth):
+a 35-degree card at 1 m with 60 strands up to 2 mm off the sheet, a wall 0.4 m behind, the D24 quantisation and
+the linearisation. Strand path: 0 halo pixels of 1576 alpha-tested card pixels; worst depth error 0.00054 mm,
+within one D24 step (0.00117 mm). Control with the card depth kept: all 1576 card pixels carry a depth of another
+surface (1253 wall pixels up to 0.43 m off, 323 strand pixels off by the card band). DoF, fog and water therefore
+see the strand depth; no fix, no key. Live: a DoF halo check stays in the L2 PNG pairs (Dialogue3 depth of field).
+
+## 5f. Every view (M5, offline 2026-11-07: participation counters; variants blocked)
+Today strands replace cards only in the main view: hair_primary_swap requires the G-buffer depth image at the pixel
+record's size. Portraits and other small views draw the static hair FS at another size and depth image; instanced
+hair (FS 0ca5ee93, CHAR_Hair_STI_DEF) has no variant. Counted now: every draw of a hair pipeline (static or instanced,
+recorded at pipeline creation whether or not it gets a variant) by pass and view, appended to the period line
+`[hair primary] frame N: ...`: `hair draws strand/total: main G-buffer a/b, velocity c/d, prepass e/f; other views
+G-buffer g, velocity h, prepass i; instanced j; card-only pass groups k` (`hair_primary::Participation`, CTest
+`hair_groom_asset_test`). k = 0 is "no card-only pass left". Only while rt_hair_groom_primary is on; no key.
+Why no variant yet (not safe offline): the strand shaders use one header and one pixel record, sized and indexed
+for the main view and baked into every variant as specialization 1100/1101. A portrait G-buffer draw with the same
+game pipeline would read and seal the main view's entries with this frame's tag, so the main pass could reuse a
+portrait hit (wrong strand, wrong depth) and the coverage evidence would mix views. A second view needs its own header,
+pixel record and pipelines specialized to that header (2 x 16 draw slots), its own depth latch and probe evidence,
+and the portrait character's hair in the groom set (the groom follows the main prepass capture). Instanced hair needs
+one groom per instance (the groom set is keyed per draw index range). Next step: run the counters in a live to learn
+which views draw hair at all before building the second record.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
