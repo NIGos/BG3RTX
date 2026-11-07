@@ -15,6 +15,7 @@
 #include "../common/native_hit_instanced.h"
 #include "../common/native_hit_recycle.h"
 #include "../common/vram_guard.h"
+#include "../common/host_memory.h"
 #include "../common/native_hit_recording.h"
 #include "../common/cpu_material_scratch.h"
 #include "../common/cpu_material_prepare.h"
@@ -321,9 +322,22 @@ bool create(Buffer& out,VkDeviceSize bytes,VkBufferUsageFlags usage,bool host=fa
  VkBufferCreateInfo ci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};ci.size=alloc;ci.usage=usage;
  if(dd->vk.CreateBuffer(dd->device,&ci,nullptr,&out.b)!=VK_SUCCESS)return false;
  VkMemoryRequirements req{};dd->vk.GetBufferMemoryRequirements(dd->device,out.b,&req);
- VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};ai.allocationSize=req.size;ai.memoryTypeIndex=find_memory_type(dd,req.memoryTypeBits,host?(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT|VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT):VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
- if(host && ai.memoryTypeIndex==UINT32_MAX)ai.memoryTypeIndex=find_memory_type(dd,req.memoryTypeBits,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
- if(ai.memoryTypeIndex==UINT32_MAX || dd->vk.AllocateMemory(dd->device,&ai,nullptr,&out.m)!=VK_SUCCESS || dd->vk.BindBufferMemory(dd->device,out.b,out.m,0)!=VK_SUCCESS){
+ VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};ai.allocationSize=req.size;
+ bool allocated=false;
+ if(host){
+  // BAR VRAM first, system memory when the BAR heap is full (no Resizable BAR: common/host_memory.h).
+  static_assert(bg3::host_memory::kSystem==(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),"host_memory.h flag values");
+  VkPhysicalDeviceMemoryProperties props{};
+  if(dd->inst && dd->inst->GetPhysicalDeviceMemoryProperties)dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical,&props);
+  uint32_t flags[VK_MAX_MEMORY_TYPES];for(uint32_t i=0;i<props.memoryTypeCount;++i)flags[i]=props.memoryTypes[i].propertyFlags;
+  allocated=bg3::host_memory::allocate_host_visible(flags,props.memoryTypeCount,req.memoryTypeBits,[&](uint32_t t){
+   ai.memoryTypeIndex=t;return dd->vk.AllocateMemory(dd->device,&ai,nullptr,&out.m)==VK_SUCCESS;})!=bg3::host_memory::kNoType;
+ }else{
+  ai.memoryTypeIndex=find_memory_type(dd,req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  allocated=ai.memoryTypeIndex!=UINT32_MAX && dd->vk.AllocateMemory(dd->device,&ai,nullptr,&out.m)==VK_SUCCESS;
+ }
+ if(!allocated)out.m=VK_NULL_HANDLE;
+ if(!allocated || dd->vk.BindBufferMemory(dd->device,out.b,out.m,0)!=VK_SUCCESS){
   dd->vk.DestroyBuffer(dd->device,out.b,nullptr);if(out.m)dd->vk.FreeMemory(dd->device,out.m,nullptr);out={};return false;
  }
  if(host && dd->vk.MapMemory(dd->device,out.m,0,VK_WHOLE_SIZE,0,&out.mapped)!=VK_SUCCESS){dd->vk.DestroyBuffer(dd->device,out.b,nullptr);dd->vk.FreeMemory(dd->device,out.m,nullptr);out={};return false;}
