@@ -285,6 +285,30 @@ static void test_frame_tags() {
   CHECK(dropout_reason(5000, 0, 5000, 0, 0, false) == Dropout::Unattributed);
 }
 
+// 5i (review 1): the submit-time upgrade. The build of this frame runs before the G-buffer (that is when the upgrade is
+// considered): it refits the groom BLASes and rewrites the points in place for the new pose, relative to the new camera.
+// Keeping the record-time header then traces the previous TLAS over them, rebased with the previous camera (the strands
+// shift by the camera's and the character's motion: misses, card-band rejections, hair gone). So the upgrade is taken
+// whenever the recorded draws stay valid: their keys keep their slots; added grooms (a new character, a LOD swap that
+// briefly drops a key elsewhere) no longer block it.
+static void test_upgrade_safe() {
+  using namespace hair_primary;
+  uint64_t p[kMaxGrooms] = {11, 22}, more[kMaxGrooms] = {22, 11, 33}, fewer[kMaxGrooms] = {11};
+  DrawSlots sp, sc;
+  sp.publish(p, 2);
+  sc = sp;
+  sc.publish(more, 3);   // 33 takes a free slot, 11 and 22 keep theirs
+  CHECK(!same_grooms(p, sp, more, sc));   // the old rule kept the stale header here
+  CHECK(upgrade_safe(p, sp, more, sc));
+  DrawSlots sf = sp;
+  sf.publish(fewer, 1);   // 22 dropped: its swapped draw would find no strands in the new TLAS
+  CHECK(!upgrade_safe(p, sp, fewer, sf));
+  DrawSlots moved;
+  uint64_t only22[kMaxGrooms] = {22};
+  moved.publish(only22, 1);   // 22 in slot 0 instead of its recorded slot
+  CHECK(!upgrade_safe(p, sp, more, moved));
+}
+
 // 5i: a LOD switch to a LOD still uploading (groom_lod stages it and returns nothing for 2-3 frames).
 static void test_lod_keep() {
   using hair_groom::lod_this_frame;
@@ -404,7 +428,7 @@ int main() {
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
-  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep();
+  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;

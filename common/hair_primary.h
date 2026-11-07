@@ -576,6 +576,17 @@ inline bool same_grooms(const uint64_t* keys_a, const DrawSlots& slots_a, const 
   }
   return true;
 }
+// 5i: a submit-time upgrade from the record-time header p to this frame's publish c is safe when every key p maps to a
+// draw slot keeps that slot in c (the swapped draws were recorded with those slots) and is still published in c.
+inline bool upgrade_safe(const uint64_t* keys_p, const DrawSlots& slots_p, const uint64_t* keys_c, const DrawSlots& slots_c) {
+  for (uint32_t i = 0; i < kDrawSlots; ++i) if (slots_p.keys[i] && slots_c.keys[i] != slots_p.keys[i]) return false;
+  for (uint32_t k = 0; k < kMaxGrooms; ++k) if (keys_p[k]) {
+    bool found = false;
+    for (uint32_t j = 0; j < kMaxGrooms && !found; ++j) found = keys_c[j] == keys_p[k];
+    if (!found) return false;
+  }
+  return true;
+}
 inline uint64_t coverage_bytes(uint32_t width, uint32_t height) {
   return uint64_t(width) * height * (kPixelBytes + 8); // packed card and accepted words
 }

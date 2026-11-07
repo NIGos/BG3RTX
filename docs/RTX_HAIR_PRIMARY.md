@@ -539,10 +539,29 @@ still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per per
   also starts at LOD 0 and switches 30 frames later: the log uploads LOD 0 then LOD 1/2 about 1 s apart for every new
   groom (32 uploads, full builds 9-21 per moving period, 0 when still). Fix `rt_hair_groom_lod_keep` (live, off): keep the
   built LOD until the wanted one is resident (hair_groom::lod_this_frame); the [hair groom] line counts kept vs dropped.
-- Fixtures: CTest hair_groom_asset_test test_frame_tags (two G-buffer frames on one publish: ambiguous and reused with
+- Review findings (2026-11-08), verified against the code:
+  1 confirmed: a submit-time upgrade refused for a groom-set change ("different grooms") left the record-time header
+    after this frame's build had refit the BLASes and rewritten the points in place (new pose, new camera origin): the
+    G-buffer traced the old TLAS over them, rebased with the old camera. Fixed (always): the upgrade is taken whenever
+    the recorded keys keep their draw slots (hair_primary::upgrade_safe; added grooms allowed, the header copy is full
+    size). Left: a key dropped from this frame's publish (rare with lod_keep), counted under "different grooms".
+  2 confirmed (5h): the camera check is now unconditional (rt_hair_primary_camera_gate retired): a header without
+    its build camera is never applied.
+  3 confirmed: the tag and the previous-camera link now use the build's own frame (rt_current_build_camera), not a
+    re-read frame_index.
+  4 confirmed: counter frame (above); its per-key state and the count slots are reset at a level load.
+  5 confirmed: rt_hair_groom_lod_keep (above).
+  6 confirmed: grooms without a primary key (no UVs yet, first points update) get instance mask 0x01; the primary
+    strand rays use 0xFE, so they no longer hide a swapped draw's strands. Shadow/GI rays (0xFF) unchanged.
+  7 rejected: the compacted copy leaves the previous TLAS on the old, unmodified BLAS (destroyed after kGroomFreeLag):
+    consistent. 8 confirmed, low (one frame of motion vectors after a skipped update), not changed. 9 confirmed, low
+    (rt_groom_links reads one word past a groom's start table for its last segment, inside the pool), not changed.
+    10 rejected for the main view (one header per frame, applied in the first G-buffer command buffer). 11 not changed
+    (CPU-read UBO camera vs GPU soup; no evidence of a mismatch).
+- Fixtures: CTest hair_groom_asset_test test_upgrade_safe, test_frame_tags (two G-buffer frames on one publish: ambiguous and reused with
   publish tags, distinct with frame tags; the counter judges the previous frame), test_lod_keep.
 - Live check (Test Dialogue1 and the isometric view, one session, camera and characters moving, both keys on/off/on):
-  on windows: ambiguous tags 0, coverage invalidated near 0, strand swaps resumed after card frames near the still
+  on windows: ambiguous tags 0, "different grooms" near 0, coverage invalidated near 0, strand swaps resumed after card frames near the still
   windows' 0-9, "LOD switches ... (groom dropped)" 0; the dropouts line near 0 (not ~1000); no visible flash.
 
 ## 6. Open items

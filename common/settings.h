@@ -459,13 +459,6 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_coverage", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "M3.2: compiled into the strand pipelines at their creation. Doubles the strand trace on strand candidate pixels. Compare thin strands against the sky or a bright wall in Test Dialogue1 while turning."},
 
-  {"exp_hair_primary_camera_gate", "Strand hair: no bald frames",
-   "Experimental: a strand frame whose groom publish lost its build camera keeps the hair cards for that frame instead of drawing no hair. Unqualified.",
-   Kind::Choice, Apply::Live, "live", true,
-   {{"off", "Off", 0, {{"rt_hair_primary_camera_gate", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_primary_camera_gate", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5h: CPU only, no cost. The period line [hair primary] dropouts counts the frames it prevents. Watch the hair in Test Dialogue1 for one-frame bald flashes."},
-
   {"exp_hair_primary_frame_tag", "Strand hair: per-frame trace tags",
    "Experimental: every frame traces its own strands, never reusing an earlier frame's strand hits when it falls back to the previous groom publish. Unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -809,7 +802,6 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_coverage_footprint", "0"},
     {"rt_hair_groom_tips", "0"},
     {"rt_hair_groom_coverage", "0"},
-    {"rt_hair_primary_camera_gate", "0"},
     {"rt_hair_primary_frame_tag", "0"},
     {"rt_hair_groom_lod_keep", "0"},
     {"rt_hair_macro_normal", "0"},

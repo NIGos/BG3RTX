@@ -3547,7 +3547,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         VkAccelerationStructureInstanceKHR in{};
         in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
         in.instanceCustomIndex = groom_count;
-        in.mask = 0xFF;
+        // 5i (review 6): a groom without a primary key (no UVs yet, first update of its points) keeps its cards in the
+        // G-buffer, so the primary strand rays (mask 0xFE, hair_primary_gbuffer.hlsl) skip it: its strands would be the
+        // closest hit over a swapped draw's own and be discarded there (a hole). Shadow and GI rays (0xFF) still see it.
+        const bool primary_key = groom_count < hair_primary::kMaxGrooms && w.g->uv_off && w.g->prev_frames > 1 && w.hp_key;
+        in.mask = hp_on && !primary_key ? 0x01 : 0xFF;
         in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
         in.accelerationStructureReference = w.g->as.addr;
         std::memcpy(gi + groom_count, &in, sizeof in);

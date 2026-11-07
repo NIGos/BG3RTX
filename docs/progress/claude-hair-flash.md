@@ -7,4 +7,8 @@
   Key `rt_hair_primary_frame_tag` (live, off): the G-buffer frame is the tag.
 - Cause 2: a LOD switch to a LOD still uploading drops the groom for 2-3 frames (cards); new slots start at LOD 0 then
   switch. Key `rt_hair_groom_lod_keep` (live, off): keep the built LOD until the new one is resident.
-- Both CPU only. Live check: RTX_HAIR_PRIMARY 5i.
+- Review fixes (always on with strands): the submit upgrade is taken whenever the recorded draws keep their slots
+  (no stale header over BLASes refit in place); headers without a build camera are never applied (camera_gate key
+  retired); tag and previous camera from the build's own frame; grooms without a primary key masked out of primary rays
+  (shader mask 0xFE); counter state reset at level loads. Rejected: compaction (7), several G-buffer CBs (10).
+- Live check: RTX_HAIR_PRIMARY 5i.

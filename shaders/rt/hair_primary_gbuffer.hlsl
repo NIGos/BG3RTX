@@ -83,7 +83,7 @@ bool hp_cov_trace(uint64_t rec, float3 org, float3 dir, uint grooms, uint64_t po
   r.Direction = dir;
   r.TMax = 1.0e5;
   RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-  q.TraceRayInline(hp_tlas(ld2(rec + 16u)), 0u, 0xFFu, r);
+  q.TraceRayInline(hp_tlas(ld2(rec + 16u)), 0u, 0xFEu, r);   // 0xFE: not the grooms whose draws keep cards (bvhsplit)
   while (q.Proceed()) {}
   if (q.CommittedStatus() == COMMITTED_NOTHING) return false;
   const uint k = q.CommittedInstanceIndex(), seg = q.CommittedPrimitiveIndex();
@@ -203,7 +203,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     r.Direction = dir;
     r.TMax = 1.0e5;
     RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-    q.TraceRayInline(hp_tlas(ld2(rec + 16u)), 0u, 0xFFu, r);
+    q.TraceRayInline(hp_tlas(ld2(rec + 16u)), 0u, 0xFEu, r);   // 0xFE: not the grooms whose draws keep cards (bvhsplit)
     while (q.Proceed()) {}
     e = uint4(hair_primary_no_strand, 0u, 0u, 0u);
     if (q.CommittedStatus() != COMMITTED_NOTHING) {
