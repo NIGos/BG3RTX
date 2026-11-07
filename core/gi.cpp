@@ -1278,6 +1278,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(hair_primary::kSpecRecordLo, uint32_t(a));
     specs.add(hair_primary::kSpecRecordHi, uint32_t(a >> 32));
   }
+  // rt_hair_fibre_mapped (M4.3): the fibre pass also replaces the mapped local lights' hair term.
+  if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0)
+    specs.add(sv::kSpecIdHairFibreMapped, host->cfg_int("rt_hair_fibre_mapped", 0) != 0 ? 1u : 0u);
   slot_key += specs.key();
   Pipe::Variant& slot = p.variants[slot_key + "|" + std::to_string(uint64_t(lay))];
   const bool known = slot.pipeline && slot.file == slot_key;
