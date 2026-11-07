@@ -410,6 +410,102 @@ def gbuffer(hits, cam, near=0.1, far=1000.0):
             "rt2w": rt2_w(), "n_view": n_view}
 
 
+# ---- M3.4 post depth: what the post passes read on strand pixels ----
+def d24(depth):
+    """The game's D24S8 depth aspect: 24-bit UNORM, round to nearest."""
+    return np.round(np.clip(depth, 0.0, 1.0) * (2 ** 24 - 1)) / (2 ** 24 - 1)
+
+
+def view_depth(depth, near=0.1, far=1000.0):
+    """Linear (view) depth w from the native reversed depth D = A + B / w (FRAME_MAP step 4 linearises the D24S8 like
+    this; DoF, AO/SSR, fog and the camera motion-vector pass read the D24S8 or that linear depth)."""
+    a = depth_a(near, far)
+    with np.errstate(divide="ignore"):
+        return np.where(depth > 0.0, (-a * far) / (depth - a), np.inf)
+
+
+def card_fixture(seed=4, size=160, fov_deg=20.0, dist=1.0, strands=60, band=0.004):
+    """Strands embedded in one alpha-tested card sheet in front of a wall, as the converter places them (every strand
+    point on its card's triangles, radius 0.125 mm): the card plane z = dist tilted 35 degrees about y, strand points up
+    to `band` / 2 off the sheet (the card's own thickness of curls), a wall 0.4 m behind. Returns (points, radii,
+    offsets, camera, card): card = dict(normal, point, half extent) of the sheet."""
+    rng = np.random.default_rng(seed)
+    ang = np.radians(35.0)
+    n = np.array([np.sin(ang), 0.0, -np.cos(ang)])
+    e1, e2 = np.array([np.cos(ang), 0.0, np.sin(ang)]), np.array([0.0, 1.0, 0.0])
+    c = np.array([0.0, 0.0, dist])
+    pts, rad, offs = [], [], [0]
+    for _ in range(strands):
+        x0 = rng.uniform(-0.05, 0.05)
+        s = np.linspace(-0.06, 0.06, 14)
+        p = (c + (x0 + 0.004 * np.sin(s * 60 + rng.uniform(0, 6)))[:, None] * e1 + s[:, None] * e2 +
+             (rng.uniform(-band, band) / 2 * np.cos(s * 40 + rng.uniform(0, 6)))[:, None] * n)
+        pts.append(p)
+        rad.append(np.full(len(p), 0.000125))
+        offs.append(offs[-1] + len(p))
+    cam = Camera(np.zeros(3), np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]), np.radians(fov_deg), (size, size))
+    card = {"normal": n, "point": c, "e1": e1, "e2": e2, "half": (0.065, 0.07), "wall_z": dist + 0.4}
+    return np.concatenate(pts), np.concatenate(rad), np.array(offs), cam, card
+
+
+def post_depth(points, radii, offsets, cam, card, keep_card_depth=False, alpha_px=1.5, near=0.1, far=1000.0):
+    """The D24S8 the post passes read after the G-buffer pass, per pixel, and which surface the colour shows.
+
+    Strand path (layer/hair_primary.cpp): the prepass clone writes no card depth, so the depth before the G-buffer is
+    the wall's; the strand G-buffer variant (GREATER_OR_EQUAL, writes) stores the strand hit's depth where the card's
+    raster holds a strand hit and discards elsewhere (wall colour and depth stay). keep_card_depth: the card depth stays
+    in the buffer (the native Depth FS, alpha-tested at `alpha_px` pixels around the strands; its virtual offset h is
+    ignored, which only moves it further back) while the colour comes from the strands: the mismatch a halo needs.
+    Returns dict(depth, colour_w, depth_w, strand) of (h, w) arrays: colour_w the view depth of the surface the colour
+    shows, depth_w the view depth the post passes reconstruct."""
+    w, h = cam.size
+    rays = cam.rays().reshape(h, w, 3)
+    _, _, f = cam.basis()
+    cos = rays @ f
+    a = depth_a(near, far)
+    native = lambda t: a + (-a * far) / (t * cos)
+    nrm, pnt = card["normal"], card["point"]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t_card = (pnt @ nrm) / (rays @ nrm)
+        q = rays * t_card[..., None] - pnt
+        inside = (np.abs(q @ card["e1"]) <= card["half"][0]) & (np.abs(q @ card["e2"]) <= card["half"][1]) & (t_card > 0)
+        t_wall = card["wall_z"] / cos
+    hits = trace(points, radii, offsets, cam)
+    strand = hits.hit & inside                     # the card raster is the strand candidate region
+    return _post_depth(strand, hits.t, t_card, inside, t_wall, native, keep_card_depth, alpha_px, cos)
+
+
+def _post_depth(strand, t_strand, t_card, inside, t_wall, native, keep_card_depth, alpha_px, cos):
+    r = int(np.ceil(alpha_px))
+    m = np.pad(strand, r)
+    alpha = np.zeros_like(strand)
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if dx * dx + dy * dy <= alpha_px * alpha_px:
+                alpha |= m[r + dy:r + dy + strand.shape[0], r + dx:r + dx + strand.shape[1]]
+    alpha &= inside
+    t_depth = np.where(strand, t_strand, t_wall)
+    if keep_card_depth:
+        t_depth = np.where(alpha, np.minimum(t_card, t_wall), t_wall)
+    depth = d24(native(t_depth))
+    return {"depth": depth, "strand": strand, "card_alpha": alpha,
+            "colour_w": np.where(strand, t_strand, t_wall) * cos, "depth_w": view_depth(depth)}
+
+
+def post_depth_report(frame, near=0.1, far=1000.0):
+    """Halo pixels: the depth the post passes read is not the surface the colour shows, beyond the D24 precision at that
+    depth (one 24-bit step, converted to view depth: dw = w^2 / |B| / (2^24 - 1), |B| = -A far)."""
+    a = depth_a(near, far)
+    step = frame["colour_w"] ** 2 / abs(-a * far) / (2 ** 24 - 1)
+    err = np.abs(frame["depth_w"] - frame["colour_w"])
+    bad = err > step
+    s = frame["strand"]
+    return {"strand_pixels": int(s.sum()), "card_alpha_pixels": int(frame["card_alpha"].sum()),
+            "halo_pixels": int(bad.sum()), "halo_strand_pixels": int((bad & s).sum()),
+            "halo_background_pixels": int((bad & ~s).sum()),
+            "max_err_mm": float(err[np.isfinite(err)].max() * 1e3), "max_step_mm": float(step[np.isfinite(step)].max() * 1e3)}
+
+
 def main():
     from PIL import Image
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
