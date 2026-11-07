@@ -182,7 +182,13 @@ float native_hit_ao_gi(float3 position,float3 geometric_normal,float footprint,u
  float occ=0;
  [loop]for(uint i=0;i<rays;++i){
   float3 dir=cosine_hemisphere(n,rand01(seed),rand01(seed));
+#ifdef RT_SPEC_NATIVE
+  if(kRtGroomAoT!=0u)g_rt_groom_ao=true;   // rt_hair_groom_ao_t (rt_common.hlsli rt_groom_ao_passes)
+#endif
   RtHit h=rt_closest_hit(o,dir,R,cone);
+#ifdef RT_SPEC_NATIVE
+  if(kRtGroomAoT!=0u)g_rt_groom_ao=false;
+#endif
   const float w=hg_ray_weight(h.t,h.aborted,R);
   occ+=w;
   if(h.aborted || h.t<0.0)continue;   // unknown or miss: no radiance (the GI's rule)

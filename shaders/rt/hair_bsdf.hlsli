@@ -90,6 +90,30 @@ float3 hb_eval(float3 t, float3 wo, float3 wi, float h, float3 sigma_a, float be
   return sum + hb_mp(cos_ti, cos_to, sin_ti, sin_to, v[3]) / (2.0 * kHbPi) * a3;
 }
 
+// The R lobe (p = 0) sampled exactly at offset h from three uniforms u (M4.2, gi/hair_fibre_spec.hlsl; twin of
+// tools/hair_groom/bsdf.py sample_r): the longitudinal lobe as the marginal of a von Mises-Fisher ring about the tilted
+// specular cone (u.x, u.y), the trimmed logistic azimuth about -2 gamma_o by its inverse CDF (u.z). Returns the
+// estimator weight (the R term over its pdf), A_0 = F(cos theta_o cos gamma_o): L_R = E[A_0 L(wi)].
+float hb_sample_r(float3 t, float3 wo, float h, float beta, float3 u, out float3 wi) {
+  beta = clamp(beta, 0.05, 1.0);
+  const float v = pow(0.726 * beta + 0.812 * beta * beta + 3.7 * pow(beta, 20.0), 2.0);
+  const float s = sqrt(kHbPi / 8.0) * (0.265 * beta + 1.194 * beta * beta + 5.372 * pow(beta, 22.0));
+  const float so = clamp(dot(wo, t), -1.0, 1.0), co = sqrt(max(1.0 - so * so, 0.0));
+  const float k = -2.0 * kHbAlpha;
+  const float s0 = so * cos(k) + co * sin(k), c0 = abs(co * cos(k) - so * sin(k));
+  const float u0 = clamp(u.x, 1e-7, 1.0 - 1e-7);
+  const float ct = clamp(1.0 + v * log(u0 + (1.0 - u0) * exp(-2.0 / v)), -1.0, 1.0);
+  const float si = clamp(-s0 * ct + c0 * sqrt(max(1.0 - ct * ct, 0.0)) * cos(2.0 * kHbPi * u.y), -1.0, 1.0);
+  const float lo = 1.0 / (1.0 + exp(kHbPi / s));
+  const float uu = clamp(lo + u.z * (1.0 - 2.0 * lo), 1e-7, 1.0 - 1e-7);
+  const float phi = s * log(uu / (1.0 - uu)) - 2.0 * asin(clamp(h, -1.0, 1.0));
+  float3 x = wo - so * t;
+  const float xl = length(x);
+  x = xl > 1e-12 ? x / xl : (abs(t.x) < 0.9 ? normalize(cross(t, float3(1, 0, 0))) : normalize(cross(t, float3(0, 1, 0))));
+  wi = si * t + sqrt(max(1.0 - si * si, 0.0)) * (cos(phi) * x + sin(phi) * cross(t, x));
+  return hb_fresnel(co * sqrt(saturate(1.0 - h * h)), kHbEta);
+}
+
 // A pixel wider than the fibre sees every offset: the mean over four stratified h (the far-field response).
 float3 hb_eval_pixel(float3 t, float3 wo, float3 wi, float3 sigma_a, float beta) {
   float3 sum = 0.0;

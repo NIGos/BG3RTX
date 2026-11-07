@@ -163,6 +163,59 @@ def bsdf_check(exe, spv, n=4000, seed=11):
     check("BSDF GPU vs CPU: every sample within 2e-4 relative", rep["rel_err_max"] < 2e-4, rep["rel_err_max"])
 
 
+def r_sample_check(exe, spv, n=4000, seed=19):
+    """M4.2: hb_sample_r (GPU, float32) against bsdf.sample_r (float64) from the same uniforms: the sampled direction and
+    the weight A_0; plus the white furnace of the R lobe (the estimator against a quadrature of r_lobe, within 3%)."""
+    rng = np.random.default_rng(seed)
+
+    def unit(k):
+        v = rng.normal(size=(k, 3))
+        return v / np.linalg.norm(v, axis=1, keepdims=True)
+    rows, want_d, want_w = [], [], []
+    for rough in (0.09, 0.25, bsdf.CHAR_HAIR["roughness"], 0.7):
+        t, wo = unit(n), unit(n)
+        h = rng.uniform(-0.99, 0.99, n)
+        u = rng.uniform(1e-4, 1 - 1e-4, (n, 3))
+        d, w = bsdf.sample_r(t, wo, h, rough, u)
+        want_d.append(d)
+        want_w.append(w)
+        block = np.zeros((n, 16), "<f4")
+        block[:, 0:3], block[:, 3], block[:, 4:7], block[:, 7] = t, 2.0, wo, rough
+        block[:, 8:11], block[:, 15] = u, h
+        rows.append(block)
+    want_d, want_w = np.concatenate(want_d), np.concatenate(want_w)
+    with tempfile.TemporaryDirectory() as tmp:
+        inp, out = Path(tmp) / "s.bin", Path(tmp) / "o.bin"
+        inp.write_bytes(np.concatenate(rows).tobytes())
+        p = subprocess.run([str(exe), "bsdf", str(inp), str(spv), str(out)], capture_output=True, text=True)
+        if p.returncode == 77:
+            return
+        if p.returncode:
+            print(p.stderr)
+            check("R sample GPU check ran", False, p.returncode)
+            return
+        got = np.frombuffer(out.read_bytes(), "<f4").reshape(-1, 4).astype(np.float64)
+    dirr = np.linalg.norm(got[:, :3] - want_d, axis=1)
+    werr = np.abs(got[:, 3] - want_w) / np.maximum(want_w, 1e-6)
+    rep = {"samples": len(want_w), "dir_err_p99": float(np.percentile(dirr, 99)), "dir_err_max": float(dirr.max()),
+           "weight_rel_err_max": float(werr.max())}
+    print(json.dumps(rep))
+    # float32 log/exp of the narrow longitudinal lobe (v ~ 0.004 at beta 0.09): the direction to 1e-3 at the 99th
+    # percentile, 1e-2 everywhere (beta 0.09: a 1e-6 change of u moves theta_i by up to ~1e-3 rad near u -> 0).
+    check("R sample GPU vs CPU: direction within 1e-3 (99%) and 1e-2 (all)", rep["dir_err_p99"] < 1e-3 and
+          rep["dir_err_max"] < 1e-2, rep)
+    check("R sample GPU vs CPU: weight A_0 within 1e-4 relative", rep["weight_rel_err_max"] < 1e-4, rep)
+    furnace = []
+    for rough in (0.09, bsdf.CHAR_HAIR["roughness"], 0.7):
+        for theta in (0.0, 30.0, 60.0, 80.0):
+            e, se, q = bsdf.r_furnace(rough, theta, n=100000, n_quad=(121, 240), n_h=24)
+            furnace.append({"beta": rough, "theta_o": theta, "estimator": round(e, 5), "se": round(se, 6),
+                            "quadrature": round(q, 5), "rel": round(e / q - 1, 4)})
+    print(json.dumps({"r_furnace": furnace}))
+    worst = max(abs(f["rel"]) for f in furnace)
+    check("R lobe white furnace: sampled estimator = quadrature within 3%", worst < 0.03, worst)
+
+
 def dual_check(exe, spv, n=3000, seed=13):
     """hd_shade (GPU) against dual.shade_table (CPU, same tables) on random frames, offsets, fibre counts 0..6."""
     rng = np.random.default_rng(seed)
@@ -234,8 +287,10 @@ def shadow_check(exe, spv, pts, rad, offs, cam, n_rays=3000, seed=17):
     hit_px = np.argwhere(g[..., 1] > 0)
     pick = hit_px[rng.choice(len(hit_px), min(n_rays, len(hit_px)), replace=False)]
     cpu = np.zeros(len(pick), int)
+    t1_cpu = np.full(len(pick), np.inf)
     for i, (y, x) in enumerate(pick):
         t, _ = primary.capsule_hits(np.broadcast_to(cam.position, (len(a), 3)), np.broadcast_to(rays[y, x], (len(a), 3)), a, b2, r)
+        t1_cpu[i] = np.min(t)
         # One crossing per run of adjacent segments of a strand (chained end caps: the joint between two segments
         # is one surface, so a ray through it enters one capsule, not two).
         hit = np.flatnonzero(np.isfinite(t))
@@ -259,6 +314,27 @@ def shadow_check(exe, spv, pts, rad, offs, cam, n_rays=3000, seed=17):
     err = float(lit.sum() - want.sum())
     print(json.dumps({"transmit_lit": int(lit.sum()), "transmit_expected": round(float(want.sum()), 1), "sigma": round(float(sigma), 1)}))
     check("shadow transmittance: mean visibility = d_f a_f^n within 4 sigma (binomial)", abs(err) <= 4 * sigma, (err, sigma))
+    # M2.3 (rt_hair_groom_ao_t): an AO/GI ray's closest strand hit stands with probability 1 - d_f a_f^n (the same
+    # rt_groom_blocks decision), else the ray passes on; its occlusion weight is the GI fade 1 - (t1/R)^2 at the closest
+    # strand t1 (rt_closest's opaque groom query). The GPU's closest strand t against the CPU's first capsule entry, and
+    # the mean occlusion from the GPU trials against the CPU expectation (n and t1 from the CPU).
+    t1 = g[pick[:, 0], pick[:, 1], 5].view("<f4").astype(np.float64)
+    t_err = np.abs(t1 - t1_cpu)
+    R = float(1.5 * np.max(t1_cpu[np.isfinite(t1_cpu)]))   # every strand inside the radius, fades 0.3..0.97
+    fade = lambda tt: np.clip(1 - (tt / R) ** 2, 0, 1)
+    p_block = np.where(cpu > 0, 1 - 0.7 * 0.5 ** cpu, 0.0)
+    occ_gpu = float(np.sum((1 - lit / 256) * fade(t1)))
+    occ_want = float(np.sum(p_block * fade(t1_cpu)))
+    occ_sigma = float(np.sqrt(np.sum(fade(t1_cpu) ** 2 * p_block * (1 - p_block) / 256)))
+    print(json.dumps({"ao_t1_err_max": float(t_err.max()), "ao_t1_err_p99": float(np.percentile(t_err, 99)),
+                      "ao_occlusion": round(occ_gpu, 2), "ao_expected": round(occ_want, 2), "ao_sigma": round(occ_sigma, 2),
+                      "ao_opaque": round(float(np.sum(fade(t1_cpu))), 2)}))
+    # The swept spheres and the capsule reference are the same surface for constant radii: float32 ray t (1e-5 of
+    # the 0.3 m distance, as the primary depth comparison).
+    check("AO: closest strand t equals the CPU capsule entry (99% within 3e-6 m)", np.percentile(t_err, 99) <= 3e-6,
+          float(np.percentile(t_err, 99)))
+    check("AO transmittance: mean occlusion = (1 - d_f a_f^n) fade(t1) within 4 sigma", abs(occ_gpu - occ_want) <= 4 * occ_sigma,
+          (occ_gpu, occ_want, occ_sigma))
 
 
 def coverage_check(exe, spv, frames=16):
@@ -322,6 +398,7 @@ def main():
         compare(g, ref, primary.gbuffer(ref, cam), strict=a.groom is None)
     if a.bsdf_spv:
         bsdf_check(a.exe, a.bsdf_spv)
+        r_sample_check(a.exe, a.bsdf_spv)
     if a.dual_spv:
         dual_check(a.exe, a.dual_spv)
     if a.shadow_spv:

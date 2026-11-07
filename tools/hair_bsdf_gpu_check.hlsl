@@ -14,6 +14,12 @@ void main(uint3 id : SV_DispatchThreadID) {
   const float4 th = asfloat(gIn.Load4(a)), wob = asfloat(gIn.Load4(a + 16u));
   const float4 wi = asfloat(gIn.Load4(a + 32u)), col = asfloat(gIn.Load4(a + 48u));
   const float beta = clamp(wob.w, 0.05, 1.0);
+  if (th.w > 1.5) {   // M4.2 R-lobe sample (bsdf.py sample_r): uniforms in the wi slot, the offset h in colour.w
+    float3 d;
+    const float f = hb_sample_r(th.xyz, wob.xyz, col.w, wob.w, wi.xyz, d);
+    gOut.Store4(id.x * 16u, asuint(float4(d, f)));
+    return;
+  }
   const float3 s = hb_eval(th.xyz, wob.xyz, wi.xyz, th.w, hb_sigma_a(col.xyz, beta), beta);
   gOut.Store4(id.x * 16u, asuint(float4(s, 0.0)));
 }

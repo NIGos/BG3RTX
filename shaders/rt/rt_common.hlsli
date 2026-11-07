@@ -1028,6 +1028,14 @@ bool rt_groom_blocks(RayDesc r, float3 o) {
                               asuint(o.z) ^ (pc.frame * 0x85EBCA6Bu)));
   return float(h.x >> 8) * (1.0 / 16777216.0) >= dot(T, float3(0.2126, 0.7152, 0.0722));
 }
+// rt_hair_groom_ao_t (specialization 1044, docs/RTX_HAIR_PRIMARY.md M2.3): the ambient occlusion / GI hemisphere rays
+// (their callers set g_rt_groom_ao around them: gi/gi_trace_rt.hlsl, native_hit_ao, native_hit_ao_gi) see the strands
+// with the shadow rays' transmittance: the closest strand hit before the scene hit stands with probability
+// 1 - d_f lum(prod a_f) over the crossings in front of the scene hit (rt_groom_blocks), else the ray passes on to the
+// scene hit or the miss. 0: the closest strand hit always stands (the strands occlude opaquely, as before).
+[[vk::constant_id(1044)]] const uint kRtGroomAoT = 0;
+static bool g_rt_groom_ao = false;
+bool rt_groom_ao_passes(RayDesc rg, float3 o) { return kRtGroomAoT != 0u && g_rt_groom_ao && !rt_groom_blocks(rg, o); }
 #else
 #ifdef RT_NATIVE_HAIR
 #include "native_hair_procedural.hlsli"
@@ -1570,7 +1578,7 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
     RayDesc rg = r;
     rg.TMax = hit ? h.t : tmax;
     const RtGroomHit g = rt_groom_trace(rg, false);
-    if (g.t >= 0.0) {
+    if (g.t >= 0.0 && !rt_groom_ao_passes(rg, o)) {
       groom_hit = hit = true;
       h.t = g.t; h.geom = 0u; h.prim = g.prim; h.inst = g.inst;
       h.o2w = float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
@@ -1945,7 +1953,7 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
     RayDesc rg = r;
     rg.TMax = RT_HAS_COMMITTED(q) ? q.CommittedRayT() : tmax;
     const RtGroomHit g = rt_groom_trace(rg, false);
-    if (g.t >= 0.0) return g.t;
+    if (g.t >= 0.0 && !rt_groom_ao_passes(rg, o)) return g.t;
   }
 #endif
   return RT_HAS_COMMITTED(q) ? q.CommittedRayT() : -1.0;

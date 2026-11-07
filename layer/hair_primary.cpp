@@ -795,7 +795,8 @@ void hair_primary_forget_pipeline(VkPipeline p) {
 }
 
 uint32_t hair_primary_transmit(uint64_t key) {
-  if (!key || cfg_int("rt_hair_groom_shadow_t", 0) == 0) return 0u;
+  // Word 2 serves both rt_hair_groom_shadow_t (shadow rays) and rt_hair_groom_ao_t (AO/GI rays, M2.3).
+  if (!key || (cfg_int("rt_hair_groom_shadow_t", 0) == 0 && cfg_int("rt_hair_groom_ao_t", 0) == 0)) return 0u;
   std::lock_guard<std::mutex> lock(g_mu);
   const auto it = g_transmit.find(key);
   const uint32_t w = it == g_transmit.end() ? 0u : it->second.packed();
@@ -1180,7 +1181,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         stats_period(300), at ? per : " none");
     g_depth_orphan_count = 0;
   }
-  if (stats_due(now) && cfg_int("rt_hair_groom_shadow_t", 0) != 0) {
+  if (stats_due(now) && (cfg_int("rt_hair_groom_shadow_t", 0) != 0 || cfg_int("rt_hair_groom_ao_t", 0) != 0)) {
     // rt_hair_groom_shadow_t participation: the draws with a measured a_f and the groom rows that carried one.
     float lo = 1.0f, hi = 0.0f, sum[3] = {0, 0, 0};
     for (const auto& [key, t] : g_transmit) {

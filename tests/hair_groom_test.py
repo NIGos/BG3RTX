@@ -589,6 +589,32 @@ def test_bsdf():
     check("chiang forward scattering (TT) above back scattering", ch[-1].mean() > 5 * ch[0].mean(), ch[[0, -1]])
     w = bsdf.slab_albedo((1, 1, 1), 0.41, n=2000, bounces=4000)
     check("white fibre slab reflects nearly everything", np.all(w > 0.9), w)
+    # M4.2 R lobe (sample_r, the strand specular indirect): the white furnace (estimator = quadrature of r_lobe within
+    # 3%) and the sampled directions' distribution: E[A_0 g(wi)] against the quadrature of r_lobe g for a test function
+    # g that varies over the lobe (within 4 standard errors plus 1% for the quadrature grid; furnace: 0.2%).
+    rng = np.random.default_rng(23)
+    for beta, theta in ((0.09, 30.0), (0.41, 0.0), (0.41, 60.0), (0.7, 80.0)):
+        e, se, q = bsdf.r_furnace(beta, theta, n=60000, n_quad=(121, 240), n_h=24)
+        check(f"R lobe white furnace beta {beta} theta_o {theta}: {e:.5f} vs {q:.5f}", abs(e / q - 1) < 0.03, (e, se, q))
+    t, to = np.array([0.0, 0.0, 1.0]), np.radians(40.0)
+    wo = np.array([np.cos(to), 0.0, np.sin(to)])
+    axis = np.array([0.3, -0.5, 0.8]) / np.linalg.norm([0.3, -0.5, 0.8])
+    gfun = lambda d: (1 + d @ axis) ** 2
+    n = 80000
+    h = rng.uniform(-1, 1, n)
+    wi, a0 = bsdf.sample_r(np.tile(t, (n, 1)), np.tile(wo, (n, 1)), h, 0.41, rng.uniform(size=(n, 3)))
+    est, est_se = (a0 * gfun(wi)).mean(), (a0 * gfun(wi)).std() / np.sqrt(n)
+    TH, PH = np.meshgrid((np.arange(121) + 0.5) / 121 * np.pi - np.pi / 2, (np.arange(240) + 0.5) / 240 * 2 * np.pi - np.pi,
+                         indexing="ij")
+    grid = np.stack([np.cos(TH) * np.cos(PH), np.cos(TH) * np.sin(PH), np.sin(TH)], -1).reshape(-1, 3)
+    dw = (np.cos(TH) * (np.pi / 121) * (2 * np.pi / 240)).reshape(-1)
+    x, wx = np.polynomial.legendre.leggauss(24)
+    m = len(grid)
+    quad = sum(wk * (np.pi / 2) * np.cos(gk) / 2 * np.sum(
+        bsdf.r_lobe(np.tile(t, (m, 1)), np.tile(wo, (m, 1)), grid, np.full(m, np.sin(gk)), 0.41) * gfun(grid) * dw)
+        for gk, wk in zip(x * np.pi / 2, wx))
+    check(f"R lobe sampled directions follow r_lobe: {est:.5f} +- {est_se:.5f} vs {quad:.5f}",
+          abs(est - quad) <= 4 * est_se + 0.01 * quad, (est, est_se, quad))
 
 def test_tips_dither():
     # Pixel centres over 4 x 5, all four frame phases, and a uniform sweep of

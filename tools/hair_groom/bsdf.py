@@ -336,3 +336,75 @@ def lobe_sweep(model, theta_i_deg=20.0, n_phi=73, n_h=64, **kw):
             S = lambert_fibre(t, W, I, hs, p["color"])
         out.append(S.mean(0))
     return np.degrees(phis), np.array(out)
+
+
+# ---- M4.2: the R lobe for specular indirect light on strand pixels (shaders/rt/hair_bsdf.hlsli hb_sample_r) ----
+
+def r_lobe(t, wo, wi, h, roughness):
+    """The R (p = 0) term of evaluate alone: M_0 N_0 A_0, per row (N,). Colour independent (surface reflection)."""
+    beta = float(np.clip(roughness, 0.05, 1.0))
+    v0 = longitudinal_variance(beta)[0]
+    s = azimuthal_scale(beta)
+    sin_to = np.clip(np.einsum("nd,nd->n", wo, t), -1, 1)
+    sin_ti = np.clip(np.einsum("nd,nd->n", wi, t), -1, 1)
+    cos_to, cos_ti = np.sqrt(1 - sin_to ** 2), np.sqrt(1 - sin_ti ** 2)
+    po, pi_ = wo - sin_to[:, None] * t, wi - sin_ti[:, None] * t
+    nrm = np.maximum(np.linalg.norm(po, axis=1) * np.linalg.norm(pi_, axis=1), 1e-9)
+    phi = np.arctan2(np.einsum("nd,nd->n", np.cross(po, pi_), t) / nrm,
+                     np.clip(np.einsum("nd,nd->n", po, pi_) / nrm, -1, 1))
+    alpha = np.radians(ALPHA_DEG)
+    so = sin_to * np.cos(-2 * alpha) + cos_to * np.sin(-2 * alpha)
+    co = np.abs(cos_to * np.cos(-2 * alpha) - sin_to * np.sin(-2 * alpha))
+    f = fresnel(cos_to * np.sqrt(np.clip(1 - h * h, 0, 1)), ETA)
+    return mp(cos_ti, co, sin_ti, so, v0) * np_lobe(phi, 0, s, np.arcsin(np.clip(h, -1, 1)), 0.0) * f
+
+
+def sample_r(t, wo, h, roughness, u):
+    """Sample the R lobe exactly at offset h from three uniforms u (N, 3): the longitudinal d'Eon lobe as the marginal
+    of a von Mises-Fisher ring (u0, u1) and the trimmed logistic azimuth around -2 gamma_o (u2, inverse CDF).
+    Returns wi (N, 3) and the estimator weight r_lobe / pdf = A_0 = F(cos theta_o cos gamma_o) (N,).
+    float32 twin: hair_bsdf.hlsli hb_sample_r."""
+    beta = float(np.clip(roughness, 0.05, 1.0))
+    v0 = longitudinal_variance(beta)[0]
+    s = azimuthal_scale(beta)
+    so = np.clip(np.einsum("nd,nd->n", wo, t), -1, 1)
+    co = np.sqrt(np.maximum(1 - so * so, 0))
+    tilt = -2 * np.radians(ALPHA_DEG)
+    s0, c0 = so * np.cos(tilt) + co * np.sin(tilt), np.abs(co * np.cos(tilt) - so * np.sin(tilt))
+    u0 = np.clip(u[:, 0], 1e-7, 1 - 1e-7)
+    ct = np.clip(1 + v0 * np.log(u0 + (1 - u0) * np.exp(-2 / v0)), -1, 1)
+    si = np.clip(-s0 * ct + c0 * np.sqrt(np.maximum(1 - ct * ct, 0)) * np.cos(2 * np.pi * u[:, 1]), -1, 1)
+    lo = 1 / (1 + np.exp(np.pi / s))
+    uu = np.clip(lo + u[:, 2] * (1 - 2 * lo), 1e-7, 1 - 1e-7)
+    phi = s * np.log(uu / (1 - uu)) - 2 * np.arcsin(np.clip(h, -1, 1))
+    x = wo - so[:, None] * t
+    x /= np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-15)
+    ci = np.sqrt(np.maximum(1 - si * si, 0))
+    wi = si[:, None] * t + ci[:, None] * (np.cos(phi)[:, None] * x + np.sin(phi)[:, None] * np.cross(t, x))
+    return wi, fresnel(co * np.sqrt(np.clip(1 - h * h, 0, 1)), ETA)
+
+
+def r_furnace(roughness, theta_o_deg, n=200000, seed=5, n_quad=(181, 360), n_h=32):
+    """White furnace of the R lobe on a strand pixel (uniform environment radiance 1, offsets h uniform): the sampled
+    estimator's mean weight against an independent quadrature of r_lobe over the sphere (midpoint grid in theta_i and
+    phi, midpoint offsets). Returns (estimator, its standard error, quadrature)."""
+    rng = np.random.default_rng(seed)
+    to = np.radians(theta_o_deg)
+    t = np.array([0.0, 0.0, 1.0])
+    wo = np.array([np.cos(to), 0.0, np.sin(to)])
+    h = rng.uniform(-1, 1, n)
+    _, w = sample_r(np.tile(t, (n, 1)), np.tile(wo, (n, 1)), h, roughness, rng.uniform(size=(n, 3)))
+    nt, nphi = n_quad
+    th = (np.arange(nt) + 0.5) / nt * np.pi - np.pi / 2
+    ph = (np.arange(nphi) + 0.5) / nphi * 2 * np.pi - np.pi
+    TH, PH = np.meshgrid(th, ph, indexing="ij")
+    wi = np.stack([np.cos(TH) * np.cos(PH), np.cos(TH) * np.sin(PH), np.sin(TH)], -1).reshape(-1, 3)
+    dw = (np.cos(TH) * (np.pi / nt) * (2 * np.pi / nphi)).reshape(-1)
+    m = len(wi)
+    # Offsets h = sin gamma, Gauss-Legendre in gamma (the Fresnel term rises steeply towards |h| = 1).
+    x, wx = np.polynomial.legendre.leggauss(n_h)
+    g = x * np.pi / 2
+    wh = wx * (np.pi / 2) * np.cos(g) / 2
+    quad = sum(wk * np.sum(r_lobe(np.tile(t, (m, 1)), np.tile(wo, (m, 1)), wi, np.full(m, np.sin(gk)), roughness) * dw)
+               for gk, wk in zip(g, wh))
+    return float(w.mean()), float(w.std() / np.sqrt(n)), float(quad)

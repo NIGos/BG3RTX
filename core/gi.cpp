@@ -379,6 +379,8 @@ bool g_ls_logged = false, g_ls_missing_logged = false;
 VkDescriptorSetLayout g_rf_set_layout = VK_NULL_HANDLE, g_rf_game_layout = VK_NULL_HANDLE;
 VkPipelineLayout g_rf_layout = VK_NULL_HANDLE;
 Pipe g_rf;
+Pipe g_hair_fibre_spec;   // gi/hair_fibre_spec.hlsl (rt_hair_fibre_spec, M4.2): strand pixels' specular indirect, after D-RF
+// (refresh keys its variants by layout: a rebuilt D-RF layout gets a fresh variant; all are destroyed at shutdown.)
 // rf_hit_shade (M4.2 tier b, common/native_hit_rf_bindings.h): D-RF's push set, the material
 // AlphaDSL as set 1, the game's lighting set 1 as set 2, the D-LS sun set as set 3 (+ SHaRC set 4).
 // Built over g_rf_set_layout and g_rf_game_layout: ensure_rf_layout drops them with those.
@@ -1266,8 +1268,11 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     // secondary queries; nothing changes until the layer publishes a groom TLAS in the scene stamp.
     specs.add(sv::kSpecIdHairGroom, hair_groom ? 1u : 0u);
     specs.add(sv::kSpecIdHairGroomShadowT, host->cfg_int("rt_hair_groom_shadow_t", 0) != 0 ? 1u : 0u);
+    // rt_hair_groom_ao_t (M2.3): the AO/GI hemisphere rays pass strands with the same transmittance.
+    specs.add(sv::kSpecIdHairGroomAoT, host->cfg_int("rt_hair_groom_ao_t", 0) != 0 ? 1u : 0u);
   }
-  if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0 || &p == &g_composite_fibre) {   // layer's hair primary header
+  if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0 || std::strcmp(file, "gi/hair_fibre_spec.hlsl") == 0 ||
+      &p == &g_composite_fibre) {   // layer's hair primary header
     const auto* hp = static_cast<const hair_primary::Persist*>(host->persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
     const uint64_t a = hp ? hp->header : 0;
     specs.add(hair_primary::kSpecRecordLo, uint32_t(a));
@@ -2482,6 +2487,25 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
   return true;
 }
 
+// rt_hair_fibre_spec (M4.2): gi/hair_fibre_spec.hlsl on D-RF's plain layout and bindings (rf_dispatch without the
+// replay pack and SHaRC set; it reads neither).
+bool hair_spec_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& pc) {
+  if (!g_hair_fibre_spec.pipeline || !g_rf_layout) return false;
+  auto traversal = prepare_omm_traversal(cmd, b, g_hair_fibre_spec.pipeline);
+  if (!traversal.valid()) return false;
+  const VkDeviceFuncs& vk = *host->vk;
+  VkWriteDescriptorSet w[kRfBindings + kNumExtras];
+  const uint32_t count = gather_writes(b, kRfBindings, w);
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_hair_fibre_spec.pipeline);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rf_layout, 0, count, w);
+  VkDescriptorSet sets[2] = {b.alpha, s.game_set1};
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_rf_layout, 1, 2, sets, s.game_set1_ndyn,
+                           s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
+  vk.CmdPushConstants(cmd, g_rf_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  return true;
+}
+
 // ---- rt_hit_emission (M4.4): the emissive scene set for the hit-GI / rf_hit_shade variants ----
 void hit_em_drop() {
   for (Pipe* p : {&g_hit_gi_em[0], &g_hit_gi_em[1], &g_hit_gi_em[2], &g_hit_gi_em[3]}) {
@@ -3639,6 +3663,22 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       }
     }
     reflection_applied = hit_shade || rf_dispatch(cmd, rb, s, rp);
+    // rt_hair_fibre_spec (docs/RTX_HAIR_PRIMARY.md M4.2): the visible strands' specular indirect with the fibre's R
+    // lobe instead of the game's probe term, after D-RF (its layout, sets and push constants; inside its timed region).
+    if (reflection_applied && !s.rf_validate && rp.rf_debug == 0 && host->cfg_int("rt_hair_fibre_spec", 0) &&
+        host->cfg_int("rt_hair_groom_primary", 0) && refresh(g_hair_fibre_spec, "gi/hair_fibre_spec.hlsl", g_rf_layout)) {
+      memory_barrier(cmd, kCS, kCS);
+      const bool ran = hair_spec_dispatch(cmd, rb, s, rp);
+      static uint64_t s_hair_spec_last = 0, s_hair_spec_run = 0;
+      if (ran) {
+        const uint64_t now = host->frame_index();
+        s_hair_spec_run = now == s_hair_spec_last + 1 ? s_hair_spec_run + 1 : 0;
+        s_hair_spec_last = now;
+        if (s_hair_spec_run % 300 == 0)
+          host->log("[hair fibre spec] strand pixels' specular indirect by the fibre R lobe after D-RF (%llu frames in this run)",
+                    (unsigned long long)s_hair_spec_run);
+      }
+    }
     rf_timestamp(cmd, 1);
     if (rg_stats && hit_shade && g_rg_ran) {   // after the end timestamp: outside the timed region
       memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -3927,7 +3967,7 @@ void gi_release() {
   sunt_release();
   g_sunt_ok = false;
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_debug,
-                  &g_trace_rt, &g_ls, &g_ls_prep, &g_hair_fibre, &g_composite_fibre, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
+                  &g_trace_rt, &g_ls, &g_ls_prep, &g_hair_fibre, &g_composite_fibre, &g_rf, &g_hair_fibre_spec, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k, &g_occ, &g_ls_full_box_occ,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
