@@ -217,6 +217,35 @@ static void test_coverage_footprint() {
 }
 // rt_hair_groom_primary_current: the G-buffer is recorded before this frame's build (so only the previous publish is
 // known then); at vkQueueSubmit this frame's publish is used only when its build is ordered first on the GPU.
+// 5h strand dropouts: the classification of a swapped draw's counted frame, and the camera gate's header test. The
+// sequence: rt_after_capture stores the build camera with frame_index F; a present on the queue thread advances
+// frame_index to F + 1 before hair_primary_publish (inside the same build) asks rt_this_build_camera(F + 1): false, the
+// header goes out without kFlagCamera, every strand fragment discards in hp_rebase, but the swap gates (coverage, depth
+// latch, applied keys) never read the flag: the draw is swapped, its card depth already dropped -> no hair that frame.
+static void test_dropout() {
+  using namespace hair_primary;
+  CHECK(dropout_reason(5000, 4800, 5000, 9000, 8000) == Dropout::None);
+  CHECK(dropout_reason(5000, 600, 5000, 9000, 8000) == Dropout::None);            // 12%: low coverage, not a dropout
+  CHECK(dropout_reason(5000, 400, 5000, 9000, 8000) == Dropout::Rejected);
+  CHECK(dropout_reason(5000, 0, 5000, 0, 0) == Dropout::NoTrace);                // hp_rebase false: nothing traced
+  CHECK(dropout_reason(5000, 0, 5000, 9000, 0) == Dropout::Missed);
+  CHECK(dropout_reason(0, 0, 5000, 0, 0) == Dropout::NoMarker);                  // the frame's tag left no marker
+  CHECK(dropout_reason(0, 0, 10, 0, 0) == Dropout::None);                        // never had evidence
+  CHECK(dropout_reason(30, 0, 30, 0, 0) == Dropout::None);                       // too few card pixels to judge
+  for (int d = 0; d < int(Dropout::Count); ++d) CHECK(std::strcmp(dropout_name(Dropout(d)), "?") != 0);
+  Header h{};
+  h.tag = 7; h.width = 4; h.height = 4; h.flags = kFlagTips;
+  uint8_t bytes[kHeaderBytes] = {};
+  const Row rows[1] = {};
+  pack(h, rows, 0, bytes);
+  CHECK(!header_usable(bytes));               // the raced publish: no build camera
+  h.flags |= kFlagCamera;
+  pack(h, rows, 0, bytes);
+  CHECK(header_usable(bytes) && header_flags(bytes) == (kFlagTips | kFlagCamera));
+  GbFrame f;
+  CHECK(f.swapped_slots == 0);
+}
+
 static void test_current_pick() {
   using namespace hair_primary;
   // One submit [prepass + build, G-buffer]: the build runs first -> this frame's publish.
@@ -326,7 +355,8 @@ int main() {
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
-  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_current_pick(); test_coverage_footprint();
+  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout();
+  test_current_pick(); test_coverage_footprint();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
