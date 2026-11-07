@@ -2855,4 +2855,6 @@ void register_geo_hooks(HookMap& m) {
   m["vkCreateBuffer"] = reinterpret_cast<PFN_vkVoidFunction>(&CreateBuffer);
 }
 
+int geo_cascade_layer(const Bg3PassInfo& p) { return cascade_layer(p); }
+
 }  // namespace bg3

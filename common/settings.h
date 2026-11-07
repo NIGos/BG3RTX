@@ -452,6 +452,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_coverage", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "M3.2: compiled into the strand pipelines at their creation. Doubles the strand trace on strand candidate pixels. Compare thin strands against the sky or a bright wall in Test Dialogue1 while turning."},
 
+  {"exp_hair_groom_cascade_drop", "Strand hair: no card shadows",
+   "Experimental: hair whose strands are in the ray-traced scene stops casting its card silhouette into the game's sun shadow maps. Where the game's shadow is still used, that hair casts no shadow. Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_groom_cascade_drop", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_groom_cascade_drop", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "M2.2: removes ribbon and double shadows under roofs. Compare the neck and shoulders under hair in Test Dialogue1, then the ground in Campsite."},
+
   {"exp_rr_hair_guides", "RR hair guides",
    "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -757,6 +764,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_primary_passes", "15"},
     {"rt_hair_groom_tips", "0"},
     {"rt_hair_groom_coverage", "0"},
+    {"rt_hair_groom_cascade_drop", "0"},
     {"rt_hair_fibre", "0"},
     {"rt_hair_fibre_gi", "0"},
     {"rt_hair_fibre_spec", "0"},

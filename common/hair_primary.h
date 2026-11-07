@@ -410,6 +410,19 @@ constexpr uint64_t kDepthStaticFs = 0x5a03e5b678b2d040ull;
 constexpr uint64_t kVelocityStaticFs = 0xb70cadc5dd3adcbdull;
 // Instanced hair G-buffer FS (CHAR_Hair_STI_DEF, docs/NATIVE_HAIR.md): no strand variant (M5), counted only.
 constexpr uint64_t kDeferredInstancedFs = 0x0ca5ee93d0f33b8cull;
+// Static hair DepthShadow FS (docs/NATIVE_HAIR.md): the sun cascade card draws (M2.2 rt_hair_groom_cascade_drop).
+constexpr uint64_t kShadowStaticFs = 0x34951669ed4b3b0full;
+
+// M2.2 (docs/RTX_HAIR_SHADOW_MAPS.md option 1): a static hair card draw in a sun cascade pass is drawn with the
+// depth-write-free clone (no card silhouette in the game's shadow map; the XFB capture and vertex stage unchanged)
+// when the key is on, its draw key (the index range, the same in the camera and cascade passes) is in the groom set
+// published this or the previous frame (the RT scene then holds its strands), and the clone exists.
+inline bool cascade_card_drop(bool key_on, bool sun_cascade, bool published_key, bool has_clone) {
+  return key_on && sun_cascade && published_key && has_clone;
+}
+inline bool publish_fresh(uint64_t published_frame, uint64_t now) {
+  return published_frame != 0 && published_frame <= now + 1 && published_frame + 1 >= now;
+}
 
 // M5 per-pass strand participation (the period line "[hair primary] frame N: ..."): every draw of a hair pipeline by
 // pass and view. Main = the G-buffer depth image at the pixel record's size; other = portraits and other small views,
@@ -418,6 +431,7 @@ constexpr uint64_t kDeferredInstancedFs = 0x0ca5ee93d0f33b8cull;
 struct Participation {
   enum Kind : uint32_t { kGbuffer = 0, kVelocity = 1, kPrepass = 2, kKinds = 3 };
   uint64_t main_total[kKinds] = {}, main_swapped[kKinds] = {}, other_total[kKinds] = {}, instanced = 0;
+  uint64_t cascade_total = 0, cascade_dropped = 0;   // M2.2: static hair card draws in sun cascade passes
   void draw(uint32_t kind, bool main_view, bool inst) {
     if (kind >= kKinds) return;
     if (inst) ++instanced;

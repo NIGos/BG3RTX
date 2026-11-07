@@ -634,6 +634,8 @@ struct CascadeSoup {
 };
 struct AlphaSnapshot;
 int geo_cascade_soup(uint64_t frame, CascadeSoup* out);
+// The cascade index (array layer) of a sun cascade pass, -1 for any other pass (geocapture cascade_layer).
+int geo_cascade_layer(const Bg3PassInfo& p);
 // Why a build has or lacks the cascade instance (the [cascade] log line): 0 added, 1 no soup
 // of the previous frame, 2 its command buffer not submitted, 3 no camera of that frame,
 // 4 legacy (non-split) build, 5 BLAS allocation failed.

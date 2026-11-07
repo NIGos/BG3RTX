@@ -46,6 +46,10 @@ std::unordered_set<VkShaderModule> g_inst_mods;                // instanced hair
 // Every game pipeline with a hair FS: participation kind (hair_primary::Participation::Kind) + 4 when instanced.
 std::unordered_map<VkPipeline, uint32_t> g_hair_pipes;
 hair_primary::Participation g_part;
+// M2.2 rt_hair_groom_cascade_drop: game static hair DepthShadow pipeline -> clone without depth writes.
+std::unordered_map<VkPipeline, VkPipeline> g_cascade_clone;
+std::unordered_set<uint64_t> g_pub_keys;   // draw keys of the last publish
+uint64_t g_pub_frame = 0;                  // its frame_index + 1 (0: none)
 hair_primary::LoadGuard g_load;                               // level-load boundary (the G-buffer depth image)
 std::unordered_map<VkPipeline, VkPipeline> g_variant;         // game pipeline -> variant
 enum class Pass : uint8_t { Prepass, Gbuffer, Velocity };
@@ -584,6 +588,10 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_mods.clear();
   g_inst_mods.clear();
   g_hair_pipes.clear();
+  for (auto& [game, c] : g_cascade_clone) dd->vk.DestroyPipeline(dd->device, c, nullptr);
+  g_cascade_clone.clear();
+  g_pub_keys.clear();
+  g_pub_frame = 0;
   g_part = hair_primary::Participation{};
   for (CountSlot& s : g_cnt) {
     if (s.rb) dd->vk.DestroyBuffer(dd->device, s.rb, nullptr);
@@ -614,7 +622,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
 
 void hair_primary_note_module(VkShaderModule m, uint64_t hash) {
   const bool ours = hash == hair_primary::kDeferredStaticFs || hash == hair_primary::kDepthStaticFs ||
-                    hash == hair_primary::kVelocityStaticFs;
+                    hash == hair_primary::kVelocityStaticFs || hash == hair_primary::kShadowStaticFs;
   std::lock_guard<std::mutex> lock(g_mu);
   // A reused handle must never keep a hair hash (it would give a non-hair pipeline a strand variant).
   if (ours) g_mods[m] = hash;
@@ -646,12 +654,33 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
         instanced |= g_inst_mods.count(ci.pStages[k].module) != 0;
       }
     // M5 participation: every hair pipeline, whether or not it gets a variant below.
-    if (out[i] && (fs >= 0 || instanced))
+    if (out[i] && (fs >= 0 || instanced) && hash != hair_primary::kShadowStaticFs)
       g_hair_pipes[out[i]] = instanced ? 4u + hair_primary::Participation::kGbuffer
                            : hash == hair_primary::kDeferredStaticFs ? uint32_t(hair_primary::Participation::kGbuffer)
                            : hash == hair_primary::kVelocityStaticFs ? uint32_t(hair_primary::Participation::kVelocity)
                                                                      : uint32_t(hair_primary::Participation::kPrepass);
     if (fs < 0 || !out[i] || !header_ready()) continue;
+    if (hash == hair_primary::kShadowStaticFs) {   // M2.2: the cascade clone, depth writes off, everything else native
+      bool lib = false, dyn = false;
+      for (auto p = static_cast<const VkBaseInStructure*>(ci.pNext); p; p = p->pNext)
+        lib |= p->sType == VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR ||
+               p->sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT;
+      const VkPipelineDepthStencilStateCreateInfo* sds = depth_state(ci, &dyn);
+      if (lib || dyn || !sds) continue;
+      VkPipelineDepthStencilStateCreateInfo nd = *sds;
+      nd.depthWriteEnable = VK_FALSE;
+      VkGraphicsPipelineCreateInfo cc = ci;
+      cc.pDepthStencilState = &nd;
+      cc.flags &= ~VkPipelineCreateFlags(VK_PIPELINE_CREATE_DERIVATIVE_BIT);
+      cc.basePipelineHandle = VK_NULL_HANDLE; cc.basePipelineIndex = -1;
+      VkPipeline clone = VK_NULL_HANDLE;
+      if (vk.CreateGraphicsPipelines(device, cache, 1, &cc, nullptr, &clone) == VK_SUCCESS && clone) {
+        auto old = g_cascade_clone.find(out[i]);
+        if (old != g_cascade_clone.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(old->second));
+        g_cascade_clone[out[i]] = clone;
+      }
+      continue;
+    }
     const Pass pass = hash == hair_primary::kDeferredStaticFs ? Pass::Gbuffer
                     : hash == hair_primary::kVelocityStaticFs ? Pass::Velocity : Pass::Prepass;
     bool library = false, dynamic_depth = false;
@@ -795,6 +824,8 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
 void hair_primary_forget_pipeline(VkPipeline p) {
   std::lock_guard<std::mutex> lock(g_mu);
   g_hair_pipes.erase(p);
+  auto cc = g_cascade_clone.find(p);
+  if (cc != g_cascade_clone.end()) { defer_destroy(BG3_DEFER_PIPELINE, uint64_t(cc->second)); g_cascade_clone.erase(cc); }
   auto variants = g_draw_variants.find(p);
   if (variants != g_draw_variants.end()) {
     for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) {
@@ -951,7 +982,22 @@ void depth_orphan(uint64_t key, uint64_t now, VkPipeline pipeline, const char* r
 
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if (args.kind != 1 || !s->pipe[0] || !hair_primary_wanted()) return false;
+  // M2.2: a sun cascade pass (depth-only D16 cascade array layer), decided before the lock (tracker lock inside).
+  const bool sun = s->pass.color_count == 0 && s->pass.depth_format == VK_FORMAT_D16_UNORM && geo_cascade_layer(s->pass) >= 0;
   std::lock_guard<std::mutex> lock(g_mu);
+  if (sun) {
+    const auto cc = g_cascade_clone.find(s->pipe[0]);
+    if (cc == g_cascade_clone.end()) return false;
+    ++g_part.cascade_total;
+    const uint64_t key = hair_primary_draw_key(s, args);
+    if (!hair_primary::cascade_card_drop(cfg_int("rt_hair_groom_cascade_drop", 0) != 0, true,
+                                         hair_primary::publish_fresh(g_pub_frame, frame_index() + 1) && g_pub_keys.count(key),
+                                         true)) return false;
+    s->hp_coverage = s->hp_query = UINT32_MAX;
+    g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, cc->second);
+    ++g_part.cascade_dropped;
+    return true;
+  }
   s->hp_coverage = s->hp_query = UINT32_MAX;
   const uint64_t now = frame_index();
   const bool main_view = s->pass.width == g_px_w && s->pass.height == g_px_h &&
@@ -1135,6 +1181,9 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   g_last_pub_camera_frame = (h.flags & hair_primary::kFlagCamera) ? now : 0;
   std::memcpy(g_last_pub_camera, st.cam, sizeof g_last_pub_camera);
+  g_pub_keys.clear();   // M2.2: the groom set this publish puts in the RT scene
+  for (uint32_t k = 0; k < count; ++k) if (keys[k]) g_pub_keys.insert(keys[k]);
+  g_pub_frame = count ? now + 1 : 0;
   st.pick = {h.tag, rec, uint64_t(cmd)};
   st.recording = cmd_recording(cmd);
   st.n = hair_primary::pack(h, rows, count, st.bytes);
@@ -1192,14 +1241,16 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     log_stats("[hair primary] frame %llu: %u grooms published; last %u frames: %llu publishes, %llu prepass, %llu "
         "G-buffer and %llu velocity strand draws, %llu pipelines refused, %llu feedback failures; prepass card depth dropped without its G-buffer "
         "swap %llu; hair draws strand/total: main G-buffer %llu/%llu, velocity %llu/%llu, prepass %llu/%llu; other views "
-        "G-buffer %llu, velocity %llu, prepass %llu; instanced %llu; card-only pass groups %u",
+        "G-buffer %llu, velocity %llu, prepass %llu; instanced %llu; card-only pass groups %u; sun cascade hair card draws "
+        "%llu, without card depth %llu",
         (unsigned long long)now, count, stats_period(300), (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
         (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_failures.refused, (unsigned long long)g_failures.feedback,
         (unsigned long long)g_st.orphan, (unsigned long long)g_part.main_swapped[0], (unsigned long long)g_part.main_total[0],
         (unsigned long long)g_part.main_swapped[1], (unsigned long long)g_part.main_total[1],
         (unsigned long long)g_part.main_swapped[2], (unsigned long long)g_part.main_total[2],
         (unsigned long long)g_part.other_total[0], (unsigned long long)g_part.other_total[1],
-        (unsigned long long)g_part.other_total[2], (unsigned long long)g_part.instanced, g_part.card_only_groups());
+        (unsigned long long)g_part.other_total[2], (unsigned long long)g_part.instanced, g_part.card_only_groups(),
+        (unsigned long long)g_part.cascade_total, (unsigned long long)g_part.cascade_dropped);
     char per[768] = {};
     size_t at = 0;
     for (uint32_t i = 0; i < g_depth_orphan_count; ++i) {

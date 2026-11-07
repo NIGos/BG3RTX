@@ -133,7 +133,22 @@ static void test_participation() {
   CHECK(q.card_only_groups() == 1);
 }
 
+// M2.2 cascade card drop: every condition is required; the publish must be this or the previous frame.
+static void test_cascade_card_drop() {
+  using hair_primary::cascade_card_drop;
+  CHECK(cascade_card_drop(true, true, true, true));
+  CHECK(!cascade_card_drop(false, true, true, true));   // key off: cards stay in the game's shadow map
+  CHECK(!cascade_card_drop(true, false, true, true));   // not a sun cascade (local atlas, prepass): untouched
+  CHECK(!cascade_card_drop(true, true, false, true));   // no published groom for the key: its cards cast
+  CHECK(!cascade_card_drop(true, true, true, false));   // no clone (library/dynamic depth): native draw
+  using hair_primary::publish_fresh;
+  CHECK(!publish_fresh(0, 10));
+  CHECK(publish_fresh(10, 10) && publish_fresh(9, 10) && publish_fresh(11, 10));
+  CHECK(!publish_fresh(8, 10) && !publish_fresh(12, 10));
+}
+
 int main() {
+  test_cascade_card_drop();
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
