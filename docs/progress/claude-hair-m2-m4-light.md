@@ -1,4 +1,4 @@
-﻿## Strand AO transmittance and fibre specular indirect (branch claude/hair-m2-m4-light, READY_FOR_LIVE, 2026-11-07)
+## Strand AO transmittance and fibre specular indirect (branch claude/hair-m2-m4-light, READY_FOR_LIVE, 2026-11-07)
 - M2.3 `rt_hair_groom_ao_t` (spec 1044, knob exp_hair_groom_ao_t, off): GI trace and RT-hit AO rays keep the
   closest strand hit with probability 1 - d_f lum(a_f^n) (rt_groom_blocks), else pass on. Before: strands opaque.
   Layer packs a_f when shadow_t or ao_t is on (restart for the layer).
