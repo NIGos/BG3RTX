@@ -111,7 +111,30 @@ static void test_period_failures() {
   CHECK(failures.refused == 0 && failures.feedback == 1);
 }
 
+// M5 participation: swapped draws only in the main view; other views and instanced hair are card-only groups.
+static void test_participation() {
+  hair_primary::Participation p;
+  CHECK(p.card_only_groups() == 0);
+  using P = hair_primary::Participation;
+  p.draw(P::kGbuffer, true, false); p.swapped(P::kGbuffer);
+  p.draw(P::kVelocity, true, false); p.swapped(P::kVelocity);
+  p.draw(P::kPrepass, true, false); p.swapped(P::kPrepass);
+  CHECK(p.card_only_groups() == 0);               // every main pass with hair has strand draws
+  p.draw(P::kGbuffer, true, false);               // a kept card draw next to a swapped one: still strands in the pass
+  CHECK(p.card_only_groups() == 0 && p.main_total[P::kGbuffer] == 2 && p.main_swapped[P::kGbuffer] == 1);
+  p.draw(P::kGbuffer, false, false);              // a portrait G-buffer draw
+  p.draw(P::kPrepass, false, false);
+  CHECK(p.card_only_groups() == 2 && p.other_total[P::kGbuffer] == 1);
+  p.draw(P::kGbuffer, true, true);                // instanced hair: counted apart, never in the main totals
+  CHECK(p.card_only_groups() == 3 && p.instanced == 1 && p.main_total[P::kGbuffer] == 2);
+  hair_primary::Participation q;
+  q.draw(P::kVelocity, true, false);              // main velocity with no swap
+  q.draw(7, true, false);                         // an unknown kind is ignored
+  CHECK(q.card_only_groups() == 1);
+}
+
 int main() {
+  test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.

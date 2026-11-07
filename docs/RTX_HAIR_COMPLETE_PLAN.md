@@ -24,9 +24,9 @@ C4 = M4.1, C5 = M1 (+ M7 content), C6 = M5, C7 = M8.
 | M0 stability (C1) | ready: strike rule, header order + A/B in hv5, strand-draw gates | 51956f86, f659b5ee, 4661e4bc (bundle12) | L1: hv5 + hair_crowd after bundle12 |
 | M1 conversion (C5) | done offline: converter 2.4-3.4x, renders 1.8x (bit-identical), caches, 80-style set, fibre reference, radial orientation, root from geometry; LOD1 transfer rejected by its gates; full rerun done: 877 pass / 295 review / 45 reject (was 745 / 346 / 126); 2-D curve tracer for curly atlases (converter 2, batch 5): representative set + HAIR_Afro_B 50 / 60 / 9 -> 69 / 47 / 3, Afro_B 0 / 38 / 4 -> 17 / 25 / 0, other styles bit-identical; next full rerun justified (~1 h, 4 jobs) | 068ff6e4 .. 71de9bc1 (claude/hair-batch-lod), claude/hair-m1-curly | none (counts offline) |
 | M2 shadows (C2) | M2.1 transmittance done offline (spec 1026, in main); M2.2 audited: cascade fallback retains card shadows, safe replacement not implemented ([analysis](RTX_HAIR_SHADOW_MAPS.md), [audit](progress/claude-hair-cascade.md)); M2.3 AO transmittance done offline (spec 1044, rt_hair_groom_ao_t; RTX_HAIR_PRIMARY 8 "M2.3") | 048d60d5 (claude/hair-shadow-transmittance); claude/hair-m2-m4-light | L2; M2.2 not ready |
-| M3 image (C3) | M3.1 tips done offline (rt_hair_groom_tips); M3.2 two-ray coverage done offline (rt_hair_groom_coverage, spec 1042: unbiased, box error -4 to -7%, 2x strand trace); M3.3 RR hair guides done offline (rr_hair_guides, spec 1043: class 5 metalness 0, fibre F0); M3.4 post depth not started | 795f6008 (claude/hair-tips), claude/hair-m3-image | L2 |
+| M3 image (C3) | M3.1 tips done offline (rt_hair_groom_tips); M3.2 two-ray coverage done offline (rt_hair_groom_coverage, spec 1042: unbiased, box error -4 to -7%, 2x strand trace); M3.3 RR hair guides done offline (rr_hair_guides, spec 1043: class 5 metalness 0, fibre F0); M3.4 post depth checked offline: no mismatch, no change | 795f6008 (claude/hair-tips), claude/hair-m3-image | L2 |
 | M4 indirect (C4) | M4.1 diffuse done offline (rt_hair_fibre_gi, in main); M4.2 specular done offline (rt_hair_fibre_spec, pass after D-RF; RTX_HAIR_PRIMARY 3 "M4.2"); M4.3, M4.4 not started | claude/hair-m2-m4-light | L3 |
-| M5 views (C6) | not started | | L3 |
+| M5 views (C6) | participation counters in the period line (claude/hair-m3m5); portrait/instanced variants blocked on a second pixel record (RTX_HAIR_PRIMARY 5f) | claude/hair-m3m5 | L3 |
 | M6 performance | not started (SER applies to ray-tracing pipelines, not to the inline queries the strand passes use: half-resolution traces and the crowd budget are the levers) | | L4 |
 | M7 content | beards and hat hair through M1's rerun; dyes need a live check | | L4 |
 | M8 qualification (C7) | not started | | L5 |
@@ -102,6 +102,8 @@ camera; PT reference on the bench fixture.
    Done offline (2026-11-07, RTX_HAIR_PRIMARY 4): class 5 guides read RT2.z as backlit, not metalness (it fed RR a
    metal before); fibre F0 0.0465, roughness >= 0.09. Hit distance stays D-RF's kNoHit on hair (not traced).
 4. Depth of field, fog and water: the post passes read the strand depth written by the G-buffer variant; check halos.
+   Checked offline (2026-11-07, RTX_HAIR_PRIMARY 5e): every post consumer reads the D24S8 after the G-buffer pass;
+   0 halo pixels in the CPU model (control with card depth kept: every card pixel). No change needed.
 Gate: edge-flicker metric on hair pixels at most the cards' in one run; no energy change; no DoF halo in PNG pairs.
 
 ### M4. Indirect light on strands. Stream A. Offline, then live.
@@ -115,6 +117,9 @@ Gate: white-fibre furnace within 3%; key-on vs key-off energy on a static camera
 ### M5. Every view. Stream A. Offline, then live (C6).
 Portraits, dialogue close-ups and other small passes; instanced hair (FS 0ca5ee93); strands in reflections and
 water hits shaded with the fibre BSDF. Gate: per-pass strand participation lines; no card-only pass left in smoke_ultra.
+2026-11-07: the participation counters are in the period line (card-only pass groups). Portrait and instanced
+variants need a second header and pixel record per view (RTX_HAIR_PRIMARY 5f); not built until a live shows which
+views draw hair.
 
 ### M6. Performance. Stream C. Offline, then live.
 Shader Execution Reordering on the strand ray queries (divergent), half-resolution GI/AO traces for strands far away,

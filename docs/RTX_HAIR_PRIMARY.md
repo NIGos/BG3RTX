@@ -403,6 +403,38 @@ Cost: two traces instead of one per strand candidate pixel (bench: ~0.4 ms at a 
 cards and the pair measurably below them in the same run.
 Key off (both keys): 215/218 requests byte-identical to main 2dcf0a88 (identical inputs); the other 3 (rr_guides.hlsl, rt/hair_primary_gbuffer.hlsl as file and manifest entry) strictly equivalent with 1042 and 1043 fixed to 0 (`tools/release_shader_equivalence.py --freeze-spec 1042 --freeze-spec 1043`, cascade control PASS); spirv-val 5/5 modules. Request delta 0.
 
+## 5e. Strand depth in post (M3.4, offline 2026-11-07: no mismatch, no change)
+Every post consumer runs after the G-buffer pass (FRAME_MAP steps 4-14): linear depth (step 4, from the D24S8),
+the camera motion-vector pass (6b), AO/SSR (8-9), fog, transparents and water (13), DoF (14). They all read the
+D24S8 as the G-buffer leaves it, or the linear depth made from it. With strands: the prepass clone writes no card
+depth, the strand G-buffer variant writes the cached hit's depth (SV_Depth = the hit projected with the pass's own
+vp, GREATER_OR_EQUAL with writes) and discards elsewhere, so a pixel's depth and colour come from the same surface:
+the strand, or what lies behind the card (skin, wall). Kept-card draws use the native fallback pipeline, which
+restores the card depth with the card colour (5b, DepthLatch).
+CPU proof (`primary.card_fixture` / `post_depth` / `post_depth_report`, CTest `hair_groom_test` test_post_depth):
+a 35-degree card at 1 m with 60 strands up to 2 mm off the sheet, a wall 0.4 m behind, the D24 quantisation and
+the linearisation. Strand path: 0 halo pixels of 1576 alpha-tested card pixels; worst depth error 0.00054 mm,
+within one D24 step (0.00117 mm). Control with the card depth kept: all 1576 card pixels carry a depth of another
+surface (1253 wall pixels up to 0.43 m off, 323 strand pixels off by the card band). DoF, fog and water therefore
+see the strand depth; no fix, no key. Live: a DoF halo check stays in the L2 PNG pairs (Dialogue3 depth of field).
+
+## 5f. Every view (M5, offline 2026-11-07: participation counters; variants blocked)
+Today strands replace cards only in the main view: hair_primary_swap requires the G-buffer depth image at the pixel
+record's size. Portraits and other small views draw the static hair FS at another size and depth image; instanced
+hair (FS 0ca5ee93, CHAR_Hair_STI_DEF) has no variant. Counted now: every draw of a hair pipeline (static or instanced,
+recorded at pipeline creation whether or not it gets a variant) by pass and view, appended to the period line
+`[hair primary] frame N: ...`: `hair draws strand/total: main G-buffer a/b, velocity c/d, prepass e/f; other views
+G-buffer g, velocity h, prepass i; instanced j; card-only pass groups k` (`hair_primary::Participation`, CTest
+`hair_groom_asset_test`). k = 0 is "no card-only pass left". Only while rt_hair_groom_primary is on; no key.
+Why no variant yet (not safe offline): the strand shaders use one header and one pixel record, sized and indexed
+for the main view and baked into every variant as specialization 1100/1101. A portrait G-buffer draw with the same
+game pipeline would read and seal the main view's entries with this frame's tag, so the main pass could reuse a
+portrait hit (wrong strand, wrong depth) and the coverage evidence would mix views. A second view needs its own header,
+pixel record and pipelines specialized to that header (2 x 16 draw slots), its own depth latch and probe evidence,
+and the portrait character's hair in the groom set (the groom follows the main prepass capture). Instanced hair needs
+one groom per instance (the groom set is keyed per draw index range). Next step: run the counters in a live to learn
+which views draw hair at all before building the second record.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.
