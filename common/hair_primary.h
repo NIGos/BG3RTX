@@ -514,19 +514,32 @@ enum class CurrentPick : uint8_t { Current, NotRecorded, AfterGbuffer, Incompati
 // pixels with that frame's tag, accepted: its strand pixels; last_card: its card pixels in the last counted frame (a
 // draw whose markers are all missing is a dropout only if it had card pixels before); traced / hit: the frame's pixel
 // entries sealed with the counted tag, and those with a strand. The first check that can explain it.
-enum class Dropout : uint8_t { None, NoMarker, NoTrace, Missed, Rejected, Count };
+enum class Dropout : uint8_t { None, NoMarker, NoTrace, Missed, Rejected, Unattributed, Count };
 constexpr uint32_t kDropoutMinCard = 64;   // fewer card pixels: too little evidence (a few pixels at the screen edge)
 inline const char* dropout_name(Dropout d) {
   static const char* const names[] = {"none", "no card marker (header tag)", "no trace (camera rebase)",
-                                      "rays missed (groom TLAS)", "rejected after the hit (owner, card band, tips)"};
+                                      "rays missed (groom TLAS)", "rejected after the hit (owner, card band, tips)",
+                                      "no strand pixel (trace counts are of another frame)"};
   return d < Dropout::Count ? names[size_t(d)] : "?";
 }
-inline Dropout dropout_reason(uint32_t card, uint32_t accepted, uint32_t last_card, uint32_t traced, uint32_t hit) {
+// traced_known: the traced/hit counts are of the judged frame's tag (the count shader counts them for its own tag only).
+inline Dropout dropout_reason(uint32_t card, uint32_t accepted, uint32_t last_card, uint32_t traced, uint32_t hit,
+                              bool traced_known = true) {
   if (card == 0) return last_card >= kDropoutMinCard ? Dropout::NoMarker : Dropout::None;
   if (card < kDropoutMinCard || uint64_t(accepted) * 10 >= card) return Dropout::None;
+  if (!traced_known) return Dropout::Unattributed;
   if (traced == 0) return Dropout::NoTrace;
   if (hit == 0) return Dropout::Missed;
   return Dropout::Rejected;
+}
+// rt_hair_primary_frame_tag (docs/RTX_HAIR_PRIMARY.md 5i): the tag a G-buffer frame's header carries. The strand
+// passes seal pixel entries and card/strand markers with it, and a sealed entry is reused without a new trace. With the
+// publish's tag two G-buffer frames can carry one tag (frame N takes this frame's publish at submit, frame N + 1 falls
+// back to the same publish: different grooms, not recorded, build after the G-buffer): N + 1 then reuses N's entries,
+// traced with N's camera, jitter and pose (holes and stale strands while anything moves) and its markers merge with N's
+// (ambiguous evidence, coverage invalidated, cards for a while). With the key: the G-buffer frame itself, unique.
+inline uint32_t gbuffer_tag(bool frame_tags, uint32_t publish_tag, uint64_t gbuffer_frame) {
+  return frame_tags ? uint32_t(gbuffer_frame) : publish_tag;
 }
 // The header's flags word (Header::flags, word 15) of packed header bytes.
 inline uint32_t header_flags(const uint8_t* bytes) {
@@ -560,6 +573,17 @@ inline bool same_grooms(const uint64_t* keys_a, const DrawSlots& slots_a, const 
       for (uint32_t j = 0; j < kMaxGrooms && !found; ++j) found = y[j] == x[k];
       if (!found) return false;
     }
+  }
+  return true;
+}
+// 5i: a submit-time upgrade from the record-time header p to this frame's publish c is safe when every key p maps to a
+// draw slot keeps that slot in c (the swapped draws were recorded with those slots) and is still published in c.
+inline bool upgrade_safe(const uint64_t* keys_p, const DrawSlots& slots_p, const uint64_t* keys_c, const DrawSlots& slots_c) {
+  for (uint32_t i = 0; i < kDrawSlots; ++i) if (slots_p.keys[i] && slots_c.keys[i] != slots_p.keys[i]) return false;
+  for (uint32_t k = 0; k < kMaxGrooms; ++k) if (keys_p[k]) {
+    bool found = false;
+    for (uint32_t j = 0; j < kMaxGrooms && !found; ++j) found = keys_c[j] == keys_p[k];
+    if (!found) return false;
   }
   return true;
 }

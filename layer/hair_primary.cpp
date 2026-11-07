@@ -142,6 +142,7 @@ HpBuf g_hdr_slots;
 struct PendingHeader {
   uint64_t cmd = 0, recording = 0, frame = 0;   // the G-buffer recording, its frame (GbFrame::frame)
   uint32_t tag = 0, n = 0, pixels = 0;          // the record-time publish
+  uint32_t seal = 0;                            // rt_hair_primary_frame_tag: the frame's own tag (0: the publish's)
   uint64_t keys[hair_primary::kMaxGrooms] = {};
   hair_primary::DrawSlots slots;
   bool open = false;
@@ -149,7 +150,7 @@ struct PendingHeader {
 PendingHeader g_pending[kHeaderSlots];
 uint32_t g_pending_next = 0;
 uint64_t g_current_picks[size_t(hair_primary::CurrentPick::Count)] = {};   // G-buffer submits per choice (period line)
-// 5h strand dropouts (period line): publishes without the build camera (and those rt_hair_primary_camera_gate recovered
+// 5h strand dropouts (period line): publishes without the build camera (and those whose build camera was recovered
 // from the build's own frame), G-buffer passes that kept cards because their header had none, and swapped draws whose
 // strand pass wrote under a tenth of their card pixels, by first explaining check, with the first four frames.
 struct DropoutStats {
@@ -166,7 +167,7 @@ bool g_order = false;                       // the last publish was staged (the 
 uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
 std::unordered_set<uint64_t> g_live_keys;   // the keys of the header the G-buffer reads (order mode: swaps need them)
 uint64_t g_order_none = 0;                  // G-buffer passes with no publish ordered before them (no swap)
-void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot = -1);
+void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot = -1, uint32_t tag = 0);
 uint64_t g_applied_cmd = 0, g_applied_recording = 0;   // the recording and tag of the last header applied
 uint32_t g_applied_tag = 0;
 // Per G-buffer frame (frame_index + 1 of its before_pass, order mode): the tag and keys of the header it applied. The
@@ -328,12 +329,23 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
         g_seen.evidence_frame = gf->frame;
       }
     }
-    // 5h: the counted G-buffer frame's swapped draws against their card pixels (same pass, same tag).
-    if (s.gframe && g_gb_frames[s.gframe % 16].frame == s.gframe) {
-      const GbFrame& f = g_gb_frames[s.gframe % 16];
-      const uint32_t* tc = s.map + hair_primary::kTagCountOffset / 4;
-      const uint32_t* cc = s.map + hair_primary::kCardCountOffset / 4;
-      const uint32_t j = s.tag - f.tag;   // the frame's tag in the count's window (s.tag, s.tag - 1, ...)
+    // 5h: the swapped draws of the G-buffer frame whose markers this count read, against their card pixels (same pass,
+    // same tag). That frame is the one the coverage evidence uses: the newest tag with markers, mapped to the unique
+    // G-buffer frame that applied it. Not s.gframe: the count runs in the scene build, which the current-frame header
+    // orders before this frame's G-buffer on the GPU, so it reads the previous G-buffer frame's markers (2026-11-08
+    // hair-flash2: every swapped draw was reported as "no card marker"). No newest tag or an ambiguous one: no verdict.
+    const uint32_t* tc_all = s.map + hair_primary::kTagCountOffset / 4;
+    const uint32_t* cc_all = s.map + hair_primary::kCardCountOffset / 4;
+    uint32_t card_totals[hair_primary::kCountTags] = {}, acc_totals[hair_primary::kCountTags] = {};
+    hair_primary::count_marker_totals(cc_all, tc_all, card_totals, acc_totals);
+    const int jn = hair_primary::newest_counted_tag(card_totals);
+    bool amb = false;
+    const GbFrame* evidence = jn < 0 ? nullptr : hair_primary::unique_frame(g_gb_frames, 16, s.tag - uint32_t(jn), amb);
+    if (evidence) {
+      const GbFrame& f = *evidence;
+      const uint32_t* tc = tc_all;
+      const uint32_t* cc = cc_all;
+      const uint32_t j = uint32_t(jn);
       for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) {
         const uint64_t key = f.draw_keys[k];
         if (!key) continue;
@@ -342,7 +354,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
         if (f.swapped_slots & (1u << k)) {
           const auto last = g_last_card.find(key);
           const auto why = hair_primary::dropout_reason(card, acc, last == g_last_card.end() ? 0u : last->second,
-                                                        g_seen.traced, g_seen.hit);
+                                                        g_seen.traced, g_seen.hit, j == 0);
           if (why != hair_primary::Dropout::None) {
             ++g_drop.draws; ++g_drop.why[size_t(why)];
             if (g_drop.firsts < 4) g_drop.first[g_drop.firsts++] = {f.frame, key, card, acc, why};
@@ -480,7 +492,8 @@ void header_image(const StagedHeader& st, uint8_t* out) {
 
 // slot >= 0 (rt_hair_groom_primary_current): the header comes from host slot `slot` of g_hdr_slots, written now with
 // `st` and possibly upgraded at vkQueueSubmit (hair_primary_submit_begin) to this frame's publish.
-void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot) {
+void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot, uint32_t tag) {
+  if (!tag) tag = st.pick.tag;   // rt_hair_primary_frame_tag: the G-buffer frame's own tag (header word 0)
   DeviceData* dd = g_dd;
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
@@ -492,13 +505,17 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot) {
   if (slot >= 0) {
     const VkDeviceSize base = VkDeviceSize(slot) * hair_primary::kHeaderAllocAll;
     header_image(st, static_cast<uint8_t*>(g_hdr_slots.map) + base);
-    const VkBufferCopy regions[4] = {{base, 0, st.n},
+    std::memcpy(static_cast<uint8_t*>(g_hdr_slots.map) + base, &tag, 4);
+    const VkBufferCopy regions[4] = {{base, 0, hair_primary::kHeaderBytes},   // full size: a submit upgrade may add grooms
                                      {base + hair_primary::kCameraOffset, hair_primary::kCameraOffset, sizeof st.cam},
                                      {base + hair_primary::kCrumbAddrOffset, hair_primary::kCrumbAddrOffset, 16},
                                      {base + hair_primary::kKeyMapOffset, hair_primary::kKeyMapOffset, sizeof st.key_map}};
     dd->vk.CmdCopyBuffer(cmd, g_hdr_slots.b, g_header.b, 4, regions);
   } else {
-    dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, st.n, st.bytes);
+    uint8_t bytes[hair_primary::kHeaderBytes];
+    std::memcpy(bytes, st.bytes, st.n);
+    std::memcpy(bytes, &tag, 4);
+    dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, st.n, bytes);
     dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);   // both cameras
     const uint64_t a[2] = {g_crumbs.map ? uint64_t(g_crumbs.addr) : 0u, 0u};
     dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCrumbAddrOffset, sizeof a, a);
@@ -511,12 +528,12 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot) {
                             VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
-  g_last_tag = st.pick.tag;
+  g_last_tag = tag;
   // The tag this recording's strand passes seal with: the count recorded later in the same recording (the scene build
   // follows the G-buffer pass) counts that frame's entries, not a newer publish applied by another recording.
   g_applied_cmd = uint64_t(cmd);
   g_applied_recording = cmd_recording(cmd);
-  g_applied_tag = st.pick.tag;
+  g_applied_tag = tag;
   g_last_n = st.pixels;
   std::memcpy(g_last_keys, st.keys, sizeof g_last_keys);
   std::memcpy(g_last_lods, st.lods, sizeof g_last_lods);
@@ -542,6 +559,8 @@ void observe_depth(uint64_t image, uint64_t now) {
   g_last_tag = 0;
   g_pixels_fresh = true;
   g_transmit.clear();
+  g_last_card.clear();                       // 5i (review 4): no dropout verdict against another scene's draws
+  for (CountSlot& c : g_cnt) c.valid = false;   // counts of the old pixel record are no evidence
   log("[hair primary] level load (first or new G-buffer images): strand swaps paused for %llu frames, groom state reset",
       (unsigned long long)hair_primary::kLoadQuietFrames);
 }
@@ -968,9 +987,11 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
     if (c)
       for (size_t k = 0; k < cmds.size() && b < 0; ++k)
         if (uint64_t(cmds[k]) == c->pick.cmd && cmd_recording(cmds[k]) == c->recording) b = int(k);
-    bool compatible = c && c->n == p.n && c->pixels == p.pixels &&
-                      hair_primary::same_grooms(p.keys, p.slots, c->keys, c->slots);
-    if (compatible && cfg_int("rt_hair_primary_camera_gate", 0) != 0 && !hair_primary::header_usable(c->bytes)) {
+    // 5i (review 1): the build ran before this G-buffer, so the record-time header would trace its TLAS over BLASes and
+    // points this build already refit in place for the new pose and camera. Take this frame's publish whenever every
+    // key the recording swapped keeps its draw slot (more grooms are fine: the header copy is full size).
+    bool compatible = c && c->pixels == p.pixels && hair_primary::upgrade_safe(p.keys, p.slots, c->keys, c->slots);
+    if (compatible && !hair_primary::header_usable(c->bytes)) {
       compatible = false;   // keep the record-time header (it has its camera: before_pass gated it)
       ++g_drop.upgrades_gated;
     }
@@ -979,8 +1000,14 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
     const uint32_t slot = uint32_t(&p - g_pending);
     GbFrame& gf = g_gb_frames[p.frame % 16];
     if (pick == hair_primary::CurrentPick::Current) {
-      header_image(*c, static_cast<uint8_t*>(g_hdr_slots.map) + VkDeviceSize(slot) * hair_primary::kHeaderAllocAll);
-      if (gf.frame == p.frame) gf.tag = c->pick.tag;
+      uint8_t* image = static_cast<uint8_t*>(g_hdr_slots.map) + VkDeviceSize(slot) * hair_primary::kHeaderAllocAll;
+      header_image(*c, image);
+      if (p.seal) std::memcpy(image, &p.seal, 4);   // rt_hair_primary_frame_tag: the frame keeps its own tag
+      if (gf.frame == p.frame) {
+        gf.tag = p.seal ? p.seal : c->pick.tag;
+        std::memcpy(gf.keys, c->keys, sizeof gf.keys);             // the rows the G-buffer now reads (count attribution)
+        std::memcpy(gf.draw_keys, c->slots.keys, sizeof gf.draw_keys);
+      }
     }
     if (gf.frame == p.frame)   // the record-time check of a tag applied by two G-buffer frames, with the final tag
       for (const GbFrame& older : g_gb_frames) if (older.frame && older.frame != gf.frame && older.tag == gf.tag)
@@ -1063,14 +1090,14 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
   if (g_applied_frame == frame) return;   // once per frame: every G-buffer pass of the frame reads one header
   g_applied_frame = frame;
   hair_primary::Staged picks[kStaged];
-  const bool gate = cfg_int("rt_hair_primary_camera_gate", 0) != 0;
+  const bool frame_tags = cfg_int("rt_hair_primary_frame_tag", 0) != 0;
   for (int i = 0; i < kStaged; ++i) {
     const auto& st = g_staged[i];
     const bool same_recording = st.pick.cmd == uint64_t(cmd) && st.recording == cmd_recording(cmd) &&
                                 bvh_rec_state(st.pick.rec) == 0;
     picks[i] = st.submitted || same_recording ? st.pick : hair_primary::Staged{};
-    // rt_hair_primary_camera_gate: a header without its build camera discards every strand fragment (hp_rebase).
-    if (picks[i].tag && gate && !hair_primary::header_usable(st.bytes)) { picks[i] = hair_primary::Staged{}; ++g_drop.gated; }
+    // A header without its build camera discards every strand fragment (hp_rebase): never applied (cards that frame).
+    if (picks[i].tag && !hair_primary::header_usable(st.bytes)) { picks[i] = hair_primary::Staged{}; ++g_drop.gated; }
   }
   int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
   // This frame's or the previous frame's publish (the strand shaders rebase it to this camera, hp_rebase); an older one
@@ -1094,16 +1121,18 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
     p = PendingHeader{};
     p.cmd = uint64_t(cmd); p.recording = cmd_recording(cmd); p.frame = frame;
     p.tag = g_staged[i].pick.tag; p.n = g_staged[i].n; p.pixels = g_staged[i].pixels;
+    p.seal = frame_tags ? uint32_t(frame) : 0u;
     std::memcpy(p.keys, g_staged[i].keys, sizeof p.keys);
     p.slots = g_staged[i].slots;
     p.open = true;
   }
-  apply_header(cmd, g_staged[i], slot);
+  const uint32_t seal = hair_primary::gbuffer_tag(frame_tags, g_staged[i].pick.tag, frame);
+  apply_header(cmd, g_staged[i], slot, seal);
   GbFrame& gf = g_gb_frames[frame % 16];
   gf.frame = frame;
   gf.swapped_slots = 0;
 
-  gf.tag = g_staged[i].pick.tag;
+  gf.tag = seal;
   // A tag applied by two G-buffer frames: with a submit-time header the final tag is known only then (the check runs
   // there, hair_primary_submit_begin).
   if (slot < 0)
@@ -1332,7 +1361,18 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_pixels_fresh = false;
   }
   hair_primary::Header h{};
-  h.tag = uint32_t(now + 1);
+  StagedHeader st;
+  // The build's own frame and camera (5i, review 2/3): rt_after_capture stored them under the frame_index of the build's
+  // start; a present on the queue thread may have advanced frame_index since (a re-read gave a header without camera,
+  // a tag shared with the next build and an off-by-one previous camera). The tag, the build camera and the previous
+  // publish's link all use that frame. No camera at all (unreadable UBO): kFlagCamera stays off and the header is
+  // never applied (before_pass, hair_primary_submit_begin): cards that frame, never a frame without hair.
+  uint64_t build_frame = 0;
+  const bool cam_ok = rt_current_build_camera(st.cam, &build_frame);
+  if (!cam_ok) ++g_drop.no_camera;
+  else if (build_frame != now) ++g_drop.recovered;
+  const uint64_t pub = cam_ok ? build_frame : now;
+  h.tag = uint32_t(pub + 1);
   h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
   if (cfg_int("rt_hair_groom_coverage", 0) != 0) h.flags |= hair_primary::kFlagCoverage;   // M3.2, live off-switch
   if (cfg_int("rt_hair_macro_normal", 0) != 0) h.flags |= hair_primary::kFlagMacroNormal;   // 5g, live once compiled in
@@ -1344,29 +1384,16 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   h.pool_bytes = uint32_t((std::min)(pool_bytes, uint64_t(UINT32_MAX)));
   h.pixels = g_pixels.addr;
   std::memcpy(h.viewport, viewport, sizeof h.viewport);
-  StagedHeader st;
-  // The build camera: the origin of this publish's camera-relative groom points (the strand passes of the next frame
-  // rebase their rays to their own camera). Without it the strand shaders keep no strand (fail closed). Called inside
-  // the scene build: rt_after_capture holds the scene lock (rt_build_camera would lock it again).
-  bool cam_ok = rt_this_build_camera(now, st.cam);
-  if (!cam_ok) {
-    ++g_drop.no_camera;
-    // rt_hair_primary_camera_gate: the build's own camera when a present advanced frame_index during the build (the
-    // groom points are relative to it whatever frame_index reads now).
-    uint64_t build_frame = 0;
-    if (cfg_int("rt_hair_primary_camera_gate", 0) != 0 && rt_current_build_camera(st.cam, &build_frame)) {
-      cam_ok = true;
-      ++g_drop.recovered;
-    }
-  }
+  // The build camera: the origin of this publish's camera-relative groom points (the strand passes rebase their rays to
+  // their own camera). Called inside the scene build: rt_after_capture holds the scene lock.
   if (cam_ok && std::isfinite(st.cam[0]) && std::isfinite(st.cam[1]) && std::isfinite(st.cam[2]))
     h.flags |= hair_primary::kFlagCamera;
   // The rows' previous points are the last update's: the publish of the previous frame, with its build camera.
-  if (g_last_pub_camera_frame && g_last_pub_camera_frame + 1 == now) {
+  if (g_last_pub_camera_frame && g_last_pub_camera_frame + 1 == pub) {
     std::memcpy(st.cam + 4, g_last_pub_camera, sizeof g_last_pub_camera);
     h.flags |= hair_primary::kFlagPrevCamera;
   }
-  g_last_pub_camera_frame = (h.flags & hair_primary::kFlagCamera) ? now : 0;
+  g_last_pub_camera_frame = (h.flags & hair_primary::kFlagCamera) ? pub : 0;
   std::memcpy(g_last_pub_camera, st.cam, sizeof g_last_pub_camera);
   g_pub_keys.clear();   // M2.2: the groom set this publish puts in the RT scene
   for (uint32_t k = 0; k < count; ++k) if (keys[k]) g_pub_keys.insert(keys[k]);
@@ -1464,12 +1491,13 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       }
       using hair_primary::Dropout;
       log_stats("[hair primary] dropouts (last %u frames): %llu swapped G-buffer draws wrote under a tenth of their card "
-          "pixels (no card marker %llu, no trace %llu, rays missed %llu, rejected after the hit %llu); first (G-buffer frame:"
+          "pixels (no card marker %llu, no trace %llu, rays missed %llu, rejected after the hit %llu, unattributed %llu); first (G-buffer frame:"
           "key prefix:card/strand pixels:check):%s; publishes without the build camera %llu (recovered %llu); camera gate: "
           "headers refused %llu, submit upgrades kept back %llu",
           stats_period(300), (unsigned long long)g_drop.draws, (unsigned long long)g_drop.why[size_t(Dropout::NoMarker)],
           (unsigned long long)g_drop.why[size_t(Dropout::NoTrace)], (unsigned long long)g_drop.why[size_t(Dropout::Missed)],
-          (unsigned long long)g_drop.why[size_t(Dropout::Rejected)], g_drop.firsts ? first : " none",
+          (unsigned long long)g_drop.why[size_t(Dropout::Rejected)], (unsigned long long)g_drop.why[size_t(Dropout::Unattributed)],
+          g_drop.firsts ? first : " none",
           (unsigned long long)g_drop.no_camera, (unsigned long long)g_drop.recovered, (unsigned long long)g_drop.gated,
           (unsigned long long)g_drop.upgrades_gated);
       g_drop = DropoutStats{};

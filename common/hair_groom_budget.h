@@ -40,6 +40,17 @@ inline bool plan_evictions(std::vector<Resident> residents, uint64_t used, uint6
   return false;
 }
 
+// rt_hair_groom_lod_keep (docs/RTX_HAIR_PRIMARY.md 5i): the LOD a groom slot uses this frame. want: its screen-size
+// (or crowd) LOD; built: the LOD its BLAS holds (-1: none); want_ready / built_ready: their arrays resident in the pool.
+// Without the key a wanted LOD still uploading drops the slot (no groom that frame: its draws go back to cards and its
+// next publishes differ, the flash while hair or camera move across a LOD threshold). With it the built LOD stays until
+// the wanted one is resident. -1: no groom this frame.
+inline int lod_this_frame(int want, int built, bool want_ready, bool built_ready, bool keep) {
+  if (want_ready) return want;
+  if (keep && built >= 0 && built != want && built_ready) return built;
+  return -1;
+}
+
 // Crowd plan (rt_hair_groom_crowd_ksegments, docs/RTX_HAIR_PRIMARY.md increment 5): the groom instances of a frame
 // share a budget of LSS segments (refit time and BLAS memory scale with segments; trace time scales with the hair
 // pixels/rays and only logarithmically with segments). Largest on screen first, each at its screen-size LOD or the

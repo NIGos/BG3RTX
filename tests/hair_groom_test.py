@@ -916,7 +916,7 @@ def test_publish_lock():
     # read there killed the game at the first publish (hv6 2026-11-04, exit 0xFFFF7001, no crash log).
     src = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
     check("hair_primary.cpp reads the build camera without the scene lock",
-          "rt_this_build_camera(" in src and "rt_build_camera(" not in src)
+          ("rt_this_build_camera(" in src or "rt_current_build_camera(" in src) and "rt_build_camera(" not in src)
 
 
 def test_groom_soup_bounds():

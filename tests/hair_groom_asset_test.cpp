@@ -246,6 +246,79 @@ static void test_dropout() {
   CHECK(f.swapped_slots == 0);
 }
 
+// 5i: the flash while anything moves. Frame N's G-buffer takes publish T at submit (current); frame N + 1 falls back to
+// the same publish (different grooms / not recorded / build after the G-buffer). With the publish's tag both seal with
+// T: N + 1 reuses N's entries (e.w == seal(e.xyz, T): no new trace, N's camera, jitter and pose) and the markers of both
+// frames merge (unique_frame ambiguous: coverage invalidated, cards). With frame tags each frame has its own.
+static void test_frame_tags() {
+  using namespace hair_primary;
+  const uint32_t T = 1001;
+  const uint64_t n = 1001, n1 = 1002;
+  GbFrame frames[16];
+  auto apply = [&](bool frame_tags, uint64_t frame, uint32_t publish) {
+    GbFrame& f = frames[frame % 16];
+    f = GbFrame{};
+    f.frame = frame;
+    f.tag = gbuffer_tag(frame_tags, publish, frame);
+    return f.tag;
+  };
+  // publish tags: both frames seal with T -> the second frame's pixel entries are reused, the evidence is ambiguous
+  CHECK(apply(false, n, T) == apply(false, n1, T));
+  bool ambiguous = false;
+  CHECK(unique_frame(frames, 16, T, ambiguous) == nullptr && ambiguous);
+  // frame tags: distinct seals (a sealed entry of frame N never matches N + 1), each frame identified
+  for (auto& f : frames) f = GbFrame{};
+  const uint32_t a = apply(true, n, T), b = apply(true, n1, T);
+  CHECK(a != b);
+  const GbFrame* fa = unique_frame(frames, 16, a, ambiguous);
+  CHECK(fa && !ambiguous && fa->frame == n);
+  const GbFrame* fb = unique_frame(frames, 16, b, ambiguous);
+  CHECK(fb && !ambiguous && fb->frame == n1);
+  // The count of the scene build runs before this frame's G-buffer on the GPU (current header): it reads the previous
+  // G-buffer frame's markers. The dropout counter judges that frame (newest tag with markers), not the next one.
+  uint32_t cards[4 * 64] = {}, accepted[4 * 64] = {}, ct[4], at[4];
+  cards[1 * 64 + 2] = 5000; accepted[1 * 64 + 2] = 4800;   // tag (count tag - 1): frame N's slot 2, well covered
+  count_marker_totals(cards, accepted, ct, at);
+  CHECK(newest_counted_tag(ct) == 1);
+  CHECK(dropout_reason(cards[1 * 64 + 2], accepted[1 * 64 + 2], 5000, 0, 0, false) == Dropout::None);
+  CHECK(dropout_reason(cards[0 * 64 + 2], accepted[0 * 64 + 2], 5000, 0, 0, true) == Dropout::NoMarker);   // the old misread
+  CHECK(dropout_reason(5000, 0, 5000, 0, 0, false) == Dropout::Unattributed);
+}
+
+// 5i (review 1): the submit-time upgrade. The build of this frame runs before the G-buffer (that is when the upgrade is
+// considered): it refits the groom BLASes and rewrites the points in place for the new pose, relative to the new camera.
+// Keeping the record-time header then traces the previous TLAS over them, rebased with the previous camera (the strands
+// shift by the camera's and the character's motion: misses, card-band rejections, hair gone). So the upgrade is taken
+// whenever the recorded draws stay valid: their keys keep their slots; added grooms (a new character, a LOD swap that
+// briefly drops a key elsewhere) no longer block it.
+static void test_upgrade_safe() {
+  using namespace hair_primary;
+  uint64_t p[kMaxGrooms] = {11, 22}, more[kMaxGrooms] = {22, 11, 33}, fewer[kMaxGrooms] = {11};
+  DrawSlots sp, sc;
+  sp.publish(p, 2);
+  sc = sp;
+  sc.publish(more, 3);   // 33 takes a free slot, 11 and 22 keep theirs
+  CHECK(!same_grooms(p, sp, more, sc));   // the old rule kept the stale header here
+  CHECK(upgrade_safe(p, sp, more, sc));
+  DrawSlots sf = sp;
+  sf.publish(fewer, 1);   // 22 dropped: its swapped draw would find no strands in the new TLAS
+  CHECK(!upgrade_safe(p, sp, fewer, sf));
+  DrawSlots moved;
+  uint64_t only22[kMaxGrooms] = {22};
+  moved.publish(only22, 1);   // 22 in slot 0 instead of its recorded slot
+  CHECK(!upgrade_safe(p, sp, more, moved));
+}
+
+// 5i: a LOD switch to a LOD still uploading (groom_lod stages it and returns nothing for 2-3 frames).
+static void test_lod_keep() {
+  using bg3::hair_groom::lod_this_frame;
+  CHECK(lod_this_frame(1, 0, true, true, false) == 1);     // resident: switch
+  CHECK(lod_this_frame(1, 0, false, true, false) == -1);   // without the key: the groom leaves the scene (cards)
+  CHECK(lod_this_frame(1, 0, false, true, true) == 0);     // with it: keep LOD 0 until LOD 1 is resident
+  CHECK(lod_this_frame(1, -1, false, false, true) == -1);  // a new slot has nothing to keep
+  CHECK(lod_this_frame(0, 0, false, false, true) == -1);   // its own LOD lost: nothing to keep
+}
+
 static void test_current_pick() {
   using namespace hair_primary;
   // One submit [prepass + build, G-buffer]: the build runs first -> this frame's publish.
@@ -355,7 +428,7 @@ int main() {
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
-  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout();
+  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
