@@ -458,6 +458,28 @@ and the portrait character's hair in the groom set (the groom follows the main p
 one groom per instance (the groom set is keyed per draw index range). Next step: run the counters in a live to learn
 which views draw hair at all before building the second record.
 
+## 5g. Grain attribution (offline 2026-11-07, branch claude/hair-grain: design, no code change)
+Tool: `tools/hair_groom/grain_stages.py <trace dirs>` (per-stage HF and structure-tensor coherence over the class-5
+mask of each trace). Data: the 2026-11-07 Test Dialogue1 A/B traces (strands a, f, fp0, fp2; cards e = rt_hair_groom 0;
+a and e have the same lit hair mean 0.4165/0.4169, the matched pair).
+- Per-frame HF energy: strands never exceed cards. Ratio a/e: albedo 0.99, roughness 0.92, tangent 0.95, lit 0.91
+  (mask) / 0.65 (hull), RR output 0.78, final 0.96. Demodulated shading bands (fine to coarse) a 0.48/0.11/0.08/0.06
+  vs e 0.49/0.11/0.08/0.07. Motion vectors vary 2.1x more per pixel (0.14 vs 0.066 px) but are clean: outliers
+  > 0.5 px from the 9x9 median 1.1-1.2% on both. The previews' pixel grain is therefore not where strands differ.
+- Line structure (coherence) is where they differ: albedo 0.313-0.333 vs 0.348 (strand spread 0.021), deferred
+  lighting 0.277-0.286 vs 0.320 (spread 0.009: gap 4x the spread), RR output 0.753-0.796 vs 0.842, final 0.749-0.792
+  vs 0.839. The loss doubles in the lighting, whose strand-only input is the fibre normal (gbuffer.hlsl:248, :294):
+  N = V made perpendicular to T, so N.V = 1 on every strand pixel (RR specular guide, env_brdf(N.V), HF 0.11 vs 0.31,
+  mean 0.047 vs 0.058). The game's hair diffuse `bg3_hair_diff` weights wrap(N.L) 0.67; ambient, probes and the RR
+  normal guide use N too; the Marschner lobes (`bg3_hair_spec`) use only T. A view-facing N removes the
+  clump-aligned shading the card normal gives: the hair reads as speckle instead of strands.
+- Design (not implemented: a shading-model change needs the settings/spec-constant plumbing and a live A/B; RT0 in the
+  dumps is too coarse to prove it offline): `rt_hair_macro_normal` (spec constant, off): RT0 = the card fragment's
+  interpolated view-space normal `card_n` (gbuffer.hlsl:154, the hair volume normal the game's wrap diffuse was made
+  for) instead of the fibre normal; RT3 tangent unchanged, so R/TT/TRT stay per fibre. Live gate (Test Dialogue1, one
+  run, toggle on/off/on): lit/compose coherence on strand pixels rises from ~0.28 toward the cards' 0.32 with the
+  hair mean within the a/f repeat noise of the same pose; RR specular-guide HF rises from 0.11 toward 0.31.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.
