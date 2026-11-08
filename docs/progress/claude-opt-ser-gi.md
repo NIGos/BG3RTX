@@ -29,5 +29,5 @@
 - Hint ON, fixed (2026-11-08, claude/opt-ser-gi dfa47ce6): reorder at uniform control flow (both rays traced first);
   validation layers (GPU-assisted + sync) clean, no device loss, output identical to hint off. 3072^2 vs compute on
   an idle GPU: lit fixture +0.31 ms (hint off) / +0.64 ms (hint on, noisy); divergent stripe fixture +0.27 ms
-  (hint off) / +0.015 ms [-0.064, +0.047] (hint on). The hint only recovers the RT-pipeline port cost: PARKED.
+  (hint off) / +0.015 ms [-0.064, +0.047] (hint on). The hint only recovers the RT-pipeline port cost. NOT EVALUATED ON GAME DATA: the fixtures have one material and no sun or far-field, so they cannot show a game gain. Next step: replay packs from the game (camp, city or dialogue), then SER on the production far+sun variant. Capture deferred by the user on 2026-11-08.
   Reopen only with a game-representative divergent fixture (replay pack) showing a gain.
