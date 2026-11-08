@@ -37,7 +37,11 @@ int main(int argc,char** argv){
     check(effects=="S"&&pb.dirty()>0);
     check(pb.state_json().find("Settings not saved. Your edits are kept.")!=std::string::npos);
     effects.clear(); fail_save=false;
+    // Selecting ray-traced GI raises Ray-tracing detail at once; turning that back off leaves a dependency the
+    // Play review must present before anything is written.
     pb.handle("{\"type\":\"set\",\"id\":\"gi\",\"value\":2}");
+    check(ps.values[st::knob_index("rt_geometry")]>=1);
+    pb.handle("{\"type\":\"set\",\"id\":\"rt_geometry\",\"value\":0}");
     pb.handle("{\"type\":\"play\"}"); check(effects.empty());
     pb.handle("{\"type\":\"cancel\"}"); pb.handle("{\"type\":\"confirm\"}");
     check(effects.empty()&&pb.dirty()>0);
@@ -76,6 +80,35 @@ int main(int argc,char** argv){
     kb.handle(R"({"type":"resetShortcut","id":"hotkey_dlss5"})");check(ks.shortcuts[1]=="Ctrl+Shift+F8");
     kb.handle(R"({"type":"discard"})");check(ks.shortcuts[1]=="Alt+N"&&kb.dirty()==0);
     kb.handle(R"({"type":"shortcut","id":"hotkey_rt_toggle","value":"None"})");check(ks.shortcuts[0]=="None");
+  }
+  // One option turns on what it needs: Strand hair on screen from all-off (Ray-tracing detail full) raises
+  // Strand hair in RT lighting and Hair shadows; the saved file has the whole user-tested strand set.
+  {
+    launcher::State hs;hs.caps=~0u;hs.base=st::code_defaults();hs.base["dev"]="1";hs.preset=st::kLow;
+    hs.values.assign(st::kKnobCount,0);hs.values[st::knob_index("rt_geometry")]=2;
+    std::string file;launcher::web::Hooks hh;
+    hh.save=[&](launcher::State& c,const st::KVList&,std::string&){file=st::render_user_ini("",c.preset,c.values);return true;};
+    launcher::web::Bridge hb(hs,hh);
+    hb.handle(R"({"type":"experimental","value":true})");
+    const int primary=st::knob_index("exp_hair_groom_primary"),groom=st::knob_index("exp_hair_groom"),
+              shadows=st::knob_index("exp_native_coverage");
+    hb.handle(R"({"type":"set","id":"exp_hair_groom_primary","value":1})");
+    check(hs.values[primary]==1&&hs.values[groom]==1&&hs.values[shadows]==1);
+    check(hb.state_json().find("Also turned on: ")!=std::string::npos);
+    hb.handle(R"({"type":"save","policy":"enable"})");hb.handle(R"({"type":"confirm"})");
+    check(hb.dirty()==0&&hs.values[primary]==1&&hs.values[groom]==1&&hs.values[shadows]==1);
+    auto saved=st::parse_ini(file);
+    for(const auto& kv:st::find_knob("exp_hair_groom_primary")->choices[1].kv)if(kv.key)check(st::lookup(saved,kv.key)==kv.value);
+    check(st::lookup(saved,"rt_native_hair")=="1"&&st::lookup(saved,"rt_native_scalp")=="1");
+    // A need that cannot be met (no linear swept spheres for Strand hair in RT lighting): today's behaviour, nothing raised.
+    launcher::State ns=hs;ns.caps=~0u&~st::kCapLinearSweptSpheres;ns.values.assign(st::kKnobCount,0);ns.values[st::knob_index("rt_geometry")]=2;
+    launcher::web::Bridge nb(ns,hh);nb.handle(R"({"type":"experimental","value":true})");
+    nb.handle(R"({"type":"set","id":"exp_hair_fibre","value":1})");
+    check(ns.values[st::knob_index("exp_hair_fibre")]==1&&ns.values[primary]==0&&ns.values[groom]==0&&ns.values[shadows]==0);
+    // Turning a prerequisite off still lowers its dependents on save.
+    hb.handle(R"({"type":"set","id":"exp_native_coverage","value":0})");hb.handle(R"({"type":"save"})");
+    hb.handle(R"({"type":"confirm"})");
+    check(hs.values[shadows]==0&&hs.values[groom]==0&&hs.values[primary]==0);
   }
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
   {
@@ -221,7 +254,9 @@ int main(int argc,char** argv){
   int writes=0;launcher::web::Hooks dh;dh.save=[&](launcher::State&,const st::KVList&,std::string&){++writes;return true;};
   launcher::web::Bridge db(dependencies,dh);
   db.handle("{\"type\":\"set\",\"id\":\"frame_generation\",\"value\":1}");
-  auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==0);check(preview.find("NVIDIA Reflex: Off \xE2\x86\x92 On")!=std::string::npos);check(dependencies.values[st::knob_index("reflex")]==0);
+  // The selection raises Reflex at once and says so; Save still waits for the confirmation.
+  check(dependencies.values[st::knob_index("reflex")]==1);check(db.state_json().find("Also turned on: NVIDIA Reflex")!=std::string::npos);
+  auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==0);
   db.handle("{\"type\":\"confirm\"}");check(writes==1);check(dependencies.values[st::knob_index("reflex")]==1);
   db.handle("{\"type\":\"set\",\"id\":\"local_shadows\",\"value\":3}");
   int hidden_choice=st::knob_index("local_shadows");if(hidden_choice>=0)check(dependencies.values[hidden_choice]!=3);

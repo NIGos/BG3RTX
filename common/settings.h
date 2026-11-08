@@ -1471,6 +1471,35 @@ inline bool choice_available(const Knob& k, int c, bool dev, bool experimental, 
          (experimental || !choice_requires_experimental(k,c));
 }
 
+// Selecting choice `c` of knob `i` raises every knob it needs (recursively) to the needed choice, so one option
+// turns on what it requires. All or nothing: false (values unchanged) when a need cannot be met (custom value,
+// hidden, experimental without the opt-in, or unsupported hardware); the card then shows the unmet need as before.
+// `raised` receives the knobs it changed. Lowering when a prerequisite is turned off stays with enforce_needs.
+inline bool raise_needs(std::vector<int>& values, int i, int c, bool dev, bool experimental, unsigned caps,
+                        bool opt_in, std::vector<int>* raised = nullptr) {
+  std::vector<int> v = values, changed;
+  std::vector<std::pair<int, int>> todo{{i, c}};
+  while (!todo.empty()) {
+    auto [ki, kc] = todo.back();
+    todo.pop_back();
+    const Knob& k = kKnobs[ki];
+    if (k.kind != Kind::Choice || kc <= 0 || kc >= choice_count(k)) continue;
+    for (const Need& n : k.choices[kc].need) {
+      if (!n.knob) continue;
+      const int j = knob_index(n.knob);
+      if (j < 0 || v[j] >= n.min_choice) continue;
+      if (v[j] < 0 || !choice_available(kKnobs[j], n.min_choice, dev, experimental, caps, opt_in)) return false;
+      v[j] = n.min_choice;
+      if (std::find(changed.begin(), changed.end(), j) == changed.end()) changed.push_back(j);
+      if (changed.size() > size_t(kKnobCount)) return false;
+      todo.emplace_back(j, n.min_choice);
+    }
+  }
+  values = std::move(v);
+  if (raised) *raised = std::move(changed);
+  return true;
+}
+
 // Pass these values to render_user_ini to preserve hidden/custom keys during an unrelated save.
 inline std::vector<int> presentation_values(const Map& effective, bool dev, bool opt_in = false) {
   auto values = knob_values(effective);

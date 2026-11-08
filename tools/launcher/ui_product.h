@@ -316,7 +316,11 @@ static void command(int id,int code,HWND source) {
     int i=id-KNOB;const auto& k=st::kKnobs[i];int row=int(SendMessageW(source,CB_GETCURSEL,0,0));int c=int(SendMessageW(source,CB_GETITEMDATA,row,0));
     if(c<0)return;
     if(!st::choice_available(k,c,g.dev,g.experimental,g.st.caps,opt_in())){status(L"This option is unavailable. Check its requirements in Help & support.");int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;}
-    g.ab_selection.touch(k,c,opt_in());g.st.values[i]=c;int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;
+    g.ab_selection.touch(k,c,opt_in());g.st.values[i]=c;
+    // Same policy as the web bridge: the selection turns on what it needs (all or nothing).
+    std::vector<int> raised;if(st::raise_needs(g.st.values,i,c,g.dev,g.experimental,g.st.caps,opt_in(),&raised)&&!raised.empty()){
+      std::wstring names;for(int j:raised){if(!names.empty())names+=L", ";names+=widen(st::kKnobs[j].label);}status(L"Also turned on: "+names+L". Save to apply.");}
+    int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;
   }
   if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=(k.dev_only?widen(k.desc)+L"\n\n":L"")+widen(k.details)+L"\n\n"+widen(std::string(k.cost.provenance)=="No qualified measurement available."?"":k.cost.provenance)+L"\n\nApplies: "+widen(st::apply_label(st::transition_apply(k,id-DETAILS<int(g.saved.size())?g.saved[id-DETAILS]:-1,g.st.values[id-DETAILS]),!k.dev_only))+L"\n"+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
   if(id==ADAPTER&&code==CBN_SELCHANGE){
