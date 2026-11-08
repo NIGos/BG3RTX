@@ -23,6 +23,7 @@
 #include <mutex>
 #include "../common/native_hair_origin.h"
 #include "../common/hair_cost_epoch.h"
+#include "../common/hair_fibre_timing.h"
 #include "../common/shader_variant.h"
 #include "../common/pipeline_async.h"
 #include "../common/pipeline_specs.h"
@@ -2966,6 +2967,65 @@ void ls_timing_collect() {
   j.clear();
 }
 
+// rt_hair_fibre / rt_hair_fibre_spec: the two strand-pixel passes alone (common/hair_fibre_timing.h), 4 timestamps per
+// frame. They run inside the ls / rf timers, so their ms are part of those lines too (never add them twice).
+VkQueryPool g_hf_queries = VK_NULL_HANDLE;
+uint32_t g_hf_slot = 0;
+uint32_t g_hf_ran[kRing] = {};   // bit p: pass p wrote both edges in that slot
+uint64_t g_hf_hair_epoch[kRing] = {};
+bg3::hair_fibre_timing::Window g_hf_win;
+
+void hair_fibre_timestamp(VkCommandBuffer cmd, uint32_t pass, uint32_t edge, bool ran = true) {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
+  if (!g_hf_queries) {
+    if (edge != 0) return;
+    VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    qi.queryCount = kRing * 4;
+    if (host->vk->CreateQueryPool(host->device, &qi, nullptr, &g_hf_queries) != VK_SUCCESS) return;
+  }
+  const uint32_t q = g_hf_slot * 4 + pass * 2 + edge;
+  host->vk->CmdResetQueryPool(cmd, g_hf_queries, q, 1);
+  host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_hf_queries, q);
+  if (edge == 0 && (g_hf_ran[g_hf_slot] & 3u) == 0u) g_hf_hair_epoch[g_hf_slot] = g_hair_timing_epoch.generation;
+  if (edge == 1 && ran) g_hf_ran[g_hf_slot] |= 1u << pass;
+}
+
+// After both passes' places in run_post: the next frame writes the next slot (only a slot with a sample advances).
+void hair_fibre_frame_end() {
+  if (g_hf_ran[g_hf_slot] == 0u) return;
+  g_hf_slot = (g_hf_slot + 1) % kRing;
+  g_hf_ran[g_hf_slot] = 0u;   // the slot about to be reused: read by hair_fibre_timing_collect long ago, or dropped
+}
+
+void hair_fibre_timing_collect() {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
+  if (!g_hf_queries) return;
+  static uint64_t s_generation = 0;   // a hair configuration change starts both windows over (hair_timing_update)
+  if (s_generation != g_hair_timing_epoch.generation) { s_generation = g_hair_timing_epoch.generation; g_hf_win.clear(); }
+  const uint32_t old = (g_hf_slot + 1) % kRing;
+  const uint32_t ran = g_hf_ran[old];
+  if (!ran) return;
+  if (!g_hair_timing_epoch.accepts(g_hf_hair_epoch[old])) { g_hf_ran[old] = 0u; return; }
+  uint64_t t[4] = {};
+  for (uint32_t p = 0; p < 2; ++p) {
+    if (!(ran & (1u << p))) continue;
+    if (host->vk->GetQueryPoolResults(host->device, g_hf_queries, old * 4 + p * 2, 2, 2 * sizeof(uint64_t), t + p * 2,
+                                      sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
+      return;   // not ready yet: retried next frame
+  }
+  g_hf_ran[old] = 0u;
+  g_hf_win.add(t, ran, g_ns_per_tick);
+  static const char* const kWhat[2] = {"fibre pass (sun + local lights, after D-LS; inside the ls: line)",
+                                       "spec pass (fibre R lobe indirect, after D-RF; inside the rf: line)"};
+  for (uint32_t p = 0; p < 2; ++p) {
+    bg3::hair_fibre_timing::Summary sm;
+    if (g_hf_win.take(p, stats_period(300), sm))
+      log_stats("[hair fibre] %s GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu dispatched frames)", kWhat[p], sm.median,
+                sm.p10, sm.p90, sm.frames);
+  }
+}
+
 // The frame's TLAS if ray-traced shadows or AO are on and the host built one
 // this frame or the previous one: the game records the G-buffer of a frame
 // before presenting the previous one and the lighting after, so the build is
@@ -3464,6 +3524,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   // The tiled lighting just wrote diffuse/specular from compute.
   memory_barrier(cmd, kCS, kCS);
   timestamp(cmd, 2);
+  hair_fibre_timing_collect();
   // D-LS first: the GI composite keeps diffuse + specular as next frame's bounce source.
   // (the sun set first: none free means no D-LS this frame, before any transition)
   if (host->cfg_int("dev", 0) && s.ls && g_ls_layout) {
@@ -3588,7 +3649,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (local_applied && !s.pan && host->cfg_int("rt_hair_fibre", 0) && host->cfg_int("rt_hair_groom_primary", 0) &&
         refresh(g_hair_fibre, "gi/hair_fibre.hlsl", g_ls_layout)) {
       memory_barrier(cmd, kCS, kCS);
+      hair_fibre_timestamp(cmd, bg3::hair_fibre_timing::kFibre, 0);
       const bool ran = ls_dispatch(cmd, lb, lp, sun, g_hair_fibre.pipeline, (g_w + 7) / 8, (g_h + 7) / 8);
+      hair_fibre_timestamp(cmd, bg3::hair_fibre_timing::kFibre, 1, ran);
       // Logged when it starts (the first frame after a frame without it) and every 300 frames while on.
       static uint64_t s_hair_fibre_last = 0, s_hair_fibre_run = 0;
       if (ran) {
@@ -3679,7 +3742,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (reflection_applied && !s.rf_validate && rp.rf_debug == 0 && host->cfg_int("rt_hair_fibre_spec", 0) &&
         host->cfg_int("rt_hair_groom_primary", 0) && refresh(g_hair_fibre_spec, "gi/hair_fibre_spec.hlsl", g_rf_layout)) {
       memory_barrier(cmd, kCS, kCS);
+      hair_fibre_timestamp(cmd, bg3::hair_fibre_timing::kSpec, 0);
       const bool ran = hair_spec_dispatch(cmd, rb, s, rp);
+      hair_fibre_timestamp(cmd, bg3::hair_fibre_timing::kSpec, 1, ran);
       static uint64_t s_hair_spec_last = 0, s_hair_spec_run = 0;
       if (ran) {
         const uint64_t now = host->frame_index();
@@ -3708,6 +3773,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
                 (void*)s.game_set1, (void*)s.game_set1_layout, s.game_set1_ndyn, s.rf_validate);
     }
   }
+  hair_fibre_frame_end();
   if (s.gi) {
     const bool fibre = host->cfg_int("rt_hair_fibre_gi", 0) && host->cfg_int("rt_hair_groom_primary", 0) &&
                        refresh(g_composite_fibre, "gi/gi_composite.hlsl");
@@ -3940,6 +4006,7 @@ void gi_on_frame(uint64_t) {
     std::fill_n(g_slot_written, kRing, false); std::fill_n(g_rt_written, kRing, false);
     std::fill_n(g_tr_written, kRing, false); std::fill_n(g_rf_written, kRing, false);
     std::fill_n(g_ls_written, kRing, false); std::fill_n(g_stats_frame, kStatsRing, uint64_t(0));
+    std::fill_n(g_hf_ran, kRing, 0u); g_hf_win.clear();
     std::fill_n(g_occ_frame, kOccRing, uint64_t(0));
     g_ms_sum = g_rt_ms_sum = 0; g_ms_count = g_rt_ms_count = 0;
     pass_timing_reset();
@@ -4018,6 +4085,10 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_ls_queries);
   g_ls_queries = VK_NULL_HANDLE;
   g_ls_ms.clear();
+  host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_hf_queries);
+  g_hf_queries = VK_NULL_HANDLE;
+  std::fill_n(g_hf_ran, kRing, 0u);
+  g_hf_win.clear();
   defer_layout_destroy(uint64_t(g_ls_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_ls_set_layout);
   g_ls_layout = VK_NULL_HANDLE;

@@ -38,7 +38,7 @@ class GpuLoggingGateTest(unittest.TestCase):
 
     def test_timestamp_helpers_require_statistics(self):
         helpers = {
-            "core/gi.cpp": ["timing_init", "timestamp", "timing_collect", "rt_timestamp", "rt_timing_collect", "trace_timestamp", "trace_timing_collect", "rf_timestamp", "rf_timing_collect", "ls_timestamp", "ls_timing_collect"],
+            "core/gi.cpp": ["timing_init", "timestamp", "timing_collect", "rt_timestamp", "rt_timing_collect", "trace_timestamp", "trace_timing_collect", "rf_timestamp", "rf_timing_collect", "ls_timestamp", "ls_timing_collect", "hair_fibre_timestamp", "hair_fibre_timing_collect"],
             "core/sharc.cpp": ["timing_collect", "sharc_timestamp"],
             "layer/ngx.cpp": ["ts_init", "ts_begin"],
             "layer/emissive.cpp": ["ts_pair"],
