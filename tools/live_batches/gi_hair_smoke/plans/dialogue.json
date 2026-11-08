@@ -1,0 +1,231 @@
+[
+ {
+  "label": "warmup",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=0,gi_rt_pipeline_reorder=0,rt_stats=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[auto\\] scene ready",
+   "\\[cfg\\] settings read",
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 180,
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ },
+ {
+  "label": "warmup-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=1,gi_rt_pipeline_reorder=1,rt_stats=0,qa_exposure_hold=0",
+  "wait_log": [
+   "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, .* \\(reorder 1\\)",
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 180,
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ]
+ },
+ {
+  "label": "cost-off-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 22,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 22,
+  "motion_end": 22,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=0,gi_rt_pipeline_reorder=0,rt_stats=0,qa_exposure_hold=1",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 30
+ },
+ {
+  "label": "shot-off-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=0,gi_rt_pipeline_reorder=0,rt_stats=0,qa_exposure_hold=1",
+  "trace_at": [
+   4
+  ]
+ },
+ {
+  "label": "cost-on-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 22,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 22,
+  "motion_end": 22,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=1,gi_rt_pipeline_reorder=1,rt_stats=0,qa_exposure_hold=1",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 30
+ },
+ {
+  "label": "shot-on-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=1,gi_rt_pipeline_reorder=1,rt_stats=0,qa_exposure_hold=1",
+  "trace_at": [
+   4
+  ]
+ },
+ {
+  "label": "cost-off-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 22,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 22,
+  "motion_end": 22,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=0,gi_rt_pipeline_reorder=0,rt_stats=0,qa_exposure_hold=1",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 30
+ },
+ {
+  "label": "shot-off-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=0,gi_rt_pipeline_reorder=0,rt_stats=0,qa_exposure_hold=1",
+  "trace_at": [
+   4
+  ]
+ },
+ {
+  "label": "cost-on-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 22,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 22,
+  "motion_end": 22,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=1,gi_rt_pipeline_reorder=1,rt_stats=0,qa_exposure_hold=1",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 30
+ },
+ {
+  "label": "shot-on-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=1,gi_rt_pipeline_reorder=1,rt_stats=0,qa_exposure_hold=1",
+  "trace_at": [
+   4
+  ]
+ },
+ {
+  "label": "restore",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 2,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 2,
+  "motion_end": 2,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_rt_pipeline=0,gi_rt_pipeline_reorder=0,rt_stats=0,qa_exposure_hold=0",
+  "wait_log": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_fresh": [
+   "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+  ],
+  "wait_log_timeout": 30
+ }
+]

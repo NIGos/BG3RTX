@@ -1,0 +1,15 @@
+{
+ "_rule": "Written and committed BEFORE any run. gpu_ms: 'gi: trace pass' GPU median ON (gi_rt_pipeline=1, reorder 1) minus OFF (compute). energy: pre-post scene colour of each ON shot against its OFF neighbours.",
+ "hair1-dialogue": {
+  "gpu_ms": {
+   "predicted": -3.0,
+   "source": "camp live: RT pipeline -2.1 ms (grp1) plus reorder -1.5 ms (ser1); dialogue with strands not measured",
+   "written": "2026-11-08"
+  },
+  "energy": {
+   "predicted": 0.0,
+   "source": "dispatch change only; seed gate PASS",
+   "written": "2026-11-08"
+  }
+ }
+}
