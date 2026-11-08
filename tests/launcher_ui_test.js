@@ -131,5 +131,9 @@ assert(all(ids.get('card-water_surface_fresnel')).some(e=>e.textContent==='Adjus
 assert.strictEqual(ids.get('control-water_surface_fresnel-0').type,'checkbox','unqualified marker hidden; Off/On is a switch');
 ids.get('experimental-switch').checked=false;ids.get('experimental-switch').onchange();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'experimental',value:false});
 render(fixture);assert(!all(ids.get('section-content')).some(e=>e.id==='card-water_surface_fresnel'));
+// Preparation (read-only, docs/RTX_HAIR_ROADMAP.md 2b): only when the host sends items; one row per item, no actions.
+render(fixture);ids.get('nav-Support').onclick();assert(!ids.get('preparation')||!all(ids.get('section-content')).includes(ids.get('preparation')));
+render({...fixture,preparation:[{id:'hair',title:'Strand hair',line:'3 of 5 styles ready, 0.1 GB on disk.',progress:0.6,state:'running'},{id:'shaders',title:'Shaders',line:'Ready.',state:'done'}]});ids.get('nav-Support').onclick();
+{const prep=all(ids.get('preparation'));assert(prep.some(e=>e.id==='prep-hair')&&prep.some(e=>e.id==='prep-shaders'));assert.strictEqual(prep.filter(e=>e.tagName==='progress').length,1);assert(!prep.some(e=>e.tagName==='button'));}
 render({...fixture,developer:true});assert(!ids.get('navigation').children.some(e=>e.className==='nav-foot'&&e.children.some(c=>c.className==='switch-row')),'developer mode keeps its own disclosure');
 console.log('Renderer: category reachability, requirements, costs, focus, native controls, presets and developer authorization pass.');

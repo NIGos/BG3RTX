@@ -50,6 +50,132 @@ review page. Crowd budget: LOD by screen size (done) plus a VRAM cap dropping fa
 cards (10 close characters at LOD 0 ~710 MB + 34 MB per style). Gates: offline as above (CTest: catalogue
 parsing, grid detection); live: matched/unmatched counts in a crowd scene (camp, Lower City). Deps: none.
 
+## 2b. Getting the grooms onto a player's PC: storage, needed set, launcher (2026-11-08, offline study)
+Prototypes: `tools/hair_groom/storage.py` (size scan, HGRZ codec, error study), `tools/hair_groom/prepare.py`
+(needed-first order, launcher status), CTest `hair_storage_test`, read-only Preparation card in the launcher.
+Nothing here changes the layer or the .hgrm format yet; the decisions at the end pick what ships.
+
+**Size today (data/assetdb/hair_grooms, 871 files, 20.97 GB).** Per array, all files and LODs: barycentrics
+(2 x f32) 8.15 GB 39%, triangle (u32) 4.07 GB 19%, radius (f32) 4.07 GB 19%, segment_first_point (u32) 3.66 GB
+17%, root (u8) 1.02 GB 5%, headers 0. There are no positions or tangents: a point is (card triangle,
+barycentrics), placed on the skinned cards each frame; the tangent is the segment's direction. Per strand LOD
+inside a file: keep 1 57%, keep 1/2 29%, keep 1/4 14%. Per mesh: LOD0 meshes 10.60 GB (393 files), LOD1 meshes
+3.26 GB (168), and 7.11 GB (312 files) are not written by the last batch (`.scratch/hair-c/full`): earlier,
+wider batches' outputs (299 of them have no mesh in the current GR2 dumps). A player would not have those.
+Hair 13.3 GB, beards 0.57 GB (71 rows). Per file: median 19.4 MB, p10 6.4, p90 46.1, max 120.8 MB; 9.8 points
+per strand. Largest: HAIR_DWR_M_Straight_Short_J 121 MB (3.3 M points, 255 k strands), HRC MenStraight_Short_J
+119, the Githyanki long cuts 110-112, the three Afro_Long_A 103, DWR Braids_Long_B 97. The top 10% of files hold
+28% of the bytes. The batch cache is a second footprint: `<report-dir>/cache` 16 GB of groom .npz + 0.5 GB of
+GR2 dumps for 737 rows; on a player's PC it must be dropped after each style (keep state.json only).
+- Redundant by construction: the thinned LODs are `convert.thin(LOD 0, keep)` (strand hash < keep: nested
+  sets; radius min(r / keep, 9 mm) with keep a power of two): bit-exact on every sampled file, 43% of the bytes.
+  `segment_first_point` is "every point but each strand's last": a strand length (1 byte) replaces ~9 x 4 bytes.
+
+**HGRZ prototype** (`storage.encode` / `decode`): LOD 0 only, thinned LODs rebuilt at load; strand lengths
+(u8 + u16 escape); triangle as zigzag delta along the strand; barycentrics as N-bit fixed point, wrapped delta
+along the strand; radius as a 16-bit log2 code (4096 steps per octave: 0.017% relative); root as mod-256
+delta; each stream byte-shuffled and zstd-compressed alone.
+Measured (`python -m tools.hair_groom.storage codec --sample 24`: 24 files spread over the size distribution,
+0.63 GB; 16 of them matched to their card mesh in the batch cache for the error in mm; zstd level 19):
+| Encoding | Ratio | Max / p99 position error | Points over 0.38 um | Tangent, segments >= 1 px: max; length-weighted p99 |
+|---|---|---|---|---|
+| zstd on the .hgrm file | 2.2 | 0 | 0 | 0 |
+| HGRZ lossless (f32 barycentrics and radius) | 6.1 (3.4-10.5) | 0 | 0 | 0 |
+| HGRZ 14-bit | 12.4 | 12.2 / 4.8 um | up to 90% | 2.55 deg; 0.15 deg |
+| HGRZ 16-bit | 11.5 (6.1-32) | 3.1 / 1.2 um | up to 32% | 0.61 deg; 0.039 deg |
+| HGRZ 18-bit | 10.4 | 0.78 / 0.30 um | up to 0.3% | 0.20 deg; 0.009 deg |
+| **HGRZ per-file bits** (16-20, `bits_for`) | **11.1** | **0.35 / 0.15 um** | **0** | 0.14 deg; 0.019 deg |
+| HGRZ 16-bit, LZ4 instead of zstd | 8.2 | as 16-bit | | |
+Every variant: thinned LODs rebuilt bit-exact, triangle/root/segments exact, radius within 0.017%, 0 zero-length
+segments after quantisation (parse_lod rejects those). Per-file bits: the batch has the card mesh when it writes
+the file, so it picks the fewest bits whose worst case (step / 2 x (|e1| + |e2|) of the largest used triangle)
+is under the threshold: the bound holds by construction, not by sample. Tangent: segments shorter than one pixel
+(at most 1.6% of the segments) reach 3 deg, as any sub-um shift does on a 1 um segment; they cover under a
+pixel. Longer segments stay under the game-roughness bound (0.16 deg); the narrowest-lobe bound (0.014 deg) is
+met by 98-99% of the drawn length, fully only by the lossless variant. Over the 20.97 GB: per-file bits
+~1.9 GB, lossless ~3.4 GB; the 559 files of the last batch (13.87 GB): ~1.25 GB / ~2.3 GB. Encode (numpy, zstd 19)
+~1.8 s per M points: ~1 s for a median style, against 27 s of conversion. First traps found and fixed in the
+prototype: barycentrics down to -1e-4 (clipping them moved points by 11 um), radii from 17 nm to 2 mm (a 16-octave
+log range overflowed).
+
+**"Imperceptible", derived.** Closest dialogue framing: the repo's close-up bound (`primary.subpixel_fixture`,
+0.6 m at 20 degrees vertical) at 4K: one pixel = 2 x 0.6 x tan(10 deg) / 2160 = 0.098 mm (a 0.23 m head filling
+the 2160 rows gives 0.106 mm). A strand edge moved by d changes a pixel's coverage by at most d / pixel; at full
+contrast an 8-bit output level is 1/255. So d <= 0.098 mm / 255 = **0.38 um** changes no output level even
+before DLSS, TAA and dithered coverage. Tangent: the fibre BSDF's narrowest longitudinal lobe (beta_m clamp 0.05,
+`bsdf.longitudinal_variance`: sigma 2.2 deg) changes by at most 0.607 / sigma of its peak per radian, so 1/255 of
+the peak needs **0.014 deg** (game hair roughness 0.41: 0.16 deg). Radius: a relative error e widens a strand by
+2 r e; 0.017% of a 0.7 mm p99 radius is 0.12 um, under the position threshold.
+
+**Decode cost at load.** numpy prototype (single thread, one LOD 0 + two thinned LODs): 133 ms per M points
+(lossless 87): ~70 ms for a median style (0.53 M points), 440 ms for the largest (3.3 M). A C++ decoder
+(zstd at ~1 GB/s, shuffle and prefix sums) should be ~5-10x faster; the layer already reads a whole LOD at upload
+(`read_lod`), so it would read the file once, decode LOD 0 and thin in memory. Needs zstd in the layer
+(the save reader in layer/assetdb.cpp has only an LZ4 block decoder; it skips zstd SaveInfo.json today).
+
+**What is needed.** Known before the game starts, without the game:
+- the catalogue (872 CHAR_Hair rows) and `tools.hair_groom.reach` categories from the paks (player 432, companion
+  6, named NPC 211, generic 25, hat variants 337, items 49, unused 157 of the 1217-row run; RTX_HAIR_PRIMARY);
+- per level: `reach` already reads every level's `Characters/_merged.lsf`; keeping the level name per template
+  gives styles per level (templates placed there), a few lines in reach;
+- the current level and party: layer/assetdb.cpp already reads the newest save's SaveInfo.json (read-only) for
+  "Current Level"; its party list names the origins and the custom character's race (to check on a player
+  save: we never open the user's saves in development), not the hairstyle.
+Known only at runtime, exactly: the layer computes the index id of every hair draw (the join key) and logs
+CountUnknown / NoFile misses. An index map built from the GR2 decode alone (no conversion) names the style of any
+draw: measured on the 545 cached dumps, 1212 meshes -> 1180 distinct index ids (32 identical meshes share a
+groom), 731 distinct index counts (189 counts shared by several ids, so the id, not the count, is the key),
+1.1 s to compute, 86 KB as JSON (+ 32 UV samples per mesh for draws without host-mapped indices: ~310 KB).
+Approaches (27 s per style per job; 872 rows -> ~98 min at 4 jobs; companion rows ~32, 0.88 GB raw):
+| | First play | Disk (HGRZ per-file bits) | Misses on first sight |
+|---|---|---|---|
+| (a) companions, then the rest in the background | ~4 min for companions at 4 jobs | all reachable, ~1.1 GB (about 87% of the styles are reachable) | custom player hair, hirelings, disguises until reached in the queue |
+| (b) on demand, cards meanwhile | 0 | only seen styles | every style once (cards for that session); wildshape/disguise/NPC crowds pop |
+| (c) everything | ~98 min before strands appear | ~1.25 GB (today 13.9 GB) | none (rejects keep cards) |
+Recommended: (a) + the runtime "seen" list. The layer appends the index id of each unconverted hair draw to
+`%LOCALAPPDATA%\BG3RTX\hair_seen.txt` (no new game key: the existing miss path); the launcher converts in
+`prepare.order`: seen first, then companion, player (character creation), named NPC, hat, other; LOD 0 before
+LOD 1 in each tier; "unused" (157, no game file references them) only with Convert all. Edge cases:
+- Custom player hair: in the player tier (432 styles), so first play may show cards for one session; the seen
+  list puts it first next time. Narrowing by the save's race is possible but unverified.
+- Hirelings: character-creation looks, player tier. Disguises (Disguise Self, Alter Self) use CC visuals:
+  player tier, seen list. Wildshape: no animal row (wolf, bear, cat, panther, owlbear, spider, badger, raven) in
+  the 872-row catalogue, so nothing to convert; creature hair that is CHAR_Hair (bugbear, goblin, cambion) is
+  ordinary NPC tiers.
+- Hats: hair under a hat is a separate mesh (hat tier, 337): converted after NPCs; cards until then.
+- NPC crowds: named NPC tier; generic NPCs (25) late; the crowd budget falls back to cards anyway.
+- Beards: rows of their own (71), same tiers. LOD1: after its LOD0 in each tier; LOD1 missing = cards at distance.
+- Mods: a mod's hair has no catalogue row; the seen list gets its index id but no map entry, so it cannot be
+  converted until the catalogue is rebuilt from the installed paks (the batch already re-enumerates: run it
+  with the mod's pak in the PackageSet). Rejects and needs-review keep cards in every approach.
+- Convert all: the opt-in for players who want no card ever; also covers unused and CV-only styles.
+
+**Launcher: one Preparation card** (Help & support page, first card; status, not a knob, so it fits neither the
+settings table nor CONTROL_CONTRACT's pages and adds no game key). One line per item, from a JSON block the
+batch writes (`prepare status --json`), polled by the bridge while the window is open:
+- `Strand hair: 412 of 559 styles ready, 2.1 GB, converting, about 35 min left.` progress bar; detail line:
+  the current tier ("Companions and character creation done. Converting named NPCs."). Buttons (next step, not
+  prototyped): Pause / Resume, and a "Convert all styles (+157, about N min)" switch.
+- `Shaders: ready.` / `Shaders: preparing, 40 of 100.` What exists: a SPIR-V disk cache
+  (%LOCALAPPDATA%\BG3RTX\shader_cache, keyed like tools/shader_identity.py), a request manifest (`requests.txt`,
+  prefetched on a background thread at game start), async pipeline builds (common/pipeline_async.h; the first
+  raygen build is ~60 s on a cold driver cache, compute meanwhile), no VkPipelineCache (the NVIDIA driver cache
+  holds compiled pipelines). A launcher preload makes sense only for the SPIR-V (BUILD_AND_PACKAGE_EFFICIENCY
+  section 4, option B 40-60 s once, or C: ship the preset's SPIR-V as a seed, 0 s); the driver's pipeline cache
+  is per application and GPU, so the launcher cannot warm it: the card says the first minute of play finishes it.
+- Where it also shows: one header line "Preparing: strand hair 74%" while work is left; Play stays enabled
+  (cards are drawn until a groom exists).
+Prototype (this branch): `preparationCard` in tools/launcher/ui/app.js renders `state.preparation` items
+read-only (title, state badge, line, progress, detail); the sample preview (`?sample`) shows it; the
+renderer test checks it renders only when sent, one row per item, no buttons. The bridge does not send it yet.
+
+**Decisions for the user.** (1) Encoding: HGRZ with per-file bits (11.1x, every point under 0.38 um; recommended)
+or lossless (6.1x); both need zstd in the layer (decoder ~100 KB of code) and a format version 3 the layer reads
+beside v2. (2) Needed set: (a) + seen list (recommended), or (c) only.
+(3) Convert all as an opt-in switch, default off. (4) The launcher converts only while it is open and the
+game is not running (BelowNormal; the game's level load starves otherwise), or also in the background.
+(5) Shader preload: ship the SPIR-V seed (C) or prewarm in the launcher (B). (6) Delete the batch cache per style.
+
 ## 3. Converter quality and validation (OFFLINE-NOW)
 On screen: fewer fake tips (strands are 14 mm median pieces: crossings in the painted mask), no doubled
 strands, cleaner partings. Method: (a) stitch across card seams (end of a strand on card A to the start on

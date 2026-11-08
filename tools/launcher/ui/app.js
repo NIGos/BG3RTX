@@ -177,11 +177,26 @@ function shortcutsCard(id) {
  if(id==='hotkey_dlss5')box.append(el('p','help-copy','Works while playing when DLSS 5 was On at game start.'));
  return box;
 }
+// First-run preparation (docs/RTX_HAIR_ROADMAP.md 2b): read-only status lines the host sends as state.preparation,
+// [{id,title,line,detail,progress (0..1 or absent),state:'done'|'running'|'waiting'|'paused'}]. No actions yet.
+function preparationCard(items) {
+ const box=el('article','card preparation');box.id='preparation';box.append(el('h3','','Preparation'));
+ items.forEach(p=>{
+  const row=el('div','prep-item'),head=el('div','prep-head');row.id='prep-'+p.id;
+  head.append(el('span','prep-title',p.title),el('span','badge'+(p.state==='paused'?' restart':''),{done:'Ready',running:'Working',waiting:'Waiting',paused:'Paused'}[p.state]||p.state||''));
+  row.append(head,el('p','description',p.line||''));
+  if(typeof p.progress==='number'&&p.state!=='done'){const bar=el('progress');bar.max=1;bar.value=p.progress;bar.setAttribute('aria-label',p.title+' progress');row.append(bar);}
+  if(p.detail)row.append(el('p','cost',p.detail));
+  box.append(row);
+ });
+ return box;
+}
 function renderSettings() {
  const root=$('section-content');rememberDisclosures(root);root.replaceChildren();
  sectionHead(root,section);
  if(section==='Support') {
   const grid=el('div','grid support');
+  if((state.preparation||[]).length)grid.append(preparationCard(state.preparation));
   const report=el('article','card');report.append(el('h3','','Report a problem'),el('p','description','Preview logs, settings and graphics details before saving a report on your PC. Nothing uploads automatically.'));const b=el('button','btn','Report a problem…');b.id='support-report';b.onclick=()=>send('report');const rf=el('div','card-foot');rf.append(b);report.append(rf);grid.append(report);
   (state.settings||[]).filter(s=>s.category==='Support'&&!s.developer).forEach(s=>grid.append(card(s)));
   const setup=el('article','card');setup.append(el('h3','','Game and graphics'),el('p','description path',state.gamePath||'Choose the game folder containing bin\\bg3.exe.'));
@@ -288,6 +303,8 @@ if(sample) {
  ['detailed_logging','Detailed logging','Support',['Off','On'],0,'Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.']
  ].map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(levels),cost:'Not measured (sample)',apply:['rt_geometry','exp_hidden_surface','exp_native_coverage','exp_water','frame_generation','detailed_logging'].includes(id)?'Restart the game to apply':'Applies after saving',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
  // The WebView host sends its review state (real settings table); a plain browser uses this sample.
- if(!window.chrome?.webview){render({type:'state',version:'0.9.4.0',modStatus:'Sample preview; game launch disabled',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview'});
+ if(!window.chrome?.webview){render({type:'state',version:'0.9.4.0',modStatus:'Sample preview; game launch disabled',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview',preparation:[
+  {id:'hair',title:'Strand hair',line:'412 of 559 styles ready, 2.1 GB on disk.',detail:'Companions and character creation done. Converting named NPCs, about 35 min left.',progress:0.74,state:'running'},
+  {id:'shaders',title:'Shaders',line:'Ultra shaders ready.',detail:'Graphics driver finishes its own cache in the first minute of play.',state:'done'}]});
  reviewView(false);}
 } else send('init');

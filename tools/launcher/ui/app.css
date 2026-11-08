@@ -107,6 +107,10 @@ main { grid-area: main; min-width: 0; overflow: auto; padding: 24px 28px 32px; s
 .card-foot { display: grid; gap: 8px; margin-top: auto; padding-top: 4px; }
 .control { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 36px; }
 .cost { margin: 0; color: var(--text-3); font-size: 12.5px; }
+.prep-item { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.prep-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.prep-title { font-weight: 600; }
+.prep-item progress { inline-size: 100%; block-size: 6px; accent-color: var(--gold); }
 .help-copy { margin: 0; color: var(--text-2); line-height: 1.6; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
