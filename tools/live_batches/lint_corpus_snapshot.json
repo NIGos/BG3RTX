@@ -75834,6 +75834,14 @@
     "gi: gi_rt_pipeline: the hit-GI trace runs as compute: key off": [
       0,
       null
+    ],
+    "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, (emission|sun) variant \\(reorder 1\\)": [
+      0,
+      null
+    ],
+    "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, (emission|sun) variant \\(reorder 0\\)": [
+      0,
+      null
     ]
   }
 }
