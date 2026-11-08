@@ -69,7 +69,7 @@ Reference measurements come from an RTX 5090, not a GPU support matrix or an FPS
 Long-session acceptance is still open.
 Every control, its choices and restart requirements are in `docs\USER_SETTINGS.md`.
 Lighting, Surfaces and Performance contain player controls; Help & support contains the game folder,
-compatibility, memory and reporting help. Visible hair remains the game's stock hair.
+compatibility, memory and reporting help, and the Preparation status (shaders, strand hair). Visible hair is the game's stock hair unless the experimental **Strand hair on screen** option is on.
 
 ### VRAM guidance
 

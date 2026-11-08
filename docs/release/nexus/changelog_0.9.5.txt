@@ -1,0 +1,22 @@
+Version 0.9.5-beta
+
+Faster
+- Off-screen bounce light (Ultra's Far setting, or when turned on) now traces with the GPU's ray tracing pipeline and sorts the rays by what they hit (shader execution reordering). Measured on an RTX 5090: about 2 ms faster at the camp and the inn, and about 1.5 ms more at the camp from the sorting; same lighting. Both are on by default. GPUs without these features keep the previous path automatically.
+- Fixed a slowdown that grew over a session in busy scenes: the foliage micro-map builder retried refused work every frame. Measured: the scene wait no longer climbs from 2 to 18 ms.
+- Ray-tracing memory: freed acceleration-structure blocks are reused after a short delay instead of growing the pool.
+
+Strand hair (experimental, off by default)
+- One option turns it on: Advanced > Strand hair on screen. It needs only a supported RTX GPU; no files to download.
+- Hair styles get strands after the game has shown them once: BG3RTX copies that style's hair cards from the game while you play, and the launcher converts it (about 1 s per style). Until then you see the game's own hair.
+- Strands are stored about 11 times smaller than before, with no visible difference.
+- New Preparation card in Help & support: hair styles ready, disk use, time left, pause/resume, and whether conversion may run while you play.
+- Fixed: since an earlier fix round strands could stay as the game's hair cards. They show again.
+- Fixed several strand-hair flashes and lags in motion (LOD switches, motion vectors, card fallback).
+
+Launcher
+- Shaders are prepared once after installing or updating, before Play, with a progress line in Preparation. The graphics driver still builds its first ray tracing pipeline in game (a short pause the first time).
+- Choosing an option now also turns on the options it needs.
+
+Known
+- Tested only on an RTX 5090 with driver 621.01.
+- Strand hair cost is not qualified yet; turning it on needs a game restart.
