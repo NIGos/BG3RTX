@@ -16,6 +16,7 @@ Choice indices remain schema indices. Box On is index 1 (`all`, ls_box=2); legac
 | Lighting | Local light shadows (`local_shadows`) | `rt_local_shadows`, `ls_samples`, `ls_shadowed` | Off / Fast / Full | Off / Fast / Full / Full | live |
 | Lighting | Interior light shadows (`box_lights`) | `ls_box`, `ls_box_honour_shadow` | Off / On | Off / Off / Off / On | live |
 | Lighting | Hair shadows (`exp_native_coverage`) | `rt_native_hair`, `rt_native_scalp`, `rt_native_tileset` | Off / On | Off / Off / Off / On | restart |
+| Lighting | RTX Hair (`exp_hair_groom_primary`) | `rt_hair_groom_primary` + the strand bundle, `rt_hair_capture` | Off / On | Off / Off / Off / Off | restart |
 | Lighting | Mod lighting strength (`rt_intensity`) | `gi_strength`, `ls_strength`, `rf_strength` | 50-100%, step 5% | 100 / 100 / 100 / 100 | live |
 | Surfaces | Reflections (`reflections`) | `rt_reflections`, `rf_max_rough` | Off / Glossy / Standard / Rough | Off / Glossy / Standard / Rough | live |
 | Surfaces | Water lighting (`exp_water`) | `rt_water_geometry`, `rt_water_reflections`, `rt_water_compose`, `rt_water_shadows`, `rt_water_ls_shadows`, `rt_water_game_shadow`, `rt_water_refraction` | Off / Reflections / Reflections and shadows / Include refraction | Off / Off / Off / Include refraction | restart |
@@ -77,17 +78,21 @@ Controls hidden from the three main pages (Experimental opt-ins remain available
 - `rt_trace_scale`, `water_surface_fresnel`, `exp_omm`, `exp_vt_alpha_masks`
 - `exp_water_hit_shade`, `exp_water_hit_cost`, `rr_post`, `exp_compact_hit_state`
 - `exp_alpha_metadata_cache`, `exp_water_empty_tiles`, `exp_water_compose_shift`, `exp_hair_groom`
-- `exp_hair_groom_primary`, `exp_hair_fibre`, `exp_hair_fibre_gi`, `exp_hair_groom_crowd`
+- `exp_hair_fibre`, `exp_hair_fibre_gi`, `exp_hair_groom_crowd`
 - `exp_hair_groom_shadow_t`, `exp_hair_primary_passes`, `exp_hair_groom_tips` (strand order/current/frame tag/LOD keep/
-  hold/world tangent are part of `exp_hair_groom_primary` On since 2026-11-08; no knob of their own. On also writes
-  the user-tested set: rt_hair_groom, shadow/AO transmittance, cascade_drop, fibre/fibre_gi/fibre_spec/fibre_mapped,
-  rr_hair_guides, rt_hair_physical_origin; restart required)
+  hold/world tangent are part of RTX Hair (`exp_hair_groom_primary`) On since 2026-11-08; no knob of their own)
 - `exp_hair_pool_trim`, `exp_hair_physical_origin`, `exp_alpha_spill`, `exp_hit_paks`
 - `exp_hit_reference`, `exp_ls_exact_k`, `exp_current_sun`
 Hidden choices: local_shadows Full + shadowed lights; box_lights legacy Shadowed;
 exp_hidden_surface Far + reflections; exp_native_coverage + Tilesets.
 Fresnel stays Experimental and Off in presets: invisible on open water to the user.
-Strand hair is a post-release update on Experimental; stock visible hair ships.
+RTX Hair (`exp_hair_groom_primary`, 0.9.5, user request) is a release Lighting control: Off in every preset, restart to
+turn on or off ("Restart the game to turn on or off."), hardware only (ray queries, linear swept spheres, shaderInt64,
+fragment stores; no local groom files). On writes the user-tested strand set (rt_hair_groom, shadow/AO transmittance,
+cascade_drop, fibre/fibre_gi/fibre_spec/fibre_mapped, rr_hair_guides, rt_hair_physical_origin, rt_hair_capture) and
+raises its needs in one click: Ray-tracing detail Include foliage, Hair shadows On, and its hidden strands-in-RT part
+`exp_hair_groom` (a developer-only, non-experimental need of a visible knob is raised with it: settings::raise_needs).
+Stock visible hair ships; styles get strands after the game has shown them once and the launcher has converted them.
 One-ray Ultra GI and Tilesets are being qualified; retain two rays and hide Tilesets until accepted.
 Temporal Ultra promotion is accepted by visual verdict, not a statistical/energy pass.
 Rejected/Off: three GPU candidates, Medium Half, water bits 2/4, glint, alpha spill

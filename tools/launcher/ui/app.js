@@ -221,7 +221,7 @@ function renderSettings() {
   root.append(grid);
   const foot=el('div','page-foot');const notices=el('a','link','Fonts and third-party notices');notices.href='https://app.bg3rtx.local/notices';notices.onclick=e=>{e.preventDefault();send('notices');};foot.append(notices,el('p','help-copy',"Independent fan mod; not affiliated with the game's developers."));root.append(foot);return;
  }
- const lightingOrder=["rt_geometry", "rr", "sun_shadows", "gi", "exp_hidden_surface", "local_shadows", "box_lights", "exp_native_coverage", "rt_intensity"];
+ const lightingOrder=["rt_geometry", "rr", "sun_shadows", "gi", "exp_hidden_surface", "local_shadows", "box_lights", "exp_native_coverage", "exp_hair_groom_primary", "rt_intensity"];
  const all=(state.settings||[]).filter(s=>section==='Developer'?state.developer&&s.developer:s.category===section&&!s.developer);
  const performanceOrder=['frame_generation','reflex','fps_cap'];
  if(section==='Performance')all.sort((a,b)=>{const rank=s=>performanceOrder.includes(s.id)?performanceOrder.indexOf(s.id):performanceOrder.length;return rank(a)-rank(b);});

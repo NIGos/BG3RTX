@@ -46,13 +46,14 @@ assert [c["label"] for c in local["choices"]] == ["Off", "Fast", "Full"]
 print("Consolidated cards, qualified box shadows and developer visibility verified.")
 
 expected = {
- "Lighting": ["DLSS Ray Reconstruction", "Ray-tracing detail", "Sun shadows", "Indirect lighting", "Local light shadows", "Mod lighting strength", "Off-screen bounce light", "Interior light shadows", "Hair shadows"],
+ "Lighting": ["DLSS Ray Reconstruction", "Ray-tracing detail", "Sun shadows", "Indirect lighting", "Local light shadows", "Mod lighting strength", "Off-screen bounce light", "Interior light shadows", "Hair shadows",
+              "RTX Hair"],   # exp_hair_groom_primary: a release Lighting control since 0.9.5 (user request)
  "Surfaces": ["Reflections", "Water lighting", "Depth of field and bloom smoothing"],
  "Performance": ["Frame Generation", "Rendered frame limit", "NVIDIA Reflex", "Faster bounce light tracing", "Bounce trace reordering"],   # gi_rt_pipeline, qualified 2026-11-08
  "Support": ["Detailed logging"],
  "DLSS 5": ["DLSS 5 Neural Rendering (experimental)"],
 }
-assert len(state["settings"]) == 19   # + exp_gi_rt_pipeline_reorder (SER on by default, user decision 2026-11-08); 17 + exp_gi_rt_pipeline + reorder
+assert len(state["settings"]) == 20   # 17 + exp_gi_rt_pipeline + reorder (2026-11-08) + RTX Hair (0.9.5)
 for page, labels in expected.items():
     assert {s["title"] for s in state["settings"] if s["category"] == page} == set(labels)
 assert not state["developer"] and not state["experimental"]
@@ -66,6 +67,7 @@ choices = {
  "local_shadows": ["Off", "Fast", "Full"], "exp_hidden_surface": ["Off", "Near", "Far (6 m)"],
  "box_lights": ["Off", "On"], "rr_post_temporal": ["Off", "On"],
  "exp_native_coverage": ["Off", "On"],
+ "exp_hair_groom_primary": ["Off", "On"],   # RTX Hair (0.9.5)
  "reflections": ["Off", "Glossy", "Standard", "Rough"],
  "exp_water": ["Off", "Reflections", "Reflections and shadows", "Include refraction"],
  "frame_generation": ["Off", "2x", "3x", "4x"], "reflex": ["Off", "On", "On + Boost"],

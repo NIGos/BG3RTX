@@ -5,8 +5,8 @@ Faster
 - Fixed a slowdown that grew over a session in busy scenes: the foliage micro-map builder retried refused work every frame. Measured: the scene wait no longer climbs from 2 to 18 ms.
 - Ray-tracing memory: freed acceleration-structure blocks are reused after a short delay instead of growing the pool.
 
-Strand hair (experimental, off by default)
-- One option turns it on: Advanced > Strand hair on screen. It needs only a supported RTX GPU; no files to download.
+RTX Hair (beta, off by default)
+- One option turns it on: Lighting > RTX Hair (restart the game to turn it on or off). It needs only a supported RTX GPU; no files to download.
 - Hair styles get strands after the game has shown them once: BG3RTX copies that style's hair cards from the game while you play, and the launcher converts it (about 1 s per style). Until then you see the game's own hair.
 - Strands are stored about 11 times smaller than before, with no visible difference.
 - New Preparation card in Help & support: hair styles ready, disk use, time left, pause/resume, and whether conversion may run while you play.
@@ -19,4 +19,4 @@ Launcher
 
 Known
 - Tested only on an RTX 5090 with driver 621.01.
-- Strand hair cost is not qualified yet; turning it on needs a game restart.
+- RTX Hair cost is not qualified yet; turning it on or off needs a game restart.

@@ -433,7 +433,7 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 1);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 19));
+  CHECK(dev.size() == size_t(kKnobCount - 20));   // 20 release controls: RTX Hair joined (user, 0.9.5 release, 2026-11-08)
   {  // SER (user decision 2026-11-08): on in every preset; choosing it in release raises the ray tracing pipeline trace.
     const int rt = knob_index("exp_gi_rt_pipeline"), ser = knob_index("exp_gi_rt_pipeline_reorder");
     for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[rt] == 1 && preset_values(p)[ser] == 1);
@@ -972,7 +972,7 @@ static void test_product_policy() {
 
 static void test_gui_review_safety() {
   const auto& primary=*find_knob("exp_hair_groom_primary");
-  CHECK(primary.experimental && primary.apply==Apply::Restart);
+  CHECK(!primary.experimental && !primary.dev_only && primary.apply==Apply::Restart);   // RTX Hair: a release control since 0.9.5
   CHECK(key_change_needs_restart("rt_hair_groom_primary","0","1"));
   CHECK(key_change_needs_restart("rt_hair_groom_primary","1","0"));
   CHECK(unmet_key_need(primary,1,parse_ini("rt=1\nsharc_device=0\n")).find("64-bit")!=std::string::npos);
@@ -1033,7 +1033,9 @@ static void test_apply_modes() {
   for (const auto* id : {"rr_post",
                          "exp_hair_groom"}) {
     const auto& k=*find_knob(id);
-    CHECK(k.experimental && !knob_visible(k,false) && k.dev_only);
+    // exp_hair_groom is RTX Hair's strands-in-RT part since 0.9.5: still hidden, no longer experimental, so the release
+    // RTX Hair card can raise it (settings::raise_needs).
+    CHECK((std::string(id)=="exp_hair_groom" ? !k.experimental : k.experimental) && !knob_visible(k,false) && k.dev_only);
     CHECK(k.choices[0].apply==Apply::Live || k.choices[0].apply==Apply::Hitch);
     CHECK(k.choices[1].apply==Apply::Live || k.choices[1].apply==Apply::Hitch);
     for(int p=0;p<kPresetCount;++p)CHECK(k.preset[p]==0);
@@ -1201,7 +1203,9 @@ static void test_consolidation_policy() {
 static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
     "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water", "dlss5_nr",
-    "exp_hidden_surface", "exp_gi_rt_pipeline", "exp_gi_rt_pipeline_reorder", "box_lights", "rr_post_temporal", "exp_native_coverage", "detailed_logging"};
+    "exp_hidden_surface", "exp_gi_rt_pipeline", "exp_gi_rt_pipeline_reorder", "box_lights", "rr_post_temporal", "exp_native_coverage",
+    "exp_hair_groom_primary",   // RTX Hair: a release Lighting control since 0.9.5 (user request, 2026-11-08)
+    "detailed_logging"};
   std::vector<std::string> visible;
   for (const auto& k : kKnobs) {
     if (knob_visible(k, false)) { visible.push_back(k.id); CHECK(std::string(k.category) != "Advanced"); }
@@ -1454,7 +1458,11 @@ static void test_strand_bundle() {
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=<missing>");
   // The bundle's restart keys are what makes the knob a restart knob.
   CHECK(key_change_needs_restart("rt_hair_physical_origin", "0", "1"));
-  CHECK(std::string(p->apply_note).find("restart") != std::string::npos);
+  {  // the visible note says plainly that a restart is needed (any case: "Restart the game to turn on or off.")
+    std::string note = p->apply_note;
+    for (char& ch : note) ch = char(tolower(static_cast<unsigned char>(ch)));
+    CHECK(note.find("restart") != std::string::npos);
+  }
   // A file with the full user-tested set reads as On (not custom), and saving it reproduces every key.
   {
     Map m = code_defaults();
@@ -1463,7 +1471,7 @@ static void test_strand_bundle() {
     apply_layer(m, parse_ini(ini));
     CHECK(knob_value(*p, m) == 1);
   }
-  CHECK(p->experimental && p->dev_only && p->choices[1].apply == Apply::Restart);
+  CHECK(!p->experimental && !p->dev_only && p->choices[1].apply == Apply::Restart);   // RTX Hair: release-visible since 0.9.5
   for (int pr = 0; pr < kPresetCount; ++pr) CHECK(p->preset[pr] == 0);   // strands stay off in every preset
   for (int pr = 0; pr < kPresetCount; ++pr) {
     Map preset;
