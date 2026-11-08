@@ -130,6 +130,6 @@
   "settings_latency_s": 1,
   "trace_stall_s": 3
  },
- "estimated_phase_seconds": 104,
+ "estimated_phase_seconds": 144,
  "purpose": "READY_FOR_LIVE, NOT authorized. gi_rt_pipeline (docs/TRACK_C_GI.md 'Ray tracing pipeline GI trace'): the Ultra hit-GI trace (far + sun + emission) as a ray tracing pipeline vs compute, toggled 0/1/0/1 in one run, static camera, exposure held in the cost and shot windows. Observables: 'gi: trace pass' GPU median per cost window (predicted -0.6 ms ON vs OFF, offline replay), energy of the pre-post scene colour (dumps.json float mean, ON vs OFF within |OFF-b - OFF-a|; predicted unchanged), no device or validation error, the raygen variant actually running (emission request on Ultra)."
 }

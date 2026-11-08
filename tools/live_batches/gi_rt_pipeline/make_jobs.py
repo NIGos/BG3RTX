@@ -29,10 +29,10 @@ plan = [
     # The raygen pipelines build in the background the first time the key is on (the compute pass runs meanwhile).
     phase("warmup-on", 10, 1, 0, wait=["gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline", PIPELINES_IDLE],
           fresh=[PIPELINES_IDLE], timeout=60),
-    phase("cost-off-a", 12, 0, 1), phase("shot-off-a", 6, 0, 1, trace=True),
-    phase("cost-on-a", 12, 1, 1), phase("shot-on-a", 6, 1, 1, trace=True),
-    phase("cost-off-b", 12, 0, 1), phase("shot-off-b", 6, 0, 1, trace=True),
-    phase("cost-on-b", 12, 1, 1), phase("shot-on-b", 6, 1, 1, trace=True),
+    phase("cost-off-a", 22, 0, 1), phase("shot-off-a", 6, 0, 1, trace=True),
+    phase("cost-on-a", 22, 1, 1), phase("shot-on-a", 6, 1, 1, trace=True),
+    phase("cost-off-b", 22, 0, 1), phase("shot-off-b", 6, 0, 1, trace=True),
+    phase("cost-on-b", 22, 1, 1), phase("shot-on-b", 6, 1, 1, trace=True),
     phase("restore", 2, 0, 0),
 ]
 COST = ["cost-off-a", "cost-on-a", "cost-off-b", "cost-on-b"]
