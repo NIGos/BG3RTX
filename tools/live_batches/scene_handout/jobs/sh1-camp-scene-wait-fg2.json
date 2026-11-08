@@ -1,0 +1,98 @@
+{
+ "name": "sh1-camp-scene-wait-fg2",
+ "save": "Campsite - 27h",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 300,
+ "repeat": 1,
+ "live_batch": "scene-handout",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_stats_period_frames=120,cpu_timing=1",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/scene_handout/plans/sh1_camp.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[cpu\\] scene build recording",
+  "\\[omm dyn\\]",
+  "\\[geo\\] RT capture",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[pace\\] rendered frame time over \\d+ frames",
+  "\\[cfg\\] settings read",
+  "\\[rt\\] scene wait: 120 frames"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-plan\\] complete phases=5\\b",
+  "^Run ended: done"
+ ],
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": ["cost-wait-on-a", "cost-wait-off", "cost-wait-on-b"],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "windows": ["cost-wait-on-a", "cost-wait-off", "cost-wait-on-b"],
+   "min": 1
+  },
+  {
+   "name": "wait on: the RT passes wait for this frame's scene in every on window",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "[1-9]\\d* waited",
+   "windows": ["cost-wait-on-a", "cost-wait-on-b"],
+   "min": 1
+  },
+  {
+   "name": "wait off: no wait in the off window",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "frames, 0 waited",
+   "windows": ["cost-wait-off"],
+   "min": 1
+  },
+  {
+   "name": "frame time: a pace line in every cost window",
+   "select": "\\[pace\\] rendered frame time over \\d+ frames",
+   "match": "median [0-9.]+ ms",
+   "windows": ["cost-wait-on-a", "cost-wait-off", "cost-wait-on-b"],
+   "period_frames": 120,
+   "min": 1
+  }
+ ],
+ "live_flow": {"expected_fps": 40},
+ "stop_on_dump": true,
+ "purpose": "Scene handout decision (docs/TRACK_D_SCENE_BUILD.md, scene wait): is the RT passes' wait for this frame's scene on the frame's critical path? rt_scene_wait 1/0/1 in one static camp session. Upper bound of what any early handout can save = frame time(on) - frame time(off); wait 0 traces the previous frame's scene (a diagnostic only, not a candidate). Judge [pace] rendered frame time and the [rt] scene wait mean per window; GPU ms lines must stay equal.",
+ "estimated_phase_seconds": 38.5
+}

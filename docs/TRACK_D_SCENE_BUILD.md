@@ -1467,3 +1467,31 @@ SpecId allocated; 1037+ remain available, 1032-1034 retired; request delta 0.
   slot out at once: the GPU order is already given by the one submit with the G-buffer first. Same scene content, no
   one-frame-old geometry. Gate: `[rt] scene wait` mean < 0.1 ms with got = waited, energy equal, `rt_primary_check`
   unchanged.
+- Review of that plan before implementing (2026-11-08, branch claude/opt-scene-handout): it is not implementable as
+  written, so nothing was built. Code facts:
+  1. Set 1 (`alpha_commit`, layer/alphatest.cpp:1300-1346) binds this frame's alpha texture views (g_tex/g_cache, collected
+     while the game records the G-buffer draws), the soup, InstInfo, pool and stamp ranges. They are known only at the
+     capture end and are written with vkUpdateDescriptorSets. Writing a set after a command buffer bound it invalidates
+     that command buffer unless the layout and pool use UPDATE_AFTER_BIND. That needs the descriptor-indexing UAB
+     features on the game's device (restart key, a feature request in the layer) and a new set 1 layout, which every
+     core pipeline that binds set 1 picks up.
+  2. The slot TLAS handle changes when it grows (`ensure_tlas`, bvhsplit.cpp:1216: cap = max(1.5 n, 4096, hint)); the
+     instance ring (bvhsplit.cpp:1192) and the mesh pool (256 -> 1024 MB in the user session) also reallocate, so the
+     buffer bindings of set 1 can change after a handout. A fixed handle needs a worst-case TLAS per slot.
+  3. bvh_build and alpha_commit can still fail after the slot is picked (pool full, pipelines, hair bounds, recording
+     checks). Today the RT passes then trace the previous scene. With an early handout they would trace a retired slot
+     holding a scene several frames old, or one never built (device loss risk). The only exact fallback is to clone the
+     previous slot into this one inside the G-buffer command buffer (TLAS copy, ring and record regions, descriptors),
+     and the previous scene's soup ranges are rewritten by this frame's capture.
+  4. The OMM accelerated-TLAS choice (`bvh_omm_scene`, `rt_omm_scene_reference`) and the water/hair consumers read
+     state decided at the commit.
+  Together that is a UAB device feature, a set 1 layout change in layer and core, worst-case TLAS sizing and a
+  per-slot clone fallback, with races between the G-buffer thread and the lighting thread on the slot state. That is a
+  restart feature with a new failure mode, for at most the 2-4 ms baseline wait.
+- First, measure whether the wait costs frame time at all. Both command buffers go down in one vkQueueSubmit, so the
+  frame cannot submit before the G-buffer thread finishes anyway; only lighting work recorded after the RT passes'
+  first query is delayed. Prepared live job (not queued): `tools/live_batches/scene_handout/jobs/sh1-camp-scene-wait-fg2.json`,
+  rt_scene_wait 1/0/1 in one static camp session (0 traces the previous frame's scene: a diagnostic, not a candidate).
+  frame time(on) - frame time(off) is the upper bound of any handout's saving. Below 0.5 ms (inside the on-a/on-b
+  spread): drop the handout. 1 ms or more: build the UAB version above (estimate several days, one restart key, off by
+  default).
