@@ -1088,6 +1088,36 @@ the observation and retains capacity; shrink needs 120 nonempty samples. CPU
 regressions cover the turn peak, every slot, inactivity and interrupted shrink.
 No shader/ABI/variant change or added GPU work; live overflow confirmation pending.
 
+### Capture reserve from the observed rise; BLAS chunk reuse (2026-11-08, claude/opt-vram, offline candidate)
+
+User's 4-minute log 2026-11-08 (RTX 5090, RR, FG, strands): `[mem] ours` cascade capture 3536 MB
+(3 slots x 1232 MiB) for a session demand peak of 370 MiB; RT capture 2047 MiB for a peak of
+about 840 MiB (opaque 171 + alpha 668); BLAS chunks 1531 allocations (1056 of 64 MB), "freed 85
+(5972 MB)" in one window.
+- Cause, cascade: one cut 140 -> 310 MiB in one slot sample was learned as `step`, and the reserve
+  is step x 3 samples (5 for RT) for good: 310 + 3 x 265 = 1104 MiB, then 1232.
+- Cause, RT: the elastic demand includes the alpha region, 40% of the buffer at a wide stride, so
+  every growth raised the demand and was learned as a step: 1024 -> 1680 -> 2047 MiB in 0.2 s at load.
+- `rt_capture_rise_reserve=1` (default 0): reserve = largest demand rise seen over the delay window
+  (3 / 5 samples), not the largest single step x the window. A ramp keeps its reserve (5 x 80 =
+  400 MiB, as before); a single cut S reserves S, not 3 S. Every rise of the learned history over
+  the delay stays covered (CTest replays a 2000-sample cut/ramp trace: 0 misses). The RT rise
+  is learned from the demand without its own alpha region. Both estimators learn always, so a live
+  toggle is exact. It can change what is rendered only if an unseen rise beyond every learned
+  one occurs (casters left out for a frame, counted in `buffer full`): hence a key, off.
+  Expected from the log: cascade about 650 MiB per slot instead of 1232 (-1.7 GB for 3),
+  RT about 1.0-1.6 GiB instead of 2047.
+- `rt_as_chunk_reuse_frames=120` (default on): an empty BLAS chunk stays 120 frames and takes the
+  next allocation that needs a new chunk, in any arena (it holds no range; it joins that arena).
+  With 0, nothing is retained and arenas never mix (old behaviour). A VRAM guard ask, an evacuated
+  relocation source or a chunk-share cap refusal frees retained chunks at once. Placement only:
+  BLAS contents, TLAS and fences are unchanged, so it is on by default. CTest churn model (40-63 MB
+  rebuilds, 6-present retirement): 599 -> 6 chunk creations, peak reservation unchanged.
+- Live check (when lives resume): `[mem] ours` cascade capture and RT capture MB with
+  rt_capture_rise_reserve 0 / 1 / 0 in one run; `[cascade] casters ... buffer full 0.0` and RT
+  `opaque draws dropped (buffer full) 0.00` in every window; `[bvh] mesh cache ... freed N`
+  near 0 and `[mem] ... (X empty)` with the reuse key on.
+
 ### CPU hit-material lists (historical implementation, 2026-11-02)
 
 `perf_hitmat_lists` retired 2026-11-04: no saving (G-buffer hooks 1.16 ms both); hidden developer INI only, default 0; shared material snapshot/list paths retained.
@@ -1419,3 +1449,21 @@ Any future candidate needs bit-equal stored outputs/counters and a paired 95%
 interval wholly below zero for total affected work, with no affected scene losing
 beyond its interval. No encoding tolerance is invoked here. No new raw key or
 SpecId allocated; 1037+ remain available, 1032-1034 retired; request delta 0.
+
+### Scene wait growth in the 2026-11-08 user session (branch claude/opt-waits)
+- What the wait is: CPU ordering, not a GPU fence. BG3 records the lighting command buffer (our RT passes) on a worker
+  1-5 ms before the G-buffer thread ends the pass where the scene is captured; `rt_scene_set` blocks on `g_scene_cv`
+  until that thread's `rt_after_capture` commits this frame's slot. Both command buffers go down in one vkQueueSubmit.
+- Why the 12 ms cap did not hold (mean 18.2 ms, max 61 ms, 0 timeouts): `rt_after_capture` holds `g_mu` for the whole
+  scene recording (scene_prepare, bvh_build, alpha_commit). After its timeout `wait_for` must re-take `g_mu`, so the
+  lighting thread waits until the commit anyway and the frame counts as "got".
+- Why it grew 2.0 -> 18.2 ms (frame 25.9 -> 52.6 ms, GI/RT GPU ms flat): the OMM dyn refusal churn inside bvh_build
+  (P4_OMM.md 11.2i: ~36 refused bakes per build, each 3 dedicated allocations, a bake dispatch and 3 log lines).
+  Fixed by `rt_omm_dyn_retry_frames` (default 64) and the fault-range log budget.
+- The remaining 2-4 ms (capture end to commit measured 1.5 ms in sw2) is the game's G-buffer recording plus our
+  build recording. Plan to overlap it (not done: touches slot lifetime, TLAS growth and the alpha descriptor set):
+  pick and pin the scene slot at capture begin, size its TLAS from the previous build's instance count (growth falls
+  back to the previous scene for that frame, as a timeout does today), write its descriptor set then, and hand that
+  slot out at once: the GPU order is already given by the one submit with the G-buffer first. Same scene content, no
+  one-frame-old geometry. Gate: `[rt] scene wait` mean < 0.1 ms with got = waited, energy equal, `rt_primary_check`
+  unchanged.

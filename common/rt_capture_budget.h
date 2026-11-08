@@ -55,19 +55,42 @@ inline uint64_t elastic_capacity(uint64_t demand,uint64_t storage_limit,uint64_t
 // Keep the largest observed positive step across quiet windows: a returning
 // pan must not have to overflow again to relearn its reserve. First observation
 // is not a step from zero (loading is not a measured camera movement).
+//
+// rt_capture_rise_reserve=1 (opt-vram, 2026-11-08): the movement reserve is the largest demand rise
+// observed over `steps` consecutive samples (the replacement delay), not the largest single-sample step
+// times `steps`. A ramp of s per sample still gives steps * s; a one-sample cut of S gives S, not 3 S
+// (cascade) or 5 S (RT). Every rise of the learned history over the delay stays covered. The user's
+// 2026-11-08 log: cascade 140 -> 310 MiB in one sample learned a 3 x 265 MiB reserve, 3 slots x 1232 MiB
+// for a 370 MiB peak. `learn` is the demand the rise is learned from (default: `demand`): the RT capture
+// passes its demand without the alpha region that scales with the buffer itself (40% floor), so its own
+// growth is not learned as a camera step (1024 -> 1680 -> 2047 MiB in 0.2 s at load in that log).
 struct CaptureHeadroom {
  uint64_t previous=0,step=0;
  bool initialized=false;
+ static constexpr unsigned kRiseHistory=8;   // >= the largest delay in samples (5, primary capture)
+ std::array<uint64_t,kRiseHistory> history{};
+ unsigned history_count=0,history_next=0;
+ uint64_t rise=0;
  uint64_t capacity(uint64_t demand,uint64_t storage_limit,uint64_t card_cap,unsigned interval,
-                   uint64_t preset_capacity=0,uint64_t current=0){
+                   uint64_t preset_capacity=0,uint64_t current=0,bool rise_reserve=false,
+                   uint64_t learn=UINT64_MAX){
   demand=(std::min)(demand,kMeshPoolHardCap);
   if(initialized && demand>previous)step=(std::max)(step,demand-previous);
   previous=demand;initialized=true;
   const uint64_t steps=(4+interval+interval-1)/interval;
+  // Both estimators learn always, so a live toggle of the key uses the history already seen.
+  const uint64_t observed=(std::min)(learn==UINT64_MAX?demand:learn,kMeshPoolHardCap);
+  for(unsigned k=1;k<=history_count && k<=steps && k<=kRiseHistory;++k){
+   const uint64_t before=history[(history_next+kRiseHistory-k)%kRiseHistory];
+   if(observed>before)rise=(std::max)(rise,observed-before);
+  }
+  history[history_next]=observed;history_next=(history_next+1)%kRiseHistory;
+  if(history_count<kRiseHistory)++history_count;
   // Bootstrap from the preset's existing quarter-capacity reserve, rather
   // than learning the first pan only after a small static-scene shrink.
-  const uint64_t reserve=(std::max)((std::max)(demand/4,preset_capacity/4),
-                                  (std::min)(step,kMeshPoolHardCap/steps)*steps);
+  const uint64_t movement=rise_reserve?(std::min)(rise,kMeshPoolHardCap)
+                                      :(std::min)(step,kMeshPoolHardCap/steps)*steps;
+  const uint64_t reserve=(std::max)((std::max)(demand/4,preset_capacity/4),movement);
   const uint64_t quantum=16*mib;
   uint64_t cap=(std::min)(kMeshPoolHardCap,card_cap);
   if(storage_limit)cap=(std::min)(cap,storage_limit);

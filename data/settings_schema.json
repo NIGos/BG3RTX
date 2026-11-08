@@ -332,16 +332,16 @@
      ]},
     {"id": "exp_hair_groom_primary", "label": "Strand hair on screen",
      "description": "Experimental: displays converted hairstyles as individual strands.",
-     "apply": "restart", "apply_note": "restart required; experimental activation safety gate", "advanced": false, "experimental": true, "developer": true,
+     "apply": "restart", "apply_note": "restart required: strands on screen, the hair ray-origin reservation and the world-space tangent are set up at startup", "advanced": false, "experimental": true, "developer": true,
      "category": "Advanced", "summary": "Experimental: displays converted hairstyles as individual strands.",
-     "details": "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Turns on the whole strand path: the frame record decided at submit, per-frame trace tags, LOD keep, coverage hold and the world-space tangent. Cost and appearance remain unqualified; activation requires restart after a reported device-loss incident.",
+     "details": "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified; turning it on needs a game restart.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {"rt": "1", "sharc_device": "1"},
      "required_from_choice": {"rt": 1, "sharc_device": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_hair_groom_primary": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "linear_swept_spheres", "shader_int64", "fragment_stores", "hair_grooms"], "keys": {"rt_hair_groom_primary": "1", "rt_hair_groom_primary_order": "1", "rt_hair_groom_primary_current": "1", "rt_hair_primary_frame_tag": "1", "rt_hair_groom_lod_keep": "1", "rt_hair_primary_hold": "1", "rt_hair_tangent_world": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": ["rt_hair_groom_primary"], "developer": false, "maturity": "developer"}
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "linear_swept_spheres", "shader_int64", "fragment_stores", "hair_grooms"], "keys": {"rt_hair_groom_primary": "1", "rt_hair_groom_primary_order": "1", "rt_hair_groom_primary_current": "1", "rt_hair_primary_frame_tag": "1", "rt_hair_groom_lod_keep": "1", "rt_hair_primary_hold": "1", "rt_hair_tangent_world": "1", "rt_hair_groom": "1", "rt_hair_groom_shadow_t": "1", "rt_hair_groom_ao_t": "1", "rt_hair_groom_cascade_drop": "1", "rt_hair_fibre": "1", "rt_hair_fibre_gi": "1", "rt_hair_fibre_spec": "1", "rt_hair_fibre_mapped": "1", "rr_hair_guides": "1", "rt_hair_physical_origin": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": ["rt_hair_groom_primary"], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_fibre", "label": "Physical strand shading",
      "description": "Experimental: gives on-screen hair brighter, warmer shading.",

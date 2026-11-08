@@ -149,6 +149,58 @@ int main() {
   CHECK(allocate_fullest(chunks, 256, 256, &off) == 0);
   CHECK(allocate_fullest(chunks, 256, 256, &off, 1, 1) == -1);
   CHECK(allocate_fullest(chunks, 256, 256, &off, -1, UINT32_MAX) == 0);
+  // rt_as_chunk_reuse_frames: a retained empty chunk is taken by another arena and joins it; a
+  // non-retained empty chunk (key 0) still never mixes arenas (checks above).
+  chunks = std::vector<Chunk>(2);
+  chunks[0].ra.init(1024);chunks[0].ra.arena = 2;chunks[1].ra.init(1024);chunks[1].ra.arena = 1;
+  CHECK(chunks[1].ra.alloc(256, 256, &off));
+  CHECK(keep_empty_chunk(chunks[0].ra, 50, 120, false) && chunks[0].ra.retained());
+  CHECK(allocate_fullest(chunks, 1024, 256, &off, -1, 1) == 0 && chunks[0].ra.arena == 1);
+  CHECK(!chunks[0].ra.empty_since && !chunks[0].ra.retained()); // in use again
+  ChunkRanges e;e.init(1024);
+  CHECK(keep_empty_chunk(e, 100, 120, false) && keep_empty_chunk(e, 219, 120, false));
+  CHECK(!keep_empty_chunk(e, 220, 120, false));         // window over: freed
+  e = ChunkRanges{};e.init(1024);
+  CHECK(!keep_empty_chunk(e, 100, 120, true));          // VRAM guard ask: freed now
+  CHECK(!keep_empty_chunk(e, 100, 0, false));           // key 0: freed now (old behaviour)
+  // Per-frame rebuilds (cascade/per-draw BLAS, 40-63 MB, retired after 6 presents): without reuse every
+  // emptied chunk is freed and a new one allocated; with reuse the in-flight set is allocated once.
+  // The peak reservation does not grow.
+  auto churn = [](uint64_t frames, uint64_t& peak) {
+    constexpr uint64_t MB = 1ull << 20;
+    struct Pending { unsigned frame; int chunk; uint64_t off, size; };
+    std::vector<Chunk> cs;std::vector<Pending> pending;
+    unsigned created = 0;peak = 0;
+    for (unsigned frame = 1; frame < 600; ++frame) {
+      for (auto it = pending.begin(); it != pending.end();) {
+        if (!retired(it->frame, frame, frame, frame)) { ++it;continue; }
+        cs[it->chunk].ra.release(it->off, it->size);it = pending.erase(it);
+      }
+      for (auto& c : cs)
+        if (c.ra.reclaimable() && !keep_empty_chunk(c.ra, frame, frames, false)) c.ra = {};
+      const uint64_t size = (40 + frame * 7 % 24) * MB;
+      const uint32_t arena = 1 + frame % 2;            // per-draw and cascade alternate
+      uint64_t o = 0;
+      int ci = allocate_fullest(cs, size, 256, &o, -1, arena);
+      if (ci < 0) {
+        Chunk c;c.ra.init(64 * MB);c.ra.arena = arena;c.ra.alloc(size, 256, &o);
+        ci = -1;
+        for (size_t i = 0; i < cs.size() && ci < 0; ++i) if (!cs[i].ra.cap) cs[i] = c, ci = int(i);
+        if (ci < 0) cs.push_back(c), ci = int(cs.size() - 1);
+        ++created;
+      }
+      cs[ci].ra.mark_pending(size);pending.push_back({frame, ci, o, size});
+      uint64_t reserved = 0;
+      for (const auto& c : cs) reserved += c.ra.cap;
+      peak = (std::max)(peak, reserved);
+    }
+    return created;
+  };
+  uint64_t peak_off = 0, peak_on = 0;
+  const unsigned created_off = churn(0, peak_off), created_on = churn(120, peak_on);
+  std::printf("Chunk reuse: %u chunks created without reuse, %u with; peak %.0f / %.0f MB\n", created_off, created_on,
+              double(peak_off) / (1ull << 20), double(peak_on) / (1ull << 20));
+  CHECK(created_off > 500 && created_on <= 8 && peak_on <= peak_off);
   const auto mixed = motion(false), separated = motion(true);
   std::printf("Motion reproduction: mixed/separated reserve %.1f/%.1f MB, occupied %.1f MB, live %.1f MB\n",
               double(mixed.reserved) / (1ull << 20), double(separated.reserved) / (1ull << 20),

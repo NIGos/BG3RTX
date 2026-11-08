@@ -209,6 +209,14 @@ each swapped G-buffer draw, up to 64 per frame, averaged per 300 frames). VRAM: 
 (41.7 MB at 2560x1067) plus per point 8 B UV + 12 B previous position (LOD 0 ~19 MB, LOD 1/2 ~10 MB per character).
 Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
 
+Fibre passes (branch claude/opt-gpu, 2026-11-08): `[hair fibre] fibre pass ... GPU median X ms` and
+`[hair fibre] spec pass ... GPU median X ms` (timestamp pairs around the two dispatches, medians per 300
+dispatched frames, common/hair_fibre_timing.h). They are inside the `ls:` and `rf:` lines: never add them twice.
+gi/hair_fibre.hlsl now has one call site each for the scene visibility query, the groom query and the fibre BSDF
+(the sun is the light loop's last iteration) and skips non-hair pixels before ls_lite's loads. Offline compile
+12 s -> 3 s, driver ISA 912 -> 260 KB, 168 registers both; same expressions in the same order, GPU output
+equality not yet checked (no replay contract for this pass).
+
 ## 5a. Cost per character and the crowd budget (increment 5, 2026-11-03, offline)
 `python -m tools.hair_groom.cost --crowd`: per groom file and LOD the mesh-pool arrays, the per-instance memory
 (points, primary UV and previous points, compacted BLAS at 70 B per segment), refit ms and trace ms per 100k hair
@@ -624,6 +632,14 @@ Independent review of the layer path; each finding verified in code before the f
   cascade_drop are read once per publish.
 - L2 not changed: a single non-opaque traversal would commit LSS candidates (unproven here: hf_groom only walks them)
   and costs every strand ray; the 3-restart skip only runs where a non-swapping groom's strand is in front.
+
+## 5l. RTX Hair single option (2026-11-08, branch claude/opt-waits)
+- The user tested and approved strands with a hand-written set (root `bg3rtx_user.ini`). "Strand hair on screen" On
+  now writes that whole set: the 5j bundle plus rt_hair_groom, shadow_t, ao_t, cascade_drop, fibre, fibre_gi,
+  fibre_spec, fibre_mapped, rr_hair_guides and rt_hair_physical_origin. Tips, coverage, macro_normal and
+  coverage_footprint stay off. Off in every preset; the other hair knobs still show (and can override) their keys.
+- Restart keys in the bundle: rt_hair_groom_primary, rt_hair_physical_origin (0 -> 1), rt_hair_tangent_world
+  (compiled at pipeline creation). The knob's note says so. Choice `kv` grew from 12 to 18 entries.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is

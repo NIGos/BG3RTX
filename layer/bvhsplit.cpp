@@ -65,6 +65,8 @@
 #include <cstdarg>
 #include <deque>
 #include <unordered_set>
+#include "../common/omm_dyn_refusal.h"
+#include "../common/omm_dyn_evict.h"
 
 namespace bg3 {
 
@@ -285,6 +287,14 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
   int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena);
   if (ci < 0) {
     VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
+    // Retained empty chunks (rt_as_chunk_reuse_frames) too small for this range must not count against
+    // the chunks' share: free them before the cap check, as the sweep would have without retention.
+    if (guard_what && vram_guard_on() && as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX))
+      for (AsChunk& c : g_chunks)
+        if (c.buf.b && c.ra.reclaimable() && c.ra.empty_since) {
+          ++g_chunks_freed;g_chunk_bytes_freed += c.buf.size;
+          free_buf(c.buf);c.ra = as_chunks::ChunkRanges{};
+        }
     if (guard_what && vram_guard_on() &&
         !vram_allow(vram_guard::kAsChunks, cs, guard_what,
                     as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX)))   // over the budget's share
@@ -752,7 +762,7 @@ struct Stats {
   // rt_omm_dyn: masked per-draw draws/triangles seen, with a micro-map attached, baked (entries, triangles), not
   // baked for the per-build or memory budget or a failure, accelerated scenes built.
   uint64_t omm_dyn_draws = 0, omm_dyn_tris = 0, omm_dyn_att_draws = 0, omm_dyn_att_tris = 0, omm_dyn_baked = 0;
-  uint64_t omm_dyn_bake_tris = 0, omm_dyn_deferred = 0, omm_dyn_failed = 0, omm_dyn_scenes = 0;
+  uint64_t omm_dyn_bake_tris = 0, omm_dyn_deferred = 0, omm_dyn_failed = 0, omm_dyn_scenes = 0, omm_dyn_evicted = 0;
 };
 Stats g_st;
 std::mutex g_st_mu;   // fixup counters (submit thread)
@@ -1400,10 +1410,12 @@ struct DynMicromap {
   Buf data, snapshot, descriptors;   // data/descriptors: micro-map build inputs, freed once the bake ran
   uint64_t rec = 0;                  // build record of the bake's command buffer
   bool ready = false;                // that command buffer was submitted (latched: records are pruned)
+  uint64_t last_use = 0;             // rt_omm_dyn_evict_frames: frame a draw last matched it (bake frame first)
 };
 std::unordered_map<uint64_t, DynMicromap> g_omm_dyn;
 VkDeviceSize g_omm_dyn_bytes = 0;    // our buffers of every entry (the backend's micro-map storage is separate)
 uint64_t g_omm_dyn_cached_tris = 0;
+bg3::omm_dyn::Refusal g_omm_dyn_refusal;   // rt_omm_dyn_retry_frames: backend refusals that prove the next ones
 std::vector<uint64_t> g_omm_dyn_tickets[kSceneSlots];   // micro-maps the slot's accelerated TLAS traverses
 struct OmmDynPipe { VkDescriptorSetLayout dsl{}; VkPipelineLayout layout{}; VkPipeline bake{}, check{}; uint64_t gen_bake{}, gen_check{}; };
 OmmDynPipe g_omm_dyn_pipe;
@@ -1823,7 +1835,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   if(g_omm_clone.pipeline || g_omm_validate.pipeline || g_omm_dyn_pipe.bake)dd->vk.DeviceWaitIdle(dd->device);
   // rt_omm_dyn: the backend destroys the micro-maps themselves (omm::device_destroyed).
   for (auto& [k, e] : g_omm_dyn) { omm::release_ticket(e.ticket); omm_dyn_free(e); }
-  g_omm_dyn.clear(); g_omm_dyn_bytes = 0; g_omm_dyn_cached_tris = 0;
+  g_omm_dyn.clear(); g_omm_dyn_bytes = 0; g_omm_dyn_cached_tris = 0; g_omm_dyn_refusal = {};
   for (auto& t : g_omm_dyn_tickets) t.clear();
   for (VkPipeline p : {g_omm_dyn_pipe.bake, g_omm_dyn_pipe.check}) if (p) dd->vk.DestroyPipeline(dd->device, p, nullptr);
   if (g_omm_dyn_pipe.layout) dd->vk.DestroyPipelineLayout(dd->device, g_omm_dyn_pipe.layout, nullptr);
@@ -2539,6 +2551,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   uint64_t omm_bake_tris = 0;
   const uint64_t omm_bake_cap = uint64_t((std::max)(cfg_int("rt_omm_dyn_bake_tris", 131072), 0));
   const VkDeviceSize omm_dyn_cap = VkDeviceSize((std::max)(cfg_int("rt_omm_dyn_mb", 256), 0)) << 20;
+  const uint32_t omm_retry = uint32_t((std::max)(cfg_int("rt_omm_dyn_retry_frames", 64), 0));
+  if (omm_dyn_on) g_omm_dyn_refusal.refresh(now, omm::live_bytes(), omm_retry);
   if (omm_dyn_on) {
     // Bakes whose command buffer ran: usable, inputs freed; dropped ones are discarded.
     for (auto it = g_omm_dyn.begin(); it != g_omm_dyn.end();) {
@@ -2557,6 +2571,25 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         continue;
       }
       ++it;
+    }
+    // rt_omm_dyn_evict_frames (off by default, common/omm_dyn_evict.h): LRU eviction of micro-maps no draw matched
+    // for N frames and no per-draw BLAS was built with, at most 64 per build.
+    const uint32_t evict_frames = uint32_t((std::max)(cfg_int("rt_omm_dyn_evict_frames", 0), 0));
+    if (evict_frames && !g_omm_dyn.empty()) {
+      std::unordered_set<uint64_t> held;
+      for (const auto& [k, s] : g_dyn) if (s.omm_ticket) held.insert(s.omm_ticket);
+      std::vector<bg3::omm_dyn::EvictCandidate> all;
+      all.reserve(g_omm_dyn.size());
+      for (const auto& [k, e] : g_omm_dyn) all.push_back({k, e.last_use, e.ready, held.count(e.ticket) != 0});
+      for (const uint64_t k : bg3::omm_dyn::pick_evictions(std::move(all), now, evict_frames, 64)) {
+        auto it = g_omm_dyn.find(k);
+        DynMicromap& e = it->second;
+        omm::release_ticket(e.ticket);   // destroyed once every registered GPU use completed
+        omm_dyn_free(e);
+        g_omm_dyn_cached_tris -= (std::min)(g_omm_dyn_cached_tris, uint64_t(e.tris));
+        g_omm_dyn.erase(it);
+        ++g_st.omm_dyn_evicted;
+      }
     }
   }
   for (auto& [di, key] : dyn) {
@@ -2613,7 +2646,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           const VkDeviceSize bytes = VkDeviceSize(fd.prims) * (64u + 24u + 8u);
           if (omm_baking.count(mk)) {
           } else if (omm_bake_tris + fd.prims > omm_bake_cap || g_omm_dyn_bytes + bytes > omm_dyn_cap ||
-                     fd.soup_off > UINT32_MAX || fd.prims > 65535u * 65535u) {
+                     fd.soup_off > UINT32_MAX || fd.prims > 65535u * 65535u || !g_omm_dyn_refusal.allow(fd.prims)) {
             ++g_st.omm_dyn_deferred;
           } else {
             omm_baking.insert(mk);
@@ -2621,6 +2654,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
             omm_bakes.push_back({mk, fd.soup_off, fd.prims, mw, mh, view, lo, hi, ar.scale[0], ar.scale[1]});
           }
         } else if (it->second.ready && it->second.tris == fd.prims && it->second.mask == view) {
+          it->second.last_use = now;   // rt_omm_dyn_evict_frames: matched by a draw this build
           // Index range for the check (capacity like the BLAS's, reallocated when the draw grows).
           const VkDeviceSize need = VkDeviceSize(fd.prims) * 4u;
           if (s.omm_index_size < need) {
@@ -3238,14 +3272,20 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     constexpr VkBufferUsageFlags kIn = VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT;
     for (const OmmBake& b : omm_bakes) {
+      // A refusal earlier in this loop proves this one (no buffers, no bake dispatch).
+      if (!g_omm_dyn_refusal.allow(b.tris)) { ++g_st.omm_dyn_deferred; continue; }
       DynMicromap e;
-      e.tris = b.tris; e.mask = b.view; e.rec = rec;
+      e.tris = b.tris; e.mask = b.view; e.rec = rec; e.last_use = now;
       const VkDeviceSize db = VkDeviceSize(b.tris) * 64u, sb = VkDeviceSize(b.tris) * 24u, tb = VkDeviceSize(b.tris) * 8u;
       const bool made = make_buf(e.data, db, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | kIn, false, "OMM dyn micro-map data") &&
                         make_buf(e.snapshot, sb, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "OMM dyn uv snapshot") &&
                         make_buf(e.descriptors, tb, kIn, true, "OMM dyn micro-map descriptors");
       for (Buf* p : {&e.data, &e.snapshot, &e.descriptors}) g_omm_dyn_bytes += p->size;
-      if (!made) { omm_dyn_free(e); ++g_st.omm_dyn_failed; continue; }
+      if (!made) {
+        omm_dyn_free(e); ++g_st.omm_dyn_failed;
+        g_omm_dyn_refusal.refused(b.tris, now, omm::live_bytes(), omm_retry);
+        continue;
+      }
       std::vector<omm::Triangle> tris(b.tris);
       for (uint32_t i = 0; i < b.tris; ++i) tris[i] = {i * 64u, uint16_t(omm_mask::kOmbLevel), uint16_t(VK_OPACITY_MICROMAP_FORMAT_4_STATE_EXT)};
       std::memcpy(e.descriptors.map, tris.data(), size_t(tb));
@@ -3260,7 +3300,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       input.triangleUsage = kIn | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
       e.ticket = omm::record(cmd, input);   // its barriers order the bake's writes before the micro-map build
       // A failed record leaves the dispatch recorded: free_buf defers the destruction past every frame in flight.
-      if (!e.ticket) { omm_dyn_free(e); ++g_st.omm_dyn_failed; continue; }
+      if (!e.ticket) {
+        omm_dyn_free(e); ++g_st.omm_dyn_failed;
+        g_omm_dyn_refusal.refused(b.tris, now, omm::live_bytes(), omm_retry);
+        continue;
+      }
       ++g_st.omm_dyn_baked;
       g_st.omm_dyn_bake_tris += b.tris;
       g_omm_dyn_cached_tris += b.tris;
@@ -4364,13 +4408,18 @@ void bvh_on_present() {
       ++g_st.evict_lru;
     }
   }
-  // Empty chunks always go, independent of guard state/cap. used still owns
+  // Empty chunks go, independent of guard state/cap (after the reuse window below). used still owns
   // pending ranges until BOTH the fence and all old TLAS slots retire above.
   // free_buf uses the existing deferred destruction queue, after retired AS
   // handles. Retained diagnostic handles pin only their own backing chunks.
-  (void)vram_take_ask(vram_guard::kYieldEmptyChunks);
-  for (AsChunk& c : g_chunks) {
+  // rt_as_chunk_reuse_frames: an empty chunk stays for that many frames to take the next new-chunk
+  // allocation (as_chunks::keep_empty_chunk); a guard ask, an evacuated source or the key at 0 free it now.
+  const bool yield_empty = vram_take_ask(vram_guard::kYieldEmptyChunks) != 0;
+  const uint64_t reuse_frames = uint64_t((std::max)(cfg_int("rt_as_chunk_reuse_frames", 120), 0));
+  for (size_t ci = 0; ci < g_chunks.size(); ++ci) {
+    AsChunk& c = g_chunks[ci];
     if (!c.buf.b || !c.ra.reclaimable()) continue;
+    if (int(ci) != g_relocating_chunk && as_chunks::keep_empty_chunk(c.ra, now, reuse_frames, yield_empty)) continue;
     ++g_chunks_freed;
     g_chunk_bytes_freed += c.buf.size;
     free_buf(c.buf);
@@ -4477,7 +4526,7 @@ void bvh_on_present() {
       last_checked = c[3]; last_changed = c[4];
       const double micro = double(c[0]) + double(c[1]) + double(c[2]);
       log_stats("[omm dyn] last %llu builds (rt_omm_dyn %d): masked per-draw draws %.1f (%.3fM triangles) per build, with a micro-map "
-          "%.1f (%.3fM triangles, %.1f%%); baked %llu micro-maps (%.3fM triangles), deferred %llu, failed %llu; accelerated "
+          "%.1f (%.3fM triangles, %.1f%%); baked %llu micro-maps (%.3fM triangles), deferred %llu, failed %llu, evicted %llu; accelerated "
           "scenes %llu; cache %zu micro-maps, %.3fM triangles, our buffers %.2f MB, backend micro-map+scratch %.2f MB; baked "
           "micro-triangles so far: known opaque %.1f%%, known transparent %.1f%%, unknown %.1f%% (%u triangles); uv checks "
           "this window: %u triangles, %u changed",
@@ -4485,7 +4534,7 @@ void bvh_on_present() {
           s.omm_dyn_att_draws / nb, s.omm_dyn_att_tris / nb * 1e-6,
           s.omm_dyn_tris ? 100.0 * double(s.omm_dyn_att_tris) / double(s.omm_dyn_tris) : 0.0, (unsigned long long)s.omm_dyn_baked,
           s.omm_dyn_bake_tris * 1e-6, (unsigned long long)s.omm_dyn_deferred, (unsigned long long)s.omm_dyn_failed,
-          (unsigned long long)s.omm_dyn_scenes, g_omm_dyn.size(), g_omm_dyn_cached_tris * 1e-6, double(g_omm_dyn_bytes) / 1048576.0,
+          (unsigned long long)s.omm_dyn_evicted, (unsigned long long)s.omm_dyn_scenes, g_omm_dyn.size(), g_omm_dyn_cached_tris * 1e-6, double(g_omm_dyn_bytes) / 1048576.0,
           double(omm::live_bytes()) / 1048576.0, micro ? 100.0 * c[0] / micro : 0.0, micro ? 100.0 * c[1] / micro : 0.0,
           micro ? 100.0 * c[2] / micro : 0.0, c[5], checked, changed);
     }

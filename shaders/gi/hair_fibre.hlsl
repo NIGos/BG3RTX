@@ -237,6 +237,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   g_rt_pass = kRtPassLocal;
   const float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) return;
+  // Only hair pixels: ls_lite's class (below) is kMatHair only where this one is (it remaps classes to standard
+  // only), so this cheap test first skips ls_lite's loads on every other pixel of the full-screen dispatch.
+  if (mat_class_at(fp) != kMatHair) return;
   LsLite s = (LsLite)0;
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
   s.pixel = fp;
@@ -254,110 +257,121 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // The fibre response: its single scattering (T_f f_s, every lobe) to the specular buffer as the game's R/TT/TRT
   // terms (RR demodulates the diffuse buffer by the hair albedo), the multiple scattering to the diffuse buffer.
   float3 add_d = 0, add_s = 0, sub_d = 0, sub_s = 0;
-  // ---- local lights (point and spot lists of the pixel's froxel) ----
+  // The point and spot lists of the pixel's froxel, then the sun as the last iteration (k == end_s). Each iteration
+  // first picks its term and its ray (phase 1), then traces it (phase 2: one scene visibility query and one strand
+  // query), then accumulates (phase 3). One call site each for rt_visibility, the groom query and the fibre BSDF
+  // instead of three (mapped lights, traced lights, sun): the inlined visibility query dominated this module's compile
+  // time (12 s -> 3 s offline; driver ISA 912 -> 260 KB, registers unchanged at 168). The terms are the same
+  // expressions on the same operands, accumulated in the same order.
   const uint3 cl = bg3_cluster(fp, d);
   const uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
-  [loop] for (uint k = cl.x; k < end_s; ++k) {
-    const uint li = bg3_light_index(k);
-    const bool spot = k >= end_p;
-    const Bg3Light l = load_light(li);
-    if ((l.flags & 1u) != 0u) {   // a game shadow map: the game's hair term stays unless rt_hair_fibre_mapped
-      if (kHfCheck != 0u || kHfMapped == 0u || pc.ls_shadowed == 0u || ls_qa_off() || ls_atlas_fallback(l.pos)) continue;
-      float R = pc.ls_source_radius;
-      if ((pc.ls_flags & 1u) != 0u) {   // D-LS's per-light data: the source radius and its owner rules
-        const uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
-        if ((si.z & 0x10000u) != 0u) {
-          R = asfloat(si.x);
-          if (ls_skip_light(si)) continue;
+  [loop] for (uint k = cl.x; k <= end_s; ++k) {
+    // ---- phase 1: the term and its ray ----
+    const bool is_sun = k == end_s;
+    bool mapped = false, trace = false;
+    float3 E = 0, Ld = 0, cd = 0, cs = 0;   // cd, cs: the game's term of a light without a shadow map
+    float S = 1.0, m = 1.0, clouds = 1.0;
+    float2 f = f_game;
+    HfRay ray = (HfRay)0;
+    if (is_sun) {
+      // ---- the sun (rt/bg3_sun.hlsli, as ls_sun) ----
+      m = pc.ls_has_mask != 0u && lFlags.m0.w > 0.0 ? gSunShadow[fp] : 1.0;
+      clouds = bg3_cloud_shadow(sf.P);
+      Ld = normalize(cam.v0.xyz);
+      E = bg3_sun_colour() * (clouds * asfloat(lScale.Load(0)));
+      if (kHfCheck != 0u || !any(E > 0.0)) continue;
+      f = f_sun;
+      ray = hf_ray(s.P, s.N, s.org, s.P + Ld * 1.0e4, fp, 0xFFFFu, s.cone, 0.0);
+      trace = true;
+    } else {
+      const uint li = bg3_light_index(k);
+      const bool spot = k >= end_p;
+      const Bg3Light l = load_light(li);
+      if ((l.flags & 1u) != 0u) {   // a game shadow map: the game's hair term stays unless rt_hair_fibre_mapped
+        if (kHfCheck != 0u || kHfMapped == 0u || pc.ls_shadowed == 0u || ls_qa_off() || ls_atlas_fallback(l.pos)) continue;
+        float R = pc.ls_source_radius;
+        if ((pc.ls_flags & 1u) != 0u) {   // D-LS's per-light data: the source radius and its owner rules
+          const uint4 si = lsSlots[uint2(min(li, 4095u), 0)];
+          if ((si.z & 0x10000u) != 0u) {
+            R = asfloat(si.x);
+            if (ls_skip_light(si)) continue;
+          }
+        }
+        float dist;
+        if (!hf_light(l, spot, sf, E, Ld, dist)) continue;   // outside its range, cone or channel: the game added nothing
+        const float3 Lv = l.pos - sf.P;
+        S = hf_atlas_hair(l, spot, sf, Ld, dot(Lv, Lv));
+        ray = hf_ray(s.P, s.N, s.org, l.pos, fp, li, s.cone, R);
+        mapped = trace = true;
+      } else {
+        float3 ct, Ld0;
+        float d2, nol;
+        if (!bg3_light_eval_mat(l, spot, sf, mt, cd, ct, cs, Ld0, d2, nol)) continue;   // the game added nothing
+        float dist;
+        if (!hf_light(l, spot, sf, E, Ld, dist)) continue;
+        float3 lpos;
+        float R;
+        const bool traced = ls_light_traced(li, spot, s, lpos, R);
+        if (kHfCheck != 0u && !traced) continue;
+        if (traced && ls_qa_off()) continue;   // D-LS's QA ambient floor removed this light: nothing to replace
+        if (traced) {
+          ls_light_ray(li, lpos, R);
+          ray = hf_ray(s.P, s.N, s.org, lpos, fp, li, s.cone, R);
+          f = f_traced;
+          trace = true;
         }
       }
-      float3 E, Ld;
-      float dist;
-      if (!hf_light(l, spot, sf, E, Ld, dist)) continue;   // outside its range, cone or channel: the game added nothing
-      const float3 Lv = l.pos - sf.P;
-      const float S = hf_atlas_hair(l, spot, sf, Ld, dot(Lv, Lv));
-      const HfRay ray = hf_ray(s.P, s.N, s.org, l.pos, fp, li, s.cone, R);
-      const uint vs = hf_visibility(ray, s.cone);
-      if (vs == kRtUnknown) continue;
-      bool passes;
-      const float n = vs == kRtLit ? hf_groom(ray, passes) : 0.0;
-      if (vs == kRtLit) {
-        float3 fs, fm;
-        hd_shade_pixel_parts(T, sf.V, Ld, n, colour, beta, fs, fm);
-        add_d += E * fm * f_game.x;
-        add_s += E * fs * f_game.y;
+    }
+    // ---- phase 2: the scene's visibility, then the strands, on D-LS's own ray ----
+    // Unknown: D-LS kept the game's term (the sun's too): so do we. An untraced light is lit (v 1, no strands).
+    const uint vs = trace ? hf_visibility(ray, s.cone) : kRtLit;
+    if (vs == kRtUnknown) continue;
+    const float v = vs == kRtLit ? 1.0 : 0.0;
+    // D-LS's strand decision replayed (blocking, or with rt_hair_groom_shadow_t passed by its draw against the groom's
+    // measured transmittance); n the strands crossed, which set T_f.
+    bool passes = true;
+    const float n = trace && v > 0.0 ? hf_groom(ray, passes) : 0.0;
+    // ---- phase 3: what the buffer holds for this term out, the fibre response in ----
+    bool shade = false;
+    if (is_sun) {
+      // The sun's visibility as the buffer's sun term has it: the game's mask m (D-LS's ls_sun keeps it; with the core's
+      // RT sun mask it is that trace), times our scene ray (min(m, v): no light where either is shadowed, so no sun
+      // under roofs or missing casters).
+      const float3 Em = E * m;
+      if (m * clouds > 0.0) {
+        float3 sd, ss;
+        bg3_sun_eval_mat(sf, mt, Ld, Em, m * clouds, sd, ss);
+        sub_d += sd * f.x;
+        sub_s += ss * f.y;
       }
+      E = Em;
+      shade = v > 0.0;
+    } else if (mapped) {
+      shade = v > 0.0;
       // D-LS keeps these lights on hair: the buffer holds the game's term at the game's AO factor.
       sub_d += E * S * bg3_hair_diff(mt, dot(sf.N, Ld), dot(mt.T, Ld), 1.0 - S) * f_game.x;
       sub_s += E * S * bg3_hair_spec(mt, Ld, sf.V) * f_game.y;
-      continue;
-    }
-    float3 cd, ct, cs, Ld0;
-    float d2, nol;
-    if (!bg3_light_eval_mat(l, spot, sf, mt, cd, ct, cs, Ld0, d2, nol)) continue;   // the game added nothing
-    float3 E, Ld;
-    float dist;
-    if (!hf_light(l, spot, sf, E, Ld, dist)) continue;
-    float3 lpos;
-    float R;
-    float v = 1.0, n = 0.0, t = 1.0;
-    float2 f = f_game;
-    const bool traced = ls_light_traced(li, spot, s, lpos, R);
-    if (kHfCheck != 0u && !traced) continue;
-    if (traced && ls_qa_off()) continue;   // D-LS's QA ambient floor removed this light: nothing to replace
-    if (traced) {
-      ls_light_ray(li, lpos, R);
-      const HfRay ray = hf_ray(s.P, s.N, s.org, lpos, fp, li, s.cone, R);
-      const uint vs = hf_visibility(ray, s.cone);
-      if (vs == kRtUnknown) continue;   // D-LS kept the game's term: so do we
-      v = vs == kRtLit ? 1.0 : 0.0;
-      // D-LS's visibility of this light, replayed on its own ray: the scene, then the strands (blocking, or with
-      // rt_hair_groom_shadow_t passed by its draw against the groom's measured transmittance).
-      bool passes = true;
-      n = v > 0.0 ? hf_groom(ray, passes) : 0.0;
-      t = v > 0.0 && passes ? 1.0 : 0.0;
-      f = f_traced;
-    }
-    if (kHfCheck != 0u) {   // the game's terms at the fibre's own transmittance model (see kHfCheck)
-      float tm = v > 0.0 && n == 0.0 ? 1.0 : 0.0;
+    } else {
+      const float t = v > 0.0 && passes ? 1.0 : 0.0;
+      if (kHfCheck != 0u) {   // the game's terms at the fibre's own transmittance model (see kHfCheck)
+        float tm = v > 0.0 && n == 0.0 ? 1.0 : 0.0;
 #ifdef RT_SPEC_NATIVE
-      if (v > 0.0 && n > 0.0 && kRtGroomShadowT != 0u)
-        tm = 0.7 * dot(pow(hd_lookup3(colour, max(0.09, beta), 0u), n.xxx), float3(0.2126, 0.7152, 0.0722));
+        if (v > 0.0 && n > 0.0 && kRtGroomShadowT != 0u)
+          tm = 0.7 * dot(pow(hd_lookup3(colour, max(0.09, beta), 0u), n.xxx), float3(0.2126, 0.7152, 0.0722));
 #endif
-      add_d += cd * (tm * f.x);
-      add_s += cs * (tm * f.y);
-    } else if (v > 0.0) {
+        add_d += cd * (tm * f.x);
+        add_s += cs * (tm * f.y);
+      } else {
+        shade = v > 0.0;
+      }
+      sub_d += cd * (t * f.x);
+      sub_s += cs * (t * f.y);
+    }
+    if (shade) {
       float3 fs, fm;
       hd_shade_pixel_parts(T, sf.V, Ld, n, colour, beta, fs, fm);
       add_d += E * fm * f.x;
       add_s += E * fs * f.y;
-    }
-    sub_d += cd * (t * f.x);
-    sub_s += cs * (t * f.y);
-  }
-  // ---- the sun (rt/bg3_sun.hlsli, as ls_sun) ----
-  const float m = pc.ls_has_mask != 0u && lFlags.m0.w > 0.0 ? gSunShadow[fp] : 1.0;
-  const float clouds = bg3_cloud_shadow(sf.P);
-  const float3 Ls = normalize(cam.v0.xyz);
-  const float3 Esun = bg3_sun_colour() * (clouds * asfloat(lScale.Load(0)));
-  if (kHfCheck == 0u && any(Esun > 0.0)) {
-    const HfRay ray = hf_ray(s.P, s.N, s.org, s.P + Ls * 1.0e4, fp, 0xFFFFu, s.cone, 0.0);
-    const uint vs = hf_visibility(ray, s.cone);
-    if (vs != kRtUnknown && m * clouds > 0.0) {   // unknown: the game's sun term stays (as D-LS keeps it)
-      float3 sd, ss;
-      bg3_sun_eval_mat(sf, mt, Ls, Esun * m, m * clouds, sd, ss);
-      sub_d += sd * f_sun.x;
-      sub_s += ss * f_sun.y;
-    }
-    if (vs == kRtLit) {
-      bool passes;
-      float3 fs, fm;
-      // The sun's visibility as the buffer's sun term has it: the game's mask m (D-LS's ls_sun keeps it; with the core's
-      // RT sun mask it is that trace), times our scene ray (min(m, v): no light where either is shadowed, so no sun
-      // under roofs or missing casters). n from the groom query only sets T_f.
-      hd_shade_pixel_parts(T, sf.V, Ls, hf_groom(ray, passes), colour, beta, fs, fm);
-      add_d += Esun * m * fm * f_sun.x;
-      add_s += Esun * m * fs * f_sun.y;
     }
   }
   const float3 od = max(gDiffuse[fp] - sub_d + add_d, 0.0), os = max(gSpecular[fp] - sub_s + add_s, 0.0);
