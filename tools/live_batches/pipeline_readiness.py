@@ -94,7 +94,7 @@ CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pa
 # core/gi.cpp make_push reads hit_ao_rays into Push::rt_ao_rays every frame.
 NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scene_compact_holds cpu_opt1 cpu_opt2 cpu_opt3 dlss5_nr_bypass rt_build fps_cap cpu_timing detailed_logging dev "
     "gi_rr_rays gi_rays gi_ao gi_strength rf_max_rough ls_shadowed rr_cbt rr fg "
-    "rt_shadows rt_alpha rt_hair_groom_primary_order rt_hair_primary_passes "
+    "rt_shadows rt_alpha rt_hair_groom_primary_order rt_hair_primary_passes rt_scene_wait "
     "rt_hair_groom_crowd_ksegments rt_hair_groom_tips rt_water_geometry preset ab_off".split())
 for key in NO_PIPELINE:
     TABLE[key] = []

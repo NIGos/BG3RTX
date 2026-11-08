@@ -1,0 +1,15 @@
+[
+ {"label": "warmup-on", "kind": "static", "speed": "static", "seconds": 20, "repeat_ms": 0, "scan": 16, "capture_at": 0,
+  "serial": 0, "motion_start": 20, "motion_end": 20, "pixels_per_second": 0, "direction": 0, "set": "rt_scene_wait=1"},
+ {"label": "warmup-off", "kind": "static", "speed": "static", "seconds": 5, "repeat_ms": 0, "scan": 16, "capture_at": 0,
+  "serial": 0, "motion_start": 5, "motion_end": 5, "pixels_per_second": 0, "direction": 0, "set": "rt_scene_wait=0"},
+ {"label": "cost-wait-on-a", "kind": "static", "speed": "static", "frames": 240, "stats_reset": true, "settle_frames": 0,
+  "seconds": 4.5, "repeat_ms": 0, "scan": 16, "capture_at": 0, "serial": 0, "motion_start": 4.5, "motion_end": 4.5,
+  "pixels_per_second": 0, "direction": 0, "set": "rt_scene_wait=1"},
+ {"label": "cost-wait-off", "kind": "static", "speed": "static", "frames": 240, "stats_reset": true, "settle_frames": 0,
+  "seconds": 4.5, "repeat_ms": 0, "scan": 16, "capture_at": 0, "serial": 0, "motion_start": 4.5, "motion_end": 4.5,
+  "pixels_per_second": 0, "direction": 0, "set": "rt_scene_wait=0"},
+ {"label": "cost-wait-on-b", "kind": "static", "speed": "static", "frames": 240, "stats_reset": true, "settle_frames": 0,
+  "seconds": 4.5, "repeat_ms": 0, "scan": 16, "capture_at": 0, "serial": 0, "motion_start": 4.5, "motion_end": 4.5,
+  "pixels_per_second": 0, "direction": 0, "set": "rt_scene_wait=1"}
+]
