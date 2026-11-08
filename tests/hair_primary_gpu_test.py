@@ -382,6 +382,43 @@ def dual_check(exe, spv, n=3000, seed=13):
     check("volume GPU vs CPU: every channel within 1e-3 relative", volume_err.max() < 1e-3, volume_err.max())
 
 
+def depth_match_check(exe, spv, g, near=0.1, far=1000.0):
+    """The fibre passes' strand-pixel test (shaders/rt/hair_depth_match.hlsli, gi/hair_strand_pixel.hlsli) on the GPU's
+    real strand pixels: their view depth w (from the strand pass's device depth with this check's projection), the
+    game's device depth z = 0.1 / w (reversed infinite Z) as the entry holds it, and the game's R32F linear depth from
+    the D24 code of z (d = w_24 / zr). Every strand pixel must match (before 2026-11-08 none did: e.z was compared with
+    d directly), and the same pixel with the depth twice the tolerance away (something else in front) must not."""
+    hit = g[..., 0] != 0xFFFFFFFF
+    Df = g[..., 3].view("<f4")[hit].astype(np.float64)
+    a = primary.depth_a(near, far)
+    w = (-a * far) / (Df - a)
+    z = (0.1 / w).astype(np.float32)
+    rows, want = [], []
+    for zr in (1.0, 1000.0):   # the frustum rays' view depth (the game's carry the far-plane scale)
+        # The negative case: twice the test's tolerance away (one code + 6 half ulps of z), in whole codes.
+        far_codes = np.ceil(2 * (1 + 6 * z.astype(np.float64))) + 1   # tolerance in codes: 1 + 6 z
+        for codes in (0, 1, -1):
+            z24 = (np.round(z.astype(np.float64) * 2 ** 24) + codes * far_codes) / 2 ** 24
+            d = ((0.1 / z24) / zr).astype(np.float32)
+            block = np.zeros((len(z), 16), "<f4")
+            block[:, 0], block[:, 1], block[:, 2], block[:, 3] = z, d, zr, 5.0
+            rows.append(block)
+            want.append(codes == 0)
+    got = gpu_rows(exe, spv, np.concatenate(rows), "strand depth match")
+    if got is None:
+        return
+    m = got[:, 0].reshape(len(rows), -1) > 0.5
+    rates = [float(r.mean()) for r in m]
+    z_, d_ = rows[3][:, 0].astype(np.float64), rows[3][:, 1].astype(np.float64)
+    old = float(np.mean(np.abs(z_ - d_) <= 1e-6 * np.maximum(np.abs(d_), 1e-6)))   # the previous comparison
+    print(json.dumps({"strand_pixels": int(hit.sum()), "match_rate": rates, "old_rule_match_rate": old}))
+    check("strand pixel test: the GPU finds strand pixels to test", hit.sum() > 1000, int(hit.sum()))
+    check("strand pixel test: every strand pixel matches the game's linear depth (zr 1 and 1000)",
+          rates[0] == 1.0 and rates[3] == 1.0, rates)
+    check("strand pixel test: a depth twice the tolerance away never matches", max(rates[1], rates[2], rates[4], rates[5]) == 0.0,
+          rates)
+
+
 def shadow_check(exe, spv, pts, rad, offs, cam, n_rays=3000, seed=17):
     """Strand crossings per ray on the GPU (tools/hair_shadow_gpu_check.hlsl): the candidates of one non-opaque query
     and successive closest hits, against the CPU count of capsules the ray enters (docs/RTX_HAIR_PRIMARY.md C2: the
@@ -513,6 +550,8 @@ def main():
         r_sample_check(a.exe, a.bsdf_spv)
     if a.dual_spv:
         dual_check(a.exe, a.dual_spv)
+        if g is not None:
+            depth_match_check(a.exe, a.dual_spv, g)
     if a.shadow_spv:
         shadow_check(a.exe, a.shadow_spv, pts, rad, offs, cam)
     if a.coverage_spv:

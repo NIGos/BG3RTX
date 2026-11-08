@@ -2,6 +2,7 @@
 #pragma once
 #include "hair_dual.hlsli"
 #include "hair_primary.hlsli"
+#include "hair_depth_match.hlsli"
 [[vk::constant_id(1100)]] const uint kHvRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kHvRecordHi = 0u;
 
@@ -16,7 +17,8 @@ bool hv_strand_pixel(uint2 fp, float d) {
   const uint64_t pixels = (uint64_t(addr.y) << 32) | uint64_t(addr.x);
   const uint4 e = vk::RawBufferLoad<uint4>(pixels + uint64_t(fp.y * hdr.y + fp.x) * hair_primary_pixel_bytes, 16);
   if (e.w != hp_seal(e.xyz, hdr.x) || e.x == hair_primary_no_strand || (e.x >> 24) >= hdr.w) return false;
-  if (abs(asfloat(e.z) - d) > 1e-6 * max(abs(d), 1e-6)) return false;
+  const float3 fn = cross(cam.ray1.xyz - cam.ray0.xyz, cam.ray2.xyz - cam.ray0.xyz);   // as hf_frustum_zr
+  if (!hair_depth_match(asfloat(e.z), d, abs(dot(cam.ray0.xyz, fn)) / max(length(fn), 1e-30))) return false;
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + (e.x >> 24) * 16u, 16);
   const uint2 pool = vk::RawBufferLoad<uint2>(rec + 24u, 8);
   uint i0;
