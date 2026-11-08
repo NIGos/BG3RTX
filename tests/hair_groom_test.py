@@ -1162,22 +1162,65 @@ def test_primary():
 
 
 def test_dual():
-    # Dual scattering (Zinke 2008, paper densities 0.7) and its path-traced per-channel correction (TABLE_K) vs a
-    # path-traced slab of random fibres, flux leaving toward the upper hemisphere. Measured 2026-11-03 for the
-    # CHAR_Hair colour: single 0.21/0.29/0.40, dual 0.70/0.73/0.75, corrected 1.02/1.01/1.01 of the reference;
-    # held-out colours corrected 0.97-1.04 (one 1.12 at 18% reference spread).
+    # Dual scattering (Zinke 2008, paper densities 0.7) and its path-traced per-channel correction (TABLE_K, fitted on
+    # the diffuse slab: dual.make_table) vs path-traced slabs of random fibres. Measured 2026-11-08 for the CHAR_Hair
+    # colour (held out of the grey fit): diffuse slab model / path traced 1.001/1.002/0.998; normal incidence (the
+    # retro walk, flux toward the upper hemisphere): single 0.21/0.29/0.39, dual 0.68/0.72/0.74, corrected
+    # 0.76/0.83/0.91 (the dual model's incidence dependence: no single k matches both, the diffuse fit conserves the
+    # energy of a lit volume; the 2026-11-03 normal-incidence fit reflected 1.3-2.2 x the path-traced diffuse energy).
     c, r = bsdf.CHAR_HAIR["color"], bsdf.CHAR_HAIR["roughness"]
+    ref_d = bsdf.slab_albedo(c, r, n=50000, bounces=4000, seed=91, diffuse=True)
+    S, M = dual.volume_integral(c, r)
+    # Bound: 2 x 50000-path diffuse walks of the grid spread <= 3%; this one is 50000 paths.
+    check("furnace: corrected model's diffuse slab reflectance within 5% of the path-traced hair (CHAR_Hair)",
+          np.all(np.abs((S + M) / ref_d - 1) < 0.05), (S + M) / ref_d)
+    hue = lambda v: v / v.sum()
+    check("furnace: corrected model keeps the path-traced hue (chromaticity within 0.02)",
+          np.abs(hue(S + M) - hue(ref_d)).max() < 0.02, (hue(S + M), hue(ref_d)))
+    cells = json.loads((ROOT / "tools/hair_groom/volume_calibration.json").read_text())
+    worst = 0.0
+    for b in dual.TABLE_BETA:   # the brightest grid colour (k clamps above it): conserved and equal to the walk
+        s, m = dual.volume_integral((0.9,) * 3, b)
+        a = cells[f"0.9/{b}"]["albedo"]
+        worst = max(worst, abs((s[0] + m[0]) / a - 1))
+        check("furnace: c 0.9 corrected diffuse reflectance below 1", s[0] + m[0] < 1.0, s[0] + m[0])
+    check("furnace: c 0.9 corrected diffuse reflectance equals the path-traced walk within 1%", worst < 0.01, worst)
     ref = dual.slab_retro_reference(c, r, n=6000, seed=21)
     ss = dual.slab_retro_dual(c, r, n=60000, single_only=True)
     ds = dual.slab_retro_dual(c, r, n=60000)
     dk = dual.slab_retro_dual(c, r, n=60000, corrected=True)
-    # Bounds: two 12000-path references of this colour spread <= 3%; 6000 paths and a 10% margin.
-    check("corrected dual scattering within 10% of the path-traced hair", np.all(np.abs(dk / ref - 1) < 0.1), dk / ref)
+    # Normal incidence: 6 x 12000-path references of this colour give 0.76/0.83/0.91; 6000 paths spread <= 5%.
+    check("normal incidence: corrected model between the uncorrected one and the reference (no energy added)",
+          np.all(dk > ds) and np.all(dk / ref < 1.0), dk / ref)
     check("uncorrected dual scattering below it (0.6..0.85)", np.all(ds / ref > 0.6) and np.all(ds / ref < 0.85), ds / ref)
     check("single scattering alone well below dual scattering", np.all(ss / ref < ds / ref - 0.2), (ss / ref, ds / ref))
-    hue = lambda v: v / v.sum()
-    check("corrected model keeps the reference hue (chromaticity within 0.02)", np.abs(hue(dk) - hue(ref)).max() < 0.02,
-          (hue(dk), hue(ref)))
+    K = np.asarray(dual.TABLE_K)
+    check("correction table smooth: k increases with roughness in every row", np.all(np.diff(K, axis=1) > 0), K)
+    # k scales only the backward multiple scattering (it does not depend on the fibre offset h); the single
+    # scattering behind one strand never exceeds the directly lit fibre's (every table entry, CPU twin of the GPU check).
+    rng = np.random.default_rng(11)
+    m_ = 400
+    tt, wo, wi = (rng.normal(size=(m_, 3)) for _ in range(3))
+    tt, wo, wi = (v / np.linalg.norm(v, axis=1, keepdims=True) for v in (tt, wo, wi))
+    scaled, excess = 0.0, 0.0
+    for cg in dual.TABLE_C:
+        for b in dual.TABLE_BETA:
+            col = (cg,) * 3
+            for nf in (0, 1, 3):
+                n_ = np.full(m_, nf)
+                parts = []
+                for h_ in (-0.6, 0.3):
+                    h = np.full(m_, h_)
+                    with patch.object(dual, "TABLE_K", tuple(tuple(2 * x for x in row) for row in dual.TABLE_K)):
+                        k2 = dual.shade_table(tt, wo, wi, h, n_, col, b)
+                    parts.append(k2 - dual.shade_table(tt, wo, wi, h, n_, col, b))   # = k x backward part
+                scaled = max(scaled, float(np.max(np.abs(parts[0] - parts[1]) / np.maximum(np.abs(parts[0]), 1e-12))))
+            f_s = bsdf.evaluate(tt, wo, wi, np.full(m_, 0.3), col, b)
+            a_f = dual.averages_table(col, b).a_f
+            excess = max(excess, float(np.max(dual.single_part(f_s, np.ones(m_), a_f) - dual.single_part(f_s, np.zeros(m_), a_f))))
+    check("k scales only the backward multiple scattering (its part does not depend on the offset h)", scaled < 1e-9, scaled)
+    check("single scattering behind one strand never exceeds the directly lit fibre's (every table entry)",
+          excess <= 0.0, excess)
     av = dual.averages((1, 1, 1), r, n=100000)
     check("white fibre: forward + backward fractions ~1 (energy)", np.all(np.abs(av.a_f + av.a_b - 1) < 0.03), av.a_f + av.a_b)
     check("correction table: k > 1 everywhere (the model misses multiple scattering, never adds)",

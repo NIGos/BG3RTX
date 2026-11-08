@@ -2,7 +2,8 @@
 // the paper. The HLSL twin of tools/hair_groom/dual.py shade_table (CTest hair_primary_gpu_test compares them):
 // fibre averages and the path-traced per-channel correction come from hair_dual_table.hlsli (generated).
 // hd_shade(n_front = 0): a directly lit fibre, f_s + d_b f_back; n_front > 0 fibres between it and the light:
-// T_f (f_s + pi d_b f_back), T_f = d_f a_f^n. The multiple-scattering part is scaled by k (path-traced slab).
+// T_f (f_s + pi d_b f_back), T_f = d_f a_f^n. The backward multiple scattering (the d_b f_back terms) is scaled by k
+// (path-traced slab); the single scattering f_s / T_f f_s never is.
 #pragma once
 #include "hair_bsdf.hlsli"
 #include "hair_dual_table.hlsli"
@@ -63,8 +64,10 @@ float3 hd_shade_pixel(float3 t, float3 wo, float3 wi, float n_front, float3 colo
   return hd_shade_with(hb_eval_pixel(t, wo, wi, hb_sigma_a(color, rough), rough), t, wo, wi, n_front, color, beta);
 }
 
-// The dual-scattering response given the single-scattering term f_s at the chosen offset(s).
-float3 hd_shade_with(float3 f_s, float3 t, float3 wo, float3 wi, float n_front, float3 color, float beta) {
+// The dual-scattering response given the single-scattering term f_s at the chosen offset(s), in two parts: the
+// single scattering (T_f f_s) and the corrected backward multiple scattering.
+void hd_parts(float3 f_s, float3 t, float3 wo, float3 wi, float n_front, float3 color, float beta, out float3 single,
+              out float3 multi) {
   const float3 a_f = hd_lookup3(color, beta, 0u), a_b = hd_lookup3(color, beta, 1u);
   const float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
   const float alpha_f = hd_lookup(lum, beta, 2u), alpha_b = hd_lookup(lum, beta, 3u);
@@ -82,8 +85,22 @@ float3 hd_shade_with(float3 f_s, float3 t, float3 wo, float3 wi, float n_front, 
   const float3 var = n_front * beta_f * beta_f + sigma_b * sigma_b;
   const float cd = cos(th_d);
   const float3 f_back = 2.0 * A_b * hd_gauss(2.0 * th_h - delta_b, var) / (kHbPi * cd * cd);
+  // The correction k scales only the backward multiple scattering, never the single scattering (direct f_s, or
+  // T_f f_s behind n fibres): a fibre behind a strand never gets more f_s than a directly lit one (dual.single_part).
   const bool direct = n_front <= 0.0;
-  const float3 F = direct ? f_s + kHdDb * f_back : kHdDf * pow(a_f, n_front) * (f_s + kHbPi * kHdDb * f_back);
-  const float3 single = direct ? f_s : 0.0;
-  return single + hd_lookup3(color, beta, 6u) * (F - single);
+  const float3 T_f = direct ? 1.0.xxx : kHdDf * pow(a_f, n_front);
+  const float3 back = direct ? kHdDb * f_back : T_f * (kHbPi * kHdDb * f_back);
+  single = T_f * f_s;
+  multi = hd_lookup3(color, beta, 6u) * back;
+}
+float3 hd_shade_with(float3 f_s, float3 t, float3 wo, float3 wi, float n_front, float3 color, float beta) {
+  float3 single, multi;
+  hd_parts(f_s, t, wo, wi, n_front, color, beta, single, multi);
+  return single + multi;
+}
+// hd_shade_pixel in its two parts (gi/hair_fibre.hlsl: single to the specular buffer, multiple to the diffuse).
+void hd_shade_pixel_parts(float3 t, float3 wo, float3 wi, float n_front, float3 color, float beta, out float3 single,
+                          out float3 multi) {
+  const float rough = clamp(beta, 0.05, 1.0);
+  hd_parts(hb_eval_pixel(t, wo, wi, hb_sigma_a(color, rough), rough), t, wo, wi, n_front, color, beta, single, multi);
 }

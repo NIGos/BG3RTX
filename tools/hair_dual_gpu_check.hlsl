@@ -14,8 +14,12 @@ void main(uint3 id : SV_DispatchThreadID) {
   const uint a = id.x * 64u;
   const float4 th = asfloat(gIn.Load4(a)), wob = asfloat(gIn.Load4(a + 16u));
   const float4 win = asfloat(gIn.Load4(a + 32u)), col = asfloat(gIn.Load4(a + 48u));
-  // h > 1.5: the pixel response (hd_shade_pixel, four offsets), as gi/hair_fibre.hlsl uses it.
-  const float3 F = th.w > 2.5 ? hd_volume_albedo(col.xyz, wob.w)
+  // h > 1.5: the pixel response (hd_shade_pixel, four offsets), as gi/hair_fibre.hlsl uses it; h > 3.5: its single
+  // scattering part alone (hd_shade_pixel_parts, the part the fibre pass writes to the specular buffer).
+  float3 single, multi;
+  hd_shade_pixel_parts(th.xyz, wob.xyz, win.xyz, win.w, col.xyz, wob.w, single, multi);
+  const float3 F = th.w > 3.5 ? single
+                : th.w > 2.5 ? hd_volume_albedo(col.xyz, wob.w)
                 : th.w > 1.5 ? hd_shade_pixel(th.xyz, wob.xyz, win.xyz, win.w, col.xyz, wob.w)
                               : hd_shade(th.xyz, wob.xyz, win.xyz, th.w, win.w, col.xyz, wob.w);
   gOut.Store4(id.x * 16u, asuint(float4(F, 0.0)));
