@@ -160,6 +160,7 @@ HOST_MEMORY_FILES = {
     "layer/hit_material.cpp", "layer/hotreload.cpp", "layer/omm_bake.cpp", "layer/omm_content.cpp",
     "layer/replay.cpp", "layer/streamline.cpp", "layer/water.cpp",
     "layer/hair_primary.cpp",   # make_readback: the strand feedback ring, TRANSFER_DST only (no storage)
+    "layer/hair_capture.cpp",   # capture staging: TRANSFER_DST only (index, soup, mask copies read back once per style)
     "core/gi.cpp",   # ensure_rt_sbt: gi_rt_pipeline's SHADER_BINDING_TABLE buffer, raygen handles written once (no storage)
 }
 # Allocation helpers: (file, name) -> (usage argument index, host argument index or None = always host).

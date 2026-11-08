@@ -332,7 +332,7 @@ int main(int argc,char** argv){
   // device/file capability, and the missing prerequisite is visible on the card.
   const auto& primary=st::kKnobs[st::knob_index("exp_hair_groom_primary")];
   for (auto missing : {st::kCapRayQuery, st::kCapLinearSweptSpheres, st::kCapShaderInt64,
-                       st::kCapFragmentStores, st::kCapHairGrooms}) {
+                       st::kCapFragmentStores}) {   // no local groom files needed (capture model)
     launcher::State hair;hair.base={{"dev","1"}};hair.caps=~unsigned(missing);hair.values=st::preset_values(st::kUltra);
     int calls=0;launcher::web::Hooks hh;hh.save=[&](launcher::State&,const st::KVList&,std::string&){++calls;return true;};
     launcher::web::Bridge hb(hair,hh);hb.experimental=true;

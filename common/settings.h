@@ -386,15 +386,15 @@ inline constexpr Knob kKnobs[] = {
 
   {"exp_hair_groom", "Strand hair in ray-traced lighting",
    "Experimental: uses individual strands for hair shadows and reflected light.",
-   Kind::Choice, Apply::Live, "live; supported LSS hardware and local groom files required", false,
+   Kind::Choice, Apply::Live, "live; supported LSS hardware required; styles get strands once captured and converted", false,
    {{"off", "Off", 0, {{"rt_hair_groom", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapHairGrooms, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
+    {"on", "On", kCapRayQuery | kCapLinearSweptSpheres, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Advanced", {"Measured", "RT -1.1-1.5 ms; GI -1.6-1.8 ms; refit +0.57 ms", "Unknown", "RTX 5090; Dialogue1 versus native cards. Reference only; qualification incomplete."}, "Uses strands in RT shadows/AO/GI/reflections. Inspect hair shadows on faces and necks in Dialogue1."},
 
   {"exp_hair_groom_primary", "Strand hair on screen",
    "Experimental: displays converted hairstyles as individual strands.",
    Kind::Choice, Apply::Restart, "restart required: strands on screen, the hair ray-origin reservation and the world-space tangent are set up at startup", false,
-   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}}, {}, {}, false, false, false, Apply::Restart},
+   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}, {"rt_hair_capture", "0"}}, {}, {}, false, false, false, Apply::Restart},
     // Review 2026-11-08 (docs/RTX_HAIR_PRIMARY.md 5j): On is the one coherent strand path, the qualified bundle: header in
     // G-buffer order decided at submit (order, current), per-frame trace tags, LOD keep, coverage hold and the
     // world-space tangent. The individual keys stay as developer diagnostics in bg3rtx.ini only (order 0 and current 0
@@ -404,15 +404,15 @@ inline constexpr Knob kKnobs[] = {
     // guides, physical hair ray origins). Tips, sub-pixel coverage, card normal and footprint bounds stay off.
     // Restart keys of the bundle: rt_hair_groom_primary (startup latch), rt_hair_physical_origin (startup
     // reservation), rt_hair_tangent_world (compiled into the strand pipelines at creation). All others are live.
-    {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores | kCapHairGrooms,
+    {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores,
      {{"rt_hair_groom_primary", "1"}, {"rt_hair_groom_primary_order", "1"}, {"rt_hair_groom_primary_current", "1"},
       {"rt_hair_primary_frame_tag", "1"}, {"rt_hair_groom_lod_keep", "1"}, {"rt_hair_primary_hold", "1"},
       {"rt_hair_tangent_world", "1"}, {"rt_hair_groom", "1"}, {"rt_hair_groom_shadow_t", "1"},
       {"rt_hair_groom_ao_t", "1"}, {"rt_hair_groom_cascade_drop", "1"}, {"rt_hair_fibre", "1"},
       {"rt_hair_fibre_gi", "1"}, {"rt_hair_fibre_spec", "1"}, {"rt_hair_fibre_mapped", "1"},
-      {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}},
+      {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, true, "Advanced", {}, "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified; turning it on needs a game restart."},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, true, "Advanced", {}, "Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified; turning it on needs a game restart."},
 
   {"exp_hair_fibre", "Physical strand shading",
    "Experimental: gives on-screen hair brighter, warmer shading.",
@@ -804,6 +804,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_pool_trim", "0"},
     {"rt_scene_compact_holds", "1"},
     {"rt_hair_groom", "0"},
+    {"rt_hair_capture", "0"},
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_groom_shadow_t", "0"},
     {"rt_hair_groom_ao_t", "0"},

@@ -976,9 +976,11 @@ static void test_gui_review_safety() {
   CHECK(key_change_needs_restart("rt_hair_groom_primary","0","1"));
   CHECK(key_change_needs_restart("rt_hair_groom_primary","1","0"));
   CHECK(unmet_key_need(primary,1,parse_ini("rt=1\nsharc_device=0\n")).find("64-bit")!=std::string::npos);
-  const unsigned hair=kCapRayQuery|kCapLinearSweptSpheres|kCapShaderInt64|kCapFragmentStores|kCapHairGrooms;
+  const unsigned hair=kCapRayQuery|kCapLinearSweptSpheres|kCapShaderInt64|kCapFragmentStores;
+  // Capture model (2026-11-08): no local groom files needed; styles get strands once captured and converted.
+  CHECK(choice_supported(primary,1,hair & ~unsigned(kCapHairGrooms)) && choice_supported(*find_knob("exp_hair_groom"),1,kCapRayQuery|kCapLinearSweptSpheres));
   CHECK(choice_supported(primary,1,hair));
-  for (unsigned bit : {unsigned(kCapRayQuery),unsigned(kCapLinearSweptSpheres),unsigned(kCapShaderInt64),unsigned(kCapFragmentStores),unsigned(kCapHairGrooms)})
+  for (unsigned bit : {unsigned(kCapRayQuery),unsigned(kCapLinearSweptSpheres),unsigned(kCapShaderInt64),unsigned(kCapFragmentStores)})
     CHECK(!choice_supported(primary,1,hair & ~bit));
   Gpu gpu; gpu.ray_query=true;gpu.linear_swept_spheres=true;gpu.shader_int64=true;gpu.fragment_stores=true;gpu.hair_grooms=true;
   CHECK((gpu_caps(gpu)&hair)==hair);

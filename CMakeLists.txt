@@ -43,6 +43,7 @@ add_library(VkLayer_bg3rtx SHARED
 
   layer/omm_backend.cpp
   layer/hair_groom.cpp
+  layer/hair_capture.cpp
   layer/rt_pipeline.cpp
   layer/omm_submit.cpp
   layer/omm_content.cpp
@@ -374,6 +375,10 @@ add_dependencies(bg3rtx_launcher bg3rtx_hairconv)
 add_executable(hairconv_test tests/hairconv_test.cpp)
 target_link_libraries(hairconv_test PRIVATE hairconv_core Cabinet)
 add_test(NAME hairconv_test COMMAND hairconv_test ${CMAKE_SOURCE_DIR}/tests/fixtures/hairconv)
+# The layer capture's CPU side (common/hair_capture.h): full-mask rule, stretch, .hcap v2 round trip into hairconv.
+add_executable(hair_capture_cpu_test tests/hair_capture_cpu_test.cpp)
+target_link_libraries(hair_capture_cpu_test PRIVATE hairconv_core Cabinet)
+add_test(NAME hair_capture_cpu_test COMMAND hair_capture_cpu_test ${CMAKE_SOURCE_DIR}/tests/fixtures/hairconv)
 # Preparation card (hair conversion, shader compile before Play): settings, lines and run policy.
 add_executable(launcher_preparation_test tools/launcher/preparation_test.cpp tools/launcher/preparation.cpp tools/launcher/launch.cpp)
 target_compile_definitions(launcher_preparation_test PRIVATE UNICODE _UNICODE)

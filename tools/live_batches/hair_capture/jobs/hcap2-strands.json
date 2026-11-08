@@ -1,0 +1,55 @@
+{
+ "name": "hcap2-strands",
+ "save": "Test Dialogue1",
+ "session": false,
+ "traces": 0,
+ "repeat": 1,
+ "hold": 120,
+ "timeout": 480,
+ "max_minutes": 8,
+ "window_mode": "visible_unfocused_fg",
+ "live_batch": "hair-capture-e2e",
+ "tree": ".claude/worktrees/test-main",
+ "fail_fast": true,
+ "stop_on_dump": false,
+ "set": "preset=ultra,fg=2,headless=0,crash_dump=1,detailed_logging=1,rt_stats=0,rt_debug=0,gi_debug=0,ls_debug=0,rf_debug=0,ls_stats=0,rf_stats=0,ls_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_primary_check=0,replay_pack=0,qa_exposure_hold=0,rt_scene_wait_log_frames=120,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_native_hair=1,rt_bvh_split=1,rt_hair_capture=0",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "tools/live_batches/hair_capture/plans/e2e.json"
+ ],
+ "patterns": [
+  "\\[auto\\]",
+  "\\[cfg\\]",
+  "\\[hot\\]",
+  "\\[watch\\]",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[hair capture\\]",
+  "\\[hair groom\\]",
+  "\\[hair primary\\]",
+  "VK_ERROR",
+  "validation",
+  "stage:",
+  "\\[hairconv\\]"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hair groom\\] indexed .*\\.hgrm: index id [0-9a-f]{16}",
+  "\\[hair groom\\] [0-9a-f]{16} LOD \\d decoded \\(v3\\): \\d+ points in \\d+ ms",
+  "\\[hair groom\\] frame \\d+: [1-9]\\d* groom instances",
+  "\\[hair primary\\] strand G-buffer draws GPU"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "\\[hair groom\\] device WITHOUT",
+  "\\[hair groom\\] .*file unreadable or changed since startup"
+ ],
+ "post": "python tools/live_batches/hair_capture/stage.py cleanup",
+ "post_gate": true
+}

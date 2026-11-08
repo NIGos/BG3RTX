@@ -39,6 +39,7 @@ struct Input {
   Head head;
   int grid[2] = {0, 0};
   uint64_t material = 0;
+  float stretch[3] = {1, 1, 1};   // v2 (layer capture): posed / first-seen card edge length, min / median / max
 };
 bool read_hcap(const std::string& path, Input& out, std::string* error);
 

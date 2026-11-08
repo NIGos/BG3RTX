@@ -362,7 +362,43 @@ already builds, tests and packages C++ (no second toolchain in the build, merge-
 - Release: scripts/package.ps1 ships `bin\bg3rtx_hairconv.exe`; verify_rc requires it and allows it among the
   payload's executables; the launcher target builds it. The setup needs no Python, PowerShell 7, LSLib or granny2.
 - Left: the layer capture itself (2c: the .hcap writer with the full-mask rule and the stretch stat), the groom
-  re-index at a level load, and a live run of capture -> conversion -> strands.
+  re-index at a level load, and a live run of capture -> conversion -> strands. (Done in 2e.)
+- Convert all, for the user: with grooms built from what the game draws, a style can only be converted after the
+  game has shown it once, so there is nothing left to "convert all" ahead of time and the switch is gone.
+
+## 2e. Layer capture writer and groom re-index (2026-11-08; branch claude/hair-capture-writer, offline)
+- Key `rt_hair_capture` (startup; bg3rtx.ini 0; written 1 by "Strand hair on screen" On and 0 by Off).
+- layer/hair_capture.cpp: from bvhsplit's no-groom path (CountUnknown, NoFile, UvMismatch hair draws captured this
+  frame), once per (index count, mask image): GPU copies of the index range, the draw's soup range and mask mip 0
+  (raw BC3 blocks; the mask is the kind 4 alpha record's CHAR_Hair binding) into one host-cached staging buffer;
+  readback through the existing readback state; a worker thread rebuilds the vertices, computes the index id and the
+  stretch, encodes .hcap v2 (common/hair_capture.h) and writes `data/assetdb/hair_capture/<index id>.hcap` (tmp +
+  rename). Full-mask rule: mips > 1, at least 256 and at least the size seen for the style (placeholders counted, never
+  converted); an upgraded mask re-captures and rewrites; an existing file is kept unless its mask was smaller.
+  With the key on, the tracker adds TRANSFER_SRC usage to the game's sampled BC3 images at creation (as the replay
+  wrapper does): game textures are otherwise not copyable, hence the startup key.
+- Cost: once per style, never per frame. GPU copy about 4.3 MB for a 1,178-triangle style (4 MB of it the 2048^2 BC3
+  mask) and about 11 MB for 25,710 triangles at stride 88; render thread 0.1-1 ms (tracker lookup, staging allocation);
+  worker 10-30 ms. Bounds: at most one capture recorded per frame, 2 staging buffers in flight (64 MB cap each),
+  8,192 dedupe keys, 128 MB of first-seen corners for the stretch, a 512 MB folder cap (logged once). Logs: one line
+  per capture and a summary every 300 frames when anything happened.
+- Converter: tools/hairconv reads .hcap v1 (dev) and v2 (layer: BC3 mask decoded, stretch kept in the record).
+- Re-index (layer/hair_groom.cpp rescan, about 30 lines): at a level load (the same boundary that drops the join
+  caches) new groom files are indexed; never mid-level, never replacing or removing an entry (a groom rewritten in
+  place is refused by read_lod's size check until the next start).
+- Tests: CTest hair_capture_cpu_test (full-mask rule, stretch, a capture in the layer's layout -> .hcap v2 ->
+  bg3rtx_hairconv reads the fixture's mesh and mask back and converts to the identical groom; a BC3 mask decodes to
+  the same groom as its RGBA8 twin; truncated files refused).
+- Live (READY_FOR_LIVE, not queued, lint 0 failing): tools/live_batches/hair_capture/jobs/hcap2-capture.json then
+  hcap2-strands.json (make_e2e_jobs.py). Two launches of Test Dialogue1: the capture key is a startup key and the plan
+  runner has no in-run save reload, so the capture (launch 1), the conversion (its post step, stage.py convert: moves
+  the captures out of the real assetdb into a scratch assetdb copy in the job's tree and runs bg3rtx_hairconv there)
+  and strands from a cold start (launch 2, whose post removes the copy) cannot share one launch.
+- Resolved (coordinator, 2026-11-08): "Strand hair on screen" and "Strand hair in ray-traced lighting" need hardware only
+  (kCapHairGrooms dropped); with no grooms cards stay, captures accumulate and strands follow conversion. Was:
+  "Strand hair on screen" required local groom files (kCapHairGrooms), so on a fresh install with
+  no grooms it cannot be turned on and nothing is ever captured. With the capture model it should require only the
+  hardware (the capture then fills the folder); left unchanged pending that decision.
 
 ## 3. Converter quality and validation (OFFLINE-NOW)
 On screen: fewer fake tips (strands are 14 mm median pieces: crossings in the painted mask), no doubled

@@ -2,6 +2,7 @@
 // read by common/hair_groom_v3.h).
 #include "hairconv.h"
 #include "../../common/hair_groom_v3.h"
+#include "../../common/hair_capture.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -42,8 +43,12 @@ bool read_hcap(const std::string& path, Input& in, std::string* error) {
   std::vector<uint8_t> raw;
   auto fail = [&](const char* why) { if (error) *error = path + ": " + why; return false; };
   if (!read_all(path, raw)) return fail("unreadable");
-  constexpr size_t kHead = 4 + 8 * 4 + 8 + 6 * 4;
-  if (raw.size() < kHead || std::memcmp(raw.data(), "HCAP", 4) != 0 || rd<uint32_t>(&raw[4]) != 1) return fail("not an .hcap v1");
+  // v1: tools/hair_groom/hcap.py (RGBA8 mask). v2: the layer's capture (common/hair_capture.h: mask format, BC3 blocks).
+  if (raw.size() < 8 || std::memcmp(raw.data(), "HCAP", 4) != 0) return fail("not an .hcap");
+  const uint32_t version = rd<uint32_t>(&raw[4]);
+  if (version != 1 && version != 2) return fail("unknown .hcap version");
+  const size_t kHead = version == 1 ? 4 + 8 * 4 + 8 + 6 * 4 : bg3::hair_capture::kHeaderBytes;
+  if (raw.size() < kHead) return fail("truncated");
   const uint32_t n = rd<uint32_t>(&raw[8]), v = rd<uint32_t>(&raw[12]), w = rd<uint32_t>(&raw[16]), h = rd<uint32_t>(&raw[20]);
   const uint32_t flags = rd<uint32_t>(&raw[24]);
   in.grid[0] = int(rd<uint32_t>(&raw[28]));
@@ -56,7 +61,16 @@ bool read_hcap(const std::string& path, Input& in, std::string* error) {
   in.has_head = flags & 1;
   in.has_grid = (flags & 2) && in.grid[0] > 0 && in.grid[1] > 0;
   if (!in.has_head) in.head = Head{};
-  const uint64_t need = kHead + uint64_t(n) * 4 + uint64_t(v) * 20 + uint64_t(w) * h * 4;
+  uint32_t mask_format = bg3::hair_capture::kMaskRgba8;
+  uint64_t mask_bytes = uint64_t(w) * h * 4;
+  if (version == 2) {
+    mask_format = rd<uint32_t>(&raw[68]);
+    mask_bytes = rd<uint32_t>(&raw[72]);
+    in.stretch[0] = rd<float>(&raw[76]); in.stretch[1] = rd<float>(&raw[80]); in.stretch[2] = rd<float>(&raw[84]);
+    const uint64_t want = mask_format == bg3::hair_capture::kMaskBc3 ? bg3::hair_capture::bc3_bytes(w, h) : uint64_t(w) * h * 4;
+    if (mask_format > bg3::hair_capture::kMaskBc3 || mask_bytes != want) return fail("mask size does not match its format");
+  }
+  const uint64_t need = kHead + uint64_t(n) * 4 + uint64_t(v) * 20 + mask_bytes;
   if (raw.size() != need || !n || n % 3 || !v || !w || !h) return fail("sizes do not match");
   size_t at = kHead;
   in.mesh.tris.resize(n);
@@ -66,7 +80,8 @@ bool read_hcap(const std::string& path, Input& in, std::string* error) {
   in.mesh.uv.resize(size_t(v) * 2);
   std::memcpy(in.mesh.uv.data(), &raw[at], size_t(v) * 8); at += size_t(v) * 8;
   in.mask.w = int(w); in.mask.h = int(h);
-  in.mask.rgba.assign(raw.begin() + at, raw.end());
+  if (mask_format == bg3::hair_capture::kMaskBc3) bg3::hair_capture::decode_bc3(&raw[at], w, h, in.mask.rgba);
+  else in.mask.rgba.assign(raw.begin() + at, raw.end());
   for (uint32_t i : in.mesh.tris)
     if (i >= v) return fail("index out of range");
   return true;
