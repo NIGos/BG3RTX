@@ -11,6 +11,9 @@
 // (below) says where each instance's vertices and alpha record are.
 #pragma once
 #include "spec_native.hlsli"
+#ifndef GI_RNG_FRAME
+#define GI_RNG_FRAME pc.frame   // the random streams' frame (gi_common.hlsli: GI_SEED_PUSH offsets it offline)
+#endif
 
 #ifdef RT_NATIVE_TILESET
 #include "../../common/native_tileset_coverage.h"
@@ -292,7 +295,7 @@ bool alpha_unknown(uint flags) { return (flags & kAlphaUnknownClear) == 0u || g_
 
 // Uniform [0, 1) per ray and hit: the hit's uv bits, its triangle and the frame.
 float alpha_hash(float2 uv, uint prim) {
-  uint3 h = pcg3d(uint3(asuint(uv.x), asuint(uv.y), prim ^ (pc.frame * 0x9E3779B9u) ^ (g_rt_class << 31)));
+  uint3 h = pcg3d(uint3(asuint(uv.x), asuint(uv.y), prim ^ (GI_RNG_FRAME * 0x9E3779B9u) ^ (g_rt_class << 31)));
   return float(h.x >> 8) * (1.0 / 16777216.0);
 }
 
@@ -1025,7 +1028,7 @@ bool rt_groom_blocks(RayDesc r, float3 o) {
   }
   if (n == 0u) return false;
   const uint3 h = pcg3d(uint3(asuint(o.x) ^ asuint(r.Direction.y), asuint(o.y) ^ asuint(r.Direction.z),
-                              asuint(o.z) ^ (pc.frame * 0x85EBCA6Bu)));
+                              asuint(o.z) ^ (GI_RNG_FRAME * 0x85EBCA6Bu)));
   return float(h.x >> 8) * (1.0 / 16777216.0) >= dot(T, float3(0.2126, 0.7152, 0.0722));
 }
 // rt_hair_groom_ao_t (specialization 1044, docs/RTX_HAIR_PRIMARY.md M2.3): the ambient occlusion / GI hemisphere rays

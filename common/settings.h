@@ -323,6 +323,22 @@ inline constexpr Knob kKnobs[] = {
    {{"rt","1","Ray-tracing support"},{"rt_alpha","1","Foliage capture"},{"rt_bvh_split","1","Hidden-surface tracking"},
     {"gi_rt_fallback","0","Hidden-surface lighting mode",1}}, false, "Lighting", {"Estimate", "Near about 0.6 ms; Far about 4 ms", "Unknown", "Estimated cost on RTX 5090: about 0.6 ms for Near or 4 ms for Far."}, "Needs Ray-tracing detail: Include foliage and Indirect lighting: Ray-traced. Turning it on or off needs a game restart; switching between Near and Far may briefly pause the game."},
 
+  // gi_rt_pipeline (docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"): the hit-GI trace as a ray tracing pipeline.
+  // READY_FOR_LIVE (tools/live_batches/gi_rt_pipeline): off in every preset until its live qualification.
+  {"exp_gi_rt_pipeline", "Ray-tracing pipeline bounce trace",
+   "Experimental: runs the off-screen bounce light trace as a ray tracing pipeline instead of a compute pass. The same lighting on average; faster in offline tests.",
+   Kind::Choice, Apply::Live, "live; may briefly pause the first time while the pipeline builds", true,
+   {{"off", "Off", 0, {{"gi_rt_pipeline", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"gi_rt_pipeline", "1"}}, {{"exp_hidden_surface", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Performance", {"Estimate", "About -2.5 ms at camp, -0.6 ms at the inn (offline replay)", "Under 1 MB", "RTX 5090 offline replays of the far + sun trace: camp -2.58, inn -0.61, S8 -0.28 ms. Not yet measured in game."}, "Needs Off-screen bounce light. Without the ray tracing pipeline and reordering features the compute trace runs (logged once)."},
+
+  {"exp_gi_rt_pipeline_reorder", "Bounce trace reordering",
+   "Experimental: sorts the bounce rays by what they hit before shading them (shader execution reordering). In offline tests it helped only at the camp.",
+   Kind::Choice, Apply::Hitch, "May briefly pause when changed", true,
+   {{"off", "Off", 0, {{"gi_rt_pipeline_reorder", "0"}}, {}, {}, false, false, false, Apply::Hitch},
+    {"kind", "By hit kind", kCapRayQuery, {{"gi_rt_pipeline_reorder", "1"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch},
+    {"object", "By hit kind and object", kCapRayQuery, {{"gi_rt_pipeline_reorder", "2"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Advanced", {"Estimate", "Camp about -0.7 ms more; inn about +0.4 ms (offline replay)", "Unknown", "RTX 5090 offline replays against the plain ray tracing pipeline trace. Not yet measured in game."}, "Needs Ray-tracing pipeline bounce trace."},
   // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
   // stay off in every preset; hair origins and spill are developer-only until qualified.
   {"box_lights", "Interior light shadows",
@@ -823,6 +839,8 @@ inline constexpr KV kDefaults[] = {
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
+    {"gi_rt_pipeline", "0"},
+    {"gi_rt_pipeline_reorder", "0"},
     {"gi_far_roof_early", "1"},
     {"sharc", "0"},
     {"sharc_log2", "22"},

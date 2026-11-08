@@ -44,6 +44,7 @@
 #include "../common/native_tileset_capability.h"
 #include "../common/omm_scene_capability.h"
 #include "../common/omm_scene_binding.h"
+#include "../common/rt_pipeline.h"
 #include "ls_lights.h"
 #include "sharc.h"
 #include "sun_trust.h"
@@ -108,6 +109,13 @@ struct Pipe {
   std::unordered_map<std::string, Variant> variants;
 };
 
+// gi_rt_pipeline: the descriptor set layouts the raygen GI trace shares with compute passes (its push set 0 and the
+// sun set 3) name both stages when the layer enabled the ray tracing pipeline (Bg3HostApi::rt_pipeline, ABI 29).
+VkShaderStageFlags hit_gi_set_stages() {
+  return VK_SHADER_STAGE_COMPUTE_BIT | (host->rt_pipeline.available ? VK_SHADER_STAGE_RAYGEN_BIT_KHR : 0u);
+}
+void hit_gi_rt_drop(bool em_only);
+
 // Background pipeline builds (common/pipeline_async.h): two workers below normal priority. Joined in
 // gi_release (before FreeLibrary: never from the DLL's static destructors).
 extern "C" __declspec(dllimport) void* __stdcall GetCurrentThread();
@@ -130,7 +138,9 @@ using bg3::pipe_async::PipelineSpecs;
 bg3::pipe_async::Result build_pipeline(const std::string& req, const std::string& entry, VkPipelineLayout layout, const PipelineSpecs& specs) {
   bg3::pipe_async::Result r{};
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(req.c_str(), entry.c_str(), "cs_6_6", &blob)) return r;
+  // gi_rt_pipeline: a GI_TRACE_RAYGEN request is a lib module with one ray generation entry (common/shader_variant.h).
+  const bool raygen = bg3::shader_variant::raygen_request(req.c_str());
+  if (!host->get_shader(req.c_str(), entry.c_str(), bg3::shader_variant::profile(req.c_str()), &blob)) return r;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
@@ -149,7 +159,22 @@ bg3::pipe_async::Result build_pipeline(const std::string& req, const std::string
   if (specs.count) pci.stage.pSpecializationInfo = &info;
   VkPipeline np = VK_NULL_HANDLE;
   const auto t_pipe = std::chrono::steady_clock::now();
-  const VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
+  VkResult pr = VK_ERROR_FEATURE_NOT_PRESENT;
+  if (!raygen) {
+    pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
+  } else if (host->vk->CreateRayTracingPipelinesKHR) {
+    // One general group (the raygen), no miss / hit / callable records: the shader traces ray queries only.
+    VkPipelineShaderStageCreateInfo stage = pci.stage;
+    stage.stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    VkRayTracingShaderGroupCreateInfoKHR group{VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR};
+    group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+    group.generalShader = 0;
+    group.closestHitShader = group.anyHitShader = group.intersectionShader = VK_SHADER_UNUSED_KHR;
+    VkRayTracingPipelineCreateInfoKHR rci{VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR};
+    rci.stageCount = 1; rci.pStages = &stage; rci.groupCount = 1; rci.pGroups = &group;
+    rci.maxPipelineRayRecursionDepth = 1; rci.layout = layout;
+    pr = host->vk->CreateRayTracingPipelinesKHR(host->device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rci, nullptr, &np);
+  }
   r.pipeline_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_pipe).count();
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
@@ -917,7 +942,7 @@ bool ensure_ls_layout() {
     // full; common/native_hit_rf_bindings.h sun). D-LS reads it at push b46 and never uses b7.
     VkDescriptorSetLayoutBinding b[kSunBindings];
     for (uint32_t i = 0; i < kSunBindings; ++i)
-      b[i] = {i, sun_binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+      b[i] = {i, sun_binding_type(i), 1, hit_gi_set_stages(), nullptr};   // gi_rt_pipeline: also the raygen GI's set 3
     VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     sci.bindingCount = kSunBindings;
     sci.pBindings = b;
@@ -1186,7 +1211,9 @@ bool ensure_rf_hit_contract() {
   return true;
 }
 
-bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
+// raygen (gi_rt_pipeline): the file's ray generation request (shader_variant.h kRtPipeline, lib profile) and its
+// reorder constant 1050; build_pipeline then creates a ray tracing pipeline.
+bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE, bool raygen = false) {
   std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
   namespace sv = bg3::shader_variant;
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
@@ -1225,7 +1252,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) |
                                                  (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u) |
                                                  (spec_cascade ? unsigned(sv::kSpecCascade) : 0u) |
-                                                 (&p == &g_composite_fibre ? unsigned(sv::kHairFibreGi) : 0u));
+                                                 (&p == &g_composite_fibre ? unsigned(sv::kHairFibreGi) : 0u) |
+                                                 (raygen ? unsigned(sv::kRtPipeline) : 0u));
   std::string slot_key = selected;
   if(sv::occ_stats_entry(file)) slot_key += occ_stats ? "#occ=1" : "#occ=0";
   if(sv::rf_hit_gi_entry(file)) slot_key += rf_gi ? "#rfgi=1" : "#rfgi=0";
@@ -1259,6 +1287,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(sv::kSpecIdGiFarRoofEarly,
               host->cfg_int("rt_stats", 0) == 0 && host->cfg_int("gi_far_roof_early", 1) != 0 ? 1u : 0u);
   }
+  if (raygen) specs.add(sv::kSpecIdGiSer, bg3::rt_pipeline::reorder_spec(host->cfg_int("gi_rt_pipeline_reorder", 0)));
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
     specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
@@ -1294,7 +1323,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   p.pipeline = known ? slot.pipeline : previous;
   if (known) {
     Bg3ShaderBlob blob{};
-    if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) {   // a failed hot reload: the built pipeline stays
+    if (!host->get_shader(selected.c_str(), "main", sv::profile(selected.c_str()), &blob)) {   // a failed hot reload: the built pipeline stays
       p.pipeline = slot.pipeline;
       return true;
     }
@@ -2524,6 +2553,7 @@ void hit_em_drop() {
     *l = VK_NULL_HANDLE;
   }
   g_hit_em_dsl = VK_NULL_HANDLE;
+  hit_gi_rt_drop(true);   // the raygen emission layout holds g_hit_em_dsl too
   rf_gi_drop();   // its emission layouts hold g_hit_em_dsl (the others are rebuilt on demand)
 }
 
@@ -2700,7 +2730,7 @@ bool ensure_hit_gi_layout(VkDescriptorSetLayout alpha,bool sharc,bool reference=
  auto& plain_layout=reference?g_hit_reference_layout:g_hit_gi_plain_layout;
  if(!set_layout){
   VkDescriptorSetLayoutBinding entries[bg3::native_hit_gi::bindings.size()];uint32_t n=0;
-  for(const auto& b:bg3::native_hit_gi::slots(reference))if(bg3::native_hit_gi::enabled(b,g_hair_origin_cap))entries[n++]={b.binding,b.type,b.count,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+  for(const auto& b:bg3::native_hit_gi::slots(reference))if(bg3::native_hit_gi::enabled(b,g_hair_origin_cap))entries[n++]={b.binding,b.type,b.count,hit_gi_set_stages(),nullptr};
   if(n>32u)return false;
   VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};ci.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;ci.bindingCount=n;ci.pBindings=entries;
   if(host->vk->CreateDescriptorSetLayout(host->device,&ci,nullptr,&set_layout)!=VK_SUCCESS)return false;
@@ -2802,6 +2832,107 @@ void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,
  if(key>0 && r!=0)*done=key;
 }
 
+// ---- gi_rt_pipeline (docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"; common/rt_pipeline.h) ----
+// The production hit-GI trace without SHaRC (gi_trace_rt_hit_sun[_em].hlsl) as a ray generation shader over the
+// same grid (the GI_TRACE_RAYGEN request), with the same descriptors and push block: its pipeline layouts name the
+// raygen stage, and the descriptor set layouts they share with compute passes name both (hit_gi_set_stages; the
+// layer does the same for the alpha and emissive sets). Any missing piece runs the compute pass, logged per reason.
+Pipe g_hit_gi_rt[2];                          // 0 gi_hit_sun, 1 gi_hit_sun_em
+VkPipelineLayout g_hit_gi_rt_layout[2] = {};
+struct RtSbt {
+  VkBuffer buffer = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  uint8_t* map = nullptr;
+  uint64_t address = 0;
+  bg3::rt_pipeline::SbtLayout layout;
+  uint32_t next = 0;
+  std::unordered_map<VkPipeline, uint32_t> slots;   // one raygen record per pipeline, round robin over kRtSbtSlots
+};
+RtSbt g_rt_sbt;
+constexpr uint32_t kRtSbtSlots = 64;
+uint32_t g_rt_path_logged = UINT32_MAX;
+
+bool rt_pipe_entry_points() {
+  const auto& vk = *host->vk;
+  return vk.CreateRayTracingPipelinesKHR && vk.GetRayTracingShaderGroupHandlesKHR && vk.CmdTraceRaysKHR && vk.GetBufferDeviceAddress;
+}
+void hit_gi_rt_drop(bool em_only) {
+  for (unsigned i = em_only ? 1u : 0u; i < 2u; ++i) {
+    for (const auto& [slot, v] : g_hit_gi_rt[i].variants) {
+      g_rt_sbt.slots.erase(v.pipeline);
+      host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v.pipeline);
+    }
+    g_hit_gi_rt[i] = Pipe{};
+    defer_layout_destroy(uint64_t(g_hit_gi_rt_layout[i]));
+    g_hit_gi_rt_layout[i] = VK_NULL_HANDLE;
+  }
+  if (em_only) return;
+  host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_rt_sbt.buffer);
+  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_rt_sbt.memory);
+  g_rt_sbt = RtSbt{};
+  g_rt_path_logged = UINT32_MAX;
+}
+bool ensure_hit_gi_rt_layout(unsigned i, const VkDescriptorSetLayout* sets, uint32_t n) {
+  if (g_hit_gi_rt_layout[i]) return true;
+  VkPushConstantRange push{VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0, sizeof(Push)};
+  VkPipelineLayoutCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  ci.setLayoutCount = n; ci.pSetLayouts = sets; ci.pushConstantRangeCount = 1; ci.pPushConstantRanges = &push;
+  if (host->vk->CreatePipelineLayout(host->device, &ci, nullptr, &g_hit_gi_rt_layout[i]) != VK_SUCCESS)
+    return g_hit_gi_rt_layout[i] = VK_NULL_HANDLE, false;
+  return true;
+}
+// The shader binding table: a host-visible buffer of kRtSbtSlots raygen records (common/rt_pipeline.h sbt_layout).
+bool ensure_rt_sbt() {
+  if (g_rt_sbt.buffer) return true;
+  const Bg3RtPipelineInfo& info = host->rt_pipeline;
+  const auto layout = bg3::rt_pipeline::sbt_layout(info.handle_size, info.handle_alignment, info.base_alignment);
+  const auto* d = static_cast<const Bg3DeviceInfo*>(host->persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
+  if (!layout.ok || !d || d->version < 1) return false;
+  const auto& vk = *host->vk;
+  VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bci.size = bg3::rt_pipeline::sbt_buffer_bytes(layout, kRtSbtSlots, info.base_alignment);
+  bci.usage = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  RtSbt s;
+  if (vk.CreateBuffer(host->device, &bci, nullptr, &s.buffer) != VK_SUCCESS) return false;
+  VkMemoryRequirements req;
+  vk.GetBufferMemoryRequirements(host->device, s.buffer, &req);
+  VkMemoryAllocateFlagsInfo flags{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};
+  flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+  VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &flags};
+  mai.allocationSize = req.size;
+  mai.memoryTypeIndex = UINT32_MAX;
+  const VkMemoryPropertyFlags want = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  for (uint32_t i = 0; i < d->memory.memoryTypeCount && mai.memoryTypeIndex == UINT32_MAX; ++i)
+    if ((req.memoryTypeBits & (1u << i)) && (d->memory.memoryTypes[i].propertyFlags & want) == want) mai.memoryTypeIndex = i;
+  void* map = nullptr;
+  if (mai.memoryTypeIndex == UINT32_MAX || vk.AllocateMemory(host->device, &mai, nullptr, &s.memory) != VK_SUCCESS ||
+      vk.BindBufferMemory(host->device, s.buffer, s.memory, 0) != VK_SUCCESS ||
+      vk.MapMemory(host->device, s.memory, 0, VK_WHOLE_SIZE, 0, &map) != VK_SUCCESS) {
+    vk.DestroyBuffer(host->device, s.buffer, nullptr);
+    if (s.memory) vk.FreeMemory(host->device, s.memory, nullptr);
+    host->log("gi: gi_rt_pipeline: the shader binding table could not be allocated");
+    return false;
+  }
+  VkBufferDeviceAddressInfo ai{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
+  ai.buffer = s.buffer;
+  s.address = vk.GetBufferDeviceAddress(host->device, &ai);
+  s.map = static_cast<uint8_t*>(map);
+  s.layout = layout;
+  g_rt_sbt = std::move(s);
+  return true;
+}
+// The pipeline's raygen record: written once into a slot no other live pipeline uses (UINT32_MAX on failure).
+uint32_t rt_sbt_slot(VkPipeline pipeline) {
+  if (auto it = g_rt_sbt.slots.find(pipeline); it != g_rt_sbt.slots.end()) return it->second;
+  const Bg3RtPipelineInfo& info = host->rt_pipeline;
+  const uint32_t slot = g_rt_sbt.next++ % kRtSbtSlots;
+  for (auto it = g_rt_sbt.slots.begin(); it != g_rt_sbt.slots.end();) it = it->second == slot ? g_rt_sbt.slots.erase(it) : std::next(it);
+  const uint64_t at = bg3::rt_pipeline::sbt_slot_address(g_rt_sbt.address, g_rt_sbt.layout, slot, info.base_alignment);
+  if (host->vk->GetRayTracingShaderGroupHandlesKHR(host->device, pipeline, 0, 1, info.handle_size, g_rt_sbt.map + (at - g_rt_sbt.address)) != VK_SUCCESS)
+    return UINT32_MAX;
+  g_rt_sbt.slots[pipeline] = slot;
+  return slot;
+}
 // Qualified hidden-hit GI uses native local-light inputs, material set1 and
 // optional SHaRC set4. gi_hit_sun adds the D-LS sun set as set 3 (this frame's write_sun_set);
 // without it (ring full, layout failure) the direct-only variant runs, as gi_hit_sun=0.
@@ -2826,17 +2957,43 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  Pipe& p=em?g_hit_gi_em[em_index]:sun?(s.sharc?g_hit_gi_sun_sharc:g_hit_gi_sun):(s.sharc?g_hit_gi_sharc:g_hit_gi);
  if(!em && !refresh(p,sun?(s.sharc?"gi/gi_trace_rt_sharc_hit_sun.hlsl":"gi/gi_trace_rt_hit_sun.hlsl")
                   :(s.sharc?"gi/gi_trace_rt_sharc_hit_direct.hlsl":"gi/gi_trace_rt_hit_direct.hlsl"),layout))return false;
- auto traversal=prepare_omm_traversal(cmd,b,p.pipeline);if(!traversal.valid())return false;
+ // gi_rt_pipeline: the same pass as a ray tracing pipeline when every piece is there (common/rt_pipeline.h choose_path).
+ Pipe* rp=nullptr;VkPipelineLayout rt_layout=VK_NULL_HANDLE;uint32_t rt_slot=UINT32_MAX;
+ {
+  namespace rtp=bg3::rt_pipeline;
+  const bool key=host->cfg_int("gi_rt_pipeline",0)!=0,device=host->rt_pipeline.available!=0,fns=device && rt_pipe_entry_points();
+  const bool variant=sun && !s.sharc;   // gi_trace_rt_hit_sun[_em].hlsl: shader_variant.h raygen_entry
+  bool ready=false;
+  if(key && fns && variant){
+   const unsigned i=em?1u:0u;
+   const VkDescriptorSetLayout sets[4]={g_hit_gi_set_layout,alpha_layout,em?g_hit_em_dsl:g_empty_dsl,g_sun_dsl};
+   if(ensure_empty_dsl() && ensure_hit_gi_rt_layout(i,sets,4) && ensure_rt_sbt() &&
+      refresh(g_hit_gi_rt[i],em?kEmFiles[2]:"gi/gi_trace_rt_hit_sun.hlsl",g_hit_gi_rt_layout[i],true) && g_hit_gi_rt[i].pipeline){
+    rt_slot=rt_sbt_slot(g_hit_gi_rt[i].pipeline);
+    if(rt_slot!=UINT32_MAX){ready=true;rp=&g_hit_gi_rt[i];rt_layout=g_hit_gi_rt_layout[i];}
+   }
+  }
+  const rtp::Path path=rtp::choose_path(key,device,fns,variant,ready);
+  if(uint32_t(path)!=g_rt_path_logged && (key || g_rt_path_logged!=UINT32_MAX)){
+   g_rt_path_logged=uint32_t(path);
+   host->log("gi: gi_rt_pipeline: the hit-GI trace runs %s%s%s (reorder %d)",path==rtp::Path::kRaygen?"as a ":"as compute: ",
+             rtp::path_name(path),path==rtp::Path::kRaygen?(em?", emission variant":", sun variant"):"",host->cfg_int("gi_rt_pipeline_reorder",0));
+  }
+ }
+ auto traversal=prepare_omm_traversal(cmd,b,rp?rp->pipeline:p.pipeline);if(!traversal.valid())return false;
  VkDescriptorSet material_alpha=b.alpha;
  if(!host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&material_alpha))return false;
  bind_ls(b,s);const auto& vk=*host->vk;VkWriteDescriptorSet writes[bg3::native_hit_gi::bindings.size()];uint32_t write_count=0;
  if(!gather_hit_gi_writes(b,writes,write_count))return false;
- vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,p.pipeline);
- vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,write_count,writes);
- vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,1,1,&material_alpha,0,nullptr);
- if(sun)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,bg3::native_hit_gi::kSetSun,1,&sun,0,nullptr);
- if(em)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,bg3::native_hit_gi::kSetEmissive,1,&em,0,nullptr);
- if(s.sharc)vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,4,1,&s.sh.set,0,nullptr);
+ // The ray tracing bind point leaves the game's compute and graphics bindings alone.
+ const VkPipelineBindPoint bind=rp?VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR:VK_PIPELINE_BIND_POINT_COMPUTE;
+ const VkPipelineLayout pass_layout=rp?rt_layout:layout;
+ vk.CmdBindPipeline(cmd,bind,rp?rp->pipeline:p.pipeline);
+ vk.CmdPushDescriptorSet(cmd,bind,pass_layout,0,write_count,writes);
+ vk.CmdBindDescriptorSets(cmd,bind,pass_layout,1,1,&material_alpha,0,nullptr);
+ if(sun)vk.CmdBindDescriptorSets(cmd,bind,pass_layout,bg3::native_hit_gi::kSetSun,1,&sun,0,nullptr);
+ if(em)vk.CmdBindDescriptorSets(cmd,bind,pass_layout,bg3::native_hit_gi::kSetEmissive,1,&em,0,nullptr);
+ if(s.sharc)vk.CmdBindDescriptorSets(cmd,bind,pass_layout,4,1,&s.sh.set,0,nullptr);
  // The hit light policy's per-light data (b46): the latest join's, the GI runs before this
  // frame's (native_hit_direct.hlsli checks each slot's key).
  Push hp=pc;hp.ls_flags=(hp.ls_flags&~1u)|(g_lsl_ok && host->cfg_int("ls_lights",1)?1u:0u);
@@ -2851,8 +3008,19 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  // gi_hit_sun: bit 25, the sun set b8 holds this frame's trust slot (header and roof volumes).
  if(sun)hp.ls_flags|=g_sunt_ok && g_sunt.view?(1u<<25):0u;
  if(em)hit_em_prepare(cmd,hp);
- vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof hp,&hp);
- vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);
+ if(!rp){
+  vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof hp,&hp);
+  vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);
+ }else{
+  vk.CmdPushConstants(cmd,rt_layout,VK_SHADER_STAGE_RAYGEN_BIT_KHR,0,sizeof hp,&hp);
+  // The compute work before (origins, SHaRC resolve, emission prepare) and after (temporal) sees the raygen stage.
+  memory_barrier(cmd,kAll,VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+  const Bg3RtPipelineInfo& info=host->rt_pipeline;
+  const VkStridedDeviceAddressRegionKHR raygen{bg3::rt_pipeline::sbt_slot_address(g_rt_sbt.address,g_rt_sbt.layout,rt_slot,info.base_alignment),
+                                               g_rt_sbt.layout.stride,g_rt_sbt.layout.stride},none{};
+  vk.CmdTraceRaysKHR(cmd,&raygen,&none,&none,&none,(g_hw+7)/8*8,(g_hh+7)/8*8,1);   // the compute pass's 8x8-group grid
+  memory_barrier(cmd,VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,kAll);
+ }
  if(!g_hit_em_logged && host->cfg_int("rt_hit_emission",0)>0){
   g_hit_em_logged=true;
   host->log("hit emission: first hit-GI dispatch %s the emissive scene (sun %d, sharc %d)",
@@ -4071,6 +4239,7 @@ void gi_release() {
   g_rg_pool = VK_NULL_HANDLE, g_rg_dsl = VK_NULL_HANDLE, g_rg_buf = VK_NULL_HANDLE, g_rg_mem = VK_NULL_HANDLE;
   g_rg_set = VK_NULL_HANDLE;
   hit_em_drop();
+  hit_gi_rt_drop(false);
   g_hit_em_logged = false;
   g_hem = HitEmWindow{};
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_queries);

@@ -179,6 +179,31 @@ Ordinary output files contain the final dispatch; use `ab.csv` for paired timing
 
 `--ab-self-test` checks drift cancellation and confidence bounds without a GPU.
 
+The A/B summary also prints `same-pipeline repeats that changed outputs or counters: A n of N, B n of N`: each
+quartet runs each pipeline twice on identical inputs, so a nonzero count means that pipeline is not deterministic.
+
+Raygen GI (gi_rt_pipeline, docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"): `--ab-rgen <file>` makes B the same
+pass as a ray generation shader (ray tracing pipeline, `vkCmdTraceRaysKHR` over A's grid). It compiles `<file>` with
+A's defines plus GI_TRACE_RAYGEN=1, which is the core's raygen request: `--ab-rgen shaders/gi/gi_trace_rt_hit_sun.hlsl`.
+The tools/gi_trace_rgen*.hlsl wrappers still work. `--rgen-spec 1050=0|1|2` selects no reorder and no prepass (the
+default), a hit kind + instance hint, or a hit kind hint. With `--define RT_SPEC_CASCADE=1` (the production request,
+plus `--spec 1000=1`) the pack's RT_CASCADE_MASKS=1 is dropped: the same program, and the two cannot be combined.
+`--pipeline-stats` also requests ray tracing pipeline statistics (the 5090 driver reports no executable for them).
+
+Seed sweep (statistical A/B for passes that cannot be bit-equal, e.g. compute vs raygen): `--seed-sweep` with
+`--define GI_SEED_PUSH=1` gives measured dispatch d the random streams of seed d + 1 (Push::bounce_spec, unused by
+the pass, offsets GI_RNG_FRAME. Push::frame stays because it stamps the hit-material records). Per side, the
+quartet phases 0-1 and 2-3 form two independent sets of N draws (`--repeat N`). The run writes
+`seed_<side><set>_<output>.mean.f32/.var.f32` (about 90 MB each at 2560x1067, so delete them after analysis), `seed_index.txt`,
+`seed_means.csv` and `seed_counters.csv` (with `--push rt_stats=1`). The per-quartet bit-equality lines then report
+DIFFER by design. `py -3 tools/replay_seed_gate.py <out>` runs the gate:
+- energy: per channel, B-A within 3 standard errors from the compute draws;
+- per pixel: a component exceeds above one encoding step and 4 sigma; the exceed fraction must stay within 3 standard
+  errors of the compute vs compute fraction;
+- counter totals: the 3-standard-error rule per counter.
+Every threshold comes from the control (A1 vs A0); none is tuned.
+`--push seed=V` sets the same field for one dispatch.
+
 ```powershell
 bin/frame_replay --pack <pack> --spv sun.spv --sun-trust trust.bin --push radius=6 `
   --ab-spec 1007=1,0 --repeat 40 --out .scratch/far-split

@@ -1,0 +1,27 @@
+{
+ "_rule": "Written and committed BEFORE any run (a later commit is post hoc). gpu_ms: predicted change of the 'gi: trace pass' GPU median ON minus OFF (mean of on-a/on-b minus mean of off-a/off-b). energy: predicted relative change of the scene colour before post (5c3fdabc float mean, dumps.json) of each ON shot against its OFF neighbours.",
+ "grp1-camp": {
+  "gpu_ms": {
+   "predicted": -2.5,
+   "source": "frame_replay seed sweep / A/B on pack replay-20261102-013545-2: raygen without reorder vs compute -2.58 ms [-2.83, -2.39] (docs/progress/claude-opt-ser-gi.md); emission not in the pack",
+   "written": "2026-11-08"
+  },
+  "energy": {
+   "predicted": 0.0,
+   "source": "seed gate PASS on camp (energy within 3 SE, per-pixel 4 sigma within the compute-vs-compute fraction)",
+   "written": "2026-11-08"
+  }
+ },
+ "grp2-inn": {
+  "gpu_ms": {
+   "predicted": -0.6,
+   "source": "A/B on pack replay-20261102-013914-3: -0.61 ms [-0.67, -0.44]; emission not in the pack",
+   "written": "2026-11-08"
+  },
+  "energy": {
+   "predicted": 0.0,
+   "source": "seed gate PASS on the inn pack",
+   "written": "2026-11-08"
+  }
+ }
+}

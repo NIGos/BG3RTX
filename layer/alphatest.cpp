@@ -27,6 +27,7 @@
 #include <optional>
 #include "../common/submit_batch.h"
 #include "hit_material.h"
+#include "rt_pipeline.h"
 #include "../common/native_hit_capability.h"
 #include "../common/mapped_copy.h"
 #include "../common/native_scalp_coverage.h"
@@ -601,27 +602,29 @@ void alpha_device_created(DeviceData* dd) {
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   ok = ok && vk.CreateSampler(dd->device, &si, nullptr, &g_clamp) == VK_SUCCESS;
   g_omm_layout=omm::available_for(dd) || omm::scene_capability(static_cast<uint32_t*>(persist(omm::scene_capability_key,sizeof(uint32_t))));
+  // gi_rt_pipeline: the raygen GI trace binds this set too (layer/rt_pipeline.cpp; compute only without it).
+  const VkShaderStageFlags stages = rt_pipeline::shared_stages();
   VkDescriptorSetLayoutBinding b[16] = {
-      {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // scene stamp
-      {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // InstInfo per TLAS instance
-      {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},   // the split's mesh pool
-      {2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kTextures, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kCaches, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_wrap},
-      {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_clamp},
-      {10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {12,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {13,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {14,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,native_hit::cache_slots,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {15,VK_DESCRIPTOR_TYPE_SAMPLER,native_hit::sampler_slots,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
+      {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},   // scene stamp
+      {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},   // InstInfo per TLAS instance
+      {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},   // the split's mesh pool
+      {2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kTextures, stages, nullptr},
+      {3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kCaches, stages, nullptr},
+      {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, stages, &g_wrap},
+      {5, VK_DESCRIPTOR_TYPE_SAMPLER, 1, stages, &g_clamp},
+      {10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,stages,nullptr},
+      {11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,stages,nullptr},
+      {12,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,stages,nullptr},
+      {13,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,stages,nullptr},
+      {14,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,native_hit::cache_slots,stages,nullptr},
+      {15,VK_DESCRIPTOR_TYPE_SAMPLER,native_hit::sampler_slots,stages,nullptr}};
   std::vector<VkDescriptorSetLayoutBinding> bindings(b,b+10);
   if(g_omm_layout)bindings.insert(bindings.end(),b+10,b+12);
   if(native_hit::enabled())bindings.insert(bindings.end(),b+12,b+16);
-  if(g_tileset_binding)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
+  if(g_tileset_binding)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,stages,nullptr});
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   dci.bindingCount = uint32_t(bindings.size());
   dci.pBindings = bindings.data();

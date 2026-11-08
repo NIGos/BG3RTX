@@ -28,6 +28,7 @@
 #include "hit_material.h"
 #include "omm_backend.h"
 #include "hair_groom.h"
+#include "rt_pipeline.h"
 #include "omm_submit.h"
 #include "../common/omm_scene_capability.h"
 #include "omm_content.h"
@@ -766,6 +767,7 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   }
   next = omm::device_features(id, phys, next, g_ext_names);
   next = hair_groom::device_features(id, phys, next, g_ext_names);
+  next = rt_pipeline::device_features(id, phys, next, g_ext_names);   // gi_rt_pipeline (layer/rt_pipeline.cpp)
   g_f_rq = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
   g_f_rq.rayQuery = VK_TRUE;
   g_f_rq.pNext = const_cast<void*>(next);

@@ -198,7 +198,14 @@ uint3 pcg3d(uint3 v) {
   v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
   return v;
 }
-uint pixel_seed(uint2 p, uint salt) { return pcg3d(uint3(p, pc.frame * 4u + salt)).x; }
+// The random streams' frame. GI_SEED_PUSH (offline only, frame_replay --seed-sweep): Push::bounce_spec (unused, 0)
+// offsets them; Push::frame keeps the sample position and the hit-material stamps.
+#ifdef GI_SEED_PUSH
+#define GI_RNG_FRAME (pc.frame + pc.bounce_spec)
+#else
+#define GI_RNG_FRAME pc.frame
+#endif
+uint pixel_seed(uint2 p, uint salt) { return pcg3d(uint3(p, GI_RNG_FRAME * 4u + salt)).x; }
 
 // GI sample position: one full-res pixel per GI texel. At half res it rotates
 // inside each 2x2 block over frames; at full res (RR mode) it is the pixel itself.

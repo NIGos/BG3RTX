@@ -252,6 +252,8 @@ static bool compile(const ShaderEntry& e, std::vector<uint32_t>& out, bool& miss
   std::vector<LPCWSTR> args = {path.c_str(), L"-spirv", L"-fspv-target-env=vulkan1.3", L"-HV", L"2021",
                                L"-T", profile.c_str(), L"-E", entry.c_str(), L"-I", inc.c_str(),
                                L"-D", L"BG3RTX=1"};
+  // A library profile (gi_rt_pipeline's lib_6_6 raygen requests) has no single entry point: no -E.
+  if (e.profile.rfind("lib_", 0) == 0) args.erase(args.begin() + 7, args.begin() + 9);
   const std::wstring sharc = widen(sharc_dir());
   if (!sharc.empty()) {
     args.push_back(L"-I");

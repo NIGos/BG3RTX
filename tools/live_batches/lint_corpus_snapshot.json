@@ -72593,6 +72593,384 @@
         "samples": 8,
         "source": "VALID same-save/key median"
       }
+    },
+    {
+      "save": "Campsite - 27h",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[cfg\\] settings read",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "gi_rt_pipeline",
+          "0"
+        ],
+        [
+          "gi_rt_pipeline_reorder",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ],
+        [
+          "sharc",
+          "0"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Campsite - 27h",
+      "patterns": [
+        "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Campsite - 27h",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Campsite - 27h",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Campsite - 27h",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "0"
+        ],
+        [
+          "qa_exposure_hold",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Campsite - 27h",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "0"
+        ],
+        [
+          "qa_exposure_hold",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[cfg\\] settings read",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "gi_rt_pipeline",
+          "0"
+        ],
+        [
+          "gi_rt_pipeline_reorder",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ],
+        [
+          "sharc",
+          "0"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "0"
+        ],
+        [
+          "qa_exposure_hold",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "gi_rt_pipeline",
+          "0"
+        ],
+        [
+          "qa_exposure_hold",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -74833,6 +75211,42 @@
       null
     ],
     "\\[sl\\] present metering device: requested 1 ": [
+      0,
+      null
+    ],
+    "\\[rt pipeline\\] .*(unavailable|entry points missing|unusable properties|left alone)": [
+      0,
+      null
+    ],
+    "\\[layer\\] optional ray tracing pipeline device request failed": [
+      0,
+      null
+    ],
+    "gi: gi_rt_pipeline: the hit-GI trace runs as compute: (no ray tracing pipeline|ray tracing pipeline entry points|this variant)": [
+      0,
+      null
+    ],
+    "gi: gi_rt_pipeline: the shader binding table could not be allocated": [
+      0,
+      null
+    ],
+    "GI_TRACE_RAYGEN=1 pipeline creation failed": [
+      0,
+      null
+    ],
+    "\\[rt pipeline\\] on the device: handle \\d+ B, alignment \\d+, base alignment \\d+, reorder REORDER": [
+      0,
+      null
+    ],
+    "gi: gi/gi_trace_rt_hit_sun(_em)?\\.hlsl\\?[^ ]*GI_TRACE_RAYGEN=1 generation \\d+": [
+      0,
+      null
+    ],
+    "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, (emission|sun) variant": [
+      0,
+      null
+    ],
+    "gi: gi_rt_pipeline: the hit-GI trace runs as compute: key off": [
       0,
       null
     ]

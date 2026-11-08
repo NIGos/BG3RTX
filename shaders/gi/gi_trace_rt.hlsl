@@ -102,6 +102,74 @@ bool gi_hit_term_ok(float3 c, uint bin) {
 #endif
 [[vk::constant_id(1007)]] const uint kSpecGiFar = 0u;
 #endif
+#if GI_TRACE_RAYGEN
+// gi_rt_pipeline (docs/TRACK_C_GI.md "Ray tracing pipeline GI trace", core/gi.cpp hit_gi_dispatch; the request
+// <file>?...;GI_TRACE_RAYGEN=1 of common/shader_variant.h, lib profile): the same body as a ray generation shader over
+// the same thread grid. gi_rt_pipeline_reorder (constant 1050, kGiSerHint) adds a prepass and one reorder hint.
+#if !RT_HIT_GI_DIRECT
+#error GI_TRACE_RAYGEN needs RT_HIT_GI_DIRECT (the hint reads the hit's instance)
+#endif
+[[vk::constant_id(1050)]] const uint kGiSerHint = 0u;   // shader_variant.h kSpecIdGiSer: 0 no reorder, 1 kind+instance, 2 kind
+[[vk::ext_capability(5388)]] [[vk::ext_extension("SPV_EXT_shader_invocation_reorder")]]
+[[vk::ext_instruction(5314)]] void gi_ser_reorder_hint(uint hint, uint bits);   // OpReorderThreadWithHintEXT
+// The first two GI rays are traced up front (the same setup, random stream and query as the loop below), their
+// hints combined, and the reorder issued once in uniform control flow: every thread of the launch reaches it (no
+// thread has returned yet; the constant's branch is uniform). The loop then reads these hits instead of tracing.
+// Per ray: 0 miss or unknown (nothing to shade), 1 on screen (a depth test and a radiance read, mostly), else
+// 2 + the hit's instance (its material row: the hidden-hit shading). Hint = ray 0 (high bits) | ray 1.
+static const uint kGiSerRays = 2u, kGiSerRayBits = 7u;
+// Hint 0 (the default): no prepass, every ray is traced in the loop as in the compute pass.
+#define GI_SER_PREPASS_RAYS (kGiSerHint != 0u ? kGiSerRays : 0u)
+static RtHit g_ser_hit[kGiSerRays];
+void gi_ser_prepass(uint2 id) {
+  if (kGiSerHint == 0u) return;   // uniform (a constant)
+  g_rt_pass = kRtPassGI;   // as the body: aborted prepass queries count as GI unknowns
+  uint hint = 0u;
+  if (all(id < pc.half)) {
+    const uint2 fp = gi_fp(id);
+    const float d = gDepth.Load(int3(fp, 0));
+    const float2 enc = gNormal.Load(int3(fp, 0)).xy;
+    const float2 e = enc * 3.5554 - 1.7777;
+    if (!(d <= 0.0 || dot(e, e) + 1.0 > 5.4e10)) {
+      const float2 uv = (float2(fp) + 0.5) / float2(pc.full);
+      const float3 P = ray_at(uv) * d;
+      const float3 N = to_lighting_space(decode_normal(enc));
+      const float3x3 inv = frustum_inverse();
+      const float dist = length(P);
+      const float pa = pixel_angle(uv);
+      RtCone cone = {dist * pa * 2.0, pa * 2.0};
+      const float4 org = rt_origin_at(fp);
+#if RT_GI_FAR
+#error GI_TRACE_RAYGEN supports RT_SPEC_GI_FAR, not the old RT_GI_FAR define build
+#elif defined(RT_SPEC_GI_FAR)
+      const float R = kSpecGiFar != 0u ? max(pc.radius, pc.gi_rt_radius) : pc.gi_rt_radius;   // the body's R
+#else
+      const float R = pc.gi_rt_radius;
+#endif
+      uint seed = pixel_seed(fp, 0u);
+      for (uint r = 0; r < min(pc.rays, GI_SER_PREPASS_RAYS); ++r) {
+        const float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
+        const float3 o = RT_SECONDARY_ORIGIN(fp, org, P, N, dist * pa, dir);
+#ifdef RT_SPEC_NATIVE
+        if (kRtGroomAoT != 0u) g_rt_groom_ao = true;
+#endif
+        g_ser_hit[r] = rt_closest_hit(o, dir, R, cone);
+#ifdef RT_SPEC_NATIVE
+        if (kRtGroomAoT != 0u) g_rt_groom_ao = false;
+#endif
+        const RtHit hh = g_ser_hit[r];
+        float2 quv;
+        float qd;
+        const bool onscreen = !hh.aborted && hh.t >= 0.0 && project(inv, o + dir * hh.t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
+        const uint h = hh.aborted || hh.t < 0.0 ? 0u : onscreen ? 1u : kGiSerHint == 2u ? 2u : 2u + (hh.inst & 0x7Fu) % 126u;
+        hint |= h << ((kGiSerHint == 2u ? 2u : kGiSerRayBits) * (kGiSerRays - 1u - r));
+      }
+    }
+  }
+  // 1: kind + instance (7 bits per ray); 2: the hit kind only (miss, on screen, hidden: 2 bits per ray).
+  if (kGiSerHint != 0u) gi_ser_reorder_hint(hint, (kGiSerHint == 2u ? 2u : kGiSerRayBits) * kGiSerRays);
+}
+#endif
 #if RT_GI_FAR || defined(RT_SPEC_GI_FAR)
 // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"; core/gi.cpp hit_gi_dispatch, request flag kGiFar on
 // the gi_hit_sun files): rays of Push::radius (gi_far_m) instead of gi_rt_radius, the per-ray rule of
@@ -162,9 +230,30 @@ bool gi_far_roof_clear(float3 o, float3 d, float t) {
 }
 #endif
 static uint g_far_stat[kGiFarStatCount];
+#if !GI_TRACE_RAYGEN
 groupshared uint gs_far_stat[kGiFarStatCount];
+#endif
 void far_stat(uint k, float v) { g_far_stat[k] += uint(clamp(v, 0.0, 8.0) * 8192.0 + 0.5); }
 void gi_trace_px(uint3 tid);
+#if GI_TRACE_RAYGEN
+// SER prototype, far + sun (tools/gi_trace_rgen_sun.hlsl): the prepass and its reorder first, then the same body. A ray
+// generation shader has no group-shared memory: the far counters take one wave sum and one atomic per wave into the
+// bin of the wave's first lane's 8x8 compute group, as stat_add bins (totals equal the compute pass; bins may move).
+[shader("raygeneration")]
+void main() {
+  const uint3 tid = DispatchRaysIndex();
+  gi_ser_prepass(tid.xy);
+  for (uint k = 0; k < kGiFarStatCount; ++k) g_far_stat[k] = 0u;
+  gi_trace_px(tid);
+  if (pc.rt_stats != 0u && kSpecGiFar != 0u) {
+    const uint bin = WaveReadLaneFirst(((tid.x >> 3) * 7u + (tid.y >> 3) * 13u) & 63u);
+    for (uint k = 0; k < kGiFarStatCount; ++k) {
+      const uint s = WaveActiveSum(g_far_stat[k]);
+      if (WaveIsFirstLane() && s) rtStats.InterlockedAdd(((kGiFarStatFirst + k) * 64u + bin) * 4u, s);
+    }
+  }
+}
+#else
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV_GroupIndex) {
   for (uint k = 0; k < kGiFarStatCount; ++k) g_far_stat[k] = 0u;
@@ -185,13 +274,22 @@ void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV
     if (gix < kGiFarStatCount && gs_far_stat[gix]) rtStats.InterlockedAdd(((kGiFarStatFirst + gix) * 64u + bin) * 4u, gs_far_stat[gix]);
   }
 }
+#endif
 void gi_trace_px(uint3 tid) {
+#elif GI_TRACE_RAYGEN
+[shader("raygeneration")]
+void main() {
+  const uint3 tid = DispatchRaysIndex();
+  gi_ser_prepass(tid.xy);
 #else
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
 #endif
   g_rt_pass = kRtPassGI;   // aborted queries count as this pass's unknowns (rt_common.hlsli)
   uint2 id = tid.xy;
+#ifdef GI_DEBUG_SWIZZLE
+  id ^= uint2(GI_DEBUG_SWIZZLE, GI_DEBUG_SWIZZLE);   // offline diagnosis: another thread / group computes each pixel
+#endif
   if (any(id >= pc.half)) return;
   uint2 fp = gi_fp(id);
   float d = gDepth.Load(int3(fp, 0));
@@ -260,7 +358,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #ifdef RT_SPEC_NATIVE
     if (kRtGroomAoT != 0u) g_rt_groom_ao = true;   // rt_hair_groom_ao_t: this ray sees the strands' transmittance
 #endif
-#if SHARC_QUERY_PASS || RT_HIT_GI_DIRECT
+#if GI_TRACE_RAYGEN
+    RtHit hh;
+    if (r < GI_SER_PREPASS_RAYS) hh = g_ser_hit[r];   // traced before the reorder (gi_ser_prepass)
+    else hh = rt_closest_hit(o, dir, R, cone);
+    float t = hh.t;
+    const bool aborted = hh.aborted;
+#elif SHARC_QUERY_PASS || RT_HIT_GI_DIRECT
     RtHit hh = rt_closest_hit(o, dir, R, cone);
     float t = hh.t;
     const bool aborted = hh.aborted;
@@ -491,7 +595,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
           // Push::ao_direct bit 3) leaves the sun out: the point/spot term alone, as gi_hit_direct.
           if (kRtCompactHitState != 0u && compact_guard) guard_count(kGuardSet1);
           const float3 hit_n=kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh);const float hit_f=cone.f0+cone.spread*t;
-          g_hs_seed=pcg3d(uint3(fp,pc.frame*8u+r)^uint3(0x6a09e667u,0xbb67ae85u,0x3c6ef372u)).x;
+          g_hs_seed=pcg3d(uint3(fp,GI_RNG_FRAME*8u+r)^uint3(0x6a09e667u,0xbb67ae85u,0x3c6ef372u)).x;
           HdDirect sun;sun.radiance=0;sun.status=HdInvalid;
           if((pc.ao_direct&8u)!=0u)sun=native_hit_sun(material,hit_p,-dir,hit_n,hit_f);
           const bool sun_ok=sun.status==HdOk;
@@ -501,7 +605,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
           const bool sun_ao=sun_ok && any(sun.radiance>0) && !((pc.ao_direct&3u)==1u && (pc.ao_direct&12u)==12u);
           float hit_a=1.0;
           if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0)) || sun_ao){
-            hit_a=native_hit_ao(hit_p,hit_n,hit_f,uint3(fp,pc.frame*8u+r));
+            hit_a=native_hit_ao(hit_p,hit_n,hit_f,uint3(fp,GI_RNG_FRAME*8u+r));
             direct.radiance=native_hit_ao_direct(direct,hit_a);
           }
           const float3 sun_l=sun_ok?sun.radiance*(sun_ao?native_hit_ao_factor(hit_a):1.0):0.0.xxx;
@@ -514,7 +618,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
           // factor applies (lights at the game's visibility, or ao_direct != 1).
           if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0))) {
             if (kRtCompactHitState != 0u && compact_guard) guard_count(kGuardSet1);
-            direct.radiance=native_hit_ao_direct(direct,native_hit_ao(hit_p,kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh),cone.f0+cone.spread*t,uint3(fp,pc.frame*8u+r)));
+            direct.radiance=native_hit_ao_direct(direct,native_hit_ao(hit_p,kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh),cone.f0+cone.spread*t,uint3(fp,GI_RNG_FRAME*8u+r)));
           }
 #endif
           if(pc.rt_stats!=0u){

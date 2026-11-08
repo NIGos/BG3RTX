@@ -67,6 +67,12 @@ struct Gpu {
   bool validation = false, pipeline_stats = false;
   PFN_vkGetPipelineExecutablePropertiesKHR executableProperties{};
   PFN_vkGetPipelineExecutableStatisticsKHR executableStatistics{};
+  // --ab-rgen (SER prototype): pipeline B is a ray tracing pipeline with one raygen group.
+  bool rt_pipeline = false;
+  VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtp{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR};
+  PFN_vkCreateRayTracingPipelinesKHR createRT{};
+  PFN_vkGetRayTracingShaderGroupHandlesKHR groupHandles{};
+  PFN_vkCmdTraceRaysKHR traceRays{};
   std::string name;
   uint32_t max_image_2d = 0, max_layers = 0;
   uint64_t device_bytes = 0;   // device-local memory allocated (never freed before exit)
@@ -77,8 +83,17 @@ fs::path g_reference_out;
 std::map<uint32_t, uint32_t> g_specs;
 std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_ab_specs;
 fs::path g_ab_spv;
+fs::path g_ab_rgen;   // --ab-rgen <hlsl>: B is this file as a lib_6_6 raygen (tools/gi_trace_rgen.hlsl) over A's grid
+bool g_synth_stripes = false;   // --synth-stripes: the striped divergence fixture (synthesize)
+uint32_t g_synth_size = 128;   // --synth-size N: --synthesize at N x N (a timing fixture; the CTests keep 128)
+std::map<uint32_t, uint32_t> g_rgen_specs;   // --rgen-spec ID=V: B's specialization only (1050: the reorder hint)
 bool g_ab_require_equal = false;
 bool g_ab_numeric = false;
+// --seed-sweep (A/B mode, statistics only; compile both sides with --define GI_SEED_PUSH=1): measured dispatch d runs with
+// Push::bounce_spec = d + 1, the GI random streams' offset (gi_common.hlsli GI_RNG_FRAME; Push::frame stays: it stamps the
+// hit-material records and picks the 2x2 sample position), so every draw is an independent random stream; per side and set (phases 0-1 / 2-3) the
+// per-pixel mean and variance and per-draw channel means and counter totals are written (tools/replay_seed_gate.py).
+bool g_seed_sweep = false;
 bool g_require_live_equal = false;
 uint32_t g_ab_warmup = 0; // untimed GPU dispatches immediately before each A/B sample
 bool g_ab_blas = false, g_blas_control = false;
@@ -97,7 +112,7 @@ bool blas_class_test() {
   std::printf("%s BLAS classes: soup, alpha, pool, held, all 4096 pool alpha slots, cascade\n",okay?"PASS":"FAIL");
   return okay;
 }
-bool ab_mode() { return g_ab_blas || !g_ab_specs.empty() || !g_ab_spv.empty(); }
+bool ab_mode() { return g_ab_blas || !g_ab_specs.empty() || !g_ab_spv.empty() || !g_ab_rgen.empty(); }
 bool g_reference_mismatch = false;
 std::atomic<unsigned> g_validation_errors{};
 [[noreturn]] void die(const std::string& what) { std::fprintf(stderr, "FAIL %s\n", what.c_str()); std::exit(1); }
@@ -195,6 +210,26 @@ int init_gpu(bool want_validation, bool require_validation) {
   VkPhysicalDeviceRayQueryFeaturesKHR useRQ{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, &use12}; useRQ.rayQuery = VK_TRUE;
   VkPhysicalDeviceAccelerationStructureFeaturesKHR useAS{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, &useRQ};
   useAS.accelerationStructure = VK_TRUE;
+  // --ab-rgen: the ray tracing pipeline and SER (EXT) features, only in that mode (ordinary replay is unchanged).
+  VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT useSER{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT};
+  VkPhysicalDeviceRayTracingPipelineFeaturesKHR useRT{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR, &useSER};
+  if (!g_ab_rgen.empty()) {
+    VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT haveSER{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT};
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR haveRT{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR, &haveSER};
+    VkPhysicalDeviceFeatures2 query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &haveRT};
+    vkGetPhysicalDeviceFeatures2(g.physical, &query);
+    if (!haveRT.rayTracingPipeline || !haveSER.rayTracingInvocationReorder) {
+      std::puts("SKIP --ab-rgen: no rayTracingPipeline + rayTracingInvocationReorder (EXT) on this device");
+      return 77;
+    }
+    extensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+    extensions.push_back(VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME);
+    useRT.rayTracingPipeline = VK_TRUE;
+    useSER.rayTracingInvocationReorder = VK_TRUE;
+    useSER.pNext = useAS.pNext;
+    useAS.pNext = &useRT;
+    g.rt_pipeline = true;
+  }
   VkPhysicalDeviceFeatures core{}; core.shaderStorageImageExtendedFormats = VK_TRUE; core.samplerAnisotropy = features.features.samplerAnisotropy;
   core.shaderSampledImageArrayDynamicIndexing = features.features.shaderSampledImageArrayDynamicIndexing;
   core.textureCompressionBC = features.features.textureCompressionBC;
@@ -209,6 +244,19 @@ int init_gpu(bool want_validation, bool require_validation) {
   PROC(vkCreateAccelerationStructureKHR, createAS); PROC(vkDestroyAccelerationStructureKHR, destroyAS);
   PROC(vkGetAccelerationStructureBuildSizesKHR, sizesAS); PROC(vkCmdBuildAccelerationStructuresKHR, buildAS);
   PROC(vkGetAccelerationStructureDeviceAddressKHR, addressAS);
+  if (g.rt_pipeline) {
+    PROC(vkCreateRayTracingPipelinesKHR, createRT);
+    PROC(vkGetRayTracingShaderGroupHandlesKHR, groupHandles);
+    PROC(vkCmdTraceRaysKHR, traceRays);
+    VkPhysicalDeviceRayTracingInvocationReorderPropertiesEXT ser{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_EXT};
+    g.rtp.pNext = &ser;
+    VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &g.rtp};
+    vkGetPhysicalDeviceProperties2(g.physical, &p2);
+    g.rtp.pNext = nullptr;
+    std::printf("[rgen] ray tracing pipeline + SER (EXT): handle %u B, base alignment %u, reordering hint %s\n",
+                g.rtp.shaderGroupHandleSize, g.rtp.shaderGroupBaseAlignment,
+                ser.rayTracingInvocationReorderReorderingHint == VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT ? "REORDER" : "NONE");
+  }
   if (g.pipeline_stats) {
     PROC(vkGetPipelineExecutablePropertiesKHR, executableProperties);
     PROC(vkGetPipelineExecutableStatisticsKHR, executableStatistics);
@@ -468,14 +516,16 @@ bool reference_equal(const fs::path& file, const std::vector<uint8_t>& raw, size
 
 // ---------------------------------------------------------------- shader
 std::string source_root() { return BG3RTX_SOURCE_DIR; }
-std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::string>& defines, const fs::path& out_spv) {
+std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::string>& defines, const fs::path& out_spv,
+                              const char* profile = "cs_6_6") {
   char sdk[MAX_PATH] = {};
   const DWORD n = GetEnvironmentVariableA("VULKAN_SDK", sdk, MAX_PATH);
   const fs::path dxc = n && n < MAX_PATH ? fs::path(sdk) / "Bin" / "dxc.exe" : fs::path(BG3RTX_DXC);
   const fs::path shaders = fs::path(source_root()) / "shaders";
   // The layer's flags (layer/shaders.cpp): vulkan1.3, HLSL 2021, cs_6_6, BG3RTX=1, the SHaRC
   // headers when present (external/ of this checkout), the file's "// dxc:" line, -O3.
-  std::string cmd = "\"" + dxc.string() + "\" \"" + hlsl.string() + "\" -spirv -fspv-target-env=vulkan1.3 -HV 2021 -T cs_6_6 -E main -I \"" +
+  std::string cmd = "\"" + dxc.string() + "\" \"" + hlsl.string() + "\" -spirv -fspv-target-env=vulkan1.3 -HV 2021 -T " + std::string(profile) +
+                    (std::strncmp(profile, "lib_", 4) ? " -E main" : "") + " -I \"" +
                     shaders.string() + "\" -D BG3RTX=1";
   const fs::path sharc = fs::path(source_root()) / "external" / "sharc-1.8.3" / "include";
   if (fs::exists(sharc / "SharcCommon.h")) cmd += " -I \"" + sharc.string() + "\" -D BG3RTX_SHARC_SDK=1";
@@ -495,6 +545,7 @@ std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::strin
   return code32;
 }
 
+void print_pipeline_stats(VkPipeline pipeline);
 // Pipeline creation is shared by replay and the pack-free GI compiler. Statistics describe
 // the specialized driver executable, rather than the unspecialized SPIR-V module.
 VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout layout) {
@@ -514,7 +565,12 @@ VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout la
   if (g.pipeline_stats) cpi.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
   VkPipeline pipeline; vkcheck(vkCreateComputePipelines(g.dev, VK_NULL_HANDLE, 1, &cpi, nullptr, &pipeline), "compute pipeline");
   vkDestroyShaderModule(g.dev, module, nullptr);
-  if (!g.pipeline_stats) return pipeline;
+  if (g.pipeline_stats) print_pipeline_stats(pipeline);
+  return pipeline;
+}
+
+// --pipeline-stats: every driver executable of a pipeline created with CAPTURE_STATISTICS (compute or ray tracing).
+void print_pipeline_stats(VkPipeline pipeline) {
   VkPipelineInfoKHR info{VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR}; info.pipeline = pipeline;
   uint32_t count = 0;
   vkcheck(g.executableProperties(g.dev, &info, &count, nullptr), "pipeline executable count");
@@ -553,7 +609,46 @@ VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout la
     }
   }
   std::fflush(stdout);
-  return pipeline;
+}
+
+// --ab-rgen: a ray tracing pipeline of one raygen group (ray queries only: no miss, hit or callable records) and its
+// shader binding table. Specialization: the common values plus --rgen-spec.
+struct RtPipe { VkPipeline pipeline{}; VkStridedDeviceAddressRegionKHR raygen{}; };
+RtPipe make_rt_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout layout) {
+  check(g.rt_pipeline, "--ab-rgen needs the ray tracing pipeline device");
+  VkShaderModuleCreateInfo smi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO}; smi.codeSize = spirv.size() * 4; smi.pCode = spirv.data();
+  VkShaderModule module; vkcheck(vkCreateShaderModule(g.dev, &smi, nullptr, &module), "raygen module");
+  std::map<uint32_t, uint32_t> specs = g_specs;
+  for (const auto& [id, value] : g_rgen_specs) specs[id] = value;
+  std::vector<VkSpecializationMapEntry> entries;
+  std::vector<uint32_t> values;
+  for (const auto& [id, value] : specs) {
+    entries.push_back({id, uint32_t(values.size() * sizeof(uint32_t)), sizeof(uint32_t)}); values.push_back(value);
+    std::printf("[rgen] spec %u=%u\n", id, value);
+  }
+  VkSpecializationInfo si{uint32_t(entries.size()), entries.data(), values.size() * sizeof(uint32_t), values.data()};
+  VkPipelineShaderStageCreateInfo stage{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_RAYGEN_BIT_KHR, module, "main"};
+  if (!entries.empty()) stage.pSpecializationInfo = &si;
+  VkRayTracingShaderGroupCreateInfoKHR group{VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR};
+  group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+  group.generalShader = 0; group.closestHitShader = group.anyHitShader = group.intersectionShader = VK_SHADER_UNUSED_KHR;
+  VkRayTracingPipelineCreateInfoKHR ci{VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR};
+  ci.stageCount = 1; ci.pStages = &stage; ci.groupCount = 1; ci.pGroups = &group;
+  ci.maxPipelineRayRecursionDepth = 1; ci.layout = layout;
+  RtPipe r;
+  if (g.pipeline_stats) ci.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
+  vkcheck(g.createRT(g.dev, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &ci, nullptr, &r.pipeline), "ray tracing pipeline");
+  if (g.pipeline_stats) print_pipeline_stats(r.pipeline);
+  vkDestroyShaderModule(g.dev, module, nullptr);
+  const uint32_t hs = g.rtp.shaderGroupHandleSize, base = g.rtp.shaderGroupBaseAlignment;
+  std::vector<uint8_t> handle(hs);
+  vkcheck(g.groupHandles(g.dev, r.pipeline, 0, 1, hs, handle.data()), "raygen handle");
+  Buf sbt = make_buffer(VkDeviceSize(base) * 2, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR, true);
+  const VkDeviceAddress aligned = (sbt.address + base - 1) / base * base;
+  std::memcpy(static_cast<uint8_t*>(sbt.map) + (aligned - sbt.address), handle.data(), hs);
+  const VkDeviceSize stride = (hs + g.rtp.shaderGroupHandleAlignment - 1) / g.rtp.shaderGroupHandleAlignment * g.rtp.shaderGroupHandleAlignment;
+  r.raygen = {aligned, stride, stride};   // raygen: size == stride
+  return r;
 }
 
 // Pack-free compiler for explicit production contracts; this does not dispatch.
@@ -772,13 +867,14 @@ bool g_no_casters = false;
 bool g_origin = false;
 // --push FIELD=VALUE (repeatable): overwrite one Push field of the pack's push before the dispatch, as the live
 // core sets it per pass (e.g. radius=6: core/gi.cpp hit_gi_dispatch's gi_far ray length; rt_stats=0 / 1).
-// Fields: radius (float, offset 24), rays (uint, offset 32), rt_stats (uint, offset 124), gi_rt_radius (float, offset 112).
+// Fields: seed (uint, offset 76: Push::bounce_spec, unused by the pass, read only by a GI_SEED_PUSH build), radius (float, offset 24),
+// rays (uint, offset 32), rt_stats (uint, offset 124), gi_rt_radius (float, offset 112).
 std::vector<std::pair<std::string, std::string>> g_push_set;
 void apply_push_set(std::vector<uint8_t>& push) {
   for (const auto& [k, v] : g_push_set) {
     const bool f = k == "radius" || k == "gi_rt_radius";
-    const size_t off = k == "radius" ? 24 : k == "rays" ? 32 : k == "gi_rt_radius" ? 112 : k == "rt_stats" ? 124 : 0;
-    check(off && off + 4 <= push.size(), "--push: unknown field " + k + " (radius, rays, gi_rt_radius, rt_stats)");
+    const size_t off = k == "seed" ? 76 : k == "radius" ? 24 : k == "rays" ? 32 : k == "gi_rt_radius" ? 112 : k == "rt_stats" ? 124 : 0;
+    check(off && off + 4 <= push.size(), "--push: unknown field " + k + " (seed, radius, rays, gi_rt_radius, rt_stats)");
     if (f) { const float x = std::stof(v); std::memcpy(push.data() + off, &x, 4); }
     else { const uint32_t x = uint32_t(std::stoul(v)); std::memcpy(push.data() + off, &x, 4); }
   }
@@ -891,7 +987,16 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   check(g_reference_out.empty() || fs::weakly_canonical(out) != fs::weakly_canonical(g_reference_out), "--reference-out must differ from --out");
   // Shader: the production file from this checkout (or an override), the pack's variant defines.
   std::vector<std::string> defines = extra_defines;
-  for (size_t a = 0; a < m.defines.size();) { size_t e = m.defines.find(';', a); defines.push_back(m.defines.substr(a, e - a)); if (e == std::string::npos) break; a = e + 1; }
+  const bool spec_cascade = std::find(extra_defines.begin(), extra_defines.end(), std::string("RT_SPEC_CASCADE=1")) != extra_defines.end();
+  for (size_t a = 0; a < m.defines.size();) {
+    size_t e = m.defines.find(';', a);
+    const std::string d = m.defines.substr(a, e - a);
+    // The production request's RT_SPEC_CASCADE=1 (with --spec 1000=1) replaces a pack's RT_CASCADE_MASKS=1: the same
+    // program by construction (tools/spec_cascade_check.py), and the two defines cannot be combined (rt_common.hlsli).
+    if (!(spec_cascade && d == "RT_CASCADE_MASKS=1")) defines.push_back(d);
+    if (e == std::string::npos) break;
+    a = e + 1;
+  }
   std::vector<uint32_t> spirv = spirv_in ? *spirv_in
       : compile(hlsl_override.empty() ? fs::path(source_root()) / "shaders" / pass.shader : hlsl_override, defines, out / "pass.spv");
   auto file = [&](const std::string& name) { return read_file(pack / name); };
@@ -1193,6 +1298,11 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   // ---- descriptor sets: every slot of the pass contract, pack resources or dummies ----
   std::vector<VkDescriptorSetLayout> setLayouts(pass.set_count);
   std::vector<VkDescriptorPoolSize> poolSizes;
+  // --ab-rgen: the same sets and push constants are visible to the raygen stage too (B binds them at the ray tracing
+  // bind point); the stage masks of the dispatch's barriers and end timestamp then cover ray tracing shaders.
+  const bool rgen = !g_ab_rgen.empty();
+  const VkShaderStageFlags kStages = VK_SHADER_STAGE_COMPUTE_BIT | (rgen ? VK_SHADER_STAGE_RAYGEN_BIT_KHR : 0u);
+  const VkPipelineStageFlags kShaderStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | (rgen ? VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR : 0u);
   auto vk_type = [](rp::Kind k) {
     switch (k) {
       case rp::kUbo: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1207,7 +1317,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     std::vector<VkDescriptorSetLayoutBinding> list;
     for (uint32_t i = 0; i < pass.slot_count; ++i) if (pass.slots[i].set == s) {
       const rp::Slot& slot = pass.slots[i];
-      list.push_back({slot.binding, vk_type(slot.kind), slot.count, VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
+      list.push_back({slot.binding, vk_type(slot.kind), slot.count, kStages, nullptr});
       poolSizes.push_back({vk_type(slot.kind), slot.count});
     }
     VkDescriptorSetLayoutCreateInfo dl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
@@ -1288,7 +1398,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   const auto push_pack = file(m.push);
   check(push_pack.size() == pass.push_bytes, "push constant bytes");
   std::vector<uint8_t> push = push_pack;
-  VkPushConstantRange pushRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, pass.push_bytes};
+  VkPushConstantRange pushRange{kStages, 0, pass.push_bytes};
   VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   pl.setLayoutCount = pass.set_count; pl.pSetLayouts = setLayouts.data(); pl.pushConstantRangeCount = 1; pl.pPushConstantRanges = &pushRange;
   VkPipelineLayout layout; vkcheck(vkCreatePipelineLayout(g.dev, &pl, nullptr, &layout), "pipeline layout");
@@ -1307,7 +1417,20 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       check(!bytes.empty() && bytes.size() % 4 == 0, "--ab-spv SPIR-V size");
       code_b.resize(bytes.size() / 4); std::memcpy(code_b.data(), bytes.data(), bytes.size());
     }
-    pipeline_b = make_pipeline(code_b, layout);
+    if (!rgen) pipeline_b = make_pipeline(code_b, layout);
+  }
+  RtPipe rt_b;
+  if (rgen) {
+    check(m.pass != "local_shadows" && m.pass != "reflections", "--ab-rgen: GI packs only (tools/gi_trace_rgen.hlsl)");
+    g_specs = common_specs;
+    // The core's raygen request is the compute request plus GI_TRACE_RAYGEN=1 (common/shader_variant.h kRtPipeline):
+    // --ab-rgen <the production file> compiles exactly that; the tools/gi_trace_rgen*.hlsl wrappers define it too.
+    auto rgen_defines = defines;
+    if (std::find(rgen_defines.begin(), rgen_defines.end(), std::string("GI_TRACE_RAYGEN=1")) == rgen_defines.end())
+      rgen_defines.push_back("GI_TRACE_RAYGEN=1");
+    rt_b = make_rt_pipeline(compile(g_ab_rgen, rgen_defines, out / "rgen.spv", "lib_6_6"), layout);
+    pipeline_b = rt_b.pipeline;
+    g_specs = user_specs;
   }
   g_specs = user_specs;
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO}; qi.queryType = VK_QUERY_TYPE_TIMESTAMP; qi.queryCount = 2;
@@ -1362,7 +1485,16 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   const uint32_t dispatches = ab_mode() ? 4 + repeat * 4 : repeat;
   std::ofstream ab_csv, numeric_csv;
   std::vector<double> ab_deltas;
-  RunResult pair_reference;
+  RunResult pair_reference, pair_other;   // phase 0 and phase 1 (the other pipeline) of the current quartet
+  uint32_t same_side_differs[2] = {0, 0};
+  struct SeedAcc { std::vector<double> s1, s2; uint32_t n = 0, comps = 0, w = 0, h = 0; };
+  std::map<std::string, SeedAcc> seed_acc;   // "<side><set>_<output>"
+  std::ofstream seed_csv, seed_counters;
+  if (g_seed_sweep) {
+    check(ab_mode(), "--seed-sweep needs an A/B mode");
+    seed_csv.open(out / "seed_means.csv"); seed_csv << "side,set,seed,output,c0,c1,c2,c3\n";
+    seed_counters.open(out / "seed_counters.csv"); seed_counters << "side,set,seed,counter,total\n";
+  }   // repeats of pipeline A / B within a quartet whose outputs or counters changed
   double quartet_ms[4]{};
   bool pair_outputs_equal = true, pair_counters_equal = true;
   bool all_outputs_equal = true, all_counters_equal = true;
@@ -1402,6 +1534,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     push = push_pack;
     if (hooks && hooks->patch) hooks->patch(run, push);
     apply_push_set(push);
+    if (g_seed_sweep && !warmup) {
+      const uint32_t sd = run - 3u; std::memcpy(push.data() + 76, &sd, 4);
+    }
     if (!g_sun_trust.empty()) {   // Push::ls_flags (offset 188, static_assert below) bit 25: a sun trust slot exists
       uint32_t lf; std::memcpy(&lf, push.data() + 188, 4); lf |= 1u << 25; std::memcpy(push.data() + 188, &lf, 4);
     }
@@ -1409,11 +1544,18 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       if (g_ab_warmup)
         barrier(c,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,
                 VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
-      vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, use_b ? pipeline_b : pipeline);
-      vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, pass.set_count, sets.data(), 0, nullptr);
-      vkCmdPushConstants(c, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pass.push_bytes, push.data());
+      const bool traced = rgen && use_b;   // B of --ab-rgen: vkCmdTraceRaysKHR over the same thread grid
+      const VkPipelineBindPoint bind = traced ? VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR : VK_PIPELINE_BIND_POINT_COMPUTE;
+      vkCmdBindPipeline(c, bind, use_b ? pipeline_b : pipeline);
+      vkCmdBindDescriptorSets(c, bind, layout, 0, pass.set_count, sets.data(), 0, nullptr);
+      vkCmdPushConstants(c, layout, kStages, 0, pass.push_bytes, push.data());
+      const VkStridedDeviceAddressRegionKHR none{};
+      auto run_pass = [&] {
+        if (traced) g.traceRays(c, &rt_b.raygen, &none, &none, &none, m.groups[0] * 8, m.groups[1] * 8, m.groups[2]);
+        else vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
+      };
       for (uint32_t pre = 0; pre <= g_ab_warmup; ++pre) {
-        barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
+        barrier(c, kShaderStage | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
         if (g_ab_warmup) {
           VkBufferCopy restore{0,0,stats.size}; vkCmdCopyBuffer(c,warm_stats.b,stats.b,1,&restore);
@@ -1431,18 +1573,18 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
         }
         if (pre == g_ab_warmup) vkCmdResetQueryPool(c, queries, 0, 2);
         barrier(c, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-                VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kShaderStage,
                 VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_UNIFORM_READ_BIT);
         if (pre < g_ab_warmup) {
-          vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
+          run_pass();
           continue;
         }
         // Wait for preceding output clears/uploads; time only this dispatch.
         vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queries, 0);
-        vkCmdDispatch(c, m.groups[0], m.groups[1], m.groups[2]);
-        vkCmdWriteTimestamp(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, queries, 1);
+        run_pass();
+        vkCmdWriteTimestamp(c, traced ? VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, queries, 1);
       }
-      barrier(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+      barrier(c, kShaderStage, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
               VK_ACCESS_HOST_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
     });
     uint64_t ticks[2] = {};
@@ -1479,6 +1621,33 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
         std::printf("  output %s %ux%u: mean %.7g %.7g %.7g %.7g, non-finite %llu, fnv1a %016llx\n", r.name.c_str(), r.w, r.h, r.mean[0], r.mean[1],
                     r.mean[2], r.mean[3], (unsigned long long)r.nonfinite, (unsigned long long)r.hash);
     }
+    if (ab_mode() && !warmup && g_seed_sweep) {
+      const std::string side = use_b ? "B" : "A", set = phase < 2 ? "0" : "1";
+      uint32_t fr; std::memcpy(&fr, push.data() + 76, 4);
+      for (const auto& o : rr.outputs) {
+        const uint32_t comps = o.format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? 3 :
+          o.format == VK_FORMAT_R16G16B16A16_SFLOAT || o.format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
+        auto& acc = seed_acc[side + set + "_" + o.name];
+        const size_t px = size_t(o.w) * o.h;
+        if (acc.s1.empty()) { acc.s1.assign(px * comps, 0.0); acc.s2.assign(px * comps, 0.0); acc.comps = comps; acc.w = o.w; acc.h = o.h; }
+        for (size_t q = 0; q < px; ++q)
+          for (uint32_t k = 0; k < comps; ++k) {
+            const double v = image_component(o.raw, o.format, q, k, comps);
+            acc.s1[q * comps + k] += v; acc.s2[q * comps + k] += v * v;
+          }
+        ++acc.n;
+        seed_csv << side << ',' << set << ',' << fr << ',' << o.name;
+        seed_csv.precision(12);
+        for (int k = 0; k < 4; ++k) seed_csv << ',' << o.mean[k];
+        seed_csv << '\n';
+      }
+      const size_t counters = rr.raw_stats.size() / (64 * 4);
+      for (size_t ci = 0; ci < counters; ++ci) {
+        uint64_t total = 0;
+        for (size_t b = 0; b < 64; ++b) { uint32_t v; std::memcpy(&v, rr.raw_stats.data() + (ci * 64 + b) * 4, 4); total += v; }
+        if (total) seed_counters << side << ',' << set << ',' << fr << ',' << ci << ',' << total << '\n';
+      }
+    }
     if (ab_mode() && !warmup) {
       // One balanced, adjacent cross-state comparison per quartet: phase 0/1.
       // BAAB reverses operand order so signed output differences remain B-A.
@@ -1504,6 +1673,15 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
         pair_reference = rr;
         pair_outputs_equal = pair_counters_equal = true;
       } else {
+        // Determinism of each pipeline on its own: phase 2 repeats phase 1's pipeline, phase 3 phase 0's.
+        auto same = [](const RunResult& x, const RunResult& y) {
+          bool eq = x.raw_stats == y.raw_stats && x.outputs.size() == y.outputs.size();
+          for (size_t i = 0; eq && i < x.outputs.size(); ++i) eq = x.outputs[i].raw == y.outputs[i].raw;
+          return eq;
+        };
+        if (phase == 1) pair_other = rr;
+        else if (phase == 2) same_side_differs[use_b] += same(pair_other, rr) ? 0u : 1u;
+        else same_side_differs[use_b] += same(pair_reference, rr) ? 0u : 1u;
         pair_counters_equal &= pair_reference.raw_stats == rr.raw_stats;
         pair_outputs_equal &= pair_reference.outputs.size() == rr.outputs.size();
         for (size_t i = 0; i < rr.outputs.size() && i < pair_reference.outputs.size(); ++i)
@@ -1651,6 +1829,23 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                   all_outputs_equal ? "100% bit-equal" : "DIFFER", all_counters_equal ? "100% bit-equal" : "DIFFER");
     std::printf("[replay] %s\n", line);
     std::ofstream(out / "ab_summary.txt") << line << '\n';
+    if (g_seed_sweep) {   // per-pixel mean and population variance over the draws of each side and set (float32)
+      std::ofstream index(out / "seed_index.txt");
+      for (const auto& [key, acc] : seed_acc) {
+        std::vector<float> mean(acc.s1.size()), var(acc.s1.size());
+        for (size_t i = 0; i < acc.s1.size(); ++i) {
+          const double m1 = acc.s1[i] / acc.n;
+          mean[i] = float(m1); var[i] = float(std::max(acc.s2[i] / acc.n - m1 * m1, 0.0));
+        }
+        std::ofstream(out / ("seed_" + key + ".mean.f32"), std::ios::binary).write(reinterpret_cast<const char*>(mean.data()), mean.size() * 4);
+        std::ofstream(out / ("seed_" + key + ".var.f32"), std::ios::binary).write(reinterpret_cast<const char*>(var.data()), var.size() * 4);
+        index << key << ' ' << acc.w << ' ' << acc.h << ' ' << acc.comps << ' ' << acc.n << '\n';
+      }
+      std::printf("[replay] seed sweep: %zu accumulators written (seed_index.txt, seed_means.csv, seed_counters.csv)\n", seed_acc.size());
+    }
+    // Same pipeline, same inputs, twice per quartet: a nonzero count means that pipeline is not deterministic.
+    std::printf("[replay] same-pipeline repeats that changed outputs or counters: A %u of %zu, B %u of %zu\n",
+                same_side_differs[0], ab_deltas.size(), same_side_differs[1], ab_deltas.size());
     if (g_ab_require_equal && !(all_outputs_equal && all_counters_equal)) g_reference_mismatch = true;
   }
   std::sort(timings.begin(), timings.end());
@@ -1784,9 +1979,16 @@ constexpr SynthAmbient kSynthAmbient{};
 // variant defines say RT_CASCADE_MASKS=1 (GI rays trace 0x01).
 void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting = false, bool casters = false) {
   fs::create_directories(dir);
-  constexpr uint32_t W = 128, H = 128, frame = 3, stamp = 7;
+  const uint32_t W = g_synth_size, H = g_synth_size;   // --synth-size (default 128, the CTest's)
+  constexpr uint32_t frame = 3, stamp = 7;
   constexpr float kFront = 4.3f;   // F: 20 cm in front of K, far beyond the on-screen depth tolerance (~2 cm footprint)
   constexpr float A = 0.5f;
+  // --synth-stripes (SER timing fixture): F covers the view as strips 2 render pixels wide with 2-pixel gaps (one GI
+  // thread each at half resolution), K behind it covers the view: neighbouring threads alternate between a cheap miss
+  // (on F) and a qualified hidden hit on K (B behind the gaps), the divergence reordering is for.
+  constexpr float kStripeHalf = 2.2f;   // > A x kFront: the strips and K cover the whole view
+  const float stripe_p = 4.0f * (2.0f * A * kFront) / float(W);
+  const uint32_t stripe_n = uint32_t(std::ceil(2.0f * kStripeHalf / stripe_p));
   constexpr uint32_t stride = 64, record = bg3::native_hit::nh_alpha_rows;
   // Soup: 64-byte vertices (position float4 at 0, UV at 16), non-indexed. A quad in the plane y
   // over [x0,x1] x [z0,z1], wound so that cross(p1 - p0, p2 - p0) points along `ny`.
@@ -1827,11 +2029,19 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
     soup = keep;
   } else {
     quad(5.0f, -10, 10, -10, 10, -1, false);        // B (instance 0, tris 0-1)
-    quad(kFront, -0.6f, 0.6f, -0.6f, 0.6f, -1, false);  // F (instance 0, tris 2-3)
+    if (!g_synth_stripes) quad(kFront, -0.6f, 0.6f, -0.6f, 0.6f, -1, false);  // F (instance 0, tris 2-3)
+    else for (uint32_t s = 0; s < stripe_n; ++s) {   // F as strips: alternating threads see F (rays miss) or K (shaded)
+      const float x0 = -kStripeHalf + s * stripe_p;
+      quad(kFront, x0, x0 + 0.5f * stripe_p, -kStripeHalf, kStripeHalf, -1, false);
+    }
   }
   const uint32_t kBase = uint32_t(soup.size());
-  if (!box) quad(4.5f, -0.6f, 0.6f, -0.6f, 0.6f, +1, true);   // K (instance 1, tris 0-1, with material)
-  uint32_t info[8] = {0, stride, 0, box ? 12u : 4u, kBase, stride | bg3::native_hit::nh_opaque_meta, record, 2};
+  const uint32_t tris0 = uint32_t(kBase / (3 * stride));
+  if (!box) {
+    if (g_synth_stripes) quad(4.5f, -kStripeHalf - 0.1f, kStripeHalf + 0.1f, -kStripeHalf - 0.1f, kStripeHalf + 0.1f, +1, true);
+    else quad(4.5f, -0.6f, 0.6f, -0.6f, 0.6f, +1, true);   // K (instance 1, tris 0-1, with material)
+  }
+  uint32_t info[8] = {0, stride, 0, box ? 12u : tris0, kBase, stride | bg3::native_hit::nh_opaque_meta, record, 2};
   if (casters) { info[3] = 10; info[4] = 0; info[5] = stride; info[6] = 0; info[7] = 0; }   // the live cascade entry: no vertices
   const uint32_t instances_used = box && !casters ? 1 : 2;
   // Hit-material records (native_hit_material.hlsli rt_hit_material, opaque prepass row).
@@ -1886,7 +2096,11 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
   for (uint32_t y = 0; y < H; ++y)
     for (uint32_t x = 0; x < W; ++x) {
       const float u = (x + 0.5f) / W, v = (y + 0.5f) / H, rx = 2 * A * u - A, rz = 2 * A * v - A;
-      const bool slab = std::abs(rx * kFront) <= 0.6f && std::abs(rz * kFront) <= 0.6f;
+      bool slab = std::abs(rx * kFront) <= 0.6f && std::abs(rz * kFront) <= 0.6f;
+      if (g_synth_stripes) {
+        const float sx = (rx * kFront + kStripeHalf) / stripe_p;
+        slab = std::abs(rz * kFront) <= kStripeHalf && sx - std::floor(sx) < 0.5f;
+      }
       depth[y * W + x] = box ? kBox : slab ? kFront : 5.0f;
     }
   // Push (gi_common.hlsli Push; bg3rtx.ini production defaults where the pass reads them).
@@ -3020,7 +3234,19 @@ int main(int argc, char** argv) {
       check(g_blas_policy == "legacy" || g_blas_policy == "layer" || g_blas_policy == "trace", "--blas-policy legacy|layer|trace");
     }
     else if (args[i] == "--ab-spv") g_ab_spv = next();
+    else if (args[i] == "--ab-rgen") g_ab_rgen = next();
+    else if (args[i] == "--synth-stripes") g_synth_stripes = true;
+    else if (args[i] == "--synth-size") {
+      g_synth_size = uint32_t(std::stoul(next()));
+      check(g_synth_size >= 16 && g_synth_size <= 4096 && g_synth_size % 16 == 0, "--synth-size 16..4096, a multiple of 16");
+    }
+    else if (args[i] == "--rgen-spec") {
+      const std::string kv = next(); const size_t eq = kv.find('=');
+      check(eq != std::string::npos, "--rgen-spec ID=UINT");
+      g_rgen_specs[uint32_t(std::stoul(kv.substr(0, eq), nullptr, 0))] = uint32_t(std::stoul(kv.substr(eq + 1), nullptr, 0));
+    }
     else if (args[i] == "--ab-numeric") g_ab_numeric = true;
+    else if (args[i] == "--seed-sweep") g_seed_sweep = true;
     else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
     else if (args[i] == "--require-live-equal") g_require_live_equal = true;
     else if (args[i] == "--ab-warmup") {
@@ -3087,7 +3313,8 @@ int main(int argc, char** argv) {
   check(!g_ab_blas || g_blas_policy != "trace", "--ab-blas baseline is layer; do not select trace baseline");
   if (g_origin) check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--origin requires ordinary pack replay");
   if (ab_mode()) {
-    check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--ab-spec/--ab-spv require ordinary pack replay");
+    check(!compile_only && !pt && !native && !pt_cost_only && test.empty() && pt_test.empty() && synth.empty(), "--ab-spec/--ab-spv/--ab-rgen require ordinary pack replay");
+    check(g_ab_rgen.empty() || g_ab_spv.empty(), "--ab-rgen and --ab-spv both name pipeline B");
     check(repeat <= (UINT32_MAX - 4) / 4, "paired repeat count too large");
     if (!repeat_given) repeat = 40;
   }
