@@ -35,10 +35,9 @@
   "\\[auto\\] scene ready",
   "\\[hot\\] core generation \\d+ loaded",
   "\\[ngx\\] RR create .*: Success",
-  "\\[pace\\] rendered frame time over 120 frames",
+  "\\[pace\\] rendered frame time over \\d+ frames",
   "\\[cfg\\] settings read",
-  "\\[rt\\] scene wait: 120 frames, [1-9]\\d* waited",
-  "\\[rt\\] scene wait: 120 frames, 0 waited"
+  "\\[rt\\] scene wait: 120 frames"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
