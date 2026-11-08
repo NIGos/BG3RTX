@@ -27,25 +27,50 @@ Choice indices remain schema indices. Box On is index 1 (`all`, ls_box=2); legac
 | Performance | Faster bounce light tracing (`exp_gi_rt_pipeline`) | `gi_rt_pipeline` | Off / On | On / On / On / On | live (first enable may pause while the pipeline builds) |
 | Performance | Bounce trace reordering (`exp_gi_rt_pipeline_reorder`) | `gi_rt_pipeline_reorder` | Off / By hit kind / By hit kind and object | By hit kind (all presets) | hitch |
 
-Home (WebView, 2026-11-08): first page and the page the launcher opens on. Shortcuts only, no state of its own:
-Play card (preset Low-Ultra, Play, version · GPU · mod files; the header is hidden on Home and carries them elsewhere);
-RTX Hair (`exp_hair_groom_primary` control with its restart badge, the Preparation hair row, Pause/Resume, When to convert);
-Shaders (the Preparation shaders row with the driver pipeline line); Performance (`exp_gi_rt_pipeline`,
-`exp_gi_rt_pipeline_reorder`, `frame_generation`, and a link to the page). Same control ids and the same
-`set` / `prep` / `preset` / `play` messages as on their own pages. Missing or hidden settings are omitted.
+Navigation (WebView, 2026-11-09): Home, Lighting, Surfaces, Performance, DLSS 5, Hotkeys, [Experimental when opted in],
+[Advanced only when it has controls: developer mode], [Developer], Help & support.
+Home (WebView, 2026-11-09): first page and the page the launcher opens on. A dashboard, no setting state of its own:
+- Play (spans the row): preset Low-Ultra, Play, version and GPU. The header and the footer Play are hidden on Home
+  (one Play button on screen); footer Save / Discard stay.
+- RTX Hair: the `exp_hair_groom_primary` control (same ids and `set` message as its Lighting card) with its apply
+  badge and, when the bridge sends `hotkey_rtx_hair`, "In game: <key> · Change" (opens Hotkeys). Style conversion:
+  Ready / Seen in game / In the game / On disk tiles ("–" when unknown), progress bar with percent and ETA, the
+  host's detail line, the last error, Start / Pause / Resume / Try again, Convert: "Styles seen in game" or "All
+  styles" (disabled with the host's one-line reason until a usable granny2.dll and the game folder are set), the
+  granny2.dll path with Choose / Change / Clear and where players get it (their own LSLib ExportTool download, never
+  shipped), When to convert (Game closed / Also while playing). These are launcher-only `prep` actions, badge
+  "Applies now": start, pause, resume, convertAll 0/1, browseGranny, clearGranny, whilePlaying 0/1.
+- Status: game folder (Choose…), GPU support (Recheck when a warning exists), mod files, unsaved changes (Save) and the
+  restart banner when a restart is pending.
+- Shaders: the shader preparation row with its progress bar.
+The three Home performance shortcuts (`exp_gi_rt_pipeline`, `exp_gi_rt_pipeline_reorder`, `frame_generation`) are
+removed: the first two are on in every preset and Frame Generation is the first card of Performance.
+Preparation status (`state.preparation`, tools/launcher/preparation.cpp): every field is optional and the page shows
+what it has. `hair` = {ready, captured, total, finished, needed, bytes, etaSeconds, source "seen"|"all", error} from
+the converter's preparation.json (`total` and `source` per docs/RTX_HAIR_ROADMAP.md 2f; `mode` is read as `source`) and
+the launcher's capture count; `granny` = {path, ok}; `convertAllReason`. Launcher-only keys in bg3rtx_launcher.ini:
+`hair_convert_all`, `hair_while_playing`, `prep_paused`, `hair_granny`. Convert all runs
+`bg3rtx_hairconv --all --game <dir> --granny <dll> --out ... --report-dir ... --threads N --jobs 1`.
+Help & support has no Preparation card (Home is its one place).
+Hotkeys (WebView): one card lists every binding the bridge sends (`state.shortcuts`, one per `common/hotkeys.h` id:
+All ray tracing off/on, DLSS 5 off/on, and RTX Hair off/on once that id exists) with capture field, "Reset to <default>"
+(`state.shortcutDefaults`) and None. A binding may not repeat any other; Ctrl+Shift+F10 stays reserved. The DLSS 5 and
+RTX Hair cards show their key with a Change link. Hotkeys apply after saving.
 
 Apply exceptions: FG Off/on restarts; 2x/3x/4x live. Water and stock-hair Off live;
 water/stock-hair enable restarts. Bounce capture first enable/disable restarts.
 RT strength affects indirect light, local shadows and reflections. Frame limit counts rendered frames.
 Capability/dependency previews, startup prerequisites and existing hardware/local-mask fallback remain.
 
-Advanced has no release controls; omit its navigation and the developer Experimental disclosure.
+Advanced has no release controls; omit its navigation and the developer Experimental disclosure (the WebView does since
+2026-11-09; the release keyboard shortcut moved to Hotkeys).
 Release "Show experimental options" switch (off by default, saved as `experimental_options=1`) shows the
 `settings::kOptInKnobs` on their own Experimental page; Off resets them to Off. Never listed: rejected
 exp_compact_hit_state / exp_alpha_metadata_cache / exp_water_empty_tiles / exp_alpha_spill, perf_* keys, diagnostics and
 policy-owned knobs (rt_trace_scale, exp_omm, exp_vt_alpha_masks, rr_post, exp_water_compose_shift,
 exp_hair_pool_trim, exp_ls_exact_k, exp_hit_reference, exp_current_sun).
-Help & support owns setup, compatibility, memory, overlay/comparison help, notices and one local-report entry. Keep Ctrl+Shift+F9; omit experimental F10 instructions.
+Help & support owns setup, compatibility, memory, overlay/comparison help, notices and one local-report entry
+(compatibility and video memory are one "Graphics details" card). Keep Ctrl+Shift+F9; omit experimental F10 instructions.
 Play saves settings first in both renderers; dependency reviews may be cancelled and failed saves keep edits and prevent launch.
 One compact header shows version, preset, GPU and mod-file presence. Installed files do not confirm runtime activity.
 Costs appear once: supported measurements after descriptions, estimates and separate-pass hair timings in details. Unknown costs and memory badges are omitted.
@@ -54,6 +79,9 @@ Selecting a choice turns on the options it needs at once, recursively, all or no
 status "Also turned on: ..."); a need that is hidden, custom, experimental without opt-in or unsupported raises
 nothing and the card keeps showing it. Turning a prerequisite off still lowers its dependents at Save.
 Apply labels: “Applies after saving”; “Applies after saving; may briefly pause”; “Restart the game to apply”.
+WebView badges, three kinds: "Applies now" (launcher-only preparation actions, no Save), "Applies after saving" (Live and
+Hitch; the pause note stays in the badge title and Details) and "Restart to apply" ("May need a restart" when only some
+choices restart). The old "May briefly pause" badge is gone.
 The native report preview uses the default inclusion set and has no issue field or inclusion checkboxes; WebView provides both.
 
 Automatic release policies (also after stale user INI layering):

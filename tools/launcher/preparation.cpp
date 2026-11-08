@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwctype>
 #include <shlobj.h>
 
 namespace launcher::prep {
@@ -29,7 +30,7 @@ std::string esc(const std::string& s) {
   return o;
 }
 std::string q(const std::string& s) { return "\"" + esc(s) + "\""; }
-const char* kKeys[] = {"hair_convert_all", "hair_while_playing", "prep_paused"};
+const char* kKeys[] = {"hair_convert_all", "hair_while_playing", "prep_paused", "hair_granny"};
 }  // namespace
 
 Settings parse_settings(const std::string& ini) {
@@ -46,6 +47,7 @@ Settings parse_settings(const std::string& ini) {
     if (k == kKeys[0]) s.convert_all = on;
     else if (k == kKeys[1]) s.while_playing = on;
     else if (k == kKeys[2]) s.paused = on;
+    else if (k == kKeys[3]) s.granny = v;
   }
   return s;
 }
@@ -65,10 +67,11 @@ std::string merge_settings(const std::string& ini, const Settings& s) {
     if (!ours && !(line.rfind("# Preparation", 0) == 0)) out += trim(raw) + "\n";
   }
   while (out.size() >= 2 && out[out.size() - 1] == '\n' && out[out.size() - 2] == '\n') out.pop_back();
-  out += "# Preparation (launcher only): convert all hair styles, convert while playing, paused.\n";
+  out += "# Preparation (launcher only): convert all hair styles, convert while playing, paused, the player's granny2.dll.\n";
   out += std::string(kKeys[0]) + "=" + (s.convert_all ? "1" : "0") + "\n";
   out += std::string(kKeys[1]) + "=" + (s.while_playing ? "1" : "0") + "\n";
   out += std::string(kKeys[2]) + "=" + (s.paused ? "1" : "0") + "\n";
+  if (!s.granny.empty()) out += std::string(kKeys[3]) + "=" + s.granny + "\n";
   return out;
 }
 
@@ -100,7 +103,7 @@ std::string json_string(const std::string& json, const char* key) {
 }
 
 Item hair_item(const HairInput& in, const Settings& s) {
-  Item it{"hair", "Strand hair"};
+  Item it{"hair", "RTX Hair"};
   if (!in.missing.empty()) {
     it.state = "unavailable";
     it.line = "Not available: " + in.missing + ".";
@@ -188,6 +191,51 @@ Item shader_item(const ShaderInput& in) {
   return it;
 }
 
+HairFacts hair_facts(const HairInput& in, const Settings& s) {
+  HairFacts f;
+  f.captured = in.captured;
+  const std::string& j = in.status_json;
+  double v = 0;
+  auto num = [&](const char* key, int& out) { if (json_number(j, key, v) && v >= 0) out = int(v); };
+  num("ready", f.ready);
+  num("finished", f.finished);
+  num("needed", f.needed);
+  num("total", f.total);
+  if (json_number(j, "bytes", v) && v >= 0) f.bytes = v;
+  if (json_number(j, "eta_s", v) && v >= 0) f.eta_s = v;
+  f.source = json_string(j, "source");
+  if (f.source.empty()) f.source = json_string(j, "mode");
+  if (f.source != "all" && f.source != "seen") f.source = s.convert_all ? "all" : "seen";
+  if (in.failed) f.error = in.error.empty() ? "The converter stopped." : in.error;
+  else f.error = json_string(j, "error");
+  return f;
+}
+
+std::string convert_all_reason(const std::string& granny, bool granny_ok, bool game_ok) {
+  if (!game_ok) return "Choose the game folder first: all styles are read from the game files.";
+  if (granny.empty()) return "Needs granny2.dll: choose it below.";
+  if (!granny_ok) return "granny2.dll was not found at the chosen path. Choose it again.";
+  return {};
+}
+
+std::wstring hair_command(const std::wstring& converter, const std::wstring& capture_dir, const std::wstring& groom_dir,
+                          const std::wstring& report_dir, int threads, bool all, const std::wstring& game,
+                          const std::wstring& granny) {
+  auto quote = [](const std::wstring& s) { return L"\"" + s + L"\""; };
+  std::wstring cmd = quote(converter) + L" ";
+  if (all) cmd += L"--all --game " + quote(game) + L" --granny " + quote(granny);
+  else cmd += quote(capture_dir);
+  return cmd + L" --out " + quote(groom_dir) + L" --report-dir " + quote(report_dir) + L" --threads " +
+         std::to_wstring(threads) + L" --jobs 1";
+}
+
+bool granny_name_ok(const std::wstring& path) {
+  const size_t slash = path.find_last_of(L"\\/");
+  std::wstring name = slash == std::wstring::npos ? path : path.substr(slash + 1);
+  for (auto& c : name) c = wchar_t(towlower(c));
+  return name == L"granny2.dll";
+}
+
 int jobs_for(bool game_running, unsigned cores) {
   if (game_running) return 1;
   return int(std::max(1u, std::min(4u, cores / 4)));
@@ -197,7 +245,7 @@ bool hair_should_run(const Settings& s, bool converter_ok, bool game_running, bo
   return converter_ok && !s.paused && !done_this_session && !failed && (!game_running || s.while_playing);
 }
 
-std::string to_json(const std::vector<Item>& items, const Settings& s, bool hair_has_work) {
+std::string to_json(const std::vector<Item>& items, const Settings& s, bool hair_has_work, const Extra& extra) {
   std::string o = "{\"items\":[";
   for (size_t i = 0; i < items.size(); ++i) {
     const Item& it = items[i];
@@ -213,7 +261,23 @@ std::string to_json(const std::vector<Item>& items, const Settings& s, bool hair
   }
   o += std::string("],\"convertAll\":") + (s.convert_all ? "true" : "false") + ",\"whilePlaying\":" +
        (s.while_playing ? "true" : "false") + ",\"paused\":" + (s.paused ? "true" : "false") +
-       ",\"pausable\":" + (hair_has_work ? "true" : "false") + "}";
+       ",\"pausable\":" + (hair_has_work ? "true" : "false");
+  // The RTX Hair panel's numbers (absent fields stay absent) and the "Convert all styles" requirement.
+  const HairFacts& f = extra.hair;
+  std::string h;
+  auto field = [&](const char* key, const std::string& value) { h += std::string(h.empty() ? "" : ",") + "\"" + key + "\":" + value; };
+  if (f.ready >= 0) field("ready", std::to_string(f.ready));
+  if (f.captured >= 0) field("captured", std::to_string(f.captured));
+  if (f.total >= 0) field("total", std::to_string(f.total));
+  if (f.finished >= 0) field("finished", std::to_string(f.finished));
+  if (f.needed >= 0) field("needed", std::to_string(f.needed));
+  if (f.bytes >= 0) field("bytes", std::to_string(int64_t(f.bytes)));
+  if (f.eta_s >= 0) field("etaSeconds", std::to_string(int64_t(f.eta_s)));
+  if (!f.source.empty()) field("source", q(f.source));
+  if (!f.error.empty()) field("error", q(f.error));
+  o += ",\"hair\":{" + h + "}";
+  o += ",\"granny\":{\"path\":" + q(s.granny) + ",\"ok\":" + (extra.granny_ok ? "true" : "false") + "}";
+  o += ",\"convertAllReason\":" + q(extra.all_reason) + "}";
   return o;
 }
 
@@ -314,9 +378,17 @@ struct Manager::Impl {
   Settings s;
   Child hair, shaders;
   int hair_jobs = 0, capture_count = 0;
-  bool hair_done = false, hair_failed = false, shaders_started = false;
+  bool hair_done = false, hair_failed = false, shaders_started = false, hair_all = false;
   uint64_t capture_mtime = 0;
   std::string hair_error;
+  bool granny_ok() const { return !s.granny.empty() && granny_name_ok(widen(s.granny)) && file_exists(widen(s.granny)); }
+  bool game_ok() const { return !game.empty() && file_exists(game + L"\\bin\\bg3.exe"); }
+  bool all_ok() const { return s.convert_all && granny_ok() && game_ok(); }
+  void save() {
+    std::string ini;
+    read_file(ini_path, ini);
+    write_file_atomic(ini_path, merge_settings(ini, s), nullptr);
+  }
 };
 
 Manager::Manager(std::wstring root, std::wstring game_dir) : impl_(std::make_unique<Impl>()) {
@@ -343,13 +415,30 @@ bool Manager::act(const std::string& action, int value) {
   Impl& m = *impl_;
   if (action == "pause") m.s.paused = true;
   else if (action == "resume") { m.s.paused = false; m.hair_failed = false; }
+  else if (action == "start") { m.s.paused = false; m.hair_failed = false; m.hair_done = false; }   // run again now
   else if (action == "whilePlaying") m.s.while_playing = value != 0;
+  else if (action == "convertAll") {
+    // "Convert all styles" needs the player's granny2.dll and the game folder; "Styles seen in game" always works.
+    if (value != 0 && !convert_all_reason(m.s.granny, m.granny_ok(), m.game_ok()).empty()) return false;
+    m.s.convert_all = value != 0;
+    m.hair_done = false; m.hair_failed = false;
+  }
+  else if (action == "clearGranny") { m.s.granny.clear(); m.s.convert_all = false; }
   else return false;
-  std::string ini;
-  read_file(m.ini_path, ini);
-  write_file_atomic(m.ini_path, merge_settings(ini, m.s), nullptr);
+  m.save();
   return true;
 }
+
+bool Manager::set_granny(const std::wstring& path) {
+  Impl& m = *impl_;
+  if (path.empty() || !granny_name_ok(path) || !file_exists(path)) return false;
+  m.s.granny = narrow(path);
+  m.hair_failed = false;
+  m.save();
+  return true;
+}
+
+std::wstring Manager::granny() const { return widen(impl_->s.granny); }
 
 void Manager::tick(bool game_running) {
   Impl& m = *impl_;
@@ -364,15 +453,16 @@ void Manager::tick(bool game_running) {
     if (m.hair.exit_code == 0) m.hair_done = true;
     else { m.hair_failed = true; m.hair_error = last_line(m.report_dir + L"\\batch.log"); }
   }
-  const bool want = m.capture_count > 0 && hair_should_run(m.s, m.missing.empty(), game_running, m.hair_done, m.hair_failed);
+  // Source: the styles the game captured, or (Convert all styles, with the player's granny2.dll) every style in the paks.
+  const bool all = m.all_ok();
+  const bool want = (all || m.capture_count > 0) && hair_should_run(m.s, m.missing.empty(), game_running, m.hair_done, m.hair_failed);
   const int threads = jobs_for(game_running, si.dwNumberOfProcessors);   // threads inside a style; one style at a time
-  if (m.hair.active() && (!want || threads != m.hair_jobs)) m.hair.stop();   // resumable
+  if (m.hair.active() && (!want || threads != m.hair_jobs || all != m.hair_all)) m.hair.stop();   // resumable
   if (!m.hair.active() && want) {
     CreateDirectoryW((m.report_dir.substr(0, m.report_dir.find_last_of(L'\\'))).c_str(), nullptr);
     CreateDirectoryW(m.report_dir.c_str(), nullptr);
-    const std::wstring cmd = quote(m.converter) + L" " + quote(m.capture_dir) + L" --out " + quote(m.groom_dir) +
-                             L" --report-dir " + quote(m.report_dir) + L" --threads " + std::to_wstring(threads) + L" --jobs 1";
-    if (m.hair.start(cmd, m.root, m.report_dir + L"\\batch.log")) m.hair_jobs = threads;
+    const std::wstring cmd = hair_command(m.converter, m.capture_dir, m.groom_dir, m.report_dir, threads, all, m.game, widen(m.s.granny));
+    if (m.hair.start(cmd, m.root, m.report_dir + L"\\batch.log")) { m.hair_jobs = threads; m.hair_all = all; }
     else { m.hair_failed = true; m.hair_error = "the converter could not be started"; }
   }
   // Shaders: once per launcher session, before Play (never beside a running game: it compiles its own).
@@ -387,12 +477,14 @@ void Manager::tick(bool game_running) {
   // The card.
   std::string status;
   read_file(m.report_dir + L"\\preparation.json", status);
-  HairInput hi{m.missing, status, m.hair.active(), game_running, m.hair_failed, m.hair_error, m.capture_count == 0};
+  HairInput hi{m.missing, status, m.hair.active(), game_running, m.hair_failed, m.hair_error, m.capture_count == 0 && !all,
+               m.capture_count};
   Item h = hair_item(hi, m.s);
   std::string sstatus;
   read_file(m.shader_status, sstatus);
   ShaderInput sh{layer, sstatus, m.shaders.active(), game_running, m.shaders_started};
-  json_ = to_json({h, shader_item(sh)}, m.s, h.state != "done" && h.state != "unavailable");
+  Extra extra{hair_facts(hi, m.s), m.granny_ok(), convert_all_reason(m.s.granny, m.granny_ok(), m.game_ok())};
+  json_ = to_json({h, shader_item(sh)}, m.s, h.state != "done" && h.state != "unavailable", extra);
 }
 
 // ---- BG3RTX.exe --precompile-shaders <status json> ----
