@@ -394,7 +394,9 @@ already builds, tests and packages C++ (no second toolchain in the build, merge-
   runner has no in-run save reload, so the capture (launch 1), the conversion (its post step, stage.py convert: moves
   the captures out of the real assetdb into a scratch assetdb copy in the job's tree and runs bg3rtx_hairconv there)
   and strands from a cold start (launch 2, whose post removes the copy) cannot share one launch.
-- Open for the user: "Strand hair on screen" requires local groom files (kCapHairGrooms), so on a fresh install with
+- Resolved (coordinator, 2026-11-08): "Strand hair on screen" and "Strand hair in ray-traced lighting" need hardware only
+  (kCapHairGrooms dropped); with no grooms cards stay, captures accumulate and strands follow conversion. Was:
+  "Strand hair on screen" required local groom files (kCapHairGrooms), so on a fresh install with
   no grooms it cannot be turned on and nothing is ever captured. With the capture model it should require only the
   hardware (the capture then fills the folder); left unchanged pending that decision.
 

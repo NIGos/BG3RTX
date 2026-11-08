@@ -8,4 +8,4 @@
 - bg3rtx_hairconv reads .hcap v2 (BC3 decode). CTest hair_capture_cpu_test (rule, stretch, round trip, BC3).
 - READY_FOR_LIVE: tools/live_batches/hair_capture hcap2-capture then hcap2-strands (two launches: startup key, no
   in-run reload); lint 0 failing; not queued.
-- Open: "Strand hair on screen" still requires local groom files, which a fresh install does not have.
+- "Strand hair on screen" (and "in ray-traced lighting") need hardware only now: local groom files no longer required.
