@@ -335,6 +335,23 @@ def dual_check(exe, spv, n=3000, seed=13):
     block[:, 3], block[:, 7], block[:, 12:15] = 3.0, betas, colours
     rows.append(block)
     want.append(volume_want)
+    # h = 4 selects the pixel response's single scattering part (hd_shade_pixel_parts). Every table entry, the same
+    # directions at n = 0 and n = 1: behind one strand a fibre never gets more single scattering than directly lit
+    # (the correction k scales only the backward multiple scattering).
+    m = 200
+    single_rows = 0
+    for c in dual.TABLE_C:
+        for beta in dual.TABLE_BETA:
+            t, wo, wi = unit(m), unit(m), unit(m)
+            f_s = sum(bsdf.evaluate(t, wo, wi, np.full(m, o), (c, c, c), beta) for o in (-0.75, -0.25, 0.25, 0.75)) / 4
+            a_f = dual.averages_table((c, c, c), beta).a_f
+            for nf in (0.0, 1.0):
+                block = np.zeros((m, 16), "<f4")
+                block[:, 0:3], block[:, 3], block[:, 4:7], block[:, 7] = t, 4.0, wo, beta
+                block[:, 8:11], block[:, 11], block[:, 12:15] = wi, nf, c
+                rows.append(block)
+                want.append(dual.single_part(f_s, np.full(m, nf), a_f))
+                single_rows += m
     want = np.concatenate(want)
     with tempfile.TemporaryDirectory() as d:
         inp, out = Path(d) / "s.bin", Path(d) / "o.bin"
@@ -355,7 +372,12 @@ def dual_check(exe, spv, n=3000, seed=13):
     check("dual GPU values finite", rep["finite"])
     check("dual GPU vs CPU: 99% of samples within 1e-4 relative", rep["rel_err_p99"] < 1e-4, rep["rel_err_p99"])
     check("dual GPU vs CPU: every sample within 1e-3 relative", rep["rel_err_max"] < 1e-3, rep["rel_err_max"])
-    volume_err = np.abs(got[-len(colours):] - volume_want) / np.maximum(volume_want, 1e-12)
+    single = got[len(want) - single_rows:].reshape(-1, 2, m, 3)   # (entry, n = 0 / 1, sample, RGB)
+    excess = float(np.max(single[:, 1] - single[:, 0]))
+    print(json.dumps({"single_entries": single.shape[0], "single_n1_minus_n0_max": excess}))
+    check("dual GPU: single scattering behind one strand never exceeds the directly lit fibre's (every table entry)",
+          excess <= 0.0, excess)
+    volume_err = np.abs(got[-single_rows - len(colours):-single_rows] - volume_want) / np.maximum(volume_want, 1e-12)
     print(json.dumps({"volume_samples": len(colours), "volume_max_rel_diff": float(volume_err.max())}))
     check("volume GPU vs CPU: every channel within 1e-3 relative", volume_err.max() < 1e-3, volume_err.max())
 

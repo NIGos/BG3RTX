@@ -610,6 +610,22 @@ still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per per
   n: up to 8 groom hits toward the light. Checks: compiles + spirv-val (plain and both variants.txt requests,
   +2), shader identity vs main 236/237 (only hair_groom_update), 134/134 CTests, GPU `hd_shade_pixel` vs
   `dual.shade_table_pixel` max rel. 6.7e-6. Live: tools/live_batches/hair_primary shot-fibre-a / cost-fibre.
+  **3b-2c (2026-11-08, branch claude/hair-fibre-fix, offline):** review fixes. (1) k scales only the backward
+  multiple scattering (`dual.single_part`: f_s, or T_f f_s behind n fibres, is never scaled; before, a fibre behind
+  one strand got k 0.7 a_f = up to 2x the f_s of a directly lit one). (2) k is fitted on the path-traced diffuse
+  slab (`dual.make_table`, targets = make_volume_table's walks): the normal-incidence fit reflected 1.3-2.2x the
+  path-traced diffuse energy (white fibres 1.2-1.6 > 1) and zig-zagged in colour (heavy-tailed walk weights); now the
+  diffuse slab equals the walks within 0.03% at every grid entry, CHAR_Hair (held out) 1.001/1.002/0.998, k monotonic
+  in roughness; normal incidence reads 0.76/0.83/0.91 of its reference (one k cannot match both incidences;
+  a k(mu_i) table would need the volume normal). (3) hair_fibre replays D-LS's own ray (origin, soft sample, extent)
+  and strand decision (rt_groom_blocks' draw with the groom's a_f) instead of re-deriving them, and counts n on it.
+  (4) Every replaced term and the fibre response take the buffer's AO-on-direct factor (the game's, or D-LS's
+  ao_direct give-back for traced lights and the sun). (5) Single scattering to the specular buffer (the game's
+  R/TT/TRT are there; RR demodulates diffuse by the albedo), multiple scattering to diffuse. rt_hair_fibre=2
+  (constant 1046): the game's terms at the fibre's transmittance model on the D-LS-traced lights; strand pixels must
+  equal key off (exact without rt_hair_groom_shadow_t, in the mean with it). Known: behind n >= 1 strands Zinke's
+  pi d_b T_f f_back can exceed the direct d_b f_back (integrated over directions, c >= 0.35), and T_f f_s uses f_s
+  at the light direction, not the paper's azimuthally averaged f_s^scatter.
   Original design notes: where: D-LS (`shaders/gi/rt_local_shadows.hlsl`) already runs after the tiled
   lighting at full resolution, re-evaluates every local light's exact game term c_i (bg3_light_eval_mat, class
   5 = the game's Marschner) and the sun's (`ls_sun`, bg3_sun_eval_mat), and adds deltas into the game's
