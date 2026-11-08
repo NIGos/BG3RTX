@@ -93,6 +93,12 @@ def default_baseline():
     return git("rev-parse", "HEAD", text=True).stdout.strip()
 
 
+def profile_of(request):
+    """The DXC profile of a request: lib_6_6 for a ray generation request (GI_TRACE_RAYGEN=1,
+    common/shader_variant.h profile), else cs_6_6. A lib compile has no -E (layer/shaders.cpp)."""
+    return "lib_6_6" if "GI_TRACE_RAYGEN=1" in split_request(request)[1] else PROFILE
+
+
 def split_request(request):
     file, _, defs = request.partition("?")
     return file, [d for d in defs.split(";") if d]
@@ -296,9 +302,11 @@ class Toolchain:
             self._val_id = hashlib.sha256(json.dumps([_file_digest([self.spirv_val]), VAL_ARGS]).encode()).hexdigest()
         return self._val_id
 
-    def command(self, src, shaders, entry, defines, extra, out, sharc=None):
-        cmd = [str(self.dxc), str(src), "-spirv", "-fspv-target-env=vulkan1.3", "-HV", "2021", "-T", PROFILE,
-               "-E", entry, "-I", str(shaders), "-D", "BG3RTX=1"]
+    def command(self, src, shaders, entry, defines, extra, out, sharc=None, profile=PROFILE):
+        cmd = [str(self.dxc), str(src), "-spirv", "-fspv-target-env=vulkan1.3", "-HV", "2021", "-T", profile]
+        if not profile.startswith("lib_"):
+            cmd += ["-E", entry]
+        cmd += ["-I", str(shaders), "-D", "BG3RTX=1"]
         if self.sharc is not None:
             cmd += ["-I", str(sharc if sharc is not None else self.sharc), "-D", "BG3RTX_SHARC_SDK=1"]
         for d in defines:
@@ -318,7 +326,7 @@ def request_keys(tree, request, tool_id):
     if path not in tree.ids:
         return None
     deps = tree.closure(path)
-    return [(e, entry_key(tool_id, request, e, deps)) for e in entries_of(tree.read(path))]
+    return [(e, entry_key(tool_id, request, e, deps, profile_of(request))) for e in entries_of(tree.read(path))]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -690,7 +698,7 @@ def _run_dxc(tool, tree, request, entry, out):
     disk = tree.materialize()
     src = Path(disk) / SHADERS / file
     cmd = tool.command(src, Path(disk) / SHADERS, entry, defines, first_line_args(tree.read(SHADERS + "/" + file)), out,
-                       sharc=Path(disk) / SHARC_LOGICAL)
+                       sharc=Path(disk) / SHARC_LOGICAL, profile=profile_of(request))
     with _DxcSlot():
         r = subprocess.run(cmd, capture_output=True, text=True, **_LOW)
     if r.returncode or not out.exists():
@@ -1001,7 +1009,7 @@ def _run_pp(tool, tree, request, out):
     disk = tree.materialize()
     src = Path(disk) / SHADERS / file
     cmd = tool.command(src, Path(disk) / SHADERS, "main", defines, first_line_args(tree.read(SHADERS + "/" + file)), out,
-                       sharc=Path(disk) / SHARC_LOGICAL)
+                       sharc=Path(disk) / SHARC_LOGICAL, profile=profile_of(request))
     cmd = cmd[:-3] + ["-P", "-Fi", str(out)]   # drop "-O3 -Fo out"
     r = subprocess.run(cmd, capture_output=True, text=True, **_LOW)
     if r.returncode or not out.exists():
@@ -1034,7 +1042,7 @@ def pp_entry_keys(pairs, tool, jobs=None, label="pp"):
             if data is not None:
                 src = tree.read(SHADERS + "/" + split_request(r)[0])
                 digest = pp_digest(data)
-                out[(tree.label, r)] = {e: hashlib.sha256(json.dumps([PP_SCHEMA, tool.id, e, PROFILE, first_line_args(src),
+                out[(tree.label, r)] = {e: hashlib.sha256(json.dumps([PP_SCHEMA, tool.id, e, profile_of(r), first_line_args(src),
                                                                       digest]).encode()).hexdigest()
                                         for e in entries_of(src)}
             prog.step(failed=data is None)

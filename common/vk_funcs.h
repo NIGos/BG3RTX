@@ -117,6 +117,9 @@
   X(GetAccelerationStructureBuildSizesKHR)     \
   X(GetAccelerationStructureDeviceAddressKHR)  \
   X(CmdBuildAccelerationStructuresKHR)         \
+  X(CreateRayTracingPipelinesKHR)              \
+  X(GetRayTracingShaderGroupHandlesKHR)        \
+  X(CmdTraceRaysKHR)                           \
   X(CmdBindVertexBuffers)                      \
   X(CmdBindVertexBuffers2)                     \
   X(CmdBindIndexBuffer)                        \

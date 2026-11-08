@@ -45,6 +45,7 @@ uint32_t layout_mask(uint32_t n) { return n == kLsBindings ? 4u : 1u; }
 bool ls_uses(uint32_t) { return true; }
 VkDescriptorType binding_type(uint32_t) { return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; }
 VkDescriptorType sun_binding_type(uint32_t) { return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; }
+VkShaderStageFlags hit_gi_set_stages() { return VK_SHADER_STAGE_COMPUTE_BIT; }   // core/gi.cpp gi_rt_pipeline
 bool g_hair_origin_cap = false;
 }
 namespace bg3::hair_origin { bool binding_enabled(bool, uint32_t, uint32_t) { return true; } }

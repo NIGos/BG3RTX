@@ -103,9 +103,9 @@ bool gi_hit_term_ok(float3 c, uint bin) {
 [[vk::constant_id(1007)]] const uint kSpecGiFar = 0u;
 #endif
 #if GI_TRACE_RAYGEN
-// SER prototype (docs/progress/claude-opt-ser-gi.md; tools/gi_trace_rgen.hlsl, frame_replay --ab-rgen): the same
-// body as a ray generation shader over the same thread grid, and one reorder hint per GI ray (kGiSerHint below).
-// Offline only: no game pipeline is built from it (the layer enables no ray tracing pipeline feature).
+// gi_rt_pipeline (docs/TRACK_C_GI.md "Ray tracing pipeline GI trace", core/gi.cpp hit_gi_dispatch; the request
+// <file>?...;GI_TRACE_RAYGEN=1 of common/shader_variant.h, lib profile): the same body as a ray generation shader over
+// the same thread grid. gi_rt_pipeline_reorder (constant 1050, kGiSerHint) adds a prepass and one reorder hint.
 #if !RT_HIT_GI_DIRECT
 #error GI_TRACE_RAYGEN needs RT_HIT_GI_DIRECT (the hint reads the hit's instance)
 #endif
@@ -118,11 +118,11 @@ bool gi_hit_term_ok(float3 c, uint bin) {
 // Per ray: 0 miss or unknown (nothing to shade), 1 on screen (a depth test and a radiance read, mostly), else
 // 2 + the hit's instance (its material row: the hidden-hit shading). Hint = ray 0 (high bits) | ray 1.
 static const uint kGiSerRays = 2u, kGiSerRayBits = 7u;
-#ifndef GI_SER_PREPASS_RAYS
-#define GI_SER_PREPASS_RAYS 2u   // offline diagnosis: 0 traces every ray in the body loop (no prepass hits)
-#endif
+// Hint 0 (the default): no prepass, every ray is traced in the loop as in the compute pass.
+#define GI_SER_PREPASS_RAYS (kGiSerHint != 0u ? kGiSerRays : 0u)
 static RtHit g_ser_hit[kGiSerRays];
 void gi_ser_prepass(uint2 id) {
+  if (kGiSerHint == 0u) return;   // uniform (a constant)
   g_rt_pass = kRtPassGI;   // as the body: aborted prepass queries count as GI unknowns
   uint hint = 0u;
   if (all(id < pc.half)) {

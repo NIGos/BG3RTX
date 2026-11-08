@@ -48,6 +48,7 @@
 #include <unordered_set>
 
 #include "assetdb.h"
+#include "rt_pipeline.h"
 #include "../common/emissive_policy.h"
 
 namespace bg3 {
@@ -1065,19 +1066,21 @@ void em_device_created(DeviceData* dd) {
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   si.maxLod = 16.0f;
   bool ok = vk.CreateSampler(dd->device, &si, nullptr, &g_sampler) == VK_SUCCESS;
+  // gi_rt_pipeline: the raygen GI trace binds the emissive scene as its set 2 (layer/rt_pipeline.cpp).
+  const VkShaderStageFlags stages = rt_pipeline::shared_stages();
   VkDescriptorSetLayoutBinding b[12] = {
-      {0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {6, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTex, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {7, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, &g_sampler},
-      {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-      {11, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxCache, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+      {0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, stages, nullptr},
+      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {6, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTex, stages, nullptr},
+      {7, VK_DESCRIPTOR_TYPE_SAMPLER, 1, stages, &g_sampler},
+      {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, stages, nullptr},
+      {11, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxCache, stages, nullptr}};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   dci.bindingCount = 12;
   dci.pBindings = b;

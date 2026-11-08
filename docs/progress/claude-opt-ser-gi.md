@@ -1,159 +1,24 @@
-## SER prototype for the GI trace (branch claude/opt-ser-gi, offline, stopped: no gain, hint crashes, 2026-11-08)
-- Support: RTX 5090 driver 621.14 exposes VK_EXT_ray_tracing_invocation_reorder rev 2 (rayTracingInvocationReorder,
-  hint mode REORDER) and VK_NV_ray_tracing_invocation_reorder rev 1. The shipped DXC (SDK 1.9.0.5399) has no
-  dx::HitObject/MaybeReorderThread for SPIR-V, but vk::ext_instruction OpReorderThreadWithHintEXT (5314) at lib_6_6
-  compiles and passes spirv-val (3 s for the hit_direct raygen).
-- Prototype: GI_TRACE_RAYGEN in gi/gi_trace_rt.hlsl (raygen entry over the same grid; one hint per GI ray after the
-  trace: 0 miss, 1 on screen, 2 + instance), spec 1050 kSpecIdGiSer (0 off). Offline only: tools/gi_trace_rgen.hlsl
-  (hit_direct base; far/sun variants use groupshared stats and need more work), frame_replay --ab-rgen <hlsl>
-  --rgen-spec 1050=V (B = ray tracing pipeline, one raygen group, vkCmdTraceRaysKHR), --synth-size N.
-  Compute path untouched: 221/221 requests byte-identical to main b4f3cd99; shader requests delta 0.
-- Fixture (synthetic lit pack at 3072x3072, 2.36M threads, 2 rays, gi_rt_radius 6, 3.4% hits, one material; not
-  representative of the game): raygen with hint OFF vs compute, 40 ABBA/BAAB pairs: +0.313 ms [+0.193, +0.476]
-  (compute 0.73, raygen 1.02 ms mean). Outputs: 37 of 9.4M half components differ by 1 ulp (driver codegen of the
-  two stages), means equal to 7 digits; counter totals equal (only wave-leader bins move).
-- Hint ON: device lost on the first dispatch (64x64 and 3072 packs); the PC restarted right after. Not rerun.
-  Likely cause: OpReorderThreadWithHintEXT inside the per-ray loop after divergent early returns; an untested fix
-  is a reorder at uniform control flow with the hint computed for both rays first.
-- Not done, by design: no game path (the layer enables no ray tracing pipeline feature and vk_funcs.h has no RT
-  entry points: an ABI change in the layer, owned by another stream), no live job. Recommendation: drop SER for
-  now; the raygen path alone is ~40% slower on the fixture and the hint path is unsafe on this driver.
-
-## SER prototype: rerun on idle GPU, hint off only (branch claude/opt-ser-gi, offline, 2026-11-08)
-- The first fixture runs shared the GPU with another game (that game crashed too), so their timing and the hint-on
-  device loss are confounded. Rerun with nvidia-smi at 5-6% (desktop apps only), no game process, hint off only
-  (spec 1050 = 0); hint on was not run. Sources: this branch's shaders, exported (the worktree was on opt-bundle2).
-- 64x64 (128^2 pack, validation on): compute 0.0017 ms, raygen 0.0374 ms; delta mean +0.0356 ms, 95% CI
-  [+0.0353, +0.0359] (40 ABBA/BAAB pairs): about 35 us of fixed ray tracing launch cost. Outputs and counters
-  100% bit-equal.
-- 3072x3072 (2 rays, gi_rt_radius 6, 3.4% hits): compute mean 1.363 ms, raygen 1.409 ms; delta mean +0.045 ms,
-  95% CI [-0.207, +0.298] (median delta +0.075, CI [-0.048, +0.202]); repeats spread 0.35-4.08 ms (clocks), so
-  no difference is resolved. Outputs: 37 of 9.4M half components differ by 1 ulp, channel means equal to 7 digits;
-  counter totals equal.
-- Reading: the earlier +0.31 ms was the shared GPU. The raygen port alone costs nothing measurable beyond ~35 us
-  per launch; any SER gain still depends on the hint path, which stays untested. Fixture not representative.
-
-## SER prototype: reorder hint at uniform control flow (branch claude/opt-ser-gi, offline, 2026-11-08)
-- Fix: gi_ser_prepass traces the first two GI rays up front (same setup, random stream and query), combines their
-  hints (7 bits each: 0 miss/unknown, 1 on screen, 2 + instance) and issues one OpReorderThreadWithHintEXT (14 bits)
-  before any thread returns; the loop then reads those hits. SPV_EXT_shader_invocation_reorder only restricts the
-  instruction to RayGenerationKHR (the hint form needs no hit object; no control-flow rule is stated).
-  spirv-val passes; compute requests 221/221 byte-identical to main 11d14456.
-- 64x64 with the Khronos validation layer plus GPU-assisted and sync validation: hint OFF and hint ON, no validation
-  error, no device loss, outputs and counters bit-equal to compute.
-- 3072^2 lit fixture (3.4% hits), 40 ABBA/BAAB pairs each vs compute: raygen OFF +0.307 ms median [+0.247, +0.314]
-  (the up-front traces cost about 0.25 ms more than the in-loop version above), hint ON +0.638 [+0.165, +1.535]
-  (clock-noisy). Hint ON output = hint OFF output, 0 differing components.
-- Striped fixture (--synth-stripes, synthetic: one material quad behind 2-pixel strips, neighbouring threads alternate
-  miss / qualified hidden hit, 37% hits): compute median 0.979 ms; raygen OFF +0.266 [+0.155, +0.386];
-  raygen + hint +0.015 [-0.064, +0.047] (mean -0.175 [-0.424, +0.074]). Outputs: hint ON = hint OFF exactly; vs
-  compute 258 of 9.4M half components differ by 1 ulp (stage codegen); counters equal.
-- Reading: the hint recovers the raygen port's cost on divergent work but does not beat compute here. Not
-  representative (one material, no sun/far; the production far + sun variant with groupshared stats is not ported;
-  the game path needs the layer: RT pipeline feature, entry points, ABI). Recommendation: park SER.
-- Status on main (2026-11-08): verdict NOT EVALUATED ON GAME DATA (fixtures have one material, no sun or far-field);
-  next step is the production far+sun variant on game replay packs (below).
-
-## SER on game frames: production far + sun trace (branch claude/opt-ser-gi, offline, 2026-11-08)
-- Setup: packs camp 013545-2, inn 013914-3, S8 142819-1 (test-main captures, read-only). Production Ultra compute
-  module gi_trace_rt_hit_sun.hlsl (RT_SPEC_NATIVE, RT_SPEC_HIT_INST, RT_SPEC_GI_FAR; the pack's RT_CASCADE_MASKS=1
-  on camp/inn instead of RT_SPEC_CASCADE, which cannot combine with it), specs 1003=1 1004=1 1007=1 1008=0 1010=0
-  1020=0 1026=0 1029=1 1038=1 1044=0, --sun-trust (pt_roofs levels WLD_Main_A / SCL_Main_A / CTY_Main_A), push
-  radius 6, rays 2, rt_stats 0, --ab-warmup 8, 40 ABBA/BAAB pairs. No emission (the packs have no emissive set).
-  Every run guarded by nvidia-smi (3-6% idle, desktop apps only) and a process check: no game, no DXC; all clean.
-- Baseline (same-module control, ms): camp 8.64 (delta +0.009 [-0.112, +0.079]), inn 2.32 (+0.100 [-0.164, +0.218]),
-  S8 3.12 (+0.082 [-0.010, +0.198]); outputs and counters 100% bit-equal. Inn and S8 absolute ms move 2.2-3.8 between
-  runs (clocks at this low load); only paired deltas are compared.
-- Port: tools/gi_trace_rgen_sun.hlsl = the far + sun module as a raygen; the far counters' group-shared reduction is a
-  per-wave sum into the first lane's 8x8-group bin (totals equal compute; bins may move). rt_stats=0 path unchanged.
-  Hint 1050=1 kind + instance (14 bits), 1050=2 kind only (4 bits); GI_SER_PREPASS_RAYS=0u = raygen without prepass.
-  spirv-val passes; validation layers: no error except the replay's missing set 1 b19 (tileset sampler, both
-  pipelines, unused at 1008=0). No device loss. Compute requests: 30/30 gi_trace_rt* byte-identical to main.
-- NOT bit-equal on game data (the --ab-require-equal gate fails): raygen vs compute differ on camp 380866 of 2.73M
-  pixels (14%), S8 1.3%; the old hit_direct port too (fixture: 37 components). Each pipeline is deterministic (new
-  same-pipeline check: 0 of 40 repeats changed); channel means equal within 0.04%, rt_stats=1 counter totals within
-  0.04% (rays equal). The hint changes outputs too (camp 376222 pixels vs hint off), which the fixture never showed:
-  some result depends on the lane/wave placement of a thread. Cause not found (no wave op or missing
-  NonUniformResourceIndex outside stats; candidates: tie order of equal-t candidates, an undefined read).
-- Raygen vs production compute, median delta [95% CI] ms, 40 pairs each:
-  - camp: no prepass -2.577 [-2.826, -2.394]; prepass, hint off -2.501 [-2.678, -2.386];
-    hint kind + instance -3.205 [-3.298, -3.030]; hint kind -3.210 [-3.356, -3.100].
-  - inn: -0.611 [-0.666, -0.440]; -0.181 [-0.312, -0.016]; -0.241 [-0.309, -0.107]; -0.160 [-0.283, -0.094].
-  - S8: -0.278 [-0.353, -0.147]; -0.045 [-0.216, +0.065]; -0.120 [-0.285, +0.000]; -0.202 [-0.260, -0.141].
-- Reading: the ray tracing stage itself is faster than the compute dispatch on all three packs (camp 30%), with no
-  reorder. SER adds about -0.7 ms on camp (foliage, divergent) over the prepass, little on S8, and the prepass costs
-  0.1-0.4 ms (inn: no prepass -0.61 beats every hint variant). The driver reports no ray tracing pipeline statistics,
-  so the stage's register / occupancy difference cannot be read (compute: 243 registers, 44 B shared).
-- Cost breakdown of the compute trace (paired, ms of A in the same run): far on/off 1007: camp -5.75 of 8.66 (66%),
-  inn -2.51 of 3.78, S8 -2.50 of 3.79; hidden-hit shading (hit_direct vs gi_trace_rt base, far off): camp -1.05 of
-  2.43, inn -0.34 of 1.36, S8 -0.94 of 1.65; sun (sun vs direct module, far off): camp -0.31, inn +0.04 (noise),
-  S8 -0.21 [-0.33, +0.004]; roof early 1038 off: camp -0.05 (noise), inn +0.82, S8 +0.92 (it saves that much);
-  compact hit state 1029 off: noise on all. Rays 1 (unpaired runs): camp 4.6 vs 8.6 ms. Far-field rays dominate.
-- Verdict by the rule (hint-on CI below the control's lower bound on 2 of 3 packs): met by the kind hint (camp,
-  S8), not by kind + instance (camp only). Not productised: the gain is mostly the stage, not reordering, the outputs
-  are not bit-equal, and a game path needs the layer's ray tracing pipeline (feature, entry points, ABI).
-- Next: find the lane-dependent result (it may affect the compute pass as well); then a raygen GI trace without
-  prepass (largest, simplest win), with the reorder hint only as an option for divergent scenes.
-- Receipts: worktree .scratch/ser/<pack>-{self,rgen*,bd-*}/ (run.log, ab.csv, guards).
-
-## Raygen vs compute mismatch: cause (branch claude/opt-ser-gi, offline, 2026-11-08)
-- Not lane-dependent. Compute is a pure function of the pixel: GI_DEBUG_SWIZZLE (new offline define,
-  gi_trace_rt.hlsl:290, id ^= k) remaps pixels to other lanes (k=1), the other wave of the 8x8 group (4) or
-  another group (8, 9). Production far + sun module vs remapped: 100% bit-equal outputs and counters on camp
-  (k 1, 4, 8), inn (9) and S8 (4). Production is not affected (no flicker or noise from the thread mapping).
-- Cause: the driver compiles the same arithmetic differently for the compute and the ray generation stage. A temporary
-  debug dump of ray 0's inputs on camp, before any ray query: the pixel position P (ray_at(uv) * d,
-  gi_common.hlsli:132) differs in the last bits on 54% of pixels, the normal N (decode_normal +
-  to_lighting_space, gi_common.hlsli:116-127) on 30%, the ray direction on 79%; rtOrigin (a texture read) on 0%.
-  The SPIR-V is the same in both modules (no RelaxedPrecision; the same execution modes). Then the hits on foliage
-  amplify these last-bit differences into different leaves (camp: 92541 hit/miss flips of 2.73M rays; S8 1.3%).
-  - FMA contraction: DXC -Gis (NoContraction on every operation) makes P equal and cuts the camp mismatch from 380866
-    to 83825 pixels.
-  - Approximate operations: even with -Gis, dot(dn, dn) after the 2.0 / t division in decode_normal, rsqrt and 1 / x
-    give a different last bit in the two stages (Vulkan allows 2.5 ulp for OpFDiv and leaves sqrt / rsqrt / sin
-    / cos implementation-defined, so the driver may pick a different sequence per pipeline).
-  The hint-on output change is most likely the same thing: the reorder instruction changes the raygen code the driver
-  emits (inferred, not tested separately).
-- No small shader fix makes the stages bit-equal: it would need correctly rounded division, sqrt, rsqrt, normalize
-  and sin/cos written out on the whole GI and shading path, and that would change the compute output too. Gate
-  (hint-off raygen vs compute, --ab-require-equal, three packs): FAILS, not fixable in the shader. Means stay
-  equal within 0.04%, counter totals within 0.04%: a different noise draw, the same expected value.
-- Consequence: a raygen GI trace cannot pass a bit-equality gate against compute. It needs a statistical gate instead
-  (energy on a static camera, PT reference), or it should replace the compute pass outright and be gated against
-  itself. The debug dump block is kept out of the tree (.scratch/ser/debug_ray0_block.hlsl). Compute requests:
-  170/170 gi/ byte-identical to main.
-
-## Statistical gate for the raygen GI trace, and the game path design (branch claude/opt-ser-gi, offline, 2026-11-08)
-- Tool: frame_replay --seed-sweep plus --define GI_SEED_PUSH=1. Each measured dispatch gets its own random streams
-  through Push::bounce_spec (GI_RNG_FRAME in gi_common.hlsli and rt_common.hlsli; it expands to pc.frame without the
-  define). Push::frame cannot be varied: it stamps the hit-material records, and a changed frame makes every hidden
-  hit "unknown". tools/replay_seed_gate.py, with tests/replay_seed_gate_test.py (5 cases), runs the gate:
-  - (a) energy per channel: B-A within 3 SE of the compute draw spread;
-  - (b) per pixel: above one fp16 step and above 4 sigma; the fraction must not pass compute vs compute by more than
-    3 SE of a difference of two binomial fractions;
-  - (c) giRawDepth and the counter totals: the same rules.
-  All 221 requests are byte-identical to main.
-- Run: raygen without prepass or reorder vs production far + sun compute, 32 draws per set for the images, 16 draws per
-  set for the counters (rt_stats=1, 1038=0 as the diagnostic pipeline). Result: PASS on camp, inn and S8, on every
-  channel and both candidate sets.
-  - Energy B-A (giRaw r / alpha), bound in brackets: camp -1.8e-5 / +8.2e-5 [4.8e-5 / 1.1e-4];
-    inn -1.1e-5 / +1.3e-5 [7.1e-5 / 8.9e-5]; S8 -7.3e-6 / +1.5e-5 [1.7e-5 / 9.6e-5].
-  - Pixels above 4 sigma, alpha, candidate vs control (bound): camp 1.59e-4 vs 1.36e-4 (1.66e-4); inn 1.11e-4 vs
-    1.08e-4 (1.34e-4); S8 9.6e-5 vs 9.3e-5 (1.17e-4).
-  - giRawDepth is identical. Counters: 65-68 nonzero, 0 failing (limit 1.4-1.5) on every pack.
-- One correction during the run: the first bound counted only the candidate's binomial noise. With it, camp alpha set 0
-  failed (1.59e-4 > 1.57e-4). The correct rule for the difference of two fractions adds the control's noise too
-  (sqrt 2). It is fixed in the tool and applies to every pack the same way.
-- Negative control (S8, far on vs off, same tool): FAIL on every giRaw channel (energy -2e-3 vs bound 2.4e-5; pixels
-  5e-4 vs bound 1.1e-4), so the gate detects a real change.
-- PT residuals: no PT reference image exists for these packs. The earlier PT runs reported shares, not images, so
-  residuals were not computed and no new reference was built.
-- Design: docs/TRACK_C_GI.md "Ray tracing pipeline GI trace: game path design". Pieces:
-  - layer features (about 40 lines);
-  - vk_funcs entries (5);
-  - host_api ABI 28 -> 29 plus the DXC lib profile (about 20);
-  - the core pipeline / SBT / dispatch next to hit_gi_dispatch (about 150);
-  - 2 keys, gi_rt_pipeline (Performance) and gi_rt_pipeline_reorder (Advanced) (about 20);
-  - shader tooling for lib requests (about 30).
-  The doc also lists the risks (FG/Streamline, Script Extender, OMM, _em) and the live job: one launch per scene,
-  0/1 toggles in one run, the energy gate and the gpu ms.
+## SER / raygen GI trace on game frames (branch claude/opt-ser-gi, offline, 2026-11-08)
+- Prototype: GI_TRACE_RAYGEN in gi/gi_trace_rt.hlsl (the hit-GI body as a raygen; far + sun port, far counters per
+  wave), spec 1050 reorder hint (prepass of 2 rays, one OpReorderThreadWithHintEXT in uniform control flow).
+  frame_replay --ab-rgen, --rgen-spec, same-pipeline determinism count, --seed-sweep. Fixtures: no gain (one material).
+- Packs camp 013545-2, inn 013914-3, S8 142819-1, production far + sun compute without emission (no emissive set in
+  the packs), 40 ABBA/BAAB pairs, idle GPU (every run guarded). Baseline camp 8.64 / inn 2.32 / S8 3.12 ms; self
+  control [-0.11, +0.08] / [-0.16, +0.22] / [-0.01, +0.20].
+- Raygen vs compute, median [95%] ms: no reorder camp -2.58 [-2.83, -2.39], inn -0.61 [-0.67, -0.44], S8 -0.28
+  [-0.35, -0.15]. Kind hint: -3.21 / -0.16 / -0.20 (meets the 2-of-3 rule); kind + instance: camp only. The stage is
+  the win; SER adds about -0.7 ms on camp only and the prepass costs 0.1-0.4 ms.
+- Cost breakdown (compute, paired): far 1007 off -5.75 of 8.66 (camp), -2.5 (inn, S8); hidden-hit shading 1.05 / 0.34
+  / 0.94; sun 0.31 / noise / 0.21; roof early 1038 saves 0.82 (inn) and 0.92 (S8); compact hit state: noise.
+- Not bit-equal, cause found: not lane-dependent (compute output bit-equal under lane / wave / group remaps,
+  GI_DEBUG_SWIZZLE, all packs). The driver compiles the same SPIR-V differently per stage: FMA contraction
+  (DXC -Gis cuts camp 380866 -> 83825 px) and division / rsqrt sequences. Foliage amplifies last-bit ray
+  differences. No small shader fix. Production unaffected.
+- Statistical gate instead: tools/replay_seed_gate.py on frame_replay --seed-sweep (GI_SEED_PUSH offsets the random
+  streams through Push::bounce_spec; thresholds from compute vs compute). Raygen without reorder PASSES on camp,
+  inn and S8 (energy within 3 SE, per-pixel 4 sigma fraction, counters); far on/off negative control FAILS.
+- Corrections: the inn sun-trust used level SCL_Main_A (the inn is The Blushing Mermaid, CTY_Main_A); the inn
+  timings above ran with the wrong roof volumes (equivalence results stand, same inputs on both sides). The first
+  per-pixel bound missed the control's own noise (sqrt 2); camp alpha passes only with the correct bound.
+- Game path design: docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"; implemented on claude/gi-rt-pipeline.
+- Receipts: worktree .scratch/ser/ (run.log, ab.csv, gate.json, guards). Codex not used.

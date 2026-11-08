@@ -703,7 +703,32 @@ No consistent timing gain; inn loses with roof/fade and S8 loses with shared sta
 Rejected and all candidate code removed; 1039 retired, no shipped key or new shader request.
 Full diagnostic intervals and receipts: docs/progress/farregs.md and worktree .scratch/farregs/.
 
-## Ray tracing pipeline GI trace: game path design (claude/opt-ser-gi, 2026-11-08, design only)
+## Ray tracing pipeline GI trace: game path design (claude/opt-ser-gi, 2026-11-08; implemented claude/gi-rt-pipeline)
+
+Implemented (claude/gi-rt-pipeline, ABI 29, READY_FOR_LIVE; the design text below stays as written):
+- Layer: layer/rt_pipeline.cpp enables VK_KHR_ray_tracing_pipeline + VK_EXT_ray_tracing_invocation_reorder when the
+  device supports both, after hair_groom's request. It never overrides an application struct
+  (common/rt_pipeline.h decide_features) and is the first optional request dropped when device creation fails
+  (layer.cpp). The alpha (set 1) and emissive set layouts name the raygen stage when it is on
+  (rt_pipeline::shared_stages). Bg3HostApi::rt_pipeline carries the handle size and alignments; VkDeviceFuncs has
+  the three entry points. No separate device key: the retry path is the safety.
+- Core (core/gi.cpp next to hit_gi_dispatch):
+  - refresh(..., raygen) requests `<file>?...;GI_TRACE_RAYGEN=1` (shader_variant.h kRtPipeline, raygen_entry: the two
+    gi_hit_sun files without SHaRC) with the lib_6_6 profile, and adds constant 1050 = reorder_spec(gi_rt_pipeline_reorder);
+  - build_pipeline creates a ray tracing pipeline with one general group;
+  - the RT layouts reuse the compute pass's set layouts (push set 0 and sun set 3 gain the raygen stage) and use a
+    raygen-only push range;
+  - a 64-slot host-visible SBT (a slot is never rewritten while its pipeline lives);
+  - vkCmdTraceRaysKHR over the compute pass's 8x8-group grid, with full barriers before and after.
+  choose_path logs each reason once: key off, no device, no entry points, variant, still building.
+- Shader: hint 0 (the default) has no prepass; constant 1050 != 0 adds the prepass and the reorder (no define).
+- Keys: gi_rt_pipeline (Performance) and gi_rt_pipeline_reorder (Advanced, 1 hit kind, 2 kind + instance). Both are
+  live, off in every preset, and dev-only until qualified (exp_gi_rt_pipeline, exp_gi_rt_pipeline_reorder).
+- Requests: +4 in shaders/variants.txt (hit_sun and hit_sun_em, each with and without OMM). The other 221 are
+  byte-identical to main. shader_identity.py and layer/shaders.cpp compile lib profiles without -E.
+- Offline gate on the shipped request (frame_replay --ab-rgen shaders/gi/gi_trace_rt_hit_sun.hlsl, RT_SPEC_CASCADE
+  with spec 1000, --seed-sweep): see docs/progress/claude-gi-rt-pipeline.md. The live job is
+  tools/live_batches/gi_rt_pipeline (camp, inn; 0/1/0/1).
 
 Evidence (docs/progress/claude-opt-ser-gi.md): on the camp, inn and S8 packs the production far + sun hit-GI trace
 runs faster as a ray generation shader over the same grid, with no reorder: camp -2.58 ms of 8.6, inn -0.61,

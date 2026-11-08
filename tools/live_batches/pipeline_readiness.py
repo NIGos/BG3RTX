@@ -42,6 +42,10 @@ for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
 for key in ("gi_far", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
             "rt_hit_emission", "rt_emissive"):
     TABLE[key] = [QUIET]
+# gi_rt_pipeline (core/gi.cpp hit_gi_dispatch): selects the cached raygen or compute hit-GI pipeline; the raygen
+# one builds in the background on first use. gi_rt_pipeline_reorder: specialization 1050 of the raygen request.
+for key in ("gi_rt_pipeline", "gi_rt_pipeline_reorder"):
+    TABLE[key] = [QUIET]
 WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"
 for key in ("rt_water_compose_shift",
             "rt_water_shadows", "rt_water_ls_shadows",

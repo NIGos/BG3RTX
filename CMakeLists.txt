@@ -43,6 +43,7 @@ add_library(VkLayer_bg3rtx SHARED
 
   layer/omm_backend.cpp
   layer/hair_groom.cpp
+  layer/rt_pipeline.cpp
   layer/omm_submit.cpp
   layer/omm_content.cpp
   layer/omm_sampler.cpp
@@ -408,6 +409,9 @@ add_executable(light_tree_test tests/light_tree_test.cpp)
 add_test(NAME light_tree_test COMMAND light_tree_test)
 add_executable(pan_epoch_test tests/pan_epoch_test.cpp)
 add_test(NAME pan_epoch_test COMMAND pan_epoch_test)
+# gi_rt_pipeline (common/rt_pipeline.h): device features, SBT layout, compute fallback.
+add_executable(rt_pipeline_test tests/rt_pipeline_test.cpp)
+add_test(NAME rt_pipeline_test COMMAND rt_pipeline_test)
 add_executable(camera_epoch_test tests/camera_epoch_test.cpp)
 add_test(NAME camera_epoch_test COMMAND camera_epoch_test)
 add_executable(camera_motion_test tests/camera_motion_test.cpp)

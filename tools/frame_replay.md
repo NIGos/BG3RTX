@@ -182,11 +182,13 @@ Ordinary output files contain the final dispatch; use `ab.csv` for paired timing
 The A/B summary also prints `same-pipeline repeats that changed outputs or counters: A n of N, B n of N`: each
 quartet runs each pipeline twice on identical inputs, so a nonzero count means that pipeline is not deterministic.
 
-SER prototype (branch claude/opt-ser-gi): `--ab-rgen tools/gi_trace_rgen_sun.hlsl` (or `gi_trace_rgen.hlsl` for
-gi_hit_direct) makes B the same pass as a ray generation shader (ray tracing pipeline, `vkCmdTraceRaysKHR` over A's
-grid); `--rgen-spec 1050=0|1|2` selects no reorder, a hit kind + instance hint, or a hit kind hint;
-`--define GI_SER_PREPASS_RAYS=0u` traces every ray in the loop (no prepass, no reorder). `--pipeline-stats` also
-requests ray tracing pipeline statistics (the 5090 driver reports no executable for them).
+Raygen GI (gi_rt_pipeline, docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"): `--ab-rgen <file>` makes B the same
+pass as a ray generation shader (ray tracing pipeline, `vkCmdTraceRaysKHR` over A's grid). It compiles `<file>` with
+A's defines plus GI_TRACE_RAYGEN=1, which is the core's raygen request: `--ab-rgen shaders/gi/gi_trace_rt_hit_sun.hlsl`.
+The tools/gi_trace_rgen*.hlsl wrappers still work. `--rgen-spec 1050=0|1|2` selects no reorder and no prepass (the
+default), a hit kind + instance hint, or a hit kind hint. With `--define RT_SPEC_CASCADE=1` (the production request,
+plus `--spec 1000=1`) the pack's RT_CASCADE_MASKS=1 is dropped: the same program, and the two cannot be combined.
+`--pipeline-stats` also requests ray tracing pipeline statistics (the 5090 driver reports no executable for them).
 
 Seed sweep (statistical A/B for passes that cannot be bit-equal, e.g. compute vs raygen): `--seed-sweep` with
 `--define GI_SEED_PUSH=1` gives measured dispatch d the random streams of seed d + 1 (Push::bounce_spec, unused by

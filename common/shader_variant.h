@@ -15,7 +15,8 @@
 namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase; 64 retired).
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kOccStats = 1u << 13, kSpecCascade = 1u << 16, kHairFibreGi = 1u << 18 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kOccStats = 1u << 13, kSpecCascade = 1u << 16, kHairFibreGi = 1u << 18,
+                  kRtPipeline = 1u << 20 };
 // Bits 11/12 are retired; the occ diagnostic uses bit 13 and kSpecCascade bit 16.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
 // carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
@@ -62,8 +63,9 @@ enum SpecId : unsigned {
   kSpecIdRrHairGuides = 1043,        // M3.3 rr_hair_guides: class 5 RR guides (rr_guides.hlsl), metalness 0, fibre f0
   kSpecIdHairShadingSpace = 1045,    // 5g rt_hair_macro_normal / rt_hair_tangent_world: strand RT0/RT3 spaces (rt/hair_primary_gbuffer)
   kSpecIdHairFibreCheck = 1046,      // rt_hair_fibre=2: the fibre pass's in-frame consistency check (gi/hair_fibre.hlsl)
-  // SER prototype (branch claude/opt-ser-gi): the raygen GI trace's reorder hint (GI_TRACE_RAYGEN only, offline tool
-  // tools/gi_trace_rgen.hlsl and gi_trace_rgen_sun.hlsl; 0 off, 1 kind + instance, 2 kind; no game request).
+  // The raygen GI trace's reorder hint (GI_TRACE_RAYGEN only):
+  // gi_rt_pipeline_reorder (common/rt_pipeline.h reorder_spec) on the GI_TRACE_RAYGEN requests; 0 off (no prepass),
+  // 1 kind + instance, 2 kind; offline tools/gi_trace_rgen*.hlsl too).
   // 1047-1049 left to the hair streams.
   kSpecIdGiSer = 1050,
 };
@@ -94,6 +96,18 @@ inline bool hit_material_entry(const char* file) {
     if (std::strcmp(n, file) == 0) return true;
   return false;
 }
+
+// gi_rt_pipeline (docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"): the production hit-GI files without SHaRC also
+// compile as a ray generation shader (GI_TRACE_RAYGEN=1, lib profile, entry main) over the same grid and descriptors.
+inline bool raygen_entry(const char* file) {
+  return std::strcmp(file, "gi/gi_trace_rt_hit_sun.hlsl") == 0 || std::strcmp(file, "gi/gi_trace_rt_hit_sun_em.hlsl") == 0;
+}
+// A request with GI_TRACE_RAYGEN=1 compiles with the lib profile (no -E: a library has no single entry point).
+inline bool raygen_request(const char* request) {
+  const char* q = std::strchr(request, '?');
+  return q && std::strstr(q, "GI_TRACE_RAYGEN=1") != nullptr;
+}
+inline const char* profile(const char* request) { return raygen_request(request) ? "lib_6_6" : "cs_6_6"; }
 
 // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"): the gi_hit_sun files get RT_GI_FAR=1 (long GI rays,
 // shaders/gi/gi_far.hlsli). The far field is sun bounce, so the direct-only files never get it.
@@ -206,6 +220,7 @@ inline unsigned allowed(const char* file) {
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   if (occ_stats_entry(file)) f |= kOccStats;
   if (std::strcmp(file, "gi/gi_composite.hlsl") == 0) f |= kHairFibreGi;
+  if (raygen_entry(file)) f |= kRtPipeline;
   return f;
 }
 
@@ -256,6 +271,8 @@ inline std::string request(const char* file, unsigned flags) {
   if (occ_stats_entry(file)) add("RT_SPEC_OCC_STATS=1");
   // Adds shaderInt64 and physical storage buffer reads: keep those capabilities out of the base request.
   if (flags & kHairFibreGi) add("RT_HAIR_FIBRE_GI_REFERENCE=1");
+  // gi_rt_pipeline: last, so the compute request is a prefix of its raygen request.
+  if (flags & kRtPipeline) add("GI_TRACE_RAYGEN=1");
   return out;
 }
 

@@ -26,7 +26,9 @@
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
 // 27: two-phase LS replay snapshots, additional descriptor sets and exact specialization payload.
 // 28: GPU completion and retained exact recording lifecycle queries. Rebuild both DLLs.
-#define BG3RTX_ABI_VERSION 28
+// 29: ray tracing pipeline GI trace (gi_rt_pipeline): Bg3HostApi::rt_pipeline (appended), the three ray tracing
+//     pipeline entry points in VkDeviceFuncs (common/vk_funcs.h). Rebuild both DLLs.
+#define BG3RTX_ABI_VERSION 29
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -225,6 +227,14 @@ struct Bg3RecordingState {
   uint64_t completion_frame; // latest submission CPU frame + 1; never a recording age
 };
 
+// ABI 29: the device's ray tracing pipeline properties (VkPhysicalDeviceRayTracingPipelinePropertiesKHR).
+struct Bg3RtPipelineInfo {
+  uint32_t available;          // 0: the core keeps the compute GI trace
+  uint32_t reorder_hint;       // rayTracingInvocationReorderReorderingHint == REORDER
+  uint32_t handle_size, handle_alignment, base_alignment;
+  uint32_t reserved;
+};
+
 struct Bg3HostApi {
   uint32_t abi_version;
   void (*log)(const char* fmt, ...);
@@ -381,6 +391,10 @@ struct Bg3HostApi {
   void (*retain_recording)(uint64_t recording);
   void (*release_recording)(uint64_t recording);
   Bg3RecordingState (*recording_state)(uint64_t recording); // unknown/zero fails closed
+  // ABI 29 (gi_rt_pipeline, layer/rt_pipeline.cpp): what the device has for ray tracing pipelines. available: the
+  // layer enabled VK_KHR_ray_tracing_pipeline + VK_EXT_ray_tracing_invocation_reorder and their features, resolved the
+  // entry points, and the alpha (set 1) and emissive descriptor set layouts also name the raygen stage.
+  Bg3RtPipelineInfo rt_pipeline;
 };
 
 struct Bg3CoreApi {

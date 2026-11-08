@@ -1,0 +1,135 @@
+{
+ "name": "grp1-camp",
+ "save": "Campsite - 27h",
+ "session": false,
+ "traces": 0,
+ "repeat": 1,
+ "hold": 120,
+ "timeout": 720,
+ "max_minutes": 12,
+ "window_mode": "visible_unfocused_fg",
+ "live_batch": "gi-rt-pipeline",
+ "tree": ".claude/worktrees/test-main",
+ "fail_fast": true,
+ "stop_on_dump": false,
+ "set": "preset=ultra,fg=2,headless=0,crash_dump=1,detailed_logging=1,rt_timing_frames=120,rt_stats=0,rt_debug=0,gi_debug=0,ls_debug=0,rf_debug=0,ls_stats=0,rf_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_primary_check=0,replay_pack=0,sharc=0,qa_exposure_hold=0,gi_rt_pipeline=0,gi_rt_pipeline_reorder=0,rt_scene_wait_log_frames=120",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "tools/live_batches/gi_rt_pipeline/plans/camp.json"
+ ],
+ "patterns": [
+  "\\[auto\\]",
+  "\\[cfg\\]",
+  "\\[hot\\]",
+  "\\[watch\\]",
+  "\\[trace\\]",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[rt pipeline\\]",
+  "gi: gi_rt_pipeline",
+  "gi: gi/gi_trace_rt_hit_sun",
+  "gi: trace pass",
+  "gi: GPU cost",
+  "rt passes: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "\\[sl\\] DLSS-G frame",
+  "VK_ERROR",
+  "validation",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\] casters"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[rt pipeline\\] on the device: handle \\d+ B, alignment \\d+, base alignment \\d+, reorder REORDER",
+  "gi: gi/gi_trace_rt_hit_sun(_em)?\\.hlsl\\?[^ ]*GI_TRACE_RAYGEN=1 generation \\d+",
+  "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, (emission|sun) variant",
+  "gi: gi_rt_pipeline: the hit-GI trace runs as compute: key off",
+  "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
+  "\\[trace\\] frame \\d+ written",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "\\[rt pipeline\\] .*(unavailable|entry points missing|unusable properties|left alone)",
+  "\\[layer\\] optional ray tracing pipeline device request failed",
+  "gi: gi_rt_pipeline: the hit-GI trace runs as compute: (no ray tracing pipeline|ray tracing pipeline entry points|this variant)",
+  "gi: gi_rt_pipeline: the shader binding table could not be allocated",
+  "GI_TRACE_RAYGEN=1 pipeline creation failed"
+ ],
+ "expect_every": [
+  {
+   "name": "gpu: the hit-GI trace pass line in every cost window (gi_rt_pipeline 0/1/0/1)",
+   "select": "gi: trace pass \\(ray-traced",
+   "match": "GPU median [0-9.]+ ms",
+   "windows": [
+    "cost-off-a",
+    "cost-on-a",
+    "cost-off-b",
+    "cost-on-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on-a",
+    "cost-off-b",
+    "cost-on-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "windows": [
+    "cost-off-a",
+    "cost-on-a",
+    "cost-off-b",
+    "cost-on-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full in every cost window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "windows": [
+    "cost-off-a",
+    "cost-on-a",
+    "cost-off-b",
+    "cost-on-b"
+   ],
+   "min": 1,
+   "when_present": true
+  }
+ ],
+ "expect_runner": [
+  "\\[window-mode\\].*visible_unfocused",
+  "\\[motion-trace\\] phase=3 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=5 label=shot-on-a repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-on-b repeat=0",
+  "\\[motion-plan\\] complete phases=11\\b",
+  "^Run ended: done"
+ ],
+ "live_flow": {
+  "expected_fps": 30,
+  "settings_latency_s": 1,
+  "trace_stall_s": 3
+ },
+ "estimated_phase_seconds": 104,
+ "purpose": "READY_FOR_LIVE, NOT authorized. gi_rt_pipeline (docs/TRACK_C_GI.md 'Ray tracing pipeline GI trace'): the Ultra hit-GI trace (far + sun + emission) as a ray tracing pipeline vs compute, toggled 0/1/0/1 in one run, static camera, exposure held in the cost and shot windows. Observables: 'gi: trace pass' GPU median per cost window (predicted -2.5 ms ON vs OFF, offline replay), energy of the pre-post scene colour (dumps.json float mean, ON vs OFF within |OFF-b - OFF-a|; predicted unchanged), no device or validation error, the raygen variant actually running (emission request on Ultra)."
+}

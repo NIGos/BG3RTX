@@ -5,6 +5,7 @@
 // instead of taking the game down.
 #include "host.h"
 #include "assetdb.h"
+#include "rt_pipeline.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -197,6 +198,7 @@ void core_init(DeviceData* dd) {
   g_host.retain_recording = &core_retain_recording;
   g_host.release_recording = &core_release_recording;
   g_host.recording_state = &core_recording_state;
+  g_host.rt_pipeline = rt_pipeline::info();   // ABI 29 (device_created ran before core_init)
   g_host.root_dir = root_dir().c_str();
   g_host.query_binding = &query_binding;
   g_host.alloc_image = &alloc_image;

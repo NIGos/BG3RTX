@@ -987,7 +987,16 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   check(g_reference_out.empty() || fs::weakly_canonical(out) != fs::weakly_canonical(g_reference_out), "--reference-out must differ from --out");
   // Shader: the production file from this checkout (or an override), the pack's variant defines.
   std::vector<std::string> defines = extra_defines;
-  for (size_t a = 0; a < m.defines.size();) { size_t e = m.defines.find(';', a); defines.push_back(m.defines.substr(a, e - a)); if (e == std::string::npos) break; a = e + 1; }
+  const bool spec_cascade = std::find(extra_defines.begin(), extra_defines.end(), std::string("RT_SPEC_CASCADE=1")) != extra_defines.end();
+  for (size_t a = 0; a < m.defines.size();) {
+    size_t e = m.defines.find(';', a);
+    const std::string d = m.defines.substr(a, e - a);
+    // The production request's RT_SPEC_CASCADE=1 (with --spec 1000=1) replaces a pack's RT_CASCADE_MASKS=1: the same
+    // program by construction (tools/spec_cascade_check.py), and the two defines cannot be combined (rt_common.hlsli).
+    if (!(spec_cascade && d == "RT_CASCADE_MASKS=1")) defines.push_back(d);
+    if (e == std::string::npos) break;
+    a = e + 1;
+  }
   std::vector<uint32_t> spirv = spirv_in ? *spirv_in
       : compile(hlsl_override.empty() ? fs::path(source_root()) / "shaders" / pass.shader : hlsl_override, defines, out / "pass.spv");
   auto file = [&](const std::string& name) { return read_file(pack / name); };
@@ -1414,7 +1423,12 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   if (rgen) {
     check(m.pass != "local_shadows" && m.pass != "reflections", "--ab-rgen: GI packs only (tools/gi_trace_rgen.hlsl)");
     g_specs = common_specs;
-    rt_b = make_rt_pipeline(compile(g_ab_rgen, defines, out / "rgen.spv", "lib_6_6"), layout);
+    // The core's raygen request is the compute request plus GI_TRACE_RAYGEN=1 (common/shader_variant.h kRtPipeline):
+    // --ab-rgen <the production file> compiles exactly that; the tools/gi_trace_rgen*.hlsl wrappers define it too.
+    auto rgen_defines = defines;
+    if (std::find(rgen_defines.begin(), rgen_defines.end(), std::string("GI_TRACE_RAYGEN=1")) == rgen_defines.end())
+      rgen_defines.push_back("GI_TRACE_RAYGEN=1");
+    rt_b = make_rt_pipeline(compile(g_ab_rgen, rgen_defines, out / "rgen.spv", "lib_6_6"), layout);
     pipeline_b = rt_b.pipeline;
     g_specs = user_specs;
   }
