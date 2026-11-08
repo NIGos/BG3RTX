@@ -84,6 +84,7 @@ std::map<uint32_t, uint32_t> g_specs;
 std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_ab_specs;
 fs::path g_ab_spv;
 fs::path g_ab_rgen;   // --ab-rgen <hlsl>: B is this file as a lib_6_6 raygen (tools/gi_trace_rgen.hlsl) over A's grid
+bool g_synth_stripes = false;   // --synth-stripes: the striped divergence fixture (synthesize)
 uint32_t g_synth_size = 128;   // --synth-size N: --synthesize at N x N (a timing fixture; the CTests keep 128)
 std::map<uint32_t, uint32_t> g_rgen_specs;   // --rgen-spec ID=V: B's specialization only (1050: the reorder hint)
 bool g_ab_require_equal = false;
@@ -1890,6 +1891,12 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
   constexpr uint32_t frame = 3, stamp = 7;
   constexpr float kFront = 4.3f;   // F: 20 cm in front of K, far beyond the on-screen depth tolerance (~2 cm footprint)
   constexpr float A = 0.5f;
+  // --synth-stripes (SER timing fixture): F covers the view as strips 2 render pixels wide with 2-pixel gaps (one GI
+  // thread each at half resolution), K behind it covers the view: neighbouring threads alternate between a cheap miss
+  // (on F) and a qualified hidden hit on K (B behind the gaps), the divergence reordering is for.
+  constexpr float kStripeHalf = 2.2f;   // > A x kFront: the strips and K cover the whole view
+  const float stripe_p = 4.0f * (2.0f * A * kFront) / float(W);
+  const uint32_t stripe_n = uint32_t(std::ceil(2.0f * kStripeHalf / stripe_p));
   constexpr uint32_t stride = 64, record = bg3::native_hit::nh_alpha_rows;
   // Soup: 64-byte vertices (position float4 at 0, UV at 16), non-indexed. A quad in the plane y
   // over [x0,x1] x [z0,z1], wound so that cross(p1 - p0, p2 - p0) points along `ny`.
@@ -1930,11 +1937,19 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
     soup = keep;
   } else {
     quad(5.0f, -10, 10, -10, 10, -1, false);        // B (instance 0, tris 0-1)
-    quad(kFront, -0.6f, 0.6f, -0.6f, 0.6f, -1, false);  // F (instance 0, tris 2-3)
+    if (!g_synth_stripes) quad(kFront, -0.6f, 0.6f, -0.6f, 0.6f, -1, false);  // F (instance 0, tris 2-3)
+    else for (uint32_t s = 0; s < stripe_n; ++s) {   // F as strips: alternating threads see F (rays miss) or K (shaded)
+      const float x0 = -kStripeHalf + s * stripe_p;
+      quad(kFront, x0, x0 + 0.5f * stripe_p, -kStripeHalf, kStripeHalf, -1, false);
+    }
   }
   const uint32_t kBase = uint32_t(soup.size());
-  if (!box) quad(4.5f, -0.6f, 0.6f, -0.6f, 0.6f, +1, true);   // K (instance 1, tris 0-1, with material)
-  uint32_t info[8] = {0, stride, 0, box ? 12u : 4u, kBase, stride | bg3::native_hit::nh_opaque_meta, record, 2};
+  const uint32_t tris0 = uint32_t(kBase / (3 * stride));
+  if (!box) {
+    if (g_synth_stripes) quad(4.5f, -kStripeHalf - 0.1f, kStripeHalf + 0.1f, -kStripeHalf - 0.1f, kStripeHalf + 0.1f, +1, true);
+    else quad(4.5f, -0.6f, 0.6f, -0.6f, 0.6f, +1, true);   // K (instance 1, tris 0-1, with material)
+  }
+  uint32_t info[8] = {0, stride, 0, box ? 12u : tris0, kBase, stride | bg3::native_hit::nh_opaque_meta, record, 2};
   if (casters) { info[3] = 10; info[4] = 0; info[5] = stride; info[6] = 0; info[7] = 0; }   // the live cascade entry: no vertices
   const uint32_t instances_used = box && !casters ? 1 : 2;
   // Hit-material records (native_hit_material.hlsli rt_hit_material, opaque prepass row).
@@ -1989,7 +2004,11 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
   for (uint32_t y = 0; y < H; ++y)
     for (uint32_t x = 0; x < W; ++x) {
       const float u = (x + 0.5f) / W, v = (y + 0.5f) / H, rx = 2 * A * u - A, rz = 2 * A * v - A;
-      const bool slab = std::abs(rx * kFront) <= 0.6f && std::abs(rz * kFront) <= 0.6f;
+      bool slab = std::abs(rx * kFront) <= 0.6f && std::abs(rz * kFront) <= 0.6f;
+      if (g_synth_stripes) {
+        const float sx = (rx * kFront + kStripeHalf) / stripe_p;
+        slab = std::abs(rz * kFront) <= kStripeHalf && sx - std::floor(sx) < 0.5f;
+      }
       depth[y * W + x] = box ? kBox : slab ? kFront : 5.0f;
     }
   // Push (gi_common.hlsli Push; bg3rtx.ini production defaults where the pass reads them).
@@ -3124,6 +3143,7 @@ int main(int argc, char** argv) {
     }
     else if (args[i] == "--ab-spv") g_ab_spv = next();
     else if (args[i] == "--ab-rgen") g_ab_rgen = next();
+    else if (args[i] == "--synth-stripes") g_synth_stripes = true;
     else if (args[i] == "--synth-size") {
       g_synth_size = uint32_t(std::stoul(next()));
       check(g_synth_size >= 16 && g_synth_size <= 4096 && g_synth_size % 16 == 0, "--synth-size 16..4096, a multiple of 16");
