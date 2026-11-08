@@ -10,7 +10,7 @@ game with the new layer and core.
 
 | Job | Save | Plan | Predicted (predicted.json, committed before any run) |
 |---|---|---|---|
-| `grp1-camp` | Campsite - 27h | 104 s, 4 PNG traces | trace pass -2.5 ms ON vs OFF; energy unchanged |
+| `grp1-camp` | Test Campsite (Campsite - 27h is gone since the reinstall) | 104 s, 4 PNG traces | trace pass -2.5 ms ON vs OFF; energy unchanged |
 | `grp2-inn` | The Blushing Mermaid - 96h 39m | 104 s, 4 PNG traces | trace pass -0.6 ms; energy unchanged |
 
 Phases:

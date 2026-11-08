@@ -43,7 +43,7 @@ SET = ("preset=ultra,fg=2,headless=0,crash_dump=1,detailed_logging=1,rt_timing_f
        "ls_debug=0,rf_debug=0,ls_stats=0,rf_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,"
        "pan_capture=0,pan_inputs=0,pan_prepare=0,rt_primary_check=0,replay_pack=0,sharc=0,qa_exposure_hold=0,"
        "gi_rt_pipeline=0,gi_rt_pipeline_reorder=0,rt_scene_wait_log_frames=120")
-SCENES = [("grp1-camp", "Campsite - 27h", "camp", -2.5), ("grp2-inn", "The Blushing Mermaid - 96h 39m", "inn", -0.6)]
+SCENES = [("grp1-camp", "Test Campsite", "camp", -2.5), ("grp2-inn", "The Blushing Mermaid - 96h 39m", "inn", -0.6)]
 for name, save, short, ms in SCENES:
     plan_rel = f"tools/live_batches/gi_rt_pipeline/plans/{short}.json"
     pipeline_readiness.apply({"set": SET}, plan)
