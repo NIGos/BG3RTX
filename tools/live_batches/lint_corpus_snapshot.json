@@ -73855,6 +73855,73 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[cfg\\] settings read",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_native_hair",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0.02,
+        "samples": 1,
+        "source": "VALID same-save/key median"
+      }
     }
   ],
   "matches": {
@@ -76145,6 +76212,24 @@
     "\\[hair primary\\] .* [1-9]\\d* pipelines refused": [
       0,
       null
+    ],
+    "\\[geo\\] transform feedback enabled: .* \\(stride 88\\)": [
+      4,
+      [
+        "hair1-dialogue.1.191025.log",
+        "frozen VALID match"
+      ]
+    ],
+    "\\[hair capture\\] fs [0-9a-f]{16} mask image \\d+: format \\d+, \\d+x\\d+, \\d+ mips \\(view base \\d+, \\d+ levels\\), layout \\d+, usage 0x[0-9a-f]+": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] frame \\d+: \\d+ groom instances; last \\d+ frames: .* unmatched hair draws \\d+ \\(not indexed \\d+, count unknown \\d+, not mapped \\d+, no file \\d+": [
+      27,
+      [
+        "hair1-dialogue.1.191025.log",
+        "frozen VALID match"
+      ]
     ]
   }
 }

@@ -1,0 +1,52 @@
+{
+ "name": "hcap1-dialogue",
+ "save": "Test Dialogue1",
+ "session": false,
+ "traces": 0,
+ "repeat": 1,
+ "hold": 120,
+ "timeout": 480,
+ "max_minutes": 8,
+ "window_mode": "visible_unfocused_fg",
+ "live_batch": "hair-capture",
+ "tree": ".claude/worktrees/test-main",
+ "fail_fast": true,
+ "stop_on_dump": false,
+ "set": "preset=ultra,fg=2,headless=0,crash_dump=1,detailed_logging=1,rt_stats=0,rt_debug=0,gi_debug=0,ls_debug=0,rf_debug=0,ls_stats=0,rf_stats=0,ls_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_primary_check=0,replay_pack=0,qa_exposure_hold=0,rt_native_hair=1,rt_bvh_split=1,rt_hair_groom=1,rt_scene_wait_log_frames=120",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "tools/live_batches/hair_capture/plans/dialogue.json"
+ ],
+ "patterns": [
+  "\\[auto\\]",
+  "\\[cfg\\]",
+  "\\[hot\\]",
+  "\\[watch\\]",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[geo\\] transform feedback",
+  "\\[hair capture\\]",
+  "\\[hair groom\\]",
+  "\\[native hair\\]",
+  "VK_ERROR",
+  "validation"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[geo\\] transform feedback enabled: .* \\(stride 88\\)",
+  "\\[hair capture\\] fs [0-9a-f]{16} mask image \\d+: format \\d+, \\d+x\\d+, \\d+ mips \\(view base \\d+, \\d+ levels\\), layout \\d+, usage 0x[0-9a-f]+",
+  "\\[hair groom\\] device with linear swept spheres",
+  "\\[hair groom\\] frame \\d+: \\d+ groom instances; last \\d+ frames: .* unmatched hair draws \\d+ \\(not indexed \\d+, count unknown \\d+, not mapped \\d+, no file \\d+"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "\\[geo\\] rt_native_hair rejected",
+  "\\[hair groom\\] device WITHOUT"
+ ]
+}
