@@ -32,20 +32,21 @@ std::string groom_dir() {
   return (s == std::string::npos ? std::string(".") : db.substr(0, s)) + "\\hair_grooms";
 }
 
-// Caller holds g_mu.
-void load_all() {
-  if (g_loaded) return;
-  g_loaded = true;
+std::unordered_set<std::string> g_paths;   // every file looked at (indexed or refused): a re-scan skips them
+
+// Caller holds g_mu. Indexes the groom files not looked at yet; returns how many were added.
+uint32_t scan(bool initial) {
   const std::string dir = groom_dir();
   WIN32_FIND_DATAA fd{};
   HANDLE h = FindFirstFileA((dir + "\\*.hgrm").c_str(), &fd);
   if (h == INVALID_HANDLE_VALUE) {
-    log("[hair groom] no groom files in %s (python -m tools.hair_groom.asset): the card path stays", dir.c_str());
-    return;
+    if (initial) log("[hair groom] no groom files in %s (bg3rtx_hairconv writes them): the card path stays", dir.c_str());
+    return 0;
   }
   uint32_t ok = 0, bad = 0;
   do {
     const std::string path = dir + "\\" + fd.cFileName;
+    if (!g_paths.insert(path).second) continue;
     auto l = std::make_unique<Loaded>();
     l->path = path;
     FILE* f = nullptr;
@@ -94,9 +95,25 @@ void load_all() {
     ++ok;
   } while (FindNextFileA(h, &fd));
   FindClose(h);
-  log("[hair groom] %u groom files loaded, %u ignored", ok, bad);
+  if (initial || ok || bad) log("[hair groom] %u groom files %s, %u ignored", ok, initial ? "loaded" : "added at a level load", bad);
+  return ok;
+}
+
+void load_all() {
+  if (g_loaded) return;
+  g_loaded = true;
+  scan(true);
 }
 }  // namespace
+
+// docs/RTX_HAIR_ROADMAP.md 2d: grooms the launcher's converter wrote while the game ran become usable at the next level
+// load (never mid-level). Only new files are added; an indexed entry is never replaced or removed (draws may hold it):
+// a groom rewritten in place is refused by read_lod's size check until the next game start.
+uint32_t rescan() {
+  std::lock_guard lock(g_mu);
+  if (!g_loaded) return 0;   // the first use indexes everything anyway
+  return scan(false);
+}
 
 bool read_lod(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod& lod) {
   bytes.clear();

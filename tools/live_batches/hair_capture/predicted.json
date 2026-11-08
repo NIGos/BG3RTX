@@ -11,5 +11,19 @@
    "source": "hair_groom UV join exists for this case (RTX_HAIR_PRIMARY)",
    "written": "2026-11-08"
   }
+ },
+ "hcap2-capture": {
+  "captures": {
+   "predicted": ">= 1 written, mask 2048x2048 BC3 (fmt 137), 12 mips, stretch near 1",
+   "source": "hcap1-dialogue: 2 full masks, 424-600 unmatched count-unknown draws",
+   "written": "2026-11-08"
+  }
+ },
+ "hcap2-strands": {
+  "strands": {
+   "predicted": "the converted style's groom indexed and drawn (groom instances >= 1)",
+   "source": "offline: hairconv grooms decode in the layer reader (hairconv_test)",
+   "written": "2026-11-08"
+  }
  }
 }

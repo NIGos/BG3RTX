@@ -394,7 +394,7 @@ inline constexpr Knob kKnobs[] = {
   {"exp_hair_groom_primary", "Strand hair on screen",
    "Experimental: displays converted hairstyles as individual strands.",
    Kind::Choice, Apply::Restart, "restart required: strands on screen, the hair ray-origin reservation and the world-space tangent are set up at startup", false,
-   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}}, {}, {}, false, false, false, Apply::Restart},
+   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}, {"rt_hair_capture", "0"}}, {}, {}, false, false, false, Apply::Restart},
     // Review 2026-11-08 (docs/RTX_HAIR_PRIMARY.md 5j): On is the one coherent strand path, the qualified bundle: header in
     // G-buffer order decided at submit (order, current), per-frame trace tags, LOD keep, coverage hold and the
     // world-space tangent. The individual keys stay as developer diagnostics in bg3rtx.ini only (order 0 and current 0
@@ -410,7 +410,7 @@ inline constexpr Knob kKnobs[] = {
       {"rt_hair_tangent_world", "1"}, {"rt_hair_groom", "1"}, {"rt_hair_groom_shadow_t", "1"},
       {"rt_hair_groom_ao_t", "1"}, {"rt_hair_groom_cascade_drop", "1"}, {"rt_hair_fibre", "1"},
       {"rt_hair_fibre_gi", "1"}, {"rt_hair_fibre_spec", "1"}, {"rt_hair_fibre_mapped", "1"},
-      {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}},
+      {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, true, "Advanced", {}, "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified; turning it on needs a game restart."},
 
@@ -804,6 +804,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_pool_trim", "0"},
     {"rt_scene_compact_holds", "1"},
     {"rt_hair_groom", "0"},
+    {"rt_hair_capture", "0"},
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_groom_shadow_t", "0"},
     {"rt_hair_groom_ao_t", "0"},

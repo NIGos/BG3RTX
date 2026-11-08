@@ -699,6 +699,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
   if (force_src && (ci->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                                  VK_IMAGE_USAGE_STORAGE_BIT)))
     patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  // rt_hair_capture (layer/hair_capture.cpp): the CHAR_Hair masks (BC3, sampled) are read back by a transfer copy of
+  // mip 0. Decided once per process like force_transfer_src: the capture needs a game restart after enabling it.
+  static const bool hair_capture_src = cfg_int("rt_hair_capture", 0) != 0;
+  if (hair_capture_src && (ci->usage & VK_IMAGE_USAGE_SAMPLED_BIT) &&
+      (ci->format == VK_FORMAT_BC3_UNORM_BLOCK || ci->format == VK_FORMAT_BC3_SRGB_BLOCK))
+    patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   // BG3's AO/SSR target (RGB10A2 render target) gets STORAGE so the GI can
   // fold its visibility into the game's own ambient occlusion.
   static const bool force_storage = cfg_int("force_storage_rgb10a2", 1) != 0;

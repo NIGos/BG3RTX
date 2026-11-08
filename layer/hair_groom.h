@@ -38,6 +38,9 @@ std::vector<const Loaded*> with_count(uint32_t index_count);
 // <assetdb dir>\hair_seen.txt ("<index count> <index id hex>", id 0 when unknown) at a level load and at device
 // destroy, so the file is written at most once per level. tools/hair_groom/prepare.py parse_seen reads it.
 void note_seen(uint32_t index_count, uint64_t index_id);
+// At a level load (bvhsplit): index groom files written since (the converter may run while the game plays). New files
+// only; returns how many were added.
+uint32_t rescan();
 void flush_seen();
 std::string seen_path();
 }  // namespace bg3::hair_groom

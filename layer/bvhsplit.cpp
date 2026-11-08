@@ -7,6 +7,7 @@
 #include "../common/native_hit_pool.h"
 #include "mesh_content_id.h"
 #include "hair_groom.h"
+#include "hair_capture.h"
 #include "../common/hair_groom_budget.h"
 #include "../common/hair_primary.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
@@ -534,6 +535,9 @@ struct FrameDraw {
   uint64_t groom_id = 0;        // rt_hair_groom: the groom file joined to this draw's index range (0 none)
   uint32_t groom_indices = 0;   // the draw's index count (also when unmatched: the log names it)
   hair_groom::JoinMiss groom_miss = hair_groom::JoinMiss::None;
+  VkBuffer cap_ib = VK_NULL_HANDLE;   // rt_hair_capture: the draw's index range (buffer, byte offset, 2 or 4 bytes)
+  VkDeviceSize cap_ib_off = 0;
+  uint32_t cap_ib_bytes = 0;
   uint64_t groom_identity = 0;  // the draw's identity without the per-frame occurrence (the join caches)
   uint64_t hp_key = 0;          // rt_hair_groom_primary: the index-range key its G-buffer draw is swapped by
   std::shared_ptr<mesh_content::Sample> content_sample;
@@ -1930,6 +1934,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   g_groom_pool_used = 0; g_groom_budget_refusals = 0;
   if (g_groom_uv_rb.b) free_buf(g_groom_uv_rb);
   g_groom_uv.clear(); g_groom_uv_logged.clear();
+  hair_capture::device_destroyed(dd);
   for (GroomUvJob& j : g_groom_uv_jobs) j = GroomUvJob{};
   defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
   defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_dsl));
@@ -1984,6 +1989,7 @@ void bvh_begin_capture(VkCommandBuffer) {
   g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
   const bool groom_key = cfg_hot(CfgHot::rt_hair_groom) != 0, lss = hair_groom::lss_enabled(), native = geo_native_hair_enabled();
   g_groom_on = groom_key && lss && native;
+  hair_capture::begin_capture();
   // Review 2026-11-08 item 15: grooms off: their LOD arrays leave the mesh pool (freed after the strand passes' lag;
   // slots release their points as their draws are captured without a groom). A staged upload not yet recorded keeps
   // its range until it is recorded (the copy still targets it), then goes the next frame.
@@ -2038,6 +2044,18 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     if (!indexed) fd.groom_miss = hair_groom::JoinMiss::NotIndexed;
     else if (!hair_groom::count_known(d.args.count)) fd.groom_miss = hair_groom::JoinMiss::CountUnknown;
     else fd.groom_id = groom_join(d, dk, &fd.groom_miss);
+  }
+  if (hair_capture::enabled() && indexed && d.alpha && s->ib) {
+    // rt_hair_capture: the index range as bound now (the build reads it later); without grooms on, the count filter
+    // alone names the styles without a groom file.
+    const uint32_t ib = s->ib_type == VK_INDEX_TYPE_UINT32 ? 4 : s->ib_type == VK_INDEX_TYPE_UINT16 ? 2 : 0;
+    if (ib) {
+      fd.cap_ib = s->ib; fd.cap_ib_bytes = ib; fd.cap_ib_off = s->ib_offset + VkDeviceSize(d.args.first) * ib;
+      if (!g_groom_on) {
+        fd.groom_indices = d.args.count;
+        if (!hair_groom::count_known(d.args.count)) fd.groom_miss = hair_groom::JoinMiss::CountUnknown;
+      }
+    }
   }
   if (!d.inst || !d.inst->ok) {
     ++g_st.not_inst_pattern;
@@ -2513,7 +2531,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     g_groom_uv.clear();
     g_groom_logged_unmatched.clear();
     hair_groom::flush_seen();   // the previous level's styles without a groom (one small file write per level load)
+    hair_groom::rescan();       // grooms converted since (bg3rtx_hairconv): usable from this level on, never mid-level
   }
+  hair_capture::poll(g_dd, now);   // rt_hair_capture: readbacks the GPU finished go to the writer thread
+  bool hair_capture_staged = false;
   struct GroomUvCopy { uint32_t job; VkDeviceSize soup_off; };
   std::vector<GroomUvCopy> groom_uv_copies;
   if (groom_ready) {
@@ -2781,6 +2802,31 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         groom_uv_copies.push_back({j, fd.soup_off});
         fd.groom_miss = hair_groom::JoinMiss::UvPending;
         break;
+      }
+    }
+    // rt_hair_capture (docs/RTX_HAIR_ROADMAP.md 2c): a style without a groom, captured into this frame's soup: copy its
+    // index range, soup corners and mask mip 0 in this build (at most one per frame; hair_capture decides once per
+    // index count and mask image).
+    if (hair && !hair_capture_staged && !fd.groom_id && fd.cap_ib && hair_capture::ready() &&
+        (fd.groom_miss == hair_groom::JoinMiss::CountUnknown || fd.groom_miss == hair_groom::JoinMiss::NoFile ||
+         fd.groom_miss == hair_groom::JoinMiss::UvMismatch) &&
+        fd.captured && !fd.held && fd.groom_indices == fd.prims * 3u &&
+        fd.soup_off + VkDeviceSize(fd.groom_indices) * stride <= cap.xfb_size) {
+      AlphaSnapshot snap{};
+      if (!alpha_snapshot_native(fd.rec, &snap) || snap.rec.kind != 4 || !snap.tex || !snap.tex_id) {
+        hair_capture::no_mask(fd.groom_indices);
+      } else {
+        hair_capture::Draw hd;
+        hd.count = fd.groom_indices;
+        hd.ib = fd.cap_ib; hd.ib_offset = fd.cap_ib_off; hd.index_bytes = fd.cap_ib_bytes;
+        hd.soup = cap.xfb; hd.soup_off = fd.soup_off; hd.soup_size = cap.xfb_size; hd.stride = stride;
+        hd.mask = snap.tex; hd.mask_layout = snap.tex_layout; hd.mask_id = snap.tex_id;
+        // The material: the record's 48 material bytes (CHAR_Hair UBO), FNV-1a 64.
+        uint64_t h = 14695981039346656037ull;
+        const auto* mb = reinterpret_cast<const uint8_t*>(&snap.rec) + 48;
+        for (int k = 0; k < 48; ++k) h = (h ^ mb[k]) * 1099511628211ull;
+        hd.material = h;
+        hair_capture_staged = hair_capture::want(g_dd, hd, now);
       }
     }
     if (hair && groom_ready && !fd.groom_id) {
@@ -3171,6 +3217,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     dd->vk.CmdDispatch(cmd,work.push.step/128u,1,1);
   }
   if(hair_status)barrier(cmd,kCS,VK_ACCESS_SHADER_WRITE_BIT,kAS|kCS,kRW);
+  if (hair_capture_staged) hair_capture::record(g_dd, cmd, now, rec);   // after the soup's conversion, like the UV join
   if (!groom_work.empty() || !g_groom_uploads.empty() || !groom_uv_copies.empty()) {
     // rt_hair_groom: groom arrays into the pool, compacted copies of last builds, then this frame's points.
     barrier(cmd, kCS | kXfer | kAS, VK_ACCESS_MEMORY_WRITE_BIT, kXfer | kAS, kRW);

@@ -73922,6 +73922,276 @@
         "samples": 1,
         "source": "VALID same-save/key median"
       }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[cfg\\] settings read",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "rr_hair_guides",
+          "1"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "1"
+        ],
+        [
+          "rt_hair_fibre",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "1"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "1"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "1"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "1"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "1"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "1"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "1"
+        ],
+        [
+          "rt_native_hair",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0.02,
+        "samples": 1,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[cfg\\] settings read",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "rr_hair_guides",
+          "1"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "0"
+        ],
+        [
+          "rt_hair_fibre",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "1"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "1"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "1"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "1"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "1"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "1"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "1"
+        ],
+        [
+          "rt_native_hair",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0.02,
+        "samples": 1,
+        "source": "VALID same-save/key median"
+      }
     }
   ],
   "matches": {
@@ -76228,6 +76498,33 @@
       27,
       [
         "hair1-dialogue.1.191025.log",
+        "frozen VALID match"
+      ]
+    ],
+    "\\[hair capture\\] .* capturing stopped": [
+      0,
+      null
+    ],
+    "\\[hair capture\\] [0-9a-f_A-Zcount]+: \\d+ indices, \\d+ vertices, mask \\d+x\\d+ fmt \\d+ mips \\d+, stretch [0-9.]+/[0-9.]+/[0-9.]+, \\d+ KB, written": [
+      0,
+      null
+    ],
+    "\\[hair capture\\] \\d+ frames: [1-9]\\d* captured": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] .*file unreadable or changed since startup": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] [0-9a-f]{16} LOD \\d decoded \\(v3\\): \\d+ points in \\d+ ms": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] frame \\d+: [1-9]\\d* groom instances": [
+      24,
+      [
+        "hcap1-dialogue.1.203259.log",
         "frozen VALID match"
       ]
     ]
