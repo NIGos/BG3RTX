@@ -40,6 +40,9 @@ Play saves settings first in both renderers; dependency reviews may be cancelled
 One compact header shows version, preset, GPU and mod-file presence. Installed files do not confirm runtime activity.
 Costs appear once: supported measurements after descriptions, estimates and separate-pass hair timings in details. Unknown costs and memory badges are omitted.
 Dependency dialogs name actions: Enable requirements / Adjust options / Keep editing; Apply changes / Cancel.
+Selecting a choice turns on the options it needs at once, recursively, all or nothing (`settings::raise_needs`;
+status "Also turned on: ..."); a need that is hidden, custom, experimental without opt-in or unsupported raises
+nothing and the card keeps showing it. Turning a prerequisite off still lowers its dependents at Save.
 Apply labels: “Applies after saving”; “Applies after saving; may briefly pause”; “Restart the game to apply”.
 The native report preview uses the default inclusion set and has no issue field or inclusion checkboxes; WebView provides both.
 
