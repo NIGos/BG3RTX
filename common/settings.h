@@ -384,7 +384,7 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 2}}, {"rt_native_tileset"}, true, false, false, Apply::Restart}},
    {}, {0, 0, 0, 1}, false, {{"rt","1","Ray-tracing support"},{"rt_alpha","1","Foliage capture"},{"rt_bvh_split","1","Scene cache"}}, false, "Lighting", {"Measured", "RT 2.3–6.3 ms; indirect-light tracing 3.2–8.8 ms", "Unknown", "Recorded RTX 5090 increases: 2.3–6.3 ms in the ray-tracing pass and 3.2–8.8 ms in indirect-light tracing, depending on scene."}, "Needs Ray-tracing detail: Include foliage. Turning it on needs a game restart, and the first start may pause while shaders compile. Visible hair stays the game's own hair."},
 
-  {"exp_hair_groom", "Strand hair in ray-traced lighting",
+  {"exp_hair_groom", "RTX Hair in ray-traced lighting",
    "Experimental: uses individual strands for hair shadows and reflected light.",
    Kind::Choice, Apply::Live, "live; supported LSS hardware required; styles get strands once captured and converted", false,
    {{"off", "Off", 0, {{"rt_hair_groom", "0"}}, {}, {}, false, false, false, Apply::Live},
@@ -392,7 +392,7 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"}}, true, "Advanced", {"Measured", "RT -1.1-1.5 ms; GI -1.6-1.8 ms; refit +0.57 ms", "Unknown", "RTX 5090; Dialogue1 versus native cards. Reference only; qualification incomplete."}, "Uses strands in RT shadows/AO/GI/reflections. Inspect hair shadows on faces and necks in Dialogue1."},
 
   {"exp_hair_groom_primary", "RTX Hair",
-   "Beta: shows hair as individual ray-traced strands instead of flat cards. A style gets strands after the game has shown it once and the launcher has converted it (see Preparation).",
+   "Beta: shows hair as individual ray-traced strands instead of flat cards. A style gets strands after the game has shown it once and the launcher has converted it. Turns on and off while playing.",
    Kind::Choice, Apply::Live, "Turns on and off while playing (also with its keyboard shortcut). If the game started with RTX Hair off, physical hair ray origins wait for a restart.", false,
    {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}, {"rt_hair_capture", "0"}}, {}, {}, false, false, false, Apply::Live},
     // Review 2026-11-08 (docs/RTX_HAIR_PRIMARY.md 5j): On is the one coherent strand path, the qualified bundle: header in

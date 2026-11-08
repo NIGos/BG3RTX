@@ -93,6 +93,17 @@ int main(int argc,char** argv){
     kb.handle(R"({"type":"shortcut","id":"hotkey_rtx_hair","value":"None"})");check(ks.shortcuts[2]=="None"&&kb.dirty()==1);
     kb.handle(R"({"type":"discard"})");check(ks.shortcuts[2]=="Ctrl+Shift+F7"&&kb.dirty()==0);
   }
+  {
+    // Hotkeys page: every binding of common/hotkeys.h and its default; a change may not repeat any other binding.
+    launcher::State ws;ws.base={{"dev","0"}};ws.values=st::preset_values(st::kHigh);
+    launcher::web::Bridge wb(ws);const auto json=wb.state_json();
+    for(size_t i=0;i<launcher::kShortcutCount;++i){
+      check(json.find(std::string("\"")+bg3::hotkeys::ids[i]+"\":\""+ws.shortcuts[i]+"\"")!=std::string::npos);
+      check(json.find(std::string("\"")+bg3::hotkeys::ids[i]+"\":\""+bg3::hotkeys::defaults[i]+"\"",json.find("\"shortcutDefaults\""))!=std::string::npos);
+    }
+    wb.handle(R"({"type":"shortcut","id":"hotkey_rt_toggle","value":"Ctrl+Shift+F8"})");check(ws.shortcuts[0]=="Ctrl+Shift+F9"&&wb.dirty()==0);
+    check(wb.handle(R"({"type":"shortcut","id":"hotkey_unknown","value":"Alt+U"})").find("Unknown keyboard shortcut")!=std::string::npos);
+  }
   // One option turns on what it needs: Strand hair on screen from all-off (Ray-tracing detail full) raises
   // Strand hair in RT lighting and Hair shadows; the saved file has the whole user-tested strand set.
   {

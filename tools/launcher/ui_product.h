@@ -98,7 +98,7 @@ static LRESULT CALLBACK focusproc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD
     else if((w>=VK_F1&&w<=VK_F12)||(w>='A'&&w<='Z')||(w>='0'&&w<='9'))
       k={unsigned(w),unsigned(((GetKeyState(VK_CONTROL)&0x8000)?1:0)|((GetKeyState(VK_SHIFT)&0x8000)?2:0)|((GetKeyState(VK_MENU)&0x8000)?4:0)),true};
     if(k.valid){auto value=bg3::hotkeys::format(k);
-      auto error=bg3::hotkeys::validate_change_at(g.st.shortcuts,i,value);
+      auto error=bg3::hotkeys::validate_change_at(g.st.shortcuts.data(),i,value);
       if(error.empty()){g.st.shortcuts[i]=value;SetWindowTextW(h,widen(value).c_str());status(L"Keyboard shortcut changed. Save to apply.");}
       else status(widen(error));
     }
@@ -251,7 +251,7 @@ static void browse() {
 }
 static void report_problem() { launcher::web::native_report(g.wnd); }
 static bool save(bool) {
-  auto shortcut_error=bg3::hotkeys::validate_all(g.st.shortcuts);
+  auto shortcut_error=bg3::hotkeys::validate_all(g.st.shortcuts.data());
   if(!shortcut_error.empty()){status(widen(shortcut_error));return false;}
   if(!g.st.settings_readable){status(L"Settings could not be read. Close and retry before saving.");return false;}
   auto preview=st::preview_dependencies(g.st.values,effective_settings(),g.st.caps,false,g.dev,g.experimental,opt_in());
@@ -343,7 +343,7 @@ static void command(int id,int code,HWND source) {
     case CLOSE:SendMessageW(g.wnd,WM_CLOSE,0,0);break;
     case BROWSE:browse();break;
     case HK_RT_RESET:case HK_NR_RESET:{int i=id==HK_RT_RESET?0:1;auto value=std::string(bg3::hotkeys::defaults[i]);
-      auto error=bg3::hotkeys::validate_change_at(g.st.shortcuts,i,value);
+      auto error=bg3::hotkeys::validate_change_at(g.st.shortcuts.data(),i,value);
       if(error.empty()){g.st.shortcuts[i]=value;rebuild();}else status(widen(error));break;}
     case NR_BROWSE:g.st.dlss5_runtime_path=launcher::dlss5::browse(g.wnd,g.st.dlss5_runtime_path);g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);status(L"Runtime file selected. Save and restart the game to apply.");rebuild();break;
     case NR_CLEAR:g.st.dlss5_runtime_path.clear();g.st.dlss5_runtime_status=launcher::dlss5::discovery_status(g.st,g.dir);status(L"DLSS 5 will look in the game folder. Save to keep this change.");rebuild();break;
