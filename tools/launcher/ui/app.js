@@ -16,7 +16,7 @@ let state = null;
 const sampleView=query.get('view')||'';
 // Review views (--screenshot-view) open the page they show.
 const viewSection={missing:'Support',probe:'Support',support:'Support',surfaces:'Surfaces',performance:'Performance',experimental:'Experimental',advanced:'Advanced'};
-let section = query.get('section') || viewSection[sampleView] || 'Lighting';
+let section = query.get('section') || viewSection[sampleView] || 'Home';
 let experimentalOpen = query.has('experimental')||sampleView==='experimental';
 const disclosureState=new Map();
 let reportSignature=null;
@@ -35,9 +35,11 @@ const icons = {
 };
 function icon(name) {const s=el('span','icon');s.setAttribute('aria-hidden','true');s.innerHTML='<svg viewBox="0 0 24 24" focusable="false">'+icons[name]+'</svg>';return s;}
 icons['DLSS 5']=icons.Performance;
-const sections = ['Lighting','Surfaces','DLSS 5','Performance','Experimental','Advanced','Support'];
+icons.Home='<path d="M3.5 11 12 4l8.5 7"/><path d="M5.8 9.3v10.2h12.4V9.3"/><path d="M10 19.5v-5.2h4v5.2"/>';
+const sections = ['Home','Lighting','Surfaces','DLSS 5','Performance','Experimental','Advanced','Support'];
 const labels = {Support:'Help & support'};
 const leads = {
+ Home:'Play, RTX Hair, shader preparation and the main performance options.',
  Lighting:'Ray-traced shadows, bounced light and the strength of the mod.',
  Surfaces:'Reflections, water and post-effect smoothing.',
  Performance:'Frame rate, latency and frame generation.',
@@ -98,21 +100,9 @@ function card(s) {
  let [description,cost]=splitCost(s.description||s.summary||'');
  if(optInPage(s))description=description.replace(/^Experimental:\s*/,'').replace(/^./,x=>x.toUpperCase());
  c.append(el('p','description',description+(s.developer?' GPU cost: '+(s.cost||'Not measured.') : '')));
- const needs=el('p','needs');needs.id='needs-'+s.id;needs.append(icon('Needs'),el('span','',needsText(s)));needs.hidden=!needsText(s);c.append(needs);
- const foot=el('div','card-foot'),control=el('div','control');
- const choices=s.choices||[];
+ const [needs,control]=settingControl(s);c.append(needs);
+ const foot=el('div','card-foot');
  if(s.custom)foot.append(el('p','help-copy','Custom value kept. Choose an option to replace it.'));
- if(choices.length===2&&choices[0].label==='Off'&&plainLabel(s,choices[1].label)==='On') {
-  const l=el('label','toggle'),i=el('input');i.type='checkbox';i.checked=s.value===choices[1].value;i.disabled=choices[i.checked?0:1].enabled===false;i.setAttribute('aria-label',s.title||s.label);i.title=[choices[i.checked?0:1].apply,choices[i.checked?0:1].reason].filter(Boolean).join('. ');i.onchange=()=>send('set',{id:s.id,value:choices[i.checked?1:0].value});l.append(i,el('span'));control.append(l,el('span','toggle-state',i.checked?'On':'Off'));
- } else if(choices.length) {
-  choiceControl(s,control,needs.id);
- } else if(s.min!==undefined) {
-  const isOff=s.hasOff&&s.value===0;
-  if(s.hasOff){const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',s.title||s.label);const off=el('button',isOff?'on':'','Off');off.setAttribute('aria-pressed',String(isOff));off.onclick=()=>send('set',{id:s.id,value:0});const on=el('button',!isOff?'on':'','On');on.setAttribute('aria-pressed',String(!isOff));on.onclick=()=>send('set',{id:s.id,value:isOff?s.min:s.value});seg.append(off,on);control.append(seg);}
-  const valueText=value=>String(value)+(s.unit?(s.unit==='%'?'':' ')+s.unit:'');
-  const i=el('input');i.type='range';i.min=s.min;i.max=s.max;i.step=s.step||1;i.value=isOff?s.min:s.value;i.disabled=isOff;i.setAttribute('aria-label',s.title||s.label);i.setAttribute('aria-valuetext',isOff?'Off':valueText(s.value));const out=el('output','range-value',isOff?'Off':valueText(s.value));i.oninput=()=>{out.textContent=valueText(i.value);i.setAttribute('aria-valuetext',valueText(i.value));};i.onchange=()=>send('set',{id:s.id,value:Number(i.value)});control.className+=' range';control.append(i,out);
- } else control.append(el('span','help-copy',s.value===-1?'Custom value preserved':String(s.value??'Unknown')));
- [...control.querySelectorAll('button,input')].forEach((e,index)=>{e.id='control-'+s.id+'-'+index;if(e.type==='checkbox')e.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();e.click();}};e.setAttribute('aria-describedby',needs.id);});
  foot.append(control);
  if(cost)foot.append(el('p','cost',cost));
  if(s.developer){const badges=el('div','row');if(measured(s.cost))badges.append(pill(s.cost,'cost'));if(measured(s.vram))badges.append(pill(s.vram,'vram'));if(s.maturity==='experimental')badges.append(pill('Experimental','exp'));if(badges.children.length)foot.append(badges);}
@@ -131,6 +121,24 @@ function card(s) {
  }
  c.append(foot);
  return c;
+}
+// The control of one setting and its unmet-requirements line, shared by the setting cards and the Home shortcuts
+// (same ids, same 'set' messages; Home and the setting's own page are never shown together).
+function settingControl(s) {
+ const needs=el('p','needs');needs.id='needs-'+s.id;needs.append(icon('Needs'),el('span','',needsText(s)));needs.hidden=!needsText(s);
+ const control=el('div','control'),choices=s.choices||[];
+ if(choices.length===2&&choices[0].label==='Off'&&plainLabel(s,choices[1].label)==='On') {
+  const l=el('label','toggle'),i=el('input');i.type='checkbox';i.checked=s.value===choices[1].value;i.disabled=choices[i.checked?0:1].enabled===false;i.setAttribute('aria-label',s.title||s.label);i.title=[choices[i.checked?0:1].apply,choices[i.checked?0:1].reason].filter(Boolean).join('. ');i.onchange=()=>send('set',{id:s.id,value:choices[i.checked?1:0].value});l.append(i,el('span'));control.append(l,el('span','toggle-state',i.checked?'On':'Off'));
+ } else if(choices.length) {
+  choiceControl(s,control,needs.id);
+ } else if(s.min!==undefined) {
+  const isOff=s.hasOff&&s.value===0;
+  if(s.hasOff){const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',s.title||s.label);const off=el('button',isOff?'on':'','Off');off.setAttribute('aria-pressed',String(isOff));off.onclick=()=>send('set',{id:s.id,value:0});const on=el('button',!isOff?'on':'','On');on.setAttribute('aria-pressed',String(!isOff));on.onclick=()=>send('set',{id:s.id,value:isOff?s.min:s.value});seg.append(off,on);control.append(seg);}
+  const valueText=value=>String(value)+(s.unit?(s.unit==='%'?'':' ')+s.unit:'');
+  const i=el('input');i.type='range';i.min=s.min;i.max=s.max;i.step=s.step||1;i.value=isOff?s.min:s.value;i.disabled=isOff;i.setAttribute('aria-label',s.title||s.label);i.setAttribute('aria-valuetext',isOff?'Off':valueText(s.value));const out=el('output','range-value',isOff?'Off':valueText(s.value));i.oninput=()=>{out.textContent=valueText(i.value);i.setAttribute('aria-valuetext',valueText(i.value));};i.onchange=()=>send('set',{id:s.id,value:Number(i.value)});control.className+=' range';control.append(i,out);
+ } else control.append(el('span','help-copy',s.value===-1?'Custom value preserved':String(s.value??'Unknown')));
+ [...control.querySelectorAll('button,input')].forEach((e,index)=>{e.id='control-'+s.id+'-'+index;if(e.type==='checkbox')e.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();e.click();}};e.setAttribute('aria-describedby',needs.id);});
+ return [needs,control];
 }
 // Segmented choices size to their labels; a card too narrow for them gets the dropdown instead.
 function fitChoices() {
@@ -180,31 +188,92 @@ function shortcutsCard(id) {
 // First-run preparation (docs/RTX_HAIR_ROADMAP.md 2b, tools/launcher/preparation.cpp): the host sends
 // state.preparation = {items:[{id,title,line,detail,progress?,state}],whilePlaying,paused,pausable}. Convert all is gone with the
 // runtime capture (only styles the game drew can be converted). Actions apply at once (no Save): pause/resume, whilePlaying.
+// Rows and hair actions are shared with the Home page (same ids and 'prep' messages; never shown together).
+function prepRow(p,titled=true) {
+ const badges={done:'Ready',running:'Working',waiting:'Waiting',paused:'Paused',unavailable:'Unavailable',failed:'Stopped'};
+ const row=el('div','prep-item'),head=el('div','prep-head');row.id='prep-'+p.id;
+ const badge=el('span','badge'+(p.state==='paused'||p.state==='failed'?' restart':''),badges[p.state]||p.state||'');
+ head.append(el('span','prep-title',titled?p.title:'Preparation'),badge);
+ row.append(head,el('p','description',p.line||''));
+ if(typeof p.progress==='number'&&p.state!=='done'&&p.state!=='unavailable'){const bar=el('progress');bar.max=1;bar.value=p.progress;bar.setAttribute('aria-label',p.title+' progress');row.append(bar);}
+ if(p.detail)row.append(el('p','cost',p.detail));
+ return row;
+}
+function prepActions(prep) {
+ const hair=(prep.items||[]).find(p=>p.id==='hair');
+ if(!hair||hair.state==='unavailable')return null;
+ const foot=el('div','card-foot');
+ if(prep.pausable){const b=el('button','btn',prep.paused?'Resume':'Pause');b.id='prep-pause';b.onclick=()=>send('prep',{action:prep.paused?'resume':'pause',value:0});foot.append(b);}
+ const when=el('div','seg prep-when');when.setAttribute('role','group');when.setAttribute('aria-label','When to convert');
+ [['Game closed',0],['Also while playing',1]].forEach(([text,value])=>{const on=!!prep.whilePlaying===!!value,b=el('button',on?'on':'',text);b.id='prep-when-'+value;b.setAttribute('aria-pressed',on?'true':'false');b.onclick=()=>send('prep',{action:'whilePlaying',value});when.append(b);});
+ foot.append(el('p','help-copy','When to convert. While playing it uses one core at low priority.'),when);
+ return foot;
+}
 function preparationCard(prep) {
  const box=el('article','card preparation');box.id='preparation';box.append(el('h3','','Preparation'));
- const badges={done:'Ready',running:'Working',waiting:'Waiting',paused:'Paused',unavailable:'Unavailable',failed:'Stopped'};
- (prep.items||[]).forEach(p=>{
-  const row=el('div','prep-item'),head=el('div','prep-head');row.id='prep-'+p.id;
-  head.append(el('span','prep-title',p.title),el('span','badge'+(p.state==='paused'||p.state==='failed'?' restart':''),badges[p.state]||p.state||''));
-  row.append(head,el('p','description',p.line||''));
-  if(typeof p.progress==='number'&&p.state!=='done'&&p.state!=='unavailable'){const bar=el('progress');bar.max=1;bar.value=p.progress;bar.setAttribute('aria-label',p.title+' progress');row.append(bar);}
-  if(p.detail)row.append(el('p','cost',p.detail));
-  box.append(row);
- });
- const hair=(prep.items||[]).find(p=>p.id==='hair');
- if(hair&&hair.state!=='unavailable'){
-  const foot=el('div','card-foot');
-  if(prep.pausable){const b=el('button','btn',prep.paused?'Resume':'Pause');b.id='prep-pause';b.onclick=()=>send('prep',{action:prep.paused?'resume':'pause',value:0});foot.append(b);}
-  const when=el('div','seg prep-when');when.setAttribute('role','group');when.setAttribute('aria-label','When to convert');
-  [['Game closed',0],['Also while playing',1]].forEach(([text,value])=>{const on=!!prep.whilePlaying===!!value,b=el('button',on?'on':'',text);b.id='prep-when-'+value;b.setAttribute('aria-pressed',on?'true':'false');b.onclick=()=>send('prep',{action:'whilePlaying',value});when.append(b);});
-  foot.append(el('p','help-copy','When to convert. While playing it uses one core at low priority.'),when);
-  box.append(foot);
- }
+ (prep.items||[]).forEach(p=>box.append(prepRow(p)));
+ const actions=prepActions(prep);if(actions)box.append(actions);
  return box;
+}
+function presetButtons(root) {
+ root.replaceChildren();
+ ['Low','Medium','High','Ultra'].forEach((name,index)=>{const on=!state.custom&&state.preset===index,b=el('button',on?'on':'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',on?'true':'false');b.title=[state.presetDescriptions?.[index],index===state.recommendedPreset?'Suggested for this GPU; performance varies.':''].filter(Boolean).join('\n');b.onclick=()=>send('preset',{value:index});root.append(b);});
+ if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');root.append(custom);}
+}
+// Home: shortcuts to the most used controls. No state of its own: the same settings rows, preparation data and
+// 'set' / 'prep' / 'preset' / 'play' messages as their own pages. The header's preset and GPU line move into the Play card.
+const homePerformance=['exp_gi_rt_pipeline','exp_gi_rt_pipeline_reorder','frame_generation'];
+// One line per item: the description's first sentence, up to a colon that starts its explanation.
+const firstSentence=text=>{const m=/^.*?[.!?](?=\s|$)/.exec(text||'');return (m?m[0]:text||'').replace(/^Beta:\s*(.)/,(_,x)=>x.toUpperCase()).replace(/:\s.*$/,'.');};
+function homeRow(s) {
+ const row=el('div','home-row');row.id='home-row-'+s.id;
+ const head=el('div','home-row-head');head.append(el('span','prep-title',s.title||s.label),applyBadge(s.apply||'',s.choices));
+ const [needs,control]=settingControl(s);
+ row.append(head,el('p','description',firstSentence(splitCost(s.description||'')[0])),needs,control);
+ return row;
+}
+function renderHome(root) {
+ const grid=el('div','grid home');
+ const setting=id=>(state.settings||[]).find(s=>s.id===id&&!s.developer);
+ const play=el('article','card home-play');play.id='home-play-card';
+ const head=el('div','card-head');head.append(el('h3','','Play'));play.append(head);
+ const group=el('div','preset-group'),label=el('span','label','Preset'),presets=el('div','presets');label.id='home-preset-label';presets.id='home-presets';presets.setAttribute('role','group');presets.setAttribute('aria-labelledby','home-preset-label');presetButtons(presets);group.append(label,presets);
+ const facts=[state.version?'BG3RTX '+state.version:'',[state.compatibility?.gpu,measured(state.compatibility?.vram)?state.compatibility.vram:null].filter(Boolean).join(' · ')||'GPU not detected',state.modStatus||'Mod files not checked'].filter(Boolean);
+ const status=el('p','description home-facts',facts.join(' · '));status.id='home-status';
+ const go=el('button','btn play','Play');go.id='home-play';go.disabled=!state.canPlay;go.onclick=()=>send('play');
+ const row=el('div','home-play-row');row.append(group,go);
+ play.append(row,status,el('p','cost','Play saves your settings first, then starts the game with BG3RTX.'));
+ grid.append(play);
+ const prep=state.preparation||{},items=prep.items||[];
+ const hairSetting=setting('exp_hair_groom_primary'),hairPrep=items.find(p=>p.id==='hair');
+ if(hairSetting||hairPrep){
+  const hair=el('article','card');hair.id='home-hair';
+  const h=el('div','card-head');h.append(el('h3','','RTX Hair'));
+  if(hairSetting){
+   h.append(applyBadge(hairSetting.apply||'',hairSetting.choices));hair.append(h,el('p','description',firstSentence(hairSetting.description)));
+   const [needs,control]=settingControl(hairSetting);hair.append(needs,control);
+  } else hair.append(h);
+  if(hairPrep){hair.append(prepRow(hairPrep,false));const actions=prepActions(prep);if(actions)hair.append(actions);}
+  grid.append(hair);
+ }
+ const shaders=el('article','card');shaders.id='home-shaders';shaders.append(el('h3','','Shaders'));
+ const shaderPrep=items.find(p=>p.id==='shaders');
+ if(shaderPrep)shaders.append(prepRow(shaderPrep,false));
+ else shaders.append(el('p','description','The shader status appears here after the launcher has checked the mod files.'));
+ grid.append(shaders);
+ const perf=homePerformance.map(setting).filter(Boolean);
+ if(perf.length){
+  const box=el('article','card');box.id='home-performance';box.append(el('h3','','Performance'));
+  perf.forEach(s=>box.append(homeRow(s)));
+  const more=el('button','btn link-btn','All performance options');more.id='home-more-performance';more.onclick=()=>{section='Performance';render(state);$('main').scrollTop=0;};
+  box.append(more);grid.append(box);
+ }
+ root.append(grid);fitChoices();
 }
 function renderSettings() {
  const root=$('section-content');rememberDisclosures(root);root.replaceChildren();
  sectionHead(root,section);
+ if(section==='Home'){renderHome(root);return;}
  if(section==='Support') {
   const grid=el('div','grid support');
   if((state.preparation?.items||[]).length)grid.append(preparationCard(state.preparation));
@@ -221,7 +290,7 @@ function renderSettings() {
   root.append(grid);
   const foot=el('div','page-foot');const notices=el('a','link','Fonts and third-party notices');notices.href='https://app.bg3rtx.local/notices';notices.onclick=e=>{e.preventDefault();send('notices');};foot.append(notices,el('p','help-copy',"Independent fan mod; not affiliated with the game's developers."));root.append(foot);return;
  }
- const lightingOrder=["rt_geometry", "rr", "sun_shadows", "gi", "exp_hidden_surface", "local_shadows", "box_lights", "exp_native_coverage", "rt_intensity"];
+ const lightingOrder=["rt_geometry", "rr", "sun_shadows", "gi", "exp_hidden_surface", "local_shadows", "box_lights", "exp_native_coverage", "exp_hair_groom_primary", "rt_intensity"];
  const all=(state.settings||[]).filter(s=>section==='Developer'?state.developer&&s.developer:s.category===section&&!s.developer);
  const performanceOrder=['frame_generation','reflex','fps_cap'];
  if(section==='Performance')all.sort((a,b)=>{const rank=s=>performanceOrder.includes(s.id)?performanceOrder.indexOf(s.id):performanceOrder.length;return rank(a)-rank(b);});
@@ -263,7 +332,8 @@ function render(next) {
  if(['Developer','Memory'].includes(section)&&!state.developer)section='Lighting';
  if(section==='Experimental'&&!releaseOptIn())section='Lighting';
  $('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
- const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const on=!state.custom&&state.preset===index,b=el('button',on?'on':'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',on?'true':'false');b.title=[state.presetDescriptions?.[index],index===state.recommendedPreset?'Suggested for this GPU; performance varies.':''].filter(Boolean).join('\n');b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
+ // Home shows the preset and the GPU line in its Play card instead of the header (one set of preset ids at a time).
+ $('header').hidden=section==='Home';if(section==='Home')$('presets').replaceChildren();else presetButtons($('presets'));
  renderNavigation();
  $('hero-version').textContent=state.version||'Version unavailable';
  $('hero-gpu').textContent=[state.compatibility?.gpu,measured(state.compatibility?.vram)?state.compatibility.vram:null].filter(Boolean).join(' · ')||'Not detected';
@@ -306,15 +376,18 @@ if(sample) {
  ['box_lights','Interior light shadows','Lighting',['Off','On'],1,'Adds shadows from rectangular interior lights that are meant to cast them. About 0.13 ms on an RTX 5090 at Grymforge.'],
  ['rr_post_temporal','Depth of field and bloom smoothing','Surfaces',['Off','On'],1,'Blends background blur and bloom across frames to smooth fine edges. About 0.15 ms on an RTX 5090 in dialogue.'],
  ['exp_native_coverage','Hair shadows','Lighting',['Off','On'],1,"Adds shadows and contact shading from the game's hair, including on faces and necks."],
+ ['exp_hair_groom_primary','RTX Hair','Lighting',['Off','On'],1,'Beta: shows hair as individual ray-traced strands instead of flat cards. A style gets strands after the game has shown it once and the launcher has converted it (see Preparation).'],
+ ['exp_gi_rt_pipeline','Faster bounce light tracing','Performance',['Off','On'],1,"Traces the off-screen bounce light with the GPU's ray tracing pipeline instead of a compute pass: the same lighting, about 2 ms faster on an RTX 5090."],
+ ['exp_gi_rt_pipeline_reorder','Bounce trace reordering','Performance',['Off','By hit kind','By hit kind and object'],1,'Sorts the bounce rays by what they hit before shading them (shader execution reordering): about 1.5 ms faster at the camp and 0.8 ms at the inn on top of the faster bounce light tracing, same lighting.'],
  ['reflections','Reflections','Surfaces',['Off','Glossy','Standard','Rough'],3,'Adds reflections to smooth surfaces and, at higher levels, rougher surfaces.'],
  ['exp_water','Water lighting','Surfaces',['Off','Reflections','Reflections and shadows','Include refraction'],3,'Adds water reflections, shadows and a distorted view of the riverbed or pool floor.'],
  ['frame_generation','Frame Generation','Performance',['Off','2x','3x','4x'],1,'Adds generated frames between rendered frames for smoother motion.'],
  ['fps_cap','Rendered frame limit','Performance',[],58,'Limits the frame rate before Frame Generation adds frames.'],
  ['reflex','NVIDIA Reflex','Performance',['Off','On','On + Boost'],1,'Reduces latency; frame generation requires On or Boost.'],
  ['detailed_logging','Detailed logging','Support',['Off','On'],0,'Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.']
- ].map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(levels),cost:'Not measured (sample)',apply:['rt_geometry','exp_hidden_surface','exp_native_coverage','exp_water','frame_generation','detailed_logging'].includes(id)?'Restart the game to apply':'Applies after saving',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
+ ].map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(levels),cost:'Not measured (sample)',apply:['rt_geometry','exp_hidden_surface','exp_hair_groom_primary','exp_native_coverage','exp_water','frame_generation','detailed_logging'].includes(id)?'Restart the game to apply':'Applies after saving',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
  // The WebView host sends its review state (real settings table); a plain browser uses this sample.
- if(!window.chrome?.webview){render({type:'state',version:'0.9.5.0',modStatus:'Sample preview; game launch disabled',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview',preparation:{items:[
+ if(!window.chrome?.webview){render({type:'state',version:'0.9.5.0',modStatus:'Mod files present',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview',preparation:{items:[
   {id:'hair',title:'Strand hair',line:'412 of 559 styles ready, 1.1 GB on disk.',detail:'Converting named characters, about 35 min left.',progress:0.74,state:'running'},
   {id:'shaders',title:'Shaders',line:'Ready. 12 compiled now.',detail:'Your graphics driver still builds the first ray tracing pipeline in game, about a minute.',state:'done'}],
   convertAll:false,whilePlaying:false,paused:false,pausable:true}});

@@ -389,11 +389,11 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live; supported LSS hardware required; styles get strands once captured and converted", false,
    {{"off", "Off", 0, {{"rt_hair_groom", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Advanced", {"Measured", "RT -1.1-1.5 ms; GI -1.6-1.8 ms; refit +0.57 ms", "Unknown", "RTX 5090; Dialogue1 versus native cards. Reference only; qualification incomplete."}, "Uses strands in RT shadows/AO/GI/reflections. Inspect hair shadows on faces and necks in Dialogue1."},
+   {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"}}, true, "Advanced", {"Measured", "RT -1.1-1.5 ms; GI -1.6-1.8 ms; refit +0.57 ms", "Unknown", "RTX 5090; Dialogue1 versus native cards. Reference only; qualification incomplete."}, "Uses strands in RT shadows/AO/GI/reflections. Inspect hair shadows on faces and necks in Dialogue1."},
 
-  {"exp_hair_groom_primary", "Strand hair on screen",
-   "Experimental: displays converted hairstyles as individual strands.",
-   Kind::Choice, Apply::Restart, "restart required: strands on screen, the hair ray-origin reservation and the world-space tangent are set up at startup", false,
+  {"exp_hair_groom_primary", "RTX Hair",
+   "Beta: shows hair as individual ray-traced strands instead of flat cards. A style gets strands after the game has shown it once and the launcher has converted it (see Preparation).",
+   Kind::Choice, Apply::Restart, "Restart the game to turn on or off.", false,
    {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}, {"rt_hair_capture", "0"}}, {}, {}, false, false, false, Apply::Restart},
     // Review 2026-11-08 (docs/RTX_HAIR_PRIMARY.md 5j): On is the one coherent strand path, the qualified bundle: header in
     // G-buffer order decided at submit (order, current), per-frame trace tags, LOD keep, coverage hold and the
@@ -412,7 +412,7 @@ inline constexpr Knob kKnobs[] = {
       {"rt_hair_fibre_gi", "1"}, {"rt_hair_fibre_spec", "1"}, {"rt_hair_fibre_mapped", "1"},
       {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, true, "Advanced", {}, "Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified; turning it on needs a game restart."},
+   {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified; turning it on needs a game restart."},
 
   {"exp_hair_fibre", "Physical strand shading",
    "Experimental: gives on-screen hair brighter, warmer shading.",
@@ -1511,7 +1511,14 @@ inline bool raise_needs(std::vector<int>& values, int i, int c, bool dev, bool e
       if (!n.knob) continue;
       const int j = knob_index(n.knob);
       if (j < 0 || v[j] >= n.min_choice) continue;
-      if (v[j] < 0 || !choice_available(kKnobs[j], n.min_choice, dev, experimental, caps, opt_in)) return false;
+      // A developer-only need of a visible knob is raised with it when it is supported and qualified (RTX Hair, 0.9.5:
+      // its strands-in-RT part, exp_hair_groom, is not a release card of its own). Experimental or unsupported needs
+      // still raise nothing.
+      const bool hidden_part = !knob_visible(kKnobs[j], dev, opt_in) && knob_visible(kKnobs[ki], dev, opt_in) &&
+                               choice_supported(kKnobs[j], n.min_choice, caps) && !choice_requires_experimental(kKnobs[j], n.min_choice);
+      // (A hidden knob holds -1, "preserve", in release: as its raised part it takes the needed choice.)
+      if ((v[j] < 0 && !hidden_part) || !(choice_available(kKnobs[j], n.min_choice, dev, experimental, caps, opt_in) || hidden_part))
+        return false;
       v[j] = n.min_choice;
       if (std::find(changed.begin(), changed.end(), j) == changed.end()) changed.push_back(j);
       if (changed.size() > size_t(kKnobCount)) return false;

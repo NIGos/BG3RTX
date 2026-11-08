@@ -40,8 +40,9 @@ reports. Each card shows how a change applies: "Applies after saving", "May brie
 
 Visible hair is the game's stock hair. With Hair shadows On, the game's hair and scalp cast
 ray-traced shadows. The first start after turning it on compiles shaders and can pause or stutter.
-No replacement hair is included in this release. The Experimental page shows only Water surface
-reflections in this release; strand hair returns there with its post-release update.
+No replacement hair files are included. **Lighting > RTX Hair** (beta, Off in every preset; restart the game to turn
+it on or off) shows hair as ray-traced strands: a style gets strands after the game has shown it once and the launcher
+has converted it (Help & support > Preparation). The Experimental page shows only Water surface reflections.
 
 Off-screen bounce light also carries light from glowing surfaces. Far extends sunlight bounce to 6 m.
 Interior light shadows respect the game's shadow flags, including lights whose shadows were

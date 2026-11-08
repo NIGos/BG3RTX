@@ -158,7 +158,30 @@ int main(int argc,char** argv){
       const auto before=s.values;bridge.handle("{\"type\":\"set\",\"id\":\""+std::string(k.id)+"\",\"value\":"+std::to_string(c)+"}");check(s.values==before);
     }
   }
-  check(visible==19);   // 17 + exp_gi_rt_pipeline and exp_gi_rt_pipeline_reorder (release controls, 2026-11-08)
+  check(visible==20);   // 17 + exp_gi_rt_pipeline and exp_gi_rt_pipeline_reorder (2026-11-08) + RTX Hair (0.9.5 release)
+  // RTX Hair (0.9.5, user request): a fresh release profile on capable hardware turns it on with one click on the
+  // Lighting page; every prerequisite is raised (none hidden left Off) and Save writes the whole strand bundle.
+  {
+    launcher::State fresh;fresh.caps=~0u;fresh.base=st::code_defaults();fresh.base["dev"]="0";
+    fresh.preset=st::kHigh;fresh.values=st::preset_values(st::kHigh);
+    std::string file;launcher::web::Hooks fh;
+    fh.save=[&](launcher::State& c,const st::KVList&,std::string&){file=st::render_user_ini("",c.preset,c.values);return true;};
+    launcher::web::Bridge fb(fresh,fh);
+    const int rtx=st::knob_index("exp_hair_groom_primary");
+    const std::string card=fb.state_json();
+    check(card.find("\"id\":\"exp_hair_groom_primary\",\"title\":\"RTX Hair\"")!=std::string::npos&&card.find("\"category\":\"Lighting\"")!=std::string::npos);
+    fb.handle("{\"type\":\"set\",\"id\":\"exp_hair_groom_primary\",\"value\":1}");
+    check(fresh.values[rtx]==1);
+    for(const auto& n:st::kKnobs[rtx].choices[1].need){if(!n.knob)continue;const int j=st::knob_index(n.knob);check(j>=0&&fresh.values[j]>=n.min_choice);}
+    for(const char* id:{"rt_geometry","exp_native_coverage"}){const auto& k=st::kKnobs[st::knob_index(id)];
+      for(const auto& n:st::kKnobs[st::knob_index("exp_hair_groom")].choices[1].need)if(n.knob&&std::string(n.knob)==id)check(fresh.values[st::knob_index(id)]>=n.min_choice&&st::knob_visible(k,false));}
+    fb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");fb.handle("{\"type\":\"confirm\"}");
+    const auto saved=st::parse_ini(file);
+    for(const char* key:{"rt_hair_groom_primary","rt_hair_groom","rt_hair_capture","rt_hair_fibre"}){
+      if(st::lookup(saved,key)!="1")std::printf("RTX Hair save: %s=%s\n",key,st::lookup(saved,key).c_str());
+      check(st::lookup(saved,key)=="1");
+    }
+  }
   // Support edits stay independent of the rendering preset and last-session evidence.
   {
     launcher::State ls;ls.caps=~0u;ls.base={{"dev","0"}};ls.values=st::preset_values(st::kHigh);ls.preset=st::kHigh;
