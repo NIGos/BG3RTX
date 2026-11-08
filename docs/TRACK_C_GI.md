@@ -712,7 +712,15 @@ Qualification (user decisions 2026-11-08; on in every preset since claude/gi-rt-
   energy shift is shown. The emission variant ran as a ray tracing pipeline, FG status 0x0, no device loss.
 - User: "in game mi sembra tutto ok, quindi se gira meglio teniamolo", then "perchè non attivarlo sempre?". So
   exp_gi_rt_pipeline is a qualified Performance control, preset On everywhere, code default 1. It is a no-op without
-  the hit-GI trace (hit_gi_dispatch is the key's only reader); gi_rt_pipeline_reorder stays developer only, 0.
+  the hit-GI trace (hit_gi_dispatch is the key's only reader).
+- SER default (claude/gi-ser-default): gi_rt_pipeline_reorder=1 (by hit kind, constant 1050 = 2) in every preset and as
+  the code default, a normal Performance control. Live, on the ray tracing pipeline trace: camp -1.5 / -1.6 ms (two
+  runs) and -1.6 ms; inn -0.8 ms in one clean window; energy unchanged; 4 runs with no device loss and no nv153.
+  The committed rule needed both scenes beyond the OFF spread. The inn is unproven (one window; the inn's scene thread
+  hits wait timeouts in its OFF windows), so this ships on the user's decision of 2026-11-08 ("Yes, turn it on").
+  Device fallback: a driver that reports no reordering gets constant 1050 = 0, so no hint and no prepass (logged on
+  the path line). A device without the reorder extension keeps the compute trace, because the raygen modules
+  declare its capability.
 - Open caveat: one nvlddmkm event 153 (17:18:05, camp, first ON window). The GPU recovered; no device loss or fault
   line. Not explained. Check offline: frame_replay --ab-rgen with the Khronos validation layer and GPU-assisted
   validation on the three packs (the 64x64 fixture was clean). If it recurs live, use the VK_EXT_device_fault

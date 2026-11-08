@@ -334,13 +334,15 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"gi_rt_pipeline", "1"}}, {}, {}, false, false, false, Apply::Live}},
    {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "About -2 ms on the bounce light trace", "Under 1 MB", "RTX 5090, Ultra, live 2026-11-08: GI trace -2.0 ms at the inn (12.0 to 9.95 ms) and -2.1 ms at the camp; scene energy unchanged within noise."}, "Applies to Off-screen bounce light: without it this option does nothing. The first time, the pipeline builds for up to a minute while the usual trace keeps running. Without the GPU's ray tracing pipeline and reordering features the usual trace runs."},
 
+  // Shader execution reordering on the raygen trace: on by default (user decision 2026-11-08, "Yes, turn it on"). Live: camp
+  // -1.5 / -1.6 ms in two runs, inn -0.8 ms in one clean window; the committed two-scene rule was not met (inn unproven).
   {"exp_gi_rt_pipeline_reorder", "Bounce trace reordering",
-   "Experimental: sorts the bounce rays by what they hit before shading them (shader execution reordering). In offline tests it helped only at the camp.",
-   Kind::Choice, Apply::Hitch, "May briefly pause when changed", true,
+   "Sorts the bounce rays by what they hit before shading them (shader execution reordering): about 1.5 ms faster at the camp and 0.8 ms at the inn on top of the faster bounce light tracing, same lighting.",
+   Kind::Choice, Apply::Hitch, "May briefly pause when changed", false,
    {{"off", "Off", 0, {{"gi_rt_pipeline_reorder", "0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"kind", "By hit kind", kCapRayQuery, {{"gi_rt_pipeline_reorder", "1"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch},
     {"object", "By hit kind and object", kCapRayQuery, {{"gi_rt_pipeline_reorder", "2"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Advanced", {"Estimate", "Camp about -0.7 ms more; inn about +0.4 ms (offline replay)", "Unknown", "RTX 5090 offline replays against the plain ray tracing pipeline trace. Not yet measured in game."}, "Needs Ray-tracing pipeline bounce trace."},
+   {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "About -1.5 ms at the camp, -0.8 ms at the inn", "Unknown", "RTX 5090, Ultra, live 2026-11-08 on top of the ray tracing pipeline trace: camp -1.5 / -1.6 ms (two runs), inn -0.8 ms (one clean window); scene energy unchanged. Shipped on the user's decision; the inn result is one window."}, "Needs Faster bounce light tracing. By hit kind is the default; by hit kind and object is the alternative. Without the GPU's reordering support the rays are traced unsorted."},
   // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
   // stay off in every preset; hair origins and spill are developer-only until qualified.
   {"box_lights", "Interior light shadows",
@@ -842,7 +844,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_far", "0"},
     {"gi_far_m", "6"},
     {"gi_rt_pipeline", "1"},
-    {"gi_rt_pipeline_reorder", "0"},
+    {"gi_rt_pipeline_reorder", "1"},
     {"gi_far_roof_early", "1"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
