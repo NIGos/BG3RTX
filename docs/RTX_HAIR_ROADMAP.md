@@ -365,6 +365,7 @@ already builds, tests and packages C++ (no second toolchain in the build, merge-
   re-index at a level load, and a live run of capture -> conversion -> strands. (Done in 2e.)
 - Convert all, for the user: with grooms built from what the game draws, a style can only be converted after the
   game has shown it once, so there is nothing left to "convert all" ahead of time and the switch is gone.
+  (Back in 2f as an opt-in that reads the paks with the player's own granny2.dll.)
 
 ## 2e. Layer capture writer and groom re-index (2026-11-08; branch claude/hair-capture-writer, offline)
 - Key `rt_hair_capture` (startup; bg3rtx.ini 0; written 1 by "Strand hair on screen" On and 0 by Off).
@@ -416,6 +417,71 @@ already builds, tests and packages C++ (no second toolchain in the build, merge-
   "Strand hair on screen" required local groom files (kCapHairGrooms), so on a fresh install with
   no grooms it cannot be turned on and nothing is ever captured. With the capture model it should require only the
   hardware (the capture then fills the folder); left unchanged pending that decision.
+
+## 2f. Convert all styles from the player's own files (2026-11-09; branch claude/hair-convert-all, offline)
+Opt-in alternative to the capture model (2c-2e): every hair and beard row of the catalogue, before the game has shown
+it. Nothing of the game or of Granny is shipped: the paks are read in place (read-only) and GR2 sections are
+decompressed by a granny2.dll the player supplies. Without that DLL the mode is unavailable and the capture model stays.
+- **CLI (launcher hook).** `bg3rtx_hairconv --all --game "<BG3 folder or its Data>" --granny "<granny2.dll>" --out
+  <assetdb>\hair_grooms --report-dir %LOCALAPPDATA%\BG3RTX\hair_batch [--jobs J] [--threads N] [--check full|cheap]
+  [--accept-review] [--match <text>]... [--names <file>] [--limit N] [--json <file>]`. Dev only: `--export-hcap <dir>`
+  (each style's input as .hcap v1), `--dump-gr2 --game .. --granny .. <pak path> <out.bin>` (gr2_dump.ps1 layout).
+  Exit 0 done, 2 bad arguments, 3 granny2.dll missing or not Granny, 4 game packages or catalogue unreadable.
+  BelowNormal priority, a progress line every 30 s, resumable (state saved after every style).
+- **Pak reading** (tools/hairconv/pak.cpp, port of tools/assets/lspk.py / lsf.py / lsx.py, layouts from LSLib, MIT,
+  credited in docs/release/THIRD_PARTY.md): LSPK v18 list and entries, part files, override order (priority, patches,
+  name), LZ4 block and frame (own decoder). zstd and zlib entries are refused with a clear error: Patch 8 has 0 zstd
+  entries among .lsf, .GR2 and .DDS (all LZ4 or stored), and no zstd source is in external/ (not downloaded).
+- **Granny** (tools/hairconv/granny.cpp): `LoadLibraryEx` of the exact path given. Stock Granny 2.11.8 does not open
+  BG3's GR2 itself ("magic value doesn't match any known file format"), so, as LSLib does, the DLL only decompresses
+  the sections (BitKnit: GrannyBeginFileDecompression / DecompressIncremental / EndFileDecompression; Oodle:
+  GrannyDecompressData); header, section table, BitKnit-compressed relocation tables and the data-tree walk (by the
+  file's own member definitions) are ours. Read: mesh Name, Position and TextureCoordinates0 (Real32 or Real16) in
+  native vertex order, PrimaryTopology Indices / Indices16, BoneBindings, skeleton InverseWorldTransform (head proxy
+  as batch.py). Access faults in a malformed tree are caught per style.
+- **Catalogue** (tools/hairconv/catalogue.cpp): every */Content/*.lsf (3,295 files) -> VisualBank / MaterialBank /
+  TextureBank as mesh_materials.collect, rows as batch.styles (LOD 0/1, CHAR_Hair, ID_Depth_Root_Alpha_MSKA mask),
+  categories as reach.py (character creation, character visuals, 55 template files), tiers as prepare.py (companion,
+  player, named, hat, other, unused; LOD 0 before LOD 1). Cached in `<report-dir>\all_catalogue.tsv`, keyed by the
+  packages' names, sizes and write times.
+- **Masks**: DDS mip 0 decoded like Pillow (dds.cpp: 5:6:5 by bit replication; BC3 alpha truncated); all BG3 masks are
+  DXT5. Note: the layer capture's BC3 decode (common/hair_capture.h) widens by x 255 / 31 instead (1 level apart on
+  some endpoints).
+- **Incremental key**: converter version, check mode, mesh name, (package, offset, part, size) of the GR2 and the mask.
+  `<report-dir>\all_state.json`: one "name \t key \t record" line per style (record: the capture mode's fields plus
+  gr2, mesh, lod, mask, visual, category, tier, index_id, indices).
+- **Status** (`<report-dir>\preparation.json`, the file the Preparation card reads; same fields as the capture mode:
+  kind, ready, finished, needed, bytes, eta_s, state running/waiting/done, line, detail "Converting <tier>, about N min
+  left.", pid) plus: `source` "game" (the capture mode has none), `all` (catalogue rows), `convert_all` true, `review`,
+  `rejects`, `next_tier`, `tiers` [{tier, total, finished}], `run_done`, `run_total`, `granny` (version), `updated`.
+  Unavailable: `{"source": "game", "state": "unavailable", "error", "line": "Convert all styles is not available.",
+  "detail": <reason>}` with exit 3.
+- **Player-facing line for the UI**: "Convert all styles needs granny2.dll, which BG3RTX cannot include. If you have
+  LSLib's ExportTool (github.com/Norbyte/lslib, Releases), point to the granny2.dll in its folder."
+- **Equivalence** (`python -m tools.hair_groom.hairconv_all_compare`, 28 styles of the 2026-11-07 batch spread over the
+  strand counts, both LODs, all verdicts; outputs in .scratch): catalogue 1,217 rows identical to batch.styles on
+  mesh_materials; 28/28 GR2 dumps byte-identical to the cached LSLib dumps; 28/28 masks byte-identical to Pillow; 28/28
+  same index id and verdict (19 pass, 5 review, 4 reject). Strand counts differ from that batch by median 0.4%, max
+  1.2% (867 of 72,972): strands2d.trace links runs in `np.argsort(dist, axis=None)` order, numpy's non-stable SIMD
+  quicksort, so equal distances (common on real masks, rare on the synthetic masks of the 2d gate) are linked in an
+  implementation-defined order; the native tracer uses the stable (flat-index) order. With argsort made stable, the
+  Python reference equals the native records exactly on 28/28 (strands, segments, dedupe drops, grid, IoU / coverage /
+  radiance, verdict). The hcap3 live's -0.7% strands (2e) is likely the same effect. Fix for the reference: `kind=
+  "stable"` in strands2d.trace (a converter-version bump of the dev batch; not done here).
+- **Timing** (this PC, Ryzen 7 9800X3D, 16 threads, `--jobs 4 --threads 4`, full check, machine quiet): the whole
+  catalogue, 1,217 rows, in **532 s (8.9 min)**: index of 27 packages 0.8 s, catalogue 0.6 s, classification 0.2 s
+  (both cached for the next run), then about 137 styles per minute. Verdicts: 898 pass, 282 needs-review, 37 reject;
+  884 groom files, 2.72 GB (v3). On the 737 rows the Python batch also ran: 736 same verdicts and every written id
+  matches; the one flip (GoblinFemCut_Short_C_Spring: pass -> needs-review, "82 cards with the root away from the
+  head") is the argsort tie order at a review threshold. Strands vs that batch: median 0.38%, p95 1.1%, max 3.8%.
+  (Python batch: about 27 s per style per job, about 2.2 h with 3 jobs.) Scratch output deleted after the count.
+- CTest `hairconv_all_test`: synthetic LSPK (stored, LZ4 block, LSF with LZ4-frame sections, a zstd entry refused, a
+  patch overriding an entry, a part file skipped), catalogue and category, catalogue cache, Pillow-exact DXT5, a
+  synthetic uncompressed GR2 (relocations, Real16 UVs, Indices16, bones) read without granny2.dll, a BitKnit section
+  refused without it, and --all without / with a missing / with a non-Granny DLL: exit 3 and "unavailable".
+- Left: the launcher UI (another agent: a path picker and the line above; run this CLI instead of the capture command
+  when the player opts in); the seen list (hair_seen.txt) is not used in this mode (it orders by tier only); LSLib's
+  exact MIT text before distribution.
 
 ## 3. Converter quality and validation (OFFLINE-NOW)
 On screen: fewer fake tips (strands are 14 mm median pieces: crossings in the painted mask), no doubled
