@@ -1590,7 +1590,10 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     for (auto it = g_key_seen.begin(); it != g_key_seen.end();) it = it->second + kKeyForgetFrames < now ? g_key_seen.erase(it) : std::next(it);
   }
   g_coverage.hold = cfg_int("rt_hair_primary_hold", 0) != 0;   // once per publish (hysteresis, CoverageGate)
-  g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint  g_published = now + 1;
+  g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint
+  // Round 3 (aa98b960) had joined this statement into the comment above: the publish gate then refused every
+  // strand swap (main-view hair stayed cards). Keep it on its own line.
+  g_published = now + 1;
   ++g_st.publishes;
   coverage_log(now);
   if (stats_due(now) && g_seen.frame && (cfg_int("rt_stats_period_frames", 0) <= 0 || g_seen.frame > g_stats_start)) {
