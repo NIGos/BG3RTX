@@ -31,3 +31,9 @@
   (inn unproven): this ships on the user's decision 2026-11-08 ("Yes, turn it on"). A driver without reordering
   gets constant 1050 = 0 (no hint, no prepass, logged); without the reorder extension the compute trace stays.
   Release controls 18 -> 19. No shader change (225 requests byte-identical).
+## Hair smoke 2026-11-08 19:10 (Test Dialogue1, Strand hair on screen bundle, after the publish fix 782a6ad4): VALID
+- Strands on screen: 900 G-buffer / 900 velocity / 901 prepass strand draws per 300 frames (refusals: coverage low ~570,
+  card depth 20-29 of 1500); strand G-buffer draws 0.21 ms. The 18:53 run had 0 (round 3 publish bug).
+- Compute vs RT pipeline + SER: trace pass OFF 8.33 / 9.44 ms, ON 6.30 / 6.49 ms: -2.59 / -2.40 vs mean OFF (spread 1.11);
+  every ON below both OFFs by about 1.9 ms. Whole GI -2.7 / -2.4 ms.
+- Energy -1.02 / +0.06% (band 3.35%, OFF-OFF spread 0.86%: the dialogue animates): within. nv153 0, no device loss.
