@@ -13,6 +13,7 @@
 #include "launcher.h"
 #include "web_host.h"
 #include "dlss5_runtime.h"
+#include "preparation.h"
 
 #include <commctrl.h>
 #include <shellapi.h>
@@ -93,6 +94,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     auto next = [&]() { return i + 1 < argc ? std::wstring(argv[++i]) : std::wstring(); };
     if (a == L"--") {
       for (++i; i < argc; ++i) game_args.push_back(argv[i]);
+    } else if (a == L"--precompile-shaders") {
+      // The Preparation card's child (tools/launcher/preparation.cpp): compile before Play, then exit.
+      const std::wstring status = next(), list = next();   // list: a test override of the request lists
+      LocalFree(argv);
+      return status.empty() ? 2 : launcher::prep::precompile_main(status, list);
     } else if (a == L"--launch") do_launch = true;
     else if (a == L"--dry-run") dry = true;
     else if (a == L"--detect") detect = true;

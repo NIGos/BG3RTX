@@ -1170,8 +1170,10 @@ uint64_t groom_join(const BvhDraw& d, uint64_t identity, hair_groom::JoinMiss* m
           uint32_t v; std::memcpy(&v, p + uint64_t(i) * 4, 4); return v;
         }, d.args.count);
         if (hair_groom::find(candidate, d.args.count)) id = candidate;
-        else if (g_groom_logged_counts.insert(d.args.count).second && g_groom_logged_counts.size() <= 64)
+        else if (g_groom_logged_counts.insert(d.args.count).second && g_groom_logged_counts.size() <= 64) {
           log("[hair groom] draw with %u indices: index id %016llx has no groom file", d.args.count, (unsigned long long)candidate);
+          hair_groom::note_seen(d.args.count, candidate);   // hair_seen.txt: convert this style first
+        }
       }
     }
   }
@@ -1830,6 +1832,7 @@ void bvh_device_created(DeviceData* dd) {
 
 void bvh_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
+  hair_groom::flush_seen();   // the last level's styles without a groom (hair_seen.txt)
   std::lock_guard<std::mutex> lock(g_mu);
   g_content_ids.clear(); g_content_on = false; g_content_captures = 0;
   if(g_omm_clone.pipeline || g_omm_validate.pipeline || g_omm_dyn_pipe.bake)dd->vk.DeviceWaitIdle(dd->device);
@@ -2509,6 +2512,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     g_groom_join.clear();
     g_groom_uv.clear();
     g_groom_logged_unmatched.clear();
+    hair_groom::flush_seen();   // the previous level's styles without a groom (one small file write per level load)
   }
   struct GroomUvCopy { uint32_t job; VkDeviceSize soup_off; };
   std::vector<GroomUvCopy> groom_uv_copies;
@@ -2783,9 +2787,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       ++g_groom_st.unmatched;
       ++g_groom_st.miss[size_t(fd.groom_miss)];
       const uint64_t what = (uint64_t(fd.groom_indices) << 8) | uint64_t(fd.groom_miss);
-      if (g_groom_logged_unmatched.size() < 64 && g_groom_logged_unmatched.insert(what).second)
+      if (g_groom_logged_unmatched.size() < 64 && g_groom_logged_unmatched.insert(what).second) {
         log("[hair groom] unmatched hair draw: %u indices (%u triangles): %s", fd.groom_indices, fd.prims,
             hair_groom::join_miss_name(fd.groom_miss));
+        // No groom for this mesh (its id is unknown here: the count names the candidates in hair_seen.txt).
+        if (fd.groom_miss == hair_groom::JoinMiss::CountUnknown || fd.groom_miss == hair_groom::JoinMiss::UvMismatch)
+          hair_groom::note_seen(fd.groom_indices, 0);
+      }
     }
     if (!groom_src) {
       if (s.groom && !groom_keep) { groom_release(*s.groom, now); s.groom.reset(); }

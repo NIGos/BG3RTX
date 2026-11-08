@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.low_priority import lower_priority
 lower_priority()
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, curves2d, dual, geom, mesh, primary, render, sample, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, curves2d, dual, geom, mesh, primary, render, sample, storage, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -356,11 +356,10 @@ def test_asset():
         path = Path(d) / "x.hgrm"
         asset.write(path, 0x1234, card, lods)
         raw = path.read_bytes()
-        try:
-            asset.write(path, 0x1234, card, lods)
-            check("asset never overwrites", False)
-        except FileExistsError:
-            check("asset never overwrites", True)
+        check("asset writes version 3", asset.file_version(path) == 3)
+        back = storage.read_any(path)
+        check("asset v3 decodes to the thinned LODs", [l.points for l in back.lods] == [len(g.points) for _, g in lods] and
+              np.array_equal(back.lods[0].triangle, lods[0][1].triangle))
         # A LOD the layer would refuse (a zero radius) raises before the file exists: no header-only stub.
         bad = [(k, g) for k, g in lods]
         bad[1] = (bad[1][0], dataclasses.replace(bad[1][1], radii=np.where(np.arange(len(bad[1][1].radii)) == 0, 0.0,
@@ -371,24 +370,25 @@ def test_asset():
         except ValueError:
             check("refused LOD writes no file", not (Path(d) / "bad.hgrm").exists())
     magic, ver, cid, iid, nv, ni, nl, _ = struct.unpack("<4sIQQ4I", raw[:40])
-    check("asset header", (magic, ver, cid, nv, ni, nl) == (b"HGRM", 2, 0x1234, 10, 24, 3) and iid == asset.index_id(card.tris))
+    check("asset header", (magic, ver, cid, nv, ni, nl) == (b"HGRM", 3, 0x1234, 10, 24, 3) and iid == asset.index_id(card.tris))
     uvs = np.frombuffer(raw, "<f4", 64, 40).reshape(32, 2)
     corners = card.tris.ravel()
     check("asset UV samples: UV0 at the sampled corners", np.allclose(uvs[0], card.uv[corners[0]]) and
           np.allclose(uvs[31], card.uv[corners[-1]]) and np.allclose(uvs[16], card.uv[corners[16 * 23 // 31]]), uvs[:2])
     # Shared fixture with tests/hair_groom_asset_test.cpp (C++ index_content_id).
     check("index id fixture", asset.index_id([0, 1, 2, 0, 2, 3]) == INDEX_ID_FIXTURE, hex(asset.index_id([0, 1, 2, 0, 2, 3])))
+    # Version 3: the LOD table after the UV samples, then the compressed LOD 0 (tools/hair_groom/storage.py).
     at, sizes = 40 + 256, []
-    for keep, g in lods:
+    decoded = storage.decode_v3(raw)
+    for (keep, g), l in zip(lods, decoded.lods):
         k, p, sgm, _ = struct.unpack("<f3I", raw[at:at + 16])
         sizes.append((k, p, sgm))
-        tri = np.frombuffer(raw, "<u4", p, at + 16)
-        bary = np.frombuffer(raw, "<f4", 2 * p, at + 16 + 4 * p).reshape(p, 2)
-        full = np.c_[1 - bary.sum(1), bary]
-        pts = np.einsum("pk,pkd->pd", full, card.positions[card.tris[tri]])
-        check(f"asset LOD {keep} reproduces points", np.allclose(pts, g.points, atol=1e-6))
-        at += 16 + p * (4 + 8 + 4 + 1) + sgm * 4
-    check("asset size", at == len(raw), (at, len(raw)))
+        full = np.c_[1 - l.bary.astype(np.float64).sum(1), l.bary]
+        pts = np.einsum("pk,pkd->pd", full, card.positions[card.tris[l.triangle.astype(np.int64)]])
+        err = np.linalg.norm(pts - g.points, axis=1).max()
+        check(f"asset LOD {keep} reproduces points within the 0.38 um threshold", p == len(g.points) and
+              err <= storage.POS_THRESHOLD_M + 1e-7, err)   # + the float32 rounding of the reference points
+        at += 16
     check("asset LODs thin", sizes[0][1] > sizes[1][1] > sizes[2][1], sizes)
 
 
@@ -1287,7 +1287,7 @@ def test_batch_cache():
              patch.object(convert, "dedupe", side_effect=AssertionError("dedupe called")), \
              patch.object(batch, "bbox_views", return_value={"test": (None, None)}), \
              patch.object(render, "render", return_value=(np.zeros((2, 2, 3)), np.zeros((2, 2)))):
-            rec = batch.process(style, None, None, d / "out", d, False)
+            rec = batch.process(style, None, None, d / "out", d, False, False, True)
             check("cached process reaches validation without conversion", rec.get("iou") == [0.0], rec)
             with patch.object(render, "render", return_value=(np.ones((2, 2, 3)), np.ones((2, 2)))), \
                  patch.object(asset, "write") as write_asset, \
@@ -1295,7 +1295,7 @@ def test_batch_cache():
                 geometry_head = (np.array([0., -.3, 0.]), np.array([.066, .089, .083]))
                 batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], geometry_head)
                 cache_bytes = path.read_bytes()
-                rec = batch.process(style, None, None, d / "out", d, False)
+                rec = batch.process(style, None, None, d / "out", d, False, False, True)
                 check("bad mask roots with a head proxy pass via geometry", rec.get("verdict") == "pass" and
                       rec.get("root_source") == "geometry" and rec.get("root_reversed_strands") == groom.strands, rec)
                 written = write_asset.call_args.args[3][0][1]
@@ -1303,16 +1303,16 @@ def test_batch_cache():
                       written.points[0, 1] < written.points[-1, 1] and path.read_bytes() == cache_bytes)
                 tangent_head = (np.array([.1, -.1, 0.]), geometry_head[1])
                 batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], tangent_head)
-                rec = batch.process(style, None, None, d / "out", d, False)
+                rec = batch.process(style, None, None, d / "out", d, False, False, True)
                 check("undecided geometry roots retain a review reason", rec.get("verdict") == "needs-review" and
                       any(s.startswith("root from geometry (") for s in rec.get("reasons", [])), rec)
                 batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], head)
-                rec = batch.process(style, None, None, d / "out", d, False)
+                rec = batch.process(style, None, None, d / "out", d, False, False, True)
                 check("bad mask roots without a head proxy still reject", rec.get("verdict") == "reject" and
                       any(s.startswith("root channel does not") for s in rec.get("reasons", [])), rec)
                 reorient.reset_mock()
                 batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, corr, geometry_head)
-                rec = batch.process(style, None, None, d / "out", d, False)
+                rec = batch.process(style, None, None, d / "out", d, False, False, True)
                 check("good mask root path never reorients", reorient.call_count == 0 and "root_source" not in rec, rec)
             path.write_bytes(b"corrupt npz")
             check("corrupt groom cache is a miss", batch.load_groom_cache(path) is None)
@@ -1328,18 +1328,23 @@ def test_batch_cache():
                  patch.object(mesh, "load_gr2_dump", side_effect=read_dump), \
                  patch.object(convert, "convert", return_value=(groom, rep)) as conversion, \
                  patch.object(convert, "dedupe", return_value=(groom, dropped)):
-                rec = batch.process(style, None, None, d / "out", d, False)
+                rec = batch.process(style, None, None, d / "out", d, False, False, True)
                 check("corrupt groom silently rebuilds", rec.get("iou") == [0.0] and conversion.call_count == 1
                       and batch.load_groom_cache(path) is not None, rec)
                 check("successful dump is cached by GR2 content", dump_path.read_bytes() == b"dump" and dump.call_count == 1)
                 path.unlink()
-                rec = batch.process(style, None, None, d / "out", d, False)
+                rec = batch.process(style, None, None, d / "out", d, False, False, True)
                 check("GR2 cache skips LSLib on groom miss", rec.get("iou") == [0.0] and dump.call_count == 1, rec)
                 path.unlink()
                 dump_path.write_bytes(b"corrupt dump")
-                rec = batch.process(style, None, None, d / "out", d, False)
+                rec = batch.process(style, None, None, d / "out", d, False, False, True)
                 check("corrupt GR2 dump silently rebuilds", rec.get("iou") == [0.0] and dump.call_count == 2
                       and dump_path.read_bytes() == b"dump", rec)
+                # Default (user decision 2026-11-08): the groom cache is deleted once the style is done; the GR2 dump
+                # is named in the record so main() deletes it after the GR2's last row.
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("groom cache deleted after the style", not path.exists() and rec.get("gr2_dump") == str(dump_path)
+                      and rec.get("index_id") == f"{asset.index_id(hair.tris):016x}", rec)
 def test_volume():
     from tools.hair_groom import volume_table, make_volume_table
     generated = (ROOT / "shaders/rt/hair_volume_table.hlsli").read_text()

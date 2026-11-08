@@ -159,7 +159,7 @@ if(NOT EXISTS "${BG3RTX_WEBVIEW2_SDK}/include/WebView2.h" OR NOT EXISTS "${BG3RT
 endif()
 add_executable(bg3rtx_launcher WIN32 tools/launcher/main.cpp tools/launcher/launch.cpp tools/launcher/gpu.cpp
   tools/launcher/diagnostics.cpp tools/launcher/compatibility.cpp tools/launcher/web_bridge.cpp
-  tools/launcher/web_host.cpp tools/launcher/launcher.rc)
+  tools/launcher/web_host.cpp tools/launcher/preparation.cpp tools/launcher/launcher.rc)
 set_target_properties(bg3rtx_launcher PROPERTIES OUTPUT_NAME BG3RTX)
 target_include_directories(bg3rtx_launcher PRIVATE ${VULKAN_SDK}/Include "${BG3RTX_WEBVIEW2_SDK}/include" "${CMAKE_SOURCE_DIR}/tools/launcher")
 target_compile_definitions(bg3rtx_launcher PRIVATE UNICODE _UNICODE)
@@ -363,6 +363,11 @@ add_executable(launcher_launch_test tools/launcher/launch_test.cpp)
 target_compile_definitions(launcher_launch_test PRIVATE UNICODE _UNICODE)
 target_link_libraries(launcher_launch_test PRIVATE advapi32)
 add_test(NAME launcher_launch_test COMMAND launcher_launch_test)
+# Preparation card (hair conversion, shader compile before Play): settings, lines and run policy.
+add_executable(launcher_preparation_test tools/launcher/preparation_test.cpp tools/launcher/preparation.cpp tools/launcher/launch.cpp)
+target_compile_definitions(launcher_preparation_test PRIVATE UNICODE _UNICODE)
+target_link_libraries(launcher_preparation_test PRIVATE advapi32 shell32 ole32)
+add_test(NAME launcher_preparation_test COMMAND launcher_preparation_test)
 add_executable(launcher_ui_state_test tools/launcher/ui_state_test.cpp)
 add_test(NAME launcher_ui_state_test COMMAND launcher_ui_state_test)
 add_executable(launcher_web_bridge_test tools/launcher/web_bridge_test.cpp
@@ -385,7 +390,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test dlss5_teardown hotkey_poll post_recording rr_r11 opt_scene_jobs cons_reprojection cons_rr_math cons_shader_bounds core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_diagnostic batch_jobs_lint release_qual opt_profile water_surface_shader water_surface_gate assets_discovery qa_evidence build_config test_registration qa_detectors fg_log_audit fg_motion_gate fg_static_effects m1_coverage_log pan_artifacts pan_fg_evidence rebase_gate rotation_preflight hair_prefetch hair_patterns gpu_logging_gate package_runtime cpu_opt_jobs cpu_opt3_jobs compact_hit_jobs compact_rf_jobs roof_jobs replay_numeric replay_seed_gate linked_path)
+  foreach(py_test dlss5_teardown hotkey_poll post_recording rr_r11 opt_scene_jobs cons_reprojection cons_rr_math cons_shader_bounds core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_diagnostic batch_jobs_lint release_qual opt_profile water_surface_shader water_surface_gate assets_discovery qa_evidence build_config test_registration qa_detectors fg_log_audit fg_motion_gate fg_static_effects m1_coverage_log pan_artifacts pan_fg_evidence rebase_gate rotation_preflight hair_prefetch hair_patterns hair_storage gpu_logging_gate package_runtime cpu_opt_jobs cpu_opt3_jobs compact_hit_jobs compact_rf_jobs roof_jobs replay_numeric replay_seed_gate linked_path)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     set_tests_properties(${py_test}_test PROPERTIES ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}")
@@ -470,6 +475,9 @@ add_executable(pak_uv_join_test tests/pak_uv_join_test.cpp layer/shader_cache.cp
 add_test(NAME pak_uv_join_test COMMAND pak_uv_join_test)
 add_executable(hair_groom_asset_test tests/hair_groom_asset_test.cpp)
 add_test(NAME hair_groom_asset_test COMMAND hair_groom_asset_test)
+# .hgrm v3 (common/hair_groom_v3.h, LZMS via the Windows Compression API) against the Python reference decode.
+add_executable(hair_groom_v3_test tests/hair_groom_v3_test.cpp)
+add_test(NAME hair_groom_v3_test COMMAND hair_groom_v3_test ${CMAKE_SOURCE_DIR}/tests/fixtures/hair_v3)
 add_executable(native_vt_recipes_test tests/native_vt_recipes_test.cpp)
 add_test(NAME native_vt_recipes_test COMMAND native_vt_recipes_test)
 # rt_hit_material_instanced (common/native_hit_instanced.h): per-draw rows of instanced wind / 2S draws.

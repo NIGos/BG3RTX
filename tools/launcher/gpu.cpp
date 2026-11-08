@@ -33,8 +33,10 @@ bool local_grooms_available(const std::wstring& directory) {
     bool valid = bg3::hair_groom::parse_header(header, bytes, asset, &at);
     for (uint32_t lod = 0; valid && lod < asset.lod_count; ++lod) {
       uint8_t h16[16]; uint32_t points = 0, segments = 0;
+      uint64_t next = 0;
       valid = _fseeki64(file, int64_t(at), SEEK_SET) == 0 && fread(h16, 1, 16, file) == 16 &&
-              bg3::hair_groom::lod_header(h16, at, &points, &segments, &at);
+              bg3::hair_groom::lod_header(h16, at, &points, &segments, &next);
+      at = asset.version == 3 ? at + 16 : next;   // v3: one table of LOD headers (common/hair_groom_v3.h)
     }
     fclose(file);
     available = valid;

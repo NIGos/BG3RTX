@@ -221,10 +221,11 @@ def load_groom_cache(path):
         return None
 
 
-def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=False):
+def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=False, keep_cache=False):
     """Returns a report record (never raises), or None on a validation-only cache miss."""
     t0 = time.monotonic()
     rec = dict(style)
+    cache = dump = None
     try:
         from PIL import Image
         from ..assets.lspk import PackageSet
@@ -237,11 +238,11 @@ def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=F
         rec["key"] = hashlib.sha256(gr2 + dds + style["mesh"].encode() + VERSION.encode()).hexdigest()[:24]
         mask = np.asarray(Image.open(BytesIO(dds)).convert("RGBA"))
         cache = report_dir / "cache" / "groom" / (groom_key(gr2, dds, style["mesh"]) + ".npz")
+        dump = report_dir / "cache" / "gr2" / (hashlib.sha256(gr2).hexdigest() + ".bin")
         cached = load_groom_cache(cache)
         if cached is None:
             if revalidate:
                 return None
-            dump = report_dir / "cache" / "gr2" / (hashlib.sha256(gr2).hexdigest() + ".bin")
 
             def read_cards(path):
                 hair = mesh.load_gr2_dump(path, style["mesh"])
@@ -279,6 +280,8 @@ def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=F
                 pass   # An unavailable cache must not discard a successful conversion.
         else:
             groom, hair, rep, dropped, grid, fit, root_corr, head = cached
+        # The layer's join key of this mesh, for every verdict: the seen list (hair_seen.txt) names styles by it.
+        rec.update(indices=int(hair.tris.size), index_id=f"{asset.index_id(hair.tris):016x}")
         bad_root = bool(root_corr) and np.median(root_corr) < ROOT_REJECT
         geometry_root = bad_root and head[1][0] > 0.01
         if geometry_root:
@@ -343,12 +346,23 @@ def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=F
         if rec["verdict"] == "pass" or (rec["verdict"] == "needs-review" and accept_review):
             out_dir.mkdir(parents=True, exist_ok=True)
             path = out_dir / f"{asset.index_id(hair.tris):016x}.hgrm"
-            if not path.exists():
+            if asset.file_version(path) != 3:   # missing or an older format: written (replaced) as version 3
                 cid, _ = asset.content_id(hair.positions, hair.tris)
-                asset.write(path, cid, hair, [(k, convert.thin(groom, k)) for k in asset.LODS])
+                rec["asset_bits"] = asset.write(path, cid, hair, [(k, convert.thin(groom, k)) for k in asset.LODS])
             rec["asset"] = path.name
+            rec["asset_bytes"] = path.stat().st_size if path.exists() else 0
     except Exception as ex:  # noqa: BLE001  a style's failure is its verdict, never the batch's
         rec.update(verdict="reject", reasons=[f"{type(ex).__name__}: {ex}"[:300]])
+    finally:
+        # User decision 2026-11-08: the groom cache is deleted once the style is done (state.json and summary.md keep
+        # the run incremental); the GR2 dump is shared by the style's LOD0/LOD1 rows: main() deletes it after the last.
+        if not keep_cache and cache is not None:
+            try:
+                cache.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if dump is not None:
+            rec["gr2_dump"] = str(dump)
     rec["seconds"] = round(time.monotonic() - t0, 1)
     return rec
 
@@ -379,6 +393,10 @@ def main():
     ap.add_argument("--jobs", type=int, default=max(1, min(4, (os.cpu_count() or 2) // 4)))
     ap.add_argument("--accept-review", action="store_true", help="also write the assets of needs-review styles")
     ap.add_argument("--revalidate", action="store_true", help="validate changed styles from cached grooms only; skip cache misses without converting")
+    ap.add_argument("--keep-cache", action="store_true", help="keep the groom cache and GR2 dumps (developer runs; deleted by default)")
+    ap.add_argument("--seen", type=Path, help="the layer's hair_seen.txt: those styles first (docs/RTX_HAIR_ROADMAP.md 2b)")
+    ap.add_argument("--all", action="store_true", help="also the styles no game file references (Convert all)")
+    ap.add_argument("--no-reach", action="store_true", help="do not classify the styles (reach.json) before converting")
     args = ap.parse_args()
     sys.path.insert(0, str(ROOT))
     from tools.low_priority import lower_priority
@@ -415,9 +433,36 @@ def main():
             else:
                 parts.append("missing:" + name)
         return hashlib.sha256("|".join(parts).encode()).hexdigest()[:24]
+    # Needed first (tools/hair_groom/prepare.py): seen, companion, player, named NPC, hat, other; unused only with --all.
+    from tools.hair_groom import prepare
+    categories = load_categories(args.report_dir, ps, todo, enabled=not args.no_reach and not redo)
+    seen = prepare.read_seen(args.seen)
+    rows = [{"name": s["name"], "lod": s["lod"], "category": categories.get(s["name"]),
+             "index_id": (state.get(s["name"]) or {}).get("index_id"), "indices": (state.get(s["name"]) or {}).get("indices"),
+             "style": s} for s in todo]
+    if seen and not args.revalidate:
+        resolve_seen(rows, seen, game, lslib, args.report_dir, args.jobs)
+    todo = [r["style"] for r in prepare.order(rows, seen, args.all or bool(redo))]
     say(f"[hair groom batch] {len(todo)} styles ({len(state)} recorded), {args.jobs} jobs, LSLib {lslib}, out {out_dir}")
     start = last = time.monotonic()
     done = fails = skipped = 0
+    progress_path = args.report_dir / "preparation.json"
+    keep = args.keep_cache or args.revalidate
+
+    def progress(total, running):
+        """<report-dir>/preparation.json: the launcher's Preparation card (prepare.status) plus this run's counters."""
+        now = time.monotonic()
+        rate = done / max(now - start, 1e-9)
+        verdicts = {n: r.get("verdict") for n, r in state.items() if r.get("verdict")}
+        sizes = [p.stat().st_size for p in out_dir.glob("*.hgrm")] if out_dir.is_dir() else []
+        secs = [float(r["seconds"]) for r in state.values() if r.get("seconds")]
+        eta = (total - done) / rate * 1.0 if rate > 0 and done else None
+        doc = prepare.status(rows, verdicts, sizes, seen, args.all, args.jobs, secs, running=running, eta_s=eta)
+        doc.update(pid=os.getpid(), run_done=done, run_total=total, rejects=fails, updated=time.time())
+        tmp = progress_path.with_name(f"preparation.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(doc), encoding="utf-8")
+        os.replace(tmp, progress_path)
+
     with concurrent.futures.ProcessPoolExecutor(args.jobs) as pool:
         futs = {}
         for s in todo:
@@ -426,30 +471,145 @@ def main():
             if old and old.get("inputs") == s["inputs"] and s["name"] not in redo:
                 skipped += 1
                 continue
-            futs[pool.submit(process, s, game, lslib, out_dir, args.report_dir, args.accept_review, args.revalidate)] = s
+            futs[pool.submit(process, s, game, lslib, out_dir, args.report_dir, args.accept_review, args.revalidate, keep)] = s
         total = len(futs)
         pending = set(futs)
+        waiting = [futs[f] for f in futs]
+        dumps_left = {}
+        for s in waiting:
+            dumps_left[s["gr2"]] = dumps_left.get(s["gr2"], 0) + 1
+        progress(total, True)
         while pending:
             finished, pending = concurrent.futures.wait(pending, timeout=30, return_when=concurrent.futures.FIRST_COMPLETED)
             for f in finished:
+                s = futs[f]
+                waiting.remove(s)
                 rec = f.result()
+                dumps_left[s["gr2"]] -= 1
+                if rec and rec.get("gr2_dump") and not dumps_left[s["gr2"]] and not keep:
+                    Path(rec["gr2_dump"]).unlink(missing_ok=True)   # the last row of that GR2 is done
                 if rec is None:
                     skipped += 1
                     done += 1
                     continue
+                rec.pop("gr2_dump", None)
                 rec["version"] = VERSION
                 state[rec["name"]] = rec
                 done += 1
                 fails += rec["verdict"] == "reject"
-                state_path.write_text(json.dumps(state, indent=1), encoding="utf-8")
+                tmp = state_path.with_name(f"state.{os.getpid()}.tmp")
+                tmp.write_text(json.dumps(state, indent=1), encoding="utf-8")
+                os.replace(tmp, state_path)   # the launcher reads it while the batch runs
             now = time.monotonic()
             if now - last >= 30 or not pending:
                 rate = done / max(now - start, 1e-9)
                 say(f"[hair groom batch] {done}/{total} done ({skipped} unchanged), {rate * 60:.1f}/min, "
                     f"ETA {(total - done) / max(rate, 1e-9):.0f}s, rejects {fails}")
+                progress(total, bool(pending))
                 last = now
     counts = write_summary(args.report_dir, state)
+    progress(total, False)
     say(f"[hair groom batch] complete in {time.monotonic() - start:.0f}s: {counts} -> {args.report_dir / 'summary.md'}")
+
+
+def dump_meshes(raw):
+    """{mesh name: (index count, index id hex)} of every mesh in a gr2_dump.ps1 file (no conversion)."""
+    from . import asset
+    from .mesh import _str
+    out = {}
+    n = int(np.frombuffer(raw, "<u4", 1, 8)[0])
+    at = 12
+    for _ in range(n):
+        name, at = _str(raw, at)
+        nv, ni, nb = (int(x) for x in np.frombuffer(raw, "<u4", 3, at))
+        at += 12
+        for _ in range(nb):
+            _, at = _str(raw, at)
+        at += nv * 28
+        idx = np.frombuffer(raw, "<u4", ni, at)
+        at += ni * 4
+        if ni >= 3 and ni % 3 == 0:
+            out[name] = (ni, f"{asset.index_id(idx):016x}")
+    return out
+
+
+def map_gr2(gr2, game, lslib, report_dir):
+    """Index ids of the meshes of one GR2 (the GR2 decode only, ~1/10 of a conversion): the seen list's names for
+    styles not converted yet. The dump stays in the cache for the conversion that follows (deleted after it)."""
+    try:
+        from ..assets.lspk import PackageSet
+        data = PackageSet(game).read(gr2)
+        dump = Path(report_dir) / "cache" / "gr2" / (hashlib.sha256(data).hexdigest() + ".bin")
+        if not dump.exists():
+            with tempfile.TemporaryDirectory(prefix="b3hg-") as tmp:
+                src, dst = Path(tmp) / "in.gr2", Path(tmp) / "out.bin"
+                src.write_bytes(data)
+                gr2_dump(lslib, src, dst)
+                atomic_cache(dump, lambda f: f.write(dst.read_bytes()))
+        return gr2, dump_meshes(dump.read_bytes())
+    except Exception as ex:  # noqa: BLE001  an unmapped GR2 is converted in its tier's order
+        return gr2, {"error": str(ex)[:200]}
+
+
+def resolve_seen(rows, seen, game, lslib, report_dir, jobs, log=say):
+    """Fills rows' index_id/indices from <report-dir>/index_map.json, decoding the GR2s of unknown rows when the seen
+    list has entries no known row explains. Returns the number of GR2s decoded."""
+    from tools.hair_groom import prepare
+    path = Path(report_dir) / "index_map.json"
+    imap = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+    def apply():
+        for r in rows:
+            got = imap.get(r["style"]["gr2"], {}).get(r["style"]["mesh"])
+            if got and not r.get("index_id"):
+                r["indices"], r["index_id"] = got
+    apply()
+    if not prepare.unresolved(rows, seen):
+        return 0
+    gr2s = sorted({r["style"]["gr2"] for r in rows if not r.get("index_id") and r["style"]["gr2"] not in imap})
+    if not gr2s:
+        return 0
+    log(f"[hair groom batch] seen list: reading {len(gr2s)} GR2 files to name the styles seen in game")
+    start = last = time.monotonic()
+    with concurrent.futures.ProcessPoolExecutor(jobs) as pool:
+        for i, (gr2, meshes) in enumerate(pool.map(map_gr2, gr2s, [game] * len(gr2s), [lslib] * len(gr2s),
+                                                    [report_dir] * len(gr2s))):
+            if "error" not in meshes:
+                imap[gr2] = meshes
+            if time.monotonic() - last >= 30:
+                log(f"[hair groom batch] seen list: {i + 1}/{len(gr2s)} GR2 files read")
+                last = time.monotonic()
+    path.write_text(json.dumps(imap), encoding="utf-8")
+    apply()
+    log(f"[hair groom batch] seen list: {len(gr2s)} GR2 files in {time.monotonic() - start:.0f}s")
+    return len(gr2s)
+
+
+def load_categories(report_dir, ps, todo, enabled=True, log=say):
+    """{style name: reach category}: <report-dir>/reach.json when its styles cover `todo`, else computed once from the
+    paks (tools.hair_groom.reach, read-only) and saved. {} when disabled or on failure (every style is then "other"
+    and Convert all changes nothing)."""
+    path = Path(report_dir) / "reach.json"
+    names = {s["name"] for s in todo}
+    if path.exists():
+        try:
+            got = json.loads(path.read_text(encoding="utf-8")).get("categories", {})
+            if names <= set(got):
+                return got
+        except (OSError, ValueError):
+            pass
+    if not enabled or not todo:
+        return {}
+    try:
+        from tools.hair_groom import reach
+        log(f"[hair groom batch] classifying {len(todo)} styles (character creation, companions, NPCs, hats; read-only)")
+        refs, users = reach.references(ps, {str(s["visual"]).lower() for s in todo}, log=log)
+        got = {s["name"]: reach.category(refs[str(s["visual"]).lower()], users) for s in todo}
+        path.write_text(json.dumps({"categories": got}, indent=1), encoding="utf-8")
+        return got
+    except Exception as ex:  # noqa: BLE001  classification only orders the work
+        log(f"[hair groom batch] classification failed ({type(ex).__name__}: {ex}): converting in name order")
+        return {}
 
 
 if __name__ == "__main__":

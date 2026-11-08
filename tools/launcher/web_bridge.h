@@ -17,6 +17,10 @@ struct Hooks {
   std::function<GraphicsInspection()> recheck;
   std::function<void()> notices;
   std::function<std::string()> reportHint;
+  // Preparation card (tools/launcher/preparation.h): its JSON object, and its actions (pause, resume, convertAll,
+  // whilePlaying). Launcher-only settings: never part of the game's settings or the unsaved-change count.
+  std::function<std::string()> preparation;
+  std::function<bool(const std::string&, int)> prepare;
 };
 class Bridge {
  public:

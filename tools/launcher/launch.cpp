@@ -158,8 +158,20 @@ std::wstring saved_game_dir() {
 }
 
 bool save_game_dir(const std::wstring& dir, std::wstring* err) {
+  // Other launcher-only keys (the Preparation card's, tools/launcher/preparation.cpp) are kept.
+  std::string old, rest;
+  read_file(launcher_ini_path(), old);
+  size_t pos = 0;
+  while (pos < old.size()) {
+    size_t nl = old.find('\n', pos);
+    std::string line = old.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+    pos = nl == std::string::npos ? old.size() : nl + 1;
+    const std::string t = st::trim(line);
+    if (t.empty() || t.rfind("game_dir=", 0) == 0 || t.rfind("# BG3RTX.exe: the game folder", 0) == 0) continue;
+    rest += t + "\n";
+  }
   return write_file_atomic(launcher_ini_path(),
-                    "# BG3RTX.exe: the game folder (the one with bin\\bg3.exe).\ngame_dir=" + narrow(dir) + "\n",
+                    "# BG3RTX.exe: the game folder (the one with bin\\bg3.exe).\ngame_dir=" + narrow(dir) + "\n" + rest,
                     err);
 }
 

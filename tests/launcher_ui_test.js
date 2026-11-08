@@ -131,5 +131,18 @@ assert(all(ids.get('card-water_surface_fresnel')).some(e=>e.textContent==='Adjus
 assert.strictEqual(ids.get('control-water_surface_fresnel-0').type,'checkbox','unqualified marker hidden; Off/On is a switch');
 ids.get('experimental-switch').checked=false;ids.get('experimental-switch').onchange();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'experimental',value:false});
 render(fixture);assert(!all(ids.get('section-content')).some(e=>e.id==='card-water_surface_fresnel'));
+// Preparation (docs/RTX_HAIR_ROADMAP.md 2b): only when the host sends it; first card on Help & support; one row per
+// item; Pause/Resume, Convert all and When to convert send 'prep' actions (launcher-only, never 'set').
+render(fixture);ids.get('nav-Support').onclick();assert(!ids.get('preparation')||!all(ids.get('section-content')).includes(ids.get('preparation')));
+const prepState={items:[{id:'hair',title:'Strand hair',line:'3 of 5 styles ready, 0.1 GB on disk.',detail:'Converting companions, about 2 min left.',progress:0.6,state:'running'},{id:'shaders',title:'Shaders',line:'Ready.',state:'done'}],convertAll:false,whilePlaying:false,paused:false,pausable:true};
+render({...fixture,preparation:prepState});ids.get('nav-Support').onclick();
+{const prep=all(ids.get('preparation'));assert(prep.some(e=>e.id==='prep-hair')&&prep.some(e=>e.id==='prep-shaders'));assert.strictEqual(prep.filter(e=>e.tagName==='progress').length,1);
+ const grid=ids.get('section-content').children.find(e=>e.className==='grid support');assert.strictEqual(grid.children[0].id,'preparation','Preparation is the first card');
+ ids.get('prep-pause').onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'prep',action:'pause',value:0});
+ const all_=ids.get('prep-convert-all');all_.checked=true;all_.onchange();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'prep',action:'convertAll',value:1});
+ ids.get('prep-when-1').onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'prep',action:'whilePlaying',value:1});}
+render({...fixture,preparation:{...prepState,paused:true}});ids.get('nav-Support').onclick();assert.strictEqual(ids.get('prep-pause').textContent,'Resume');
+render({...fixture,preparation:{...prepState,items:[{id:'hair',title:'Strand hair',line:'Not available: Python 3 was not found.',state:'unavailable'}]}});ids.get('nav-Support').onclick();
+assert(!all(ids.get('preparation')).some(e=>e.tagName==='button'||e.tagName==='input'),'no actions without a converter');
 render({...fixture,developer:true});assert(!ids.get('navigation').children.some(e=>e.className==='nav-foot'&&e.children.some(c=>c.className==='switch-row')),'developer mode keeps its own disclosure');
 console.log('Renderer: category reachability, requirements, costs, focus, native controls, presets and developer authorization pass.');

@@ -1,9 +1,12 @@
 #include "host.h"
 #include "hair_groom.h"
 #include "assetdb.h"
+#include "../common/hair_groom_v3.h"
+#include "../common/hair_groom_lzms.h"
 #include <windows.h>
 #include <cstring>
 #include <mutex>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -51,15 +54,29 @@ void load_all() {
     const size_t got = fread(head, 1, sizeof head, f);
     uint64_t at = 0;
     bool lods_ok = parse_header(head, got, l->asset, &at);
+    if (lods_ok && l->asset.version == kV3) {
+      // v3 (common/hair_groom_v3.h): the LOD table follows the header; the arrays are decoded at upload.
+      std::vector<uint8_t> table(size_t(kV3HeaderBytes + 16ull * l->asset.lod_count));
+      std::memcpy(table.data(), head, size_t(kV3HeaderBytes));
+      V3Table t;
+      lods_ok = _fseeki64(f, int64_t(kV3HeaderBytes), SEEK_SET) == 0 &&
+                fread(table.data() + kV3HeaderBytes, 1, table.size() - size_t(kV3HeaderBytes), f) == table.size() - kV3HeaderBytes &&
+                v3_table(table.data(), table.size(), l->asset.lod_count, t) && _fseeki64(f, 0, SEEK_END) == 0;
+      for (uint32_t k = 0; lods_ok && k < t.lods; ++k) l->asset.lod_segments[k] = t.segments[k];
+      l->size = lods_ok ? uint64_t(_ftelli64(f)) : 0;
+      lods_ok = lods_ok && l->size > t.streams_at;
+      at = l->size;   // skips the v2 LOD walk below
+      l->lod_at[0] = l->size;
+    }
     // The LOD headers only (three 16-byte reads): the segment counts the crowd plan needs before any upload.
-    for (uint32_t k = 0; lods_ok && k < l->asset.lod_count && k < 8; ++k) {
+    for (uint32_t k = 0; lods_ok && l->asset.version != kV3 && k < l->asset.lod_count && k < 8; ++k) {
       uint8_t h16[16];
       uint32_t points = 0;
       l->lod_at[k] = at;
       lods_ok = _fseeki64(f, int64_t(at), SEEK_SET) == 0 && fread(h16, 1, 16, f) == 16 &&
                 lod_header(h16, at, &points, &l->asset.lod_segments[k], &at);
     }
-    if (lods_ok) {   // the LODs end exactly at the end of the file (as parse() requires)
+    if (lods_ok && l->asset.version != kV3) {   // the LODs end exactly at the end of the file (as parse() requires)
       l->lod_at[l->asset.lod_count] = at;
       lods_ok = _fseeki64(f, 0, SEEK_END) == 0 && uint64_t(_ftelli64(f)) == at;
       l->size = at;
@@ -84,6 +101,32 @@ void load_all() {
 bool read_lod(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod& lod) {
   bytes.clear();
   if (index >= l.asset.lod_count || index >= 8 || !l.size) return false;
+  if (l.asset.version == kV3) {
+    // The whole file (LOD 0's streams), decoded to this LOD's v2 bytes, then the v2 checks. Logged per decode: one
+    // per groom upload (round 3 M6 uploads a LOD once), the cost line of docs/RTX_HAIR_ROADMAP.md 2b.
+    if (l.size >= (uint64_t(1) << 31)) return false;
+    FILE* f = nullptr;
+    if (fopen_s(&f, l.path.c_str(), "rb") != 0 || !f) return false;
+    std::vector<uint8_t> file;
+    bool ok = _fseeki64(f, 0, SEEK_END) == 0 && uint64_t(_ftelli64(f)) == l.size && _fseeki64(f, 0, SEEK_SET) == 0;
+    if (ok) {
+      file.resize(size_t(l.size));
+      ok = fread(file.data(), 1, file.size(), f) == file.size();
+    }
+    fclose(f);
+    Asset h;
+    ok = ok && parse_header(file.data(), file.size(), h) && h.index_id == l.asset.index_id && h.indices == l.asset.indices &&
+         h.lod_count == l.asset.lod_count && h.version == kV3;
+    const ULONGLONG t0 = GetTickCount64();
+    ok = ok && decode_v3_lod(file.data(), file.size(), index, lzms_inflate, bytes);
+    uint64_t at = 0;
+    ok = ok && parse_lod(bytes.data(), bytes.size(), at, l.asset.indices / 3, lod) && at == bytes.size();
+    if (ok) log("[hair groom] %016llx LOD %u decoded (v3): %u points in %llu ms", (unsigned long long)l.asset.index_id, index,
+                lod.points, (unsigned long long)(GetTickCount64() - t0));
+    else log("[hair groom] %s: v3 LOD %u malformed, the cards stay", l.path.c_str(), index);
+    if (!ok) bytes.clear();
+    return ok;
+  }
   const uint64_t begin = l.lod_at[index], end = l.lod_at[index + 1];
   if (end <= begin || end - begin >= (uint64_t(1) << 31)) return false;
   FILE* f = nullptr;
@@ -182,5 +225,59 @@ bool count_known(uint32_t index_count) {
   std::lock_guard lock(g_mu);
   load_all();
   return g_counts.count(index_count) != 0;
+}
+
+namespace {
+std::mutex g_seen_mu;
+std::set<std::pair<uint32_t, uint64_t>> g_seen_pending;
+constexpr size_t kSeenMax = 4096;   // lines kept in hair_seen.txt (one per unconverted mesh: ~1200 exist)
+}  // namespace
+
+std::string seen_path() {
+  std::string db = assetdb_file();
+  const size_t s = db.find_last_of("\\/");
+  return (s == std::string::npos ? std::string(".") : db.substr(0, s)) + "\\hair_seen.txt";
+}
+
+void note_seen(uint32_t index_count, uint64_t index_id) {
+  if (!index_count) return;
+  std::lock_guard lock(g_seen_mu);
+  if (g_seen_pending.size() < kSeenMax) g_seen_pending.insert({index_count, index_id});
+}
+
+void flush_seen() {
+  std::set<std::pair<uint32_t, uint64_t>> add;
+  {
+    std::lock_guard lock(g_seen_mu);
+    add.swap(g_seen_pending);
+  }
+  if (add.empty()) return;
+  const std::string path = seen_path();
+  std::set<std::pair<uint32_t, uint64_t>> all;
+  FILE* f = nullptr;
+  if (fopen_s(&f, path.c_str(), "rb") == 0 && f) {
+    char line[128];
+    while (fgets(line, sizeof line, f) && all.size() < kSeenMax) {
+      unsigned count = 0;
+      unsigned long long id = 0;
+      if (line[0] != '#' && sscanf_s(line, "%u %llx", &count, &id) == 2 && count) all.insert({count, uint64_t(id)});
+    }
+    fclose(f);
+  }
+  const size_t before = all.size();
+  for (const auto& e : add)
+    if (all.size() < kSeenMax) all.insert(e);
+  if (all.size() == before) return;
+  std::string text = "# hair drawn without a strand groom (BG3RTX layer): index count, index id (0 = unknown)\n";
+  char buf[64];
+  for (const auto& [count, id] : all) {
+    snprintf(buf, sizeof buf, "%u %016llx\n", count, (unsigned long long)id);
+    text += buf;
+  }
+  const std::string tmp = path + "." + std::to_string(GetCurrentProcessId()) + ".tmp";
+  if (write_file(tmp, text.data(), text.size()) && MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+    log("[hair groom] seen list: %zu new, %zu styles without a groom in %s", all.size() - before, all.size(), path.c_str());
+  else
+    DeleteFileA(tmp.c_str());
 }
 }  // namespace bg3::hair_groom

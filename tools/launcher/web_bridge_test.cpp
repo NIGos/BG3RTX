@@ -392,6 +392,22 @@ int main(int argc,char** argv){
     for(int i=0;i<st::kKnobCount;++i)check(ps.values[i]==(st::knob_visible(st::kKnobs[i],false)?st::kKnobs[i].preset[p]:old[i]));
     check(qb.state_json().find("\"custom\":false")!=std::string::npos);
   }
+  // Preparation card: its object is in the state only from the hook; actions go to the hook, never to the settings
+  // (no unsaved change), and an unknown action or no host reports unavailability.
+  {
+    launcher::State ps; ps.values=st::preset_values(st::kHigh); ps.preset=st::kHigh;
+    std::string got;int value=-1;
+    launcher::web::Hooks qh;
+    qh.preparation=[]{return std::string("{\"items\":[],\"convertAll\":false,\"whilePlaying\":false,\"paused\":false,\"pausable\":true}");};
+    qh.prepare=[&](const std::string& action,int v){got=action;value=v;return action!="bogus";};
+    launcher::web::Bridge qb(ps,qh);
+    const std::string state=qb.handle("{\"type\":\"prep\",\"action\":\"convertAll\",\"value\":1}");
+    check(got=="convertAll"&&value==1&&qb.dirty()==0&&state.find("\"preparation\":{\"items\":[]")!=std::string::npos);
+    check(qb.handle("{\"type\":\"prep\",\"action\":\"bogus\"}").find("Preparation is unavailable")!=std::string::npos);
+    launcher::web::Bridge nb(ps);
+    check(nb.state_json().find("\"preparation\"")==std::string::npos);
+    check(nb.handle("{\"type\":\"prep\",\"action\":\"pause\"}").find("Preparation is unavailable")!=std::string::npos);
+  }
   std::printf("%d checks, %d failed\n",checks,failed);return failed?1:0;
 }
 

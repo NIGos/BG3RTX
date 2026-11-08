@@ -237,6 +237,11 @@ std::string Bridge::handle(const std::string& message){
   else if(type=="clearDlss5Runtime"){state_.dlss5_runtime_path.clear();refresh_runtime();status_="DLSS 5 will look in the game folder. Save to keep this change.";}
   else if(type=="recheck"){if(hooks_.recheck)set_compatibility(hooks_.recheck());}
   else if(type=="notices"){if(hooks_.notices)hooks_.notices();}
+  else if(type=="prep"){
+    // Preparation card: launcher-only settings, applied at once (no Save, not counted as unsaved).
+    const auto action=get<std::string>(o,"action");const int value=get<int>(o,"value",0);
+    if(!hooks_.prepare||!hooks_.prepare(action,value))status_="Preparation is unavailable. Reopen the launcher.";
+  }
   else if(type=="adapter"){
     int selected=get<int>(o,"value",-1);if(selected>=0&&size_t(selected)<inspection_.adapters.size())set_compatibility(inspection_,selected);else status_="Choose an available GPU.";
   }
@@ -282,6 +287,7 @@ std::string Bridge::state_json() const {
   out+=",\"shortcuts\":{\"hotkey_rt_toggle\":"+q(state_.shortcuts[0])+",\"hotkey_dlss5\":"+q(state_.shortcuts[1])+"}";
   out+=",\"dlss5RuntimePath\":"+q(state_.dlss5_runtime_path)+",\"dlss5RuntimeStatus\":"+q(state_.dlss5_runtime_status.empty()?"Runtime status is checked when the game folder or selected file changes. NVIDIA-signed runtimes are preferred.":state_.dlss5_runtime_status);
   out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Generated frames do not increase the rendered frame rate.\"";
+  if(hooks_.preparation){const auto prep=hooks_.preparation();if(!prep.empty())out+=",\"preparation\":"+prep;}
   out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"presetLabel\":"+q(preview_preset_>=0?st::kPresetLabel[preview_preset_]:st::kPresetLabel[state_.preset])+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
   out+=std::string(",\"report\":{\"visible\":")+b(report_visible_)+",\"privacy\":"+q(diagnostics::privacy_text)+",\"loggingHint\":"+q(report_hint_)+",\"bytes\":"+std::to_string(report_.bytes)+",\"status\":"+std::to_string(int(report_.status))+",\"message\":"+q(report_.message)+",\"files\":[";
   first=true;for(auto& f:report_.files){if(!first)out+=",";first=false;out+="{\"name\":"+q(f.name)+",\"text\":"+q(f.text)+",\"note\":"+q(f.note)+",\"size\":"+std::to_string(f.text.size())+"}";}

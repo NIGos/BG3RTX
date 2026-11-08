@@ -18,7 +18,9 @@
 #include <dxc/dxcapi.h>
 #include "dxc_thread.h"
 
+#include <atomic>
 #include <condition_variable>
+#include <unordered_set>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -568,6 +570,94 @@ void shader_poll() {
     if (e->requested) build(*e, *tree, true);
     else e->built = false;   // only prefetched: rebuilt (or found unchanged) when the renderer asks
   }
+}
+
+// ---- launcher preparation (docs/RTX_HAIR_ROADMAP.md 2b): compile before Play ----
+// The launcher runs `BG3RTX.exe --precompile-shaders` as a BelowNormal child, which loads this DLL and calls this
+// export: every request of the list files (lines "file<TAB>entry<TAB>profile", or requests.txt's
+// "unseen<TAB>file<TAB>entry<TAB>profile") whose key the runtime cache does not hold is compiled with the game's own
+// DXC, arguments and key, and stored where the game reads it. Requests already cached cost a key and a read.
+// progress(user, done, total, compiled, failed) after each request; *cancel stops between requests.
+struct PrecompileReq { std::string file, entry, profile; };
+static std::vector<PrecompileReq> precompile_list(const char* paths) {
+  std::vector<PrecompileReq> out;
+  std::unordered_set<std::string> seen;
+  std::string all = paths ? paths : "";
+  for (size_t a = 0; a <= all.size();) {
+    size_t b = all.find(';', a);
+    if (b == std::string::npos) b = all.size();
+    const std::string path = all.substr(a, b - a);
+    a = b + 1;
+    FILE* f = nullptr;
+    if (path.empty() || fopen_s(&f, path.c_str(), "rb") != 0 || !f) continue;
+    char line[1024];
+    while (fgets(line, sizeof line, f)) {
+      std::string l(line);
+      while (!l.empty() && (l.back() == '\n' || l.back() == '\r')) l.pop_back();
+      if (l.empty() || l[0] == '#') continue;
+      std::vector<std::string> parts;
+      for (size_t p = 0;;) {
+        size_t q = l.find('\t', p);
+        parts.push_back(l.substr(p, q == std::string::npos ? std::string::npos : q - p));
+        if (q == std::string::npos) break;
+        p = q + 1;
+      }
+      if (parts.size() == 4) parts.erase(parts.begin());   // requests.txt: the unseen count first
+      if (parts.size() != 3 || parts[0].empty() || !seen.insert(parts[0] + "|" + parts[1] + "|" + parts[2]).second) continue;
+      out.push_back({parts[0], parts[1], parts[2]});
+    }
+    fclose(f);
+  }
+  return out;
+}
+
+extern "C" int bg3rtx_precompile(const char* list_paths, int threads,
+                                                       void (*progress)(void*, int, int, int, int), void* user,
+                                                       volatile long* cancel) {
+  const std::vector<PrecompileReq> reqs = precompile_list(list_paths);
+  const std::string& dir = cache_dir();
+  if (dir.empty() || !dxc()) return -1;
+  const std::string tool = tool_id(cfg_int("shader_debug", 0));
+  if (tool.empty()) return -1;
+  const auto tree = source_tree();
+  std::atomic<int> next{0}, done{0}, compiled{0}, failed{0};
+  std::mutex pmu;
+  auto worker = [&] {
+    while (!(cancel && *cancel)) {
+      const int i = next++;
+      if (i >= int(reqs.size())) break;
+      const PrecompileReq& r = reqs[size_t(i)];
+      const std::string key = sc::request_key(*tree, tool, r.file, r.entry, r.profile);
+      std::vector<uint32_t> code;
+      if (!sc::load(dir, key, code)) {
+        ShaderEntry e{r.file, r.entry, r.profile};
+        bool missing_entry = false;
+        const uint64_t t0 = now_us();
+        if (compile(e, code, missing_entry)) {
+          sc::store(dir, key, code);
+          ++compiled;
+          log("[shaders] precompile %s:%s compiled in %.0f ms", r.file.c_str(), r.entry.c_str(), double(now_us() - t0) / 1000.0);
+        } else {
+          ++failed;
+          log("[shaders] precompile %s:%s FAILED", r.file.c_str(), r.entry.c_str());
+        }
+      }
+      const int d = ++done;
+      if (progress) {
+        std::lock_guard<std::mutex> lock(pmu);
+        progress(user, d, int(reqs.size()), compiled.load(), failed.load());
+      }
+    }
+    dxc_release_thread();
+  };
+  const int n = (std::max)(1, (std::min)(threads, 16));
+  std::vector<std::thread> pool;
+  for (int t = 1; t < n; ++t) pool.emplace_back(worker);
+  worker();
+  for (auto& t : pool) t.join();
+  log("[shaders] precompile: %d requests, %d compiled, %d failed%s", int(reqs.size()), compiled.load(), failed.load(),
+      cancel && *cancel ? " (cancelled)" : "");
+  return failed.load();
 }
 
 }  // namespace bg3
