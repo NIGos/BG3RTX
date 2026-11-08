@@ -29,3 +29,15 @@
     knob's prerequisite is now on in every preset (its unmet-need check uses gi_rt_pipeline off).
     CONTROL_CONTRACT.md has the new row.
   - No shader or request change (identity checked).
+
+## SER live 2026-11-08 18:09 (gi_ser_reorder: both runs INVALID by fail-fast, numbers mined)
+- Reorder 1 ran in game for the first time (emission variant, log `(reorder 1)`); no device loss, nv153 0 in both runs.
+- Both runs stopped on one scene-wait timeout (1 of 120 frames) in the second half (inn cost-off-b, camp cost-on-b).
+- Camp, cost-on-a: trace pass 9.58 / 9.48 ms OFF vs 7.92 ms ON: -1.61 ms (OFF spread 0.10; predicted -0.6).
+  Whole GI -2.6 ms. cost-on-b has one partial line (+1.68, rf +0.8 too): not usable. Energy on-a +0.19% (band 0.67%).
+- Inn, cost-on-a vs cost-off-a only: trace 10.91 -> 10.12 ms (-0.79; predicted +0.4). No OFF-b, no energy pair.
+- An nvlddmkm 153 was logged at 18:09:22, before the runner took the game lock (no BG3 running): these events also
+  occur without our pipeline, which weakens the link of the 17:18 camp event to gi_rt_pipeline (not proven either way).
+- Verdict: SER looks faster in game in both scenes, but each has one clean ON window. Not enabled.
+- Next: let the scene-wait gate allow 1 timeout per 120-frame line (one late frame cannot move a 300-frame GPU median)
+  and rerun the same two jobs.
