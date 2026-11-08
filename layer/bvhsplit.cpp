@@ -287,6 +287,14 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
   int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena);
   if (ci < 0) {
     VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
+    // Retained empty chunks (rt_as_chunk_reuse_frames) too small for this range must not count against
+    // the chunks' share: free them before the cap check, as the sweep would have without retention.
+    if (guard_what && vram_guard_on() && as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX))
+      for (AsChunk& c : g_chunks)
+        if (c.buf.b && c.ra.reclaimable() && c.ra.empty_since) {
+          ++g_chunks_freed;g_chunk_bytes_freed += c.buf.size;
+          free_buf(c.buf);c.ra = as_chunks::ChunkRanges{};
+        }
     if (guard_what && vram_guard_on() &&
         !vram_allow(vram_guard::kAsChunks, cs, guard_what,
                     as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX)))   // over the budget's share
@@ -4400,13 +4408,18 @@ void bvh_on_present() {
       ++g_st.evict_lru;
     }
   }
-  // Empty chunks always go, independent of guard state/cap. used still owns
+  // Empty chunks go, independent of guard state/cap (after the reuse window below). used still owns
   // pending ranges until BOTH the fence and all old TLAS slots retire above.
   // free_buf uses the existing deferred destruction queue, after retired AS
   // handles. Retained diagnostic handles pin only their own backing chunks.
-  (void)vram_take_ask(vram_guard::kYieldEmptyChunks);
-  for (AsChunk& c : g_chunks) {
+  // rt_as_chunk_reuse_frames: an empty chunk stays for that many frames to take the next new-chunk
+  // allocation (as_chunks::keep_empty_chunk); a guard ask, an evacuated source or the key at 0 free it now.
+  const bool yield_empty = vram_take_ask(vram_guard::kYieldEmptyChunks) != 0;
+  const uint64_t reuse_frames = uint64_t((std::max)(cfg_int("rt_as_chunk_reuse_frames", 120), 0));
+  for (size_t ci = 0; ci < g_chunks.size(); ++ci) {
+    AsChunk& c = g_chunks[ci];
     if (!c.buf.b || !c.ra.reclaimable()) continue;
+    if (int(ci) != g_relocating_chunk && as_chunks::keep_empty_chunk(c.ra, now, reuse_frames, yield_empty)) continue;
     ++g_chunks_freed;
     g_chunk_bytes_freed += c.buf.size;
     free_buf(c.buf);

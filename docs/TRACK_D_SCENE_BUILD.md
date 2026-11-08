@@ -1088,6 +1088,36 @@ the observation and retains capacity; shrink needs 120 nonempty samples. CPU
 regressions cover the turn peak, every slot, inactivity and interrupted shrink.
 No shader/ABI/variant change or added GPU work; live overflow confirmation pending.
 
+### Capture reserve from the observed rise; BLAS chunk reuse (2026-11-08, claude/opt-vram, offline candidate)
+
+User's 4-minute log 2026-11-08 (RTX 5090, RR, FG, strands): `[mem] ours` cascade capture 3536 MB
+(3 slots x 1232 MiB) for a session demand peak of 370 MiB; RT capture 2047 MiB for a peak of
+about 840 MiB (opaque 171 + alpha 668); BLAS chunks 1531 allocations (1056 of 64 MB), "freed 85
+(5972 MB)" in one window.
+- Cause, cascade: one cut 140 -> 310 MiB in one slot sample was learned as `step`, and the reserve
+  is step x 3 samples (5 for RT) for good: 310 + 3 x 265 = 1104 MiB, then 1232.
+- Cause, RT: the elastic demand includes the alpha region, 40% of the buffer at a wide stride, so
+  every growth raised the demand and was learned as a step: 1024 -> 1680 -> 2047 MiB in 0.2 s at load.
+- `rt_capture_rise_reserve=1` (default 0): reserve = largest demand rise seen over the delay window
+  (3 / 5 samples), not the largest single step x the window. A ramp keeps its reserve (5 x 80 =
+  400 MiB, as before); a single cut S reserves S, not 3 S. Every rise of the learned history over
+  the delay stays covered (CTest replays a 2000-sample cut/ramp trace: 0 misses). The RT rise
+  is learned from the demand without its own alpha region. Both estimators learn always, so a live
+  toggle is exact. It can change what is rendered only if an unseen rise beyond every learned
+  one occurs (casters left out for a frame, counted in `buffer full`): hence a key, off.
+  Expected from the log: cascade about 650 MiB per slot instead of 1232 (-1.7 GB for 3),
+  RT about 1.0-1.6 GiB instead of 2047.
+- `rt_as_chunk_reuse_frames=120` (default on): an empty BLAS chunk stays 120 frames and takes the
+  next allocation that needs a new chunk, in any arena (it holds no range; it joins that arena).
+  With 0, nothing is retained and arenas never mix (old behaviour). A VRAM guard ask, an evacuated
+  relocation source or a chunk-share cap refusal frees retained chunks at once. Placement only:
+  BLAS contents, TLAS and fences are unchanged, so it is on by default. CTest churn model (40-63 MB
+  rebuilds, 6-present retirement): 599 -> 6 chunk creations, peak reservation unchanged.
+- Live check (when lives resume): `[mem] ours` cascade capture and RT capture MB with
+  rt_capture_rise_reserve 0 / 1 / 0 in one run; `[cascade] casters ... buffer full 0.0` and RT
+  `opaque draws dropped (buffer full) 0.00` in every window; `[bvh] mesh cache ... freed N`
+  near 0 and `[mem] ... (X empty)` with the reuse key on.
+
 ### CPU hit-material lists (historical implementation, 2026-11-02)
 
 `perf_hitmat_lists` retired 2026-11-04: no saving (G-buffer hooks 1.16 ms both); hidden developer INI only, default 0; shared material snapshot/list paths retained.

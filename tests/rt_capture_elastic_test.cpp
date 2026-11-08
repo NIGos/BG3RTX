@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <vector>
 using namespace bg3::capture_budget;
 static unsigned checks;
 static void check(bool ok){++checks;if(!ok){std::fprintf(stderr,"elastic check %u failed\n",checks);std::exit(1);}}
@@ -128,6 +129,63 @@ int main(){
  rt_size=pending;
  check(rt_size==1408*mib); // 1000 + 5 * 80, beyond either quarter reserve.
  check(rh.capacity(1080*mib,cap,cap,1,1024*mib)>rt_size);
+ // rt_capture_rise_reserve (opt-vram): a ramp keeps the same reserve (5 x 80 = the 400 MiB rise)...
+ {
+  CaptureHeadroom r;
+  r.capacity(600*mib,cap,cap,1,1024*mib,0,true);
+  uint64_t p=r.capacity(680*mib,cap,cap,1,1024*mib,0,true);
+  for(unsigned i=1;i<=4;++i)p=r.capacity((680+80*i)*mib,cap,cap,1,1024*mib,0,true);
+  check(p==1408*mib && r.rise==400*mib);
+  // ...and the key-off estimator learned in parallel gives the old answer, so a live toggle is exact.
+  check(r.capacity(1000*mib,cap,cap,1,1024*mib)==1408*mib);
+ }
+ // A one-sample cut (the 2026-11-08 user log: cascade 140 -> 310 MiB) reserves the cut once, not 3 times:
+ // 310 + 3 x 170 = 820 -> 832 MiB before, 310 + 170 = 480 MiB now.
+ {
+  CaptureHeadroom off,on;
+  for(unsigned i=0;i<10;++i){off.capacity(140*mib,cap,cap,3,427*mib);on.capacity(140*mib,cap,cap,3,427*mib,0,true);}
+  check(off.capacity(310*mib,cap,cap,3,427*mib)==832*mib);
+  check(on.capacity(310*mib,cap,cap,3,427*mib,0,true)==480*mib);
+  // The learned rise persists across quiet samples, like the step.
+  for(unsigned i=0;i<200;++i)on.capacity(150*mib,cap,cap,3,427*mib,0,true);
+  check(on.capacity(150*mib,cap,cap,3,427*mib,0,true)==320*mib && on.rise==170*mib);
+ }
+ // Coverage of the learned history: replaying any trace, every rise within the delay fits the reserve
+ // computed at its start. Deterministic pseudo-random trace with cuts and ramps.
+ for(unsigned interval:{1u,3u}){
+  const unsigned steps=(4+interval+interval-1)/interval;
+  CaptureHeadroom r;
+  std::vector<uint64_t> trace;
+  uint64_t x=12345,d=200*mib;
+  for(unsigned i=0;i<2000;++i){
+   x=x*6364136223846793005ull+1442695040888963407ull;
+   const unsigned kind=unsigned(x>>60);
+   if(kind<2)d+=uint64_t((x>>20)%300)*mib;               // cut up
+   else if(kind<4)d-=(std::min)(d-16*mib,uint64_t((x>>20)%300)*mib); // cut down
+   else if(kind<9)d+=uint64_t((x>>24)%40)*mib;            // ramp
+   else d-=(std::min)(d-16*mib,uint64_t((x>>24)%40)*mib);
+   d=(std::min)(d,1200*mib);
+   trace.push_back(d);
+  }
+  for(uint64_t v:trace)r.capacity(v,cap,cap,interval,0,0,true);
+  for(size_t i=0;i<trace.size();++i){
+   const uint64_t c=r.capacity(trace[i],cap,cap,interval,0,0,true);
+   for(size_t k=1;k<=steps && i+k<trace.size();++k)check(trace[i+k]<=c);
+  }
+ }
+ // RT: the buffer's own alpha region (40% of its size) grows with the buffer. Learning from the demand
+ // without it, growth is not a camera step: the policy demand rises with the size, the learned rise stays 0.
+ for(bool rise:{false,true}){
+  CaptureHeadroom r;
+  uint64_t size=1024*mib;
+  for(unsigned i=0;i<200;++i){
+   const uint64_t opaque=(i<10?200:330)*mib;               // one real 130 MiB step at load
+   const uint64_t demand=opaque+size/100*40;
+   size=(std::max)(size,r.capacity(demand,cap,cap,1,1024*mib,size,rise,opaque));
+  }
+  if(rise)check(r.rise==130*mib && size==1024*mib);         // (330 + 256) / 0.6 < the 1024 MiB floor
+  else check(size>1700*mib && r.step>130*mib);              // its own growth learned as steps
+ }
  // Retired producers only; late submission and F+2 cascade consumers covered.
  check(!elastic_retired(10,11,false));check(elastic_retired(10,12,false));
  check(!elastic_retired(10,13,true));check(elastic_retired(10,14,true));
