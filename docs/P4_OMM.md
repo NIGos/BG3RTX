@@ -636,6 +636,18 @@ release ships the tools, the user's own install is the source, the output lives 
 - Log `[omm dyn]` (every rt_timing_frames builds): masked per-draw draws/triangles, with a micro-map (%), baked /
   deferred / failed, accelerated scenes, cache size and bytes, cumulative micro-triangle states, uv checks per window.
 - No ABI change (layer only; host_api.h untouched). Key-off SPIR-V: the guard is only in OMM variants.
+- Full backend churn (2026-11-08 user session, branch claude/opt-waits): after 682 micro-maps the backend held its
+  256 MB (micro-map storage plus the scratch it keeps per micro-map) and refused every new identity, while the cache
+  never evicts. Each masked draw without a micro-map was then retried every build: 3 dedicated VkDeviceMemory
+  buffers (one host-mapped), a recorded bake dispatch, 3 `[fault] range of ours: OMM dyn` lines, the refusal and 3
+  deferred frees. Refusals grew with the foliage seen (6003 -> 10846 per 300 builds, ~36 per build; 111k log lines
+  in 4 minutes) and the scene wait mean with them (2.0 -> 18.2 ms). Fix (`rt_omm_dyn_retry_frames`, default 64,
+  common/omm_dyn_refusal.h): a refusal of n triangles at backend live bytes L proves every bake of >= n triangles is
+  refused while live bytes stay >= L; those are counted deferred before any allocation or dispatch until the live
+  bytes drop or 64 frames pass. Same micro-maps built; 0 restores the per-frame retry. The fault-range log keeps
+  the first 32 lines per 600 frames and summarises the rest per name (common/log_budget.h).
+  Open: eviction (LRU by last use) and freeing the backend scratch after the build would let new foliage get
+  micro-maps again; both change which micro-maps exist, so they need their own A/B.
 - Historical READY_FOR_LIVE preparation (now passed; section 1): `tools/live_batches/omm_qual` job om4 (camp, 123 s, one launch: REF / ON / REF via
   rt_omm_reference, diag-check with rt_stats=1); predictions in predicted.json (violations 0, micro-map share >= 90%
   of masked per-draw triangles, ~40-49% known, candidates 30-50% fewer, rt passes 1.5-3 ms lower, energy equal).

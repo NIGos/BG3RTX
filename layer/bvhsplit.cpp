@@ -65,6 +65,7 @@
 #include <cstdarg>
 #include <deque>
 #include <unordered_set>
+#include "../common/omm_dyn_refusal.h"
 
 namespace bg3 {
 
@@ -1404,6 +1405,7 @@ struct DynMicromap {
 std::unordered_map<uint64_t, DynMicromap> g_omm_dyn;
 VkDeviceSize g_omm_dyn_bytes = 0;    // our buffers of every entry (the backend's micro-map storage is separate)
 uint64_t g_omm_dyn_cached_tris = 0;
+bg3::omm_dyn::Refusal g_omm_dyn_refusal;   // rt_omm_dyn_retry_frames: backend refusals that prove the next ones
 std::vector<uint64_t> g_omm_dyn_tickets[kSceneSlots];   // micro-maps the slot's accelerated TLAS traverses
 struct OmmDynPipe { VkDescriptorSetLayout dsl{}; VkPipelineLayout layout{}; VkPipeline bake{}, check{}; uint64_t gen_bake{}, gen_check{}; };
 OmmDynPipe g_omm_dyn_pipe;
@@ -1823,7 +1825,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   if(g_omm_clone.pipeline || g_omm_validate.pipeline || g_omm_dyn_pipe.bake)dd->vk.DeviceWaitIdle(dd->device);
   // rt_omm_dyn: the backend destroys the micro-maps themselves (omm::device_destroyed).
   for (auto& [k, e] : g_omm_dyn) { omm::release_ticket(e.ticket); omm_dyn_free(e); }
-  g_omm_dyn.clear(); g_omm_dyn_bytes = 0; g_omm_dyn_cached_tris = 0;
+  g_omm_dyn.clear(); g_omm_dyn_bytes = 0; g_omm_dyn_cached_tris = 0; g_omm_dyn_refusal = {};
   for (auto& t : g_omm_dyn_tickets) t.clear();
   for (VkPipeline p : {g_omm_dyn_pipe.bake, g_omm_dyn_pipe.check}) if (p) dd->vk.DestroyPipeline(dd->device, p, nullptr);
   if (g_omm_dyn_pipe.layout) dd->vk.DestroyPipelineLayout(dd->device, g_omm_dyn_pipe.layout, nullptr);
@@ -2539,6 +2541,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   uint64_t omm_bake_tris = 0;
   const uint64_t omm_bake_cap = uint64_t((std::max)(cfg_int("rt_omm_dyn_bake_tris", 131072), 0));
   const VkDeviceSize omm_dyn_cap = VkDeviceSize((std::max)(cfg_int("rt_omm_dyn_mb", 256), 0)) << 20;
+  const uint32_t omm_retry = uint32_t((std::max)(cfg_int("rt_omm_dyn_retry_frames", 64), 0));
+  if (omm_dyn_on) g_omm_dyn_refusal.refresh(now, omm::live_bytes(), omm_retry);
   if (omm_dyn_on) {
     // Bakes whose command buffer ran: usable, inputs freed; dropped ones are discarded.
     for (auto it = g_omm_dyn.begin(); it != g_omm_dyn.end();) {
@@ -2613,7 +2617,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           const VkDeviceSize bytes = VkDeviceSize(fd.prims) * (64u + 24u + 8u);
           if (omm_baking.count(mk)) {
           } else if (omm_bake_tris + fd.prims > omm_bake_cap || g_omm_dyn_bytes + bytes > omm_dyn_cap ||
-                     fd.soup_off > UINT32_MAX || fd.prims > 65535u * 65535u) {
+                     fd.soup_off > UINT32_MAX || fd.prims > 65535u * 65535u || !g_omm_dyn_refusal.allow(fd.prims)) {
             ++g_st.omm_dyn_deferred;
           } else {
             omm_baking.insert(mk);
@@ -3238,6 +3242,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     constexpr VkBufferUsageFlags kIn = VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT;
     for (const OmmBake& b : omm_bakes) {
+      // A refusal earlier in this loop proves this one (no buffers, no bake dispatch).
+      if (!g_omm_dyn_refusal.allow(b.tris)) { ++g_st.omm_dyn_deferred; continue; }
       DynMicromap e;
       e.tris = b.tris; e.mask = b.view; e.rec = rec;
       const VkDeviceSize db = VkDeviceSize(b.tris) * 64u, sb = VkDeviceSize(b.tris) * 24u, tb = VkDeviceSize(b.tris) * 8u;
@@ -3245,7 +3251,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                         make_buf(e.snapshot, sb, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "OMM dyn uv snapshot") &&
                         make_buf(e.descriptors, tb, kIn, true, "OMM dyn micro-map descriptors");
       for (Buf* p : {&e.data, &e.snapshot, &e.descriptors}) g_omm_dyn_bytes += p->size;
-      if (!made) { omm_dyn_free(e); ++g_st.omm_dyn_failed; continue; }
+      if (!made) {
+        omm_dyn_free(e); ++g_st.omm_dyn_failed;
+        g_omm_dyn_refusal.refused(b.tris, now, omm::live_bytes(), omm_retry);
+        continue;
+      }
       std::vector<omm::Triangle> tris(b.tris);
       for (uint32_t i = 0; i < b.tris; ++i) tris[i] = {i * 64u, uint16_t(omm_mask::kOmbLevel), uint16_t(VK_OPACITY_MICROMAP_FORMAT_4_STATE_EXT)};
       std::memcpy(e.descriptors.map, tris.data(), size_t(tb));
@@ -3260,7 +3270,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       input.triangleUsage = kIn | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
       e.ticket = omm::record(cmd, input);   // its barriers order the bake's writes before the micro-map build
       // A failed record leaves the dispatch recorded: free_buf defers the destruction past every frame in flight.
-      if (!e.ticket) { omm_dyn_free(e); ++g_st.omm_dyn_failed; continue; }
+      if (!e.ticket) {
+        omm_dyn_free(e); ++g_st.omm_dyn_failed;
+        g_omm_dyn_refusal.refused(b.tris, now, omm::live_bytes(), omm_retry);
+        continue;
+      }
       ++g_st.omm_dyn_baked;
       g_st.omm_dyn_bake_tris += b.tris;
       g_omm_dyn_cached_tris += b.tris;

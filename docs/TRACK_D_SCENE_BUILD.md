@@ -1419,3 +1419,21 @@ Any future candidate needs bit-equal stored outputs/counters and a paired 95%
 interval wholly below zero for total affected work, with no affected scene losing
 beyond its interval. No encoding tolerance is invoked here. No new raw key or
 SpecId allocated; 1037+ remain available, 1032-1034 retired; request delta 0.
+
+### Scene wait growth in the 2026-11-08 user session (branch claude/opt-waits)
+- What the wait is: CPU ordering, not a GPU fence. BG3 records the lighting command buffer (our RT passes) on a worker
+  1-5 ms before the G-buffer thread ends the pass where the scene is captured; `rt_scene_set` blocks on `g_scene_cv`
+  until that thread's `rt_after_capture` commits this frame's slot. Both command buffers go down in one vkQueueSubmit.
+- Why the 12 ms cap did not hold (mean 18.2 ms, max 61 ms, 0 timeouts): `rt_after_capture` holds `g_mu` for the whole
+  scene recording (scene_prepare, bvh_build, alpha_commit). After its timeout `wait_for` must re-take `g_mu`, so the
+  lighting thread waits until the commit anyway and the frame counts as "got".
+- Why it grew 2.0 -> 18.2 ms (frame 25.9 -> 52.6 ms, GI/RT GPU ms flat): the OMM dyn refusal churn inside bvh_build
+  (P4_OMM.md 11.2i: ~36 refused bakes per build, each 3 dedicated allocations, a bake dispatch and 3 log lines).
+  Fixed by `rt_omm_dyn_retry_frames` (default 64) and the fault-range log budget.
+- The remaining 2-4 ms (capture end to commit measured 1.5 ms in sw2) is the game's G-buffer recording plus our
+  build recording. Plan to overlap it (not done: touches slot lifetime, TLAS growth and the alpha descriptor set):
+  pick and pin the scene slot at capture begin, size its TLAS from the previous build's instance count (growth falls
+  back to the previous scene for that frame, as a timeout does today), write its descriptor set then, and hand that
+  slot out at once: the GPU order is already given by the one submit with the G-buffer first. Same scene content, no
+  one-frame-old geometry. Gate: `[rt] scene wait` mean < 0.1 ms with got = waited, energy equal, `rt_primary_check`
+  unchanged.

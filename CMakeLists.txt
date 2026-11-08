@@ -433,6 +433,9 @@ add_executable(log_rotate_test tests/log_rotate_test.cpp)
 add_test(NAME log_rotate_test COMMAND log_rotate_test)
 add_executable(log_stats_test tests/log_stats_test.cpp)
 add_test(NAME log_stats_test COMMAND log_stats_test)
+# rt_omm_dyn_retry_frames and the fault-range log budget (common/omm_dyn_refusal.h, common/log_budget.h).
+add_executable(omm_dyn_refusal_test tests/omm_dyn_refusal_test.cpp)
+add_test(NAME omm_dyn_refusal_test COMMAND omm_dyn_refusal_test)
 add_executable(async_capture_queue_test tests/async_capture_queue_test.cpp)
 add_test(NAME async_capture_queue_test COMMAND async_capture_queue_test)
 # rt_cascade_casters (common/cascade_casters.h, docs/TRACK_D_RT.md 6.7 item 2).

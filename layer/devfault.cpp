@@ -9,6 +9,7 @@
 // its precision) mapped to the registered ranges that contain it, live or
 // freed, and the vendor records. The next fault, if any, names the buffer.
 #include "host.h"
+#include "../common/log_budget.h"
 
 #include <algorithm>
 #include <cstring>
@@ -42,6 +43,9 @@ std::mutex g_mu;
 std::vector<Range> g_live;
 std::deque<Range> g_freed;           // the most recent frees (a fault on freed memory names them)
 constexpr size_t kFreedKeep = 1024;
+// "range of ours" lines: the first 32 per 600 frames, the rest summarised per name in one line (2026-11-08 session:
+// 111k OMM dyn lines in 4 minutes). Every range is still registered, so a fault still names it.
+log_budget::Budget g_range_log(32, 600);
 
 const VkBaseInStructure* find_in(const void* chain, VkStructureType t) {
   for (auto p = static_cast<const VkBaseInStructure*>(chain); p; p = p->pNext)
@@ -331,7 +335,10 @@ void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size) {
   r.lo = addr;
   r.hi = addr + size;
   r.created = frame_index();
-  log_stats("[fault] range of ours: %s [0x%llx, +%llu)", what, (unsigned long long)addr, (unsigned long long)size);
+  std::string summary;
+  const bool line = g_range_log.admit(what, r.created, &summary);
+  if (!summary.empty()) log_stats("[fault] ranges of ours not logged: %s", summary.c_str());
+  if (line) log_stats("[fault] range of ours: %s [0x%llx, +%llu)", what, (unsigned long long)addr, (unsigned long long)size);
   g_live.push_back(std::move(r));
 }
 
