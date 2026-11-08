@@ -603,6 +603,28 @@ Independent review of the layer path; each finding verified in code before the f
   mismatch 0, card-draw upgrades only when a groom leaves; `shadow transmittance` draws measured > 0 with shadow_t on;
   dropouts attributed (unattributed 0); no hole where two characters' hair overlaps; watchdog trips 0 in normal play.
 
+## 5k. Layer review round 3 (offline 2026-11-08, branch claude/hair-fix3-layer)
+- H2 confirmed (likely the dialogue/camera flash): a LOD switch reset prev_frames, so the switch frame published key 0
+  and mask 0x01, DrawSlots freed the slot, the submit drew the card and the next frames refused: strand-card-strand on
+  every LOD change. Now a slot that published its key keeps it (and mask 0xFF) on the switch frame
+  (`hair_primary::groom_primary_key`); only row.w stays 0 until the second update.
+- M1 confirmed: previous points are now published only when the slot's last update was the previous build frame
+  (`groom_prev_points`); otherwise row.w 0 (camera-only motion for that frame, no wrong MVs after skipped updates).
+- M2 confirmed: card-mode G-buffer pixels write the accepted marker with flag 0x40 (kMarkerCard, no card word: no
+  coverage evidence); the swapped velocity variant then writes the card's native motion vector (b70cadc5 formula from
+  location 1, the previous clip position) instead of discarding.
+- M4 confirmed: non-hair draws now leave the hook unless their key is published (this or the last publish) or had its
+  prepass depth dropped; no more `uncovered` entry per game draw. The hook still takes g_mu once per indexed draw.
+- M5 confirmed: the clones are created outside g_mu and inserted under it; the generic G-buffer variant (never bound) is
+  not created (32 + fallback per static hair G-buffer pipeline instead of 33 + fallback).
+- M6 confirmed: a LOD upload reads the header and that LOD's bytes only (offsets from indexing; size and header
+  re-checked) and validates that LOD (`parse_lod`); the whole-file parse is gone from bvh_build.
+- L1: a pixel-record reallocation zeroes the header tag in the same command buffer. L3: per-key maps prune keys not
+  published for 600 frames. L4: `submit_decision` composes the submit-time choice (unit-tested). L5: passes and
+  cascade_drop are read once per publish.
+- L2 not changed: a single non-opaque traversal would commit LSS candidates (unproven here: hf_groom only walks them)
+  and costs every strand ray; the 3-restart skip only runs where a non-swapping groom's strand is in front.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

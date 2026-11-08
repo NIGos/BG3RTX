@@ -37,6 +37,7 @@ static const uint hair_primary_flag_tangent_world = 32u;  // common/hair_primary
 static const uint hair_primary_key_map_offset = 3248u; // common/hair_primary.h kKeyMapOffset
 static const uint hair_primary_slot_mask_offset = 3504u; // common/hair_primary.h kSlotMaskOffset
 static const uint hair_primary_marker_skipped = 0x20u;   // common/hair_primary.h kMarkerSkipped
+static const uint hair_primary_marker_card = 0x40u;      // common/hair_primary.h kMarkerCard
 static const uint kHpSkips = 3u;   // strands of other slots skipped along one pixel ray before it gives up
 
 struct Camera {               // set 0 binding 2 (FRAME_MAP "Frame generation")
@@ -266,6 +267,11 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     // card, as the native pipeline draws it: the prepass alpha test, the native material at the card UV, the card normal
     // (view), the card tangent (world: the native T is the bitangent tilted by the detail mask), card depth. No markers.
     if (!hp_tips_keep(card_M.w * grazing, pos.xy, tag, aux.x)) { discard; return o; }
+    // Round 3 M2: the accepted word alone, flagged card (no card word: no coverage evidence), so the swapped velocity
+    // variant writes this card's motion vector here.
+    const uint64_t card_mark = addr2(ld2(rec + 32u)) + uint64_t(width) * height * 16u +
+                               uint64_t(uint(pos.y) * width + uint(pos.x)) * 8u;
+    vk::RawBufferStore<uint>(card_mark + 4u, (tag << 8u) | kDrawSlot | hair_primary_marker_card, 4);
     const NativeMaterial cm = native_material(card_uv, dx, dy, aux);
     o.rt0 = float4(hp_stereo_encode(normalize(mul(float4(card_n, 0.0), gCam.view).xyz)), 0.0, 0.0);
     o.rt1 = float4(cm.rt1, 1.0);

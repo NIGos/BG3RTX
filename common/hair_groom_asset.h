@@ -134,13 +134,12 @@ inline bool parse_header(const uint8_t* bytes, uint64_t size, Asset& out, uint64
   return true;
 }
 
-// `bytes` must outlive the views. Every range and index is checked; false on anything malformed.
-inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
-  uint64_t at = 0;
-  if (!parse_header(bytes, size, out, &at)) return false;
-  const uint32_t triangles = out.indices / 3, lods = out.lod_count;
-  for (uint32_t l = 0; l < lods; ++l) {
-    if (size - at < 16) return false;
+// One LOD at `at` (its 16-byte header, then the arrays); advances `at` past it. `bytes` must outlive the views. Every
+// range and index is checked; false on anything malformed. The layer reads and validates only the LOD it uploads
+// (round 3 M6: it read and parsed the whole file for every LOD upload).
+inline bool parse_lod(const uint8_t* bytes, uint64_t size, uint64_t& at, uint32_t triangles, Lod& out) {
+  {
+    if (at > size || size - at < 16) return false;
     Lod lod;
     std::memcpy(&lod.keep, bytes + at, 4);
     std::memcpy(&lod.points, bytes + at + 4, 4);
@@ -177,6 +176,19 @@ inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
       std::memcpy(b1, lod.bary + 2 * uint64_t(v) + 2, 8);
       if (t0 == t1 && b0[0] == b1[0] && b0[1] == b1[1]) return false;
     }
+    out = lod;
+  }
+  return true;
+}
+
+// `bytes` must outlive the views. Every range and index is checked; false on anything malformed.
+inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
+  uint64_t at = 0;
+  if (!parse_header(bytes, size, out, &at)) return false;
+  const uint32_t triangles = out.indices / 3, lods = out.lod_count;
+  for (uint32_t l = 0; l < lods; ++l) {
+    Lod lod;
+    if (!parse_lod(bytes, size, at, triangles, lod)) return false;
     out.lods.push_back(lod);
   }
   return at == size;

@@ -13,8 +13,10 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 #include <mutex>
 #include <shared_mutex>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -55,7 +57,7 @@ uint64_t g_pub_frame = 0;                  // its frame_index + 1 (0: none)
 hair_primary::LoadGuard g_load;                               // level-load boundary (the G-buffer depth image)
 std::unordered_map<VkPipeline, VkPipeline> g_variant;         // game pipeline -> variant
 enum class Pass : uint8_t { Prepass, Gbuffer, Velocity };
-std::unordered_map<VkPipeline, Pass> g_pass_of;               // variant -> its pass
+std::unordered_map<VkPipeline, Pass> g_pass_of;               // game pipeline -> its pass (with a g_variant entry)
 // Index ranges of the grooms in the last two published TLASes: a draw is swapped only when its groom is in both, so
 // the prepass (recorded before this frame's build) and the G-buffer (after it) agree on a draw that just appeared.
 hair_primary::SwapGate g_gate;   // which draws are swapped (common/hair_primary.h SwapGate)
@@ -174,6 +176,10 @@ uint64_t g_watchdog_logged = 0, g_watchdog_period = 0;
 float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
 uint64_t g_last_pub_camera_frame = 0;
 bool g_order = false;                       // the last publish was staged (the key on)
+std::unordered_map<uint64_t, uint64_t> g_key_seen;   // draw key -> frame_index of its last publish (round 3 L3)
+constexpr uint64_t kKeyForgetFrames = 600;
+int g_cfg_passes = 15;                   // rt_hair_primary_passes, read at each publish (round 3 L5)
+bool g_cfg_cascade_drop = false;            // rt_hair_groom_cascade_drop, likewise
 uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
 std::unordered_set<uint64_t> g_live_keys;   // the keys of the header the G-buffer reads (order mode: swaps need them)
 uint64_t g_order_none = 0;                  // G-buffer passes with no publish ordered before them (no swap)
@@ -760,29 +766,59 @@ void hair_primary_forget_module(VkShaderModule m) {
   g_inst_mods.erase(m);
 }
 
+// Review 2026-11-08 round 3 M5: the clones are created outside g_mu (up to 33 pipelines per static hair G-buffer pipeline
+// stalled every draw hook and publish behind the driver's compiler), then inserted under it. The game cannot destroy
+// out[i] before this hook returns, so the handles stay valid in between. The generic G-buffer variant (no draw slot)
+// was never bound (G-buffer draws bind strand[slot]): not created; g_variant holds VK_NULL_HANDLE for it.
 void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, const VkGraphicsPipelineCreateInfo* cis,
                                  const VkPipeline* out) {
-  std::lock_guard<std::mutex> lock(g_mu);
-  if ((g_mods.empty() && g_inst_mods.empty()) || !g_dd || device != g_dd->device) return;
-  const VkDeviceFuncs& vk = g_dd->vk;
-  for (uint32_t i = 0; i < n; ++i) {
-    const VkGraphicsPipelineCreateInfo& ci = cis[i];
-    int fs = -1;
-    uint64_t hash = 0;
-    bool instanced = false;
-    for (uint32_t k = 0; k < ci.stageCount; ++k)
-      if (ci.pStages[k].stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
-        const auto it = g_mods.find(ci.pStages[k].module);
-        if (it != g_mods.end()) fs = int(k), hash = it->second;
-        instanced |= g_inst_mods.count(ci.pStages[k].module) != 0;
-      }
-    // M5 participation: every hair pipeline, whether or not it gets a variant below.
-    if (out[i] && (fs >= 0 || instanced) && hash != hair_primary::kShadowStaticFs)
-      g_hair_pipes[out[i]] = instanced ? 4u + hair_primary::Participation::kGbuffer
-                           : hash == hair_primary::kDeferredStaticFs ? uint32_t(hair_primary::Participation::kGbuffer)
-                           : hash == hair_primary::kVelocityStaticFs ? uint32_t(hair_primary::Participation::kVelocity)
-                                                                     : uint32_t(hair_primary::Participation::kPrepass);
-    if (fs < 0 || !out[i] || !header_ready()) continue;
+  struct Plan { uint32_t i; int fs; uint64_t hash; };
+  std::vector<Plan> plans;
+  uint64_t header_addr = 0;
+  const VkDeviceFuncs* vkp = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    if ((g_mods.empty() && g_inst_mods.empty()) || !g_dd || device != g_dd->device) return;
+    vkp = &g_dd->vk;
+    for (uint32_t i = 0; i < n; ++i) {
+      const VkGraphicsPipelineCreateInfo& ci = cis[i];
+      int fs = -1;
+      uint64_t hash = 0;
+      bool instanced = false;
+      for (uint32_t k = 0; k < ci.stageCount; ++k)
+        if (ci.pStages[k].stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+          const auto it = g_mods.find(ci.pStages[k].module);
+          if (it != g_mods.end()) fs = int(k), hash = it->second;
+          instanced |= g_inst_mods.count(ci.pStages[k].module) != 0;
+        }
+      // M5 participation: every hair pipeline, whether or not it gets a variant below.
+      if (out[i] && (fs >= 0 || instanced) && hash != hair_primary::kShadowStaticFs)
+        g_hair_pipes[out[i]] = instanced ? 4u + hair_primary::Participation::kGbuffer
+                             : hash == hair_primary::kDeferredStaticFs ? uint32_t(hair_primary::Participation::kGbuffer)
+                             : hash == hair_primary::kVelocityStaticFs ? uint32_t(hair_primary::Participation::kVelocity)
+                                                                       : uint32_t(hair_primary::Participation::kPrepass);
+      if (fs < 0 || !out[i] || !header_ready()) continue;
+      plans.push_back({i, fs, hash});
+    }
+    header_addr = g_header.addr;
+  }
+  if (plans.empty()) return;
+  const VkDeviceFuncs& vk = *vkp;
+  struct Made {
+    VkPipeline game = VK_NULL_HANDLE, cascade = VK_NULL_HANDLE, fallback = VK_NULL_HANDLE, variant = VK_NULL_HANDLE;
+    Pass pass = Pass::Prepass;
+    bool has_variant = false, has_draw = false;
+    DrawVariants draw;
+  };
+  std::vector<Made> made;
+  uint64_t refused = 0;
+  std::vector<std::string> notes;   // logged under the lock (rate limits are shared)
+  for (const Plan& pl : plans) {
+    const VkGraphicsPipelineCreateInfo& ci = cis[pl.i];
+    const int fs = pl.fs;
+    const uint64_t hash = pl.hash;
+    Made m;
+    m.game = out[pl.i];
     if (hash == hair_primary::kShadowStaticFs) {   // M2.2: the cascade clone, depth writes off, everything else native
       bool lib = false, dyn = false;
       for (auto p = static_cast<const VkBaseInStructure*>(ci.pNext); p; p = p->pNext)
@@ -798,14 +834,14 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       cc.basePipelineHandle = VK_NULL_HANDLE; cc.basePipelineIndex = -1;
       VkPipeline clone = VK_NULL_HANDLE;
       if (vk.CreateGraphicsPipelines(device, cache, 1, &cc, nullptr, &clone) == VK_SUCCESS && clone) {
-        auto old = g_cascade_clone.find(out[i]);
-        if (old != g_cascade_clone.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(old->second));
-        g_cascade_clone[out[i]] = clone;
+        m.cascade = clone;
+        made.push_back(m);
       }
       continue;
     }
     const Pass pass = hash == hair_primary::kDeferredStaticFs ? Pass::Gbuffer
                     : hash == hair_primary::kVelocityStaticFs ? Pass::Velocity : Pass::Prepass;
+    m.pass = pass;
     bool library = false, dynamic_depth = false;
     for (auto p = static_cast<const VkBaseInStructure*>(ci.pNext); p; p = p->pNext)
       library |= p->sType == VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR ||
@@ -832,16 +868,15 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       native.flags &= ~VkPipelineCreateFlags(VK_PIPELINE_CREATE_DERIVATIVE_BIT);
       native.basePipelineHandle = VK_NULL_HANDLE; native.basePipelineIndex = -1;
       VkPipeline fallback = VK_NULL_HANDLE;
-      if (vk.CreateGraphicsPipelines(device, cache, 1, &native, nullptr, &fallback) == VK_SUCCESS) {
-        auto old = g_fallback.find(out[i]);
-        if (old != g_fallback.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(old->second));
-        g_fallback[out[i]] = fallback;
-      }
+      if (vk.CreateGraphicsPipelines(device, cache, 1, &native, nullptr, &fallback) == VK_SUCCESS) m.fallback = fallback;
     }
     if (library || dynamic_depth || !ds) {
-      if (g_failures.refused++ < 8)
-        log("[hair primary] FS %016llx pipeline refused (%s): its draws keep the cards", (unsigned long long)hash,
-            library ? "pipeline library" : dynamic_depth ? "dynamic depth state" : "no depth state");
+      ++refused;
+      char t[200];
+      std::snprintf(t, sizeof t, "[hair primary] FS %016llx pipeline refused (%s): its draws keep the cards", (unsigned long long)hash,
+                    library ? "pipeline library" : dynamic_depth ? "dynamic depth state" : "no depth state");
+      notes.push_back(t);
+      if (m.fallback) made.push_back(m);
       continue;
     }
     std::vector<VkPipelineShaderStageCreateInfo> stages(ci.pStages, ci.pStages + ci.stageCount);
@@ -853,7 +888,7 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     // header flags kFlagMacroNormal / kFlagTangentWorld then switch each one live.
     const uint32_t shading_space =
         cfg_int("rt_hair_macro_normal", 0) != 0 || cfg_int("rt_hair_tangent_world", 0) != 0 ? 1u : 0u;
-    const uint32_t spec_words[4] = {uint32_t(g_header.addr), uint32_t(g_header.addr >> 32), coverage, shading_space};
+    const uint32_t spec_words[4] = {uint32_t(header_addr), uint32_t(header_addr >> 32), coverage, shading_space};
     const VkSpecializationMapEntry spec_map[4] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4},
                                                   {shader_variant::kSpecIdHairGroomCoverage, 8, 4},
                                                   {shader_variant::kSpecIdHairShadingSpace, 12, 4}};
@@ -863,22 +898,25 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       Bg3ShaderBlob blob{};
       const char* file = pass == Pass::Gbuffer ? "rt/hair_primary_gbuffer.hlsl" : "rt/hair_primary_velocity.hlsl";
       if (!shader_get(file, "main", "ps_6_6", &blob)) {
-        if (g_failures.refused++ < 8) log("[hair primary] strand fragment shader unavailable: hair keeps its cards");
+        ++refused;
+        notes.push_back("[hair primary] strand fragment shader unavailable: hair keeps its cards");
+        if (m.fallback) made.push_back(m);
         continue;
       }
       VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
       mci.codeSize = blob.size_bytes;
       mci.pCode = blob.code;
-      if (vk.CreateShaderModule(device, &mci, nullptr, &mod) != VK_SUCCESS) continue;
+      if (vk.CreateShaderModule(device, &mci, nullptr, &mod) != VK_SUCCESS) { if (m.fallback) made.push_back(m); continue; }
       stages[size_t(fs)].module = mod;
       stages[size_t(fs)].pName = "main";
       stages[size_t(fs)].pSpecializationInfo = &spec;
       // G-buffer: strands write their own depth on top of whatever the prepass left (no card depth there).
       // Velocity: the strand depth the G-buffer wrote passes, nearer geometry does not; no writes.
-      if (g_logged_pipes++ < 6)
-        log("[hair primary] %s hair pipeline: native depth test %u write %u compare %d -> strands test 1 write %u "
-            "compare GREATER_OR_EQUAL", pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable,
-            ds->depthWriteEnable, int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer));
+      char t[240];
+      std::snprintf(t, sizeof t, "[hair primary] %s hair pipeline: native depth test %u write %u compare %d -> strands test 1 "
+                    "write %u compare GREATER_OR_EQUAL", pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable,
+                    ds->depthWriteEnable, int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer));
+      notes.push_back(std::string("pipe:") + t);
       dsv.depthTestEnable = VK_TRUE;
       dsv.depthWriteEnable = pass == Pass::Gbuffer ? VK_TRUE : VK_FALSE;
       dsv.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
@@ -891,61 +929,78 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     vci.flags &= ~VkPipelineCreateFlags(VK_PIPELINE_CREATE_DERIVATIVE_BIT);
     vci.basePipelineHandle = VK_NULL_HANDLE;
     vci.basePipelineIndex = -1;
-    VkPipeline v = VK_NULL_HANDLE;
-    const VkResult r = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &v);
-    if (mod) vk.DestroyShaderModule(device, mod, nullptr);
-    if (r != VK_SUCCESS || !v) {
-      if (g_failures.refused++ < 8) log("[hair primary] variant pipeline creation failed (%d): hair keeps its cards", int(r));
+    if (pass != Pass::Gbuffer) {
+      VkPipeline v = VK_NULL_HANDLE;
+      const VkResult r = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &v);
+      if (mod) vk.DestroyShaderModule(device, mod, nullptr);
+      if (r != VK_SUCCESS || !v) {
+        ++refused;
+        char t[160];
+        std::snprintf(t, sizeof t, "[hair primary] variant pipeline creation failed (%d): hair keeps its cards", int(r));
+        notes.push_back(t);
+        continue;
+      }
+      m.variant = v;
+      m.has_variant = true;
+      made.push_back(m);
       continue;
     }
-    auto it = g_variant.find(out[i]);
-    if (it != g_variant.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
-    g_variant[out[i]] = v;
-    g_pass_of[v] = pass;
-    if (pass == Pass::Gbuffer) {
-      Bg3ShaderBlob blob{};
-      VkShaderModule pm = VK_NULL_HANDLE;
-      if (!shader_get("rt/hair_primary_gbuffer.hlsl", "main", "ps_6_6", &blob)) continue;
-      VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-      mi.codeSize = blob.size_bytes; mi.pCode = blob.code;
-      if (vk.CreateShaderModule(device, &mi, nullptr, &pm) != VK_SUCCESS) continue;
-      stages[size_t(fs)].module = pm;
-      vci.pStages = stages.data();
-      DrawVariants variants;
-      VkPipelineColorBlendStateCreateInfo blend{};
-      std::vector<VkPipelineColorBlendAttachmentState> attachments;
-      if (ci.pColorBlendState) {
-        blend = *ci.pColorBlendState;
-        if (blend.attachmentCount) attachments.assign(blend.pAttachments, blend.pAttachments + blend.attachmentCount);
-        for (auto& attachment : attachments) attachment.colorWriteMask = 0;
-        blend.pAttachments = attachments.data();
-      }
-      for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) {
-        dsv.front = ds->front; dsv.back = ds->back;
-        // Pipeline specialization supplies exact draw-key attribution before tracing,
-        // without changing the game's descriptor or push-constant layouts.
-        const uint32_t words[5] = {spec_words[0], spec_words[1], k, coverage, shading_space};
-        const VkSpecializationMapEntry map[5] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
-                                                 {shader_variant::kSpecIdHairGroomCoverage, 12, 4},
-                                                 {shader_variant::kSpecIdHairShadingSpace, 16, 4}};
-        const VkSpecializationInfo draw_spec{5, map, sizeof words, words};
-        stages[size_t(fs)].pSpecializationInfo = &draw_spec;
-        dsv.depthWriteEnable = VK_TRUE;
-        vci.pColorBlendState = ci.pColorBlendState;
-        vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &variants.strand[k]);
-        dsv.depthWriteEnable = VK_FALSE;
-        dsv.front.writeMask = dsv.back.writeMask = 0;
-        vci.pColorBlendState = ci.pColorBlendState ? &blend : nullptr;
-        vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &variants.probe[k]);
-      }
-      vk.DestroyShaderModule(device, pm, nullptr);
-      auto old = g_draw_variants.find(out[i]);
+    // G-buffer: one strand and one masked-probe pipeline per draw slot (specialization 1102), no generic variant.
+    VkPipelineColorBlendStateCreateInfo blend{};
+    std::vector<VkPipelineColorBlendAttachmentState> attachments;
+    if (ci.pColorBlendState) {
+      blend = *ci.pColorBlendState;
+      if (blend.attachmentCount) attachments.assign(blend.pAttachments, blend.pAttachments + blend.attachmentCount);
+      for (auto& attachment : attachments) attachment.colorWriteMask = 0;
+      blend.pAttachments = attachments.data();
+    }
+    for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) {
+      dsv.front = ds->front; dsv.back = ds->back;
+      // Pipeline specialization supplies exact draw-key attribution before tracing,
+      // without changing the game's descriptor or push-constant layouts.
+      const uint32_t words[5] = {spec_words[0], spec_words[1], k, coverage, shading_space};
+      const VkSpecializationMapEntry map[5] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
+                                               {shader_variant::kSpecIdHairGroomCoverage, 12, 4},
+                                               {shader_variant::kSpecIdHairShadingSpace, 16, 4}};
+      const VkSpecializationInfo draw_spec{5, map, sizeof words, words};
+      stages[size_t(fs)].pSpecializationInfo = &draw_spec;
+      dsv.depthWriteEnable = VK_TRUE;
+      vci.pColorBlendState = ci.pColorBlendState;
+      vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &m.draw.strand[k]);
+      dsv.depthWriteEnable = VK_FALSE;
+      dsv.front.writeMask = dsv.back.writeMask = 0;
+      vci.pColorBlendState = ci.pColorBlendState ? &blend : nullptr;
+      vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &m.draw.probe[k]);
+    }
+    if (mod) vk.DestroyShaderModule(device, mod, nullptr);
+    m.has_variant = m.has_draw = true;
+    made.push_back(m);
+  }
+  std::lock_guard<std::mutex> lock(g_mu);
+  for (const std::string& t : notes) {
+    const bool pipe = t.rfind("pipe:", 0) == 0;
+    if (pipe ? g_logged_pipes++ < 6 : g_failures.refused < 8) log("%s", t.c_str() + (pipe ? 5 : 0));
+  }
+  g_failures.refused += refused;
+  auto replace = [](std::unordered_map<VkPipeline, VkPipeline>& map, VkPipeline game, VkPipeline v) {
+    auto old = map.find(game);
+    if (old != map.end() && old->second) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(old->second));
+    map[game] = v;
+  };
+  for (const Made& m : made) {
+    if (m.cascade) replace(g_cascade_clone, m.game, m.cascade);
+    if (m.fallback) replace(g_fallback, m.game, m.fallback);
+    if (!m.has_variant) continue;
+    replace(g_variant, m.game, m.variant);   // VK_NULL_HANDLE for the G-buffer: the draw variants below are bound
+    g_pass_of[m.game] = m.pass;
+    if (m.has_draw) {
+      auto old = g_draw_variants.find(m.game);
       if (old != g_draw_variants.end())
         for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) {
           if (old->second.strand[k]) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(old->second.strand[k]));
           if (old->second.probe[k]) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(old->second.probe[k]));
         }
-      g_draw_variants[out[i]] = variants;
+      g_draw_variants[m.game] = m.draw;
     }
   }
 }
@@ -969,8 +1024,8 @@ void hair_primary_forget_pipeline(VkPipeline p) {
   }
   auto it = g_variant.find(p);
   if (it == g_variant.end()) return;
-  g_pass_of.erase(it->second);
-  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
+  g_pass_of.erase(p);
+  if (it->second) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
   g_variant.erase(it);
 }
 
@@ -1012,13 +1067,23 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
     // over refit BLASes with its older camera. So that publish is always applied: draws whose key it lacks draw their
     // card (slot mask bits 16-31, the strand variant's card mode: card G-buffer and card depth), the rest trace it.
     hair_primary::Staged picks[kStaged];
-    bool submitted[kStaged];
-    for (int i = 0; i < kStaged; ++i) { picks[i] = g_staged[i].pick; submitted[i] = g_staged[i].submitted; }
-    const int ci = hair_primary::ordered_publish(picks, submitted, kStaged, p.tag, g, [&](int i) {
-      for (size_t k = 0; k < cmds.size(); ++k)
-        if (uint64_t(cmds[k]) == g_staged[i].pick.cmd && cmd_recording(cmds[k]) == g_staged[i].recording) return int(k);
-      return -1;
-    });
+    bool submitted[kStaged], usable[kStaged];
+    uint32_t pixels[kStaged];
+    uint64_t keys[kStaged][hair_primary::kMaxGrooms];
+    for (int i = 0; i < kStaged; ++i) {
+      picks[i] = g_staged[i].pick; submitted[i] = g_staged[i].submitted; pixels[i] = g_staged[i].pixels;
+      usable[i] = hair_primary::header_usable(g_staged[i].bytes);
+      std::memcpy(keys[i], g_staged[i].keys, sizeof keys[i]);
+    }
+    GbFrame& gf = g_gb_frames[p.frame % 16];
+    const bool frame_known = gf.frame == p.frame;
+    const hair_primary::SubmitDecision d = hair_primary::submit_decision(picks, submitted, usable, pixels, keys, kStaged, p.tag,
+        p.pixels, p.slots, g, [&](int i) {
+          for (size_t k = 0; k < cmds.size(); ++k)
+            if (uint64_t(cmds[k]) == g_staged[i].pick.cmd && cmd_recording(cmds[k]) == g_staged[i].recording) return int(k);
+          return -1;
+        }, frame_known, gf.swapped_slots);
+    const int ci = d.publish;
     if (p.slotless) {   // rt_hair_groom_primary_current 0 (diagnostic): the record-time header cannot follow the build
       if (ci >= 0) ++g_header_mismatch;
       continue;
@@ -1026,16 +1091,11 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
     const StagedHeader* c = ci >= 0 ? &g_staged[ci] : nullptr;
     const uint32_t slot = uint32_t(&p - g_pending);
     uint8_t* image = static_cast<uint8_t*>(g_hdr_slots.map) + VkDeviceSize(slot) * hair_primary::kHeaderAllocAll;
-    GbFrame& gf = g_gb_frames[p.frame % 16];
-    const bool frame_known = gf.frame == p.frame;
-    uint32_t card_slots = 0;
-    hair_primary::CurrentPick pick;
+    const uint32_t card_slots = d.plan.card_slots;
+    const hair_primary::CurrentPick pick = d.pick;
     if (c) {
-      const bool usable = hair_primary::header_usable(c->bytes) && c->pixels == p.pixels;
-      if (!hair_primary::header_usable(c->bytes)) ++g_drop.upgrades_gated;
-      const hair_primary::Upgrade u = hair_primary::upgrade_plan(p.slots, c->keys, usable);
-      card_slots = u.card_slots;
-      pick = card_slots ? hair_primary::CurrentPick::Incompatible : hair_primary::CurrentPick::Current;
+      if (!usable[ci]) ++g_drop.upgrades_gated;
+      const hair_primary::Upgrade& u = d.plan;
       header_image(*c, image);
       if (p.seal) std::memcpy(image, &p.seal, 4);   // rt_hair_primary_frame_tag: the frame keeps its own tag
       std::memcpy(image + hair_primary::kKeyMapOffset, u.key_map, sizeof u.key_map);   // the recorded draws' slots
@@ -1050,15 +1110,10 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
         for (uint32_t i = 0; i < hair_primary::kDrawSlots; ++i) if (card_slots & (1u << i)) gf.draw_keys[i] = 0;
         gf.swapped_slots &= ~card_slots;   // their cards: neither coverage evidence nor dropouts this frame
       }
-    } else {
-      bool newer = false;
-      for (const StagedHeader& st : g_staged) newer |= st.pick.tag > p.tag;
-      pick = newer ? hair_primary::CurrentPick::AfterGbuffer : hair_primary::CurrentPick::NotRecorded;
     }
     ++g_current_picks[size_t(pick)];
     // Item 2: the slots whose G-buffer draws swapped (all recorded now): the pixel trace skips any other slot's strands.
-    const uint32_t masks = hair_primary::slot_masks(frame_known ? gf.swapped_slots : hair_primary::kAllSwapSlots, card_slots);
-    std::memcpy(image + hair_primary::kSlotMaskOffset, &masks, 4);
+    std::memcpy(image + hair_primary::kSlotMaskOffset, &d.masks, 4);
     if (gf.frame == p.frame)   // the record-time check of a tag applied by two G-buffer frames, with the final tag
       for (const GbFrame& older : g_gb_frames) if (older.frame && older.frame != gf.frame && older.tag == gf.tag)
         for (uint64_t key : older.keys) if (key) g_coverage.invalidate(key, gf.frame);
@@ -1237,8 +1292,8 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     // applied this or the last frame and the strands are on: elsewhere the game's mask is the hair's only sun shadow.
     static const volatile uint64_t* sun_rt = static_cast<const volatile uint64_t*>(persist(hair_primary::kSunRtPersistKey, sizeof(uint64_t)));
     const bool sun_ok = strands_on() && sun_rt && hair_primary::sun_rt_fresh(*sun_rt, frame_index());
-    if (!sun_ok && cfg_int("rt_hair_groom_cascade_drop", 0) != 0) ++g_part.cascade_no_rt_sun;
-    if (!hair_primary::cascade_card_drop(cfg_int("rt_hair_groom_cascade_drop", 0) != 0 && sun_ok, true,
+    if (!sun_ok && g_cfg_cascade_drop) ++g_part.cascade_no_rt_sun;
+    if (!hair_primary::cascade_card_drop(g_cfg_cascade_drop && sun_ok, true,
                                          hair_primary::publish_fresh(g_pub_frame, frame_index() + 1) && g_pub_keys.count(key),
                                          true)) return false;
     s->hp_coverage = s->hp_query = UINT32_MAX;
@@ -1267,6 +1322,12 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if (!main_view) return false;
   const auto it = g_variant.find(s->pipe[0]);
   const uint64_t key = hair_primary_draw_key(s, args);
+  // Round 3 M4: a draw of a non-hair pipeline matters only when its index range is a published groom key or one whose
+  // prepass card depth went (a sibling draw of the same mesh); every other game draw leaves at once (it used to add an
+  // `uncovered` entry per draw key, which prune then walked for 300 frames).
+  if (hp == g_hair_pipes.end() && it == g_variant.end() && !g_gate.published.count(key) &&
+      !g_gate.published_prev.count(key) && !g_depth.keys.count(key))
+    return false;
   if (it == g_variant.end()) {
     if (s->pass.color_count >= 4) {
       g_depth.observe_pipeline(key, now, false, g_fallback.count(s->pipe[0]) != 0);
@@ -1282,7 +1343,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     }
     return false;
   }
-  const Pass pass = g_pass_of[it->second];
+  const Pass pass = g_pass_of[s->pipe[0]];
   const uint32_t draw = g_live_slots.find(key);
   if (draw == hair_primary::kDrawSlots && g_live_keys.count(key)) g_without_slot.insert(key);
   const auto dv = g_draw_variants.find(s->pipe[0]);
@@ -1307,7 +1368,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // Header order prepass: no pass swaps (the G-buffer would read another frame's header than the evidence; a prepass
   // clone without card depth next to card G-buffer draws loses the hair: order turned off after order-1 swaps).
   if (!g_order || draw == hair_primary::kDrawSlots) { allowed = false; refuse(!g_order ? Refusal::Order : Refusal::NoSlot); }
-  const int passes = cfg_int("rt_hair_primary_passes", 15);
+  const int passes = g_cfg_passes;   // round 3 L5: read once per publish
   {   // rt_hair_primary_passes (diagnostic bitmask, default 15): 1 G-buffer, 2 velocity, 4 prepass clone, 8 coverage probe
     if (!(passes & (pass == Pass::Gbuffer ? 1 : pass == Pass::Velocity ? 2 : 4))) { allowed = false; refuse(Refusal::Passes); }
   }
@@ -1421,6 +1482,8 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   std::lock_guard<std::mutex> lock(g_mu);
   DeviceData* dd = g_dd;
   if (!dd) return;
+  g_cfg_passes = cfg_int("rt_hair_primary_passes", 15);                   // the draw hook's keys (round 3 L5)
+  g_cfg_cascade_drop = cfg_int("rt_hair_groom_cascade_drop", 0) != 0;
   count = (std::min)(count, hair_primary::kMaxGrooms);
   const uint64_t now = frame_index();
   observe_depth(depth_image, now, identity);
@@ -1440,6 +1503,9 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     }
     g_px_w = width;
     g_px_h = height;
+    // Round 3 L1: the header still holds the old record's address (freed after the defer lag): tag 0 makes every strand
+    // reader discard until a header with the new record is applied.
+    dd->vk.CmdFillBuffer(cmd, g_header.b, 0, 4, 0u);
     g_coverage.clear(); g_last_swap_frame.clear();
     g_pixels_fresh = true;
     log("[hair primary] pixel record %ux%u: %.1f MB", width, height, double(g_pixels.size) / 1048576.0);
@@ -1511,9 +1577,20 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     apply_header(cmd, st);
   }
   g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms), now);
+  // Round 3 L3: the per-key maps grew all session; drop keys not published for kKeyForgetFrames.
+  for (uint32_t k = 0; k < count; ++k) if (keys[k]) g_key_seen[keys[k]] = now;
+  if (now % 300 == 0) {
+    auto unseen = [&](uint64_t key) {
+      const auto it = g_key_seen.find(key);
+      return it == g_key_seen.end() || it->second + kKeyForgetFrames < now;
+    };
+    auto prune = [&](auto& map) { for (auto it = map.begin(); it != map.end();) it = unseen(it->first) ? map.erase(it) : std::next(it); };
+    prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame);
+    prune(g_coverage.latest); prune(g_coverage.incomplete); prune(g_coverage.swapping);
+    for (auto it = g_key_seen.begin(); it != g_key_seen.end();) it = it->second + kKeyForgetFrames < now ? g_key_seen.erase(it) : std::next(it);
+  }
   g_coverage.hold = cfg_int("rt_hair_primary_hold", 0) != 0;   // once per publish (hysteresis, CoverageGate)
-  g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint
-  g_published = now + 1;
+  g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint  g_published = now + 1;
   ++g_st.publishes;
   coverage_log(now);
   if (stats_due(now) && g_seen.frame && (cfg_int("rt_stats_period_frames", 0) <= 0 || g_seen.frame > g_stats_start)) {

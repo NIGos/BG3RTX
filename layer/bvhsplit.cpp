@@ -473,6 +473,8 @@ struct GroomSlot {
   VkDeviceSize uv_off = 0;     // rt_hair_groom_primary: per-point card UV after the bounds (0: not allocated)
   VkDeviceSize prev_off = 0;   // and last frame's points after the UVs (valid once prev_frames > 0)
   uint32_t prev_frames = 0;    // updates since the points range was allocated (the first copies garbage)
+  uint64_t last_update = 0;    // round 3 M1: the build frame of the last points update (prev points are that frame's)
+  bool keyed = false;          // round 3 H2: a primary key was published for this slot (kept across LOD switches)
   AsAlloc as;
   VkDeviceSize build_scratch = 0, update_scratch = 0;
   bool built = false;          // the BLAS holds a full build of this LOD
@@ -1014,13 +1016,12 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   }
   const hair_groom::Loaded* src = hair_groom::find(id, a.indices);
   std::vector<uint8_t> bytes;
-  hair_groom::Asset full;
-  if (!src || !hair_groom::read_full(*src, bytes, full)) {
+  hair_groom::Lod l;   // round 3 M6: only this LOD's bytes are read and validated
+  if (!src || !hair_groom::read_lod(*src, uint32_t(lod), bytes, l)) {
     log("[hair groom] %016llx: file unreadable or changed since startup, groom off for it", (unsigned long long)id);
     a.failed = true;
     return nullptr;
   }
-  const auto& l = full.lods[size_t(lod)];
   auto up = [](VkDeviceSize v) { return (v + 15) / 16 * 16; };
   GroomAsset::Lod n;
   n.points = l.points; n.segments = l.segments; n.keep = l.keep;
@@ -2440,7 +2441,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   std::vector<DynHoldPackJob> hold_pack_jobs;
   // rt_hair_groom: this frame's matched hair draws (groom_decide), in TLAS-instance order of their cards.
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
-                     uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; uint32_t prims = 0; };
+                     uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; uint32_t prims = 0;
+                     bool prev_ok = false; };   // round 3 M1: the slot's last update was the previous build frame
   const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
   std::unordered_map<uint64_t, size_t> groom_of_key;
@@ -2840,6 +2842,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         w.refit = g.built && rec_submitted(g.rec) && dyn_refit_ok;
         if (!w.refit) g.built = false;   // a full build (also after an unsubmitted one)
         g.rec = rec;
+        // M1: prev points are last frame's, not an older update's (prev_frames is checked at the row, after this update)
+        w.prev_ok = hair_primary::groom_prev_points(2u, g.last_update, now);
+        g.last_update = now;
         groom_of_key[key] = groom_work.size();
         groom_work.push_back(w);
         ++g_groom_st.matched;
@@ -3583,7 +3588,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         // 5i (review 6): a groom without a primary key (no UVs yet, first update of its points) keeps its cards in the
         // G-buffer, so the primary strand rays (mask 0xFE, hair_primary_gbuffer.hlsl) skip it: its strands would be the
         // closest hit over a swapped draw's own and be discarded there (a hole). Shadow and GI rays (0xFF) still see it.
-        const bool primary_key = groom_count < hair_primary::kMaxGrooms && w.g->uv_off && w.g->prev_frames > 1 && w.hp_key;
+        // Round 3 H2: a slot that already published its key keeps it on a LOD switch frame (prev_frames 1): the new
+        // LOD's points, UVs and BLAS are all written by this build, before this TLAS. Dropping it freed the draw slot,
+        // put the draw in card mode at submit and refused the next frames: a strand-card-strand flash per LOD change.
+        const bool primary_key = groom_count < hair_primary::kMaxGrooms &&
+                                 hair_primary::groom_primary_key(w.g->uv_off != 0, w.hp_key, w.g->prev_frames, w.g->keyed);
         in.mask = hp_on && !primary_key ? 0x01 : 0xFF;
         in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
         in.accelerationStructureReference = w.g->as.addr;
@@ -3603,10 +3612,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         if (groom_count < hair_primary::kMaxGrooms) {
           // Previous points: valid from the second update of this points range (the first copies stale bytes).
           hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
-                                  w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};
+                                  w.prev_ok && w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};   // M1: last frame's
           // No UVs yet, or a points range in its first update (new LOD or upload: its BLAS and points exist on the
           // GPU only from this build on): its draw keeps the card.
-          hp_keys[groom_count] = w.g->uv_off && w.g->prev_frames > 1 ? w.hp_key : 0;
+          // H2: a slot that published its key keeps it through a LOD switch (primary_key above).
+          hp_keys[groom_count] = primary_key ? w.hp_key : 0;
+          if (primary_key) w.g->keyed = true;
           hp_lods[groom_count] = uint8_t(w.g->lod < 0 ? 0 : w.g->lod);
         }
         ++groom_count;
