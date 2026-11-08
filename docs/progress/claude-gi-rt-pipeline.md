@@ -41,3 +41,12 @@
 - Verdict: SER looks faster in game in both scenes, but each has one clean ON window. Not enabled.
 - Next: let the scene-wait gate allow 1 timeout per 120-frame line (one late frame cannot move a 300-frame GPU median)
   and rerun the same two jobs.
+
+## SER rerun 2026-11-08 18:19 (gate: at most 1 scene-wait timeout per 120 frames)
+- Camp VALID (265 s, nv153 0): trace pass OFF 8.78 / 10.18 ms, ON 7.97 / 7.88 ms: -1.51 / -1.60 ms vs mean OFF; OFF spread
+  1.40 (OFF-b high), every ON below both OFFs (by 0.8-0.9 ms against the lower OFF). Energy -0.21 / +0.02% (band 0.36%,
+  3 OFF-OFF pairs): unchanged. With the first run's on-a (-1.61, spread 0.10): camp gain about 1-1.6 ms, consistent.
+- Inn INVALID again: 5 of 120 scene-wait timeouts in cost-off-a (reorder 0, prepass recording phase): the inn's scene
+  thread is at the limit; not SER. Inn evidence stays one window (-0.79 ms vs OFF-a only).
+- Committed rule (both scenes beyond the OFF spread): not met (inn unproven, camp margin vs spread small). Reorder stays
+  off by default pending the user's decision.
