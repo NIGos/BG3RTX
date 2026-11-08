@@ -188,6 +188,20 @@ grid); `--rgen-spec 1050=0|1|2` selects no reorder, a hit kind + instance hint, 
 `--define GI_SER_PREPASS_RAYS=0u` traces every ray in the loop (no prepass, no reorder). `--pipeline-stats` also
 requests ray tracing pipeline statistics (the 5090 driver reports no executable for them).
 
+Seed sweep (statistical A/B for passes that cannot be bit-equal, e.g. compute vs raygen): `--seed-sweep` with
+`--define GI_SEED_PUSH=1` gives measured dispatch d the random streams of seed d + 1 (Push::bounce_spec, unused by
+the pass, offsets GI_RNG_FRAME. Push::frame stays because it stamps the hit-material records). Per side, the
+quartet phases 0-1 and 2-3 form two independent sets of N draws (`--repeat N`). The run writes
+`seed_<side><set>_<output>.mean.f32/.var.f32` (about 90 MB each at 2560x1067, so delete them after analysis), `seed_index.txt`,
+`seed_means.csv` and `seed_counters.csv` (with `--push rt_stats=1`). The per-quartet bit-equality lines then report
+DIFFER by design. `py -3 tools/replay_seed_gate.py <out>` runs the gate:
+- energy: per channel, B-A within 3 standard errors from the compute draws;
+- per pixel: a component exceeds above one encoding step and 4 sigma; the exceed fraction must stay within 3 standard
+  errors of the compute vs compute fraction;
+- counter totals: the 3-standard-error rule per counter.
+Every threshold comes from the control (A1 vs A0); none is tuned.
+`--push seed=V` sets the same field for one dispatch.
+
 ```powershell
 bin/frame_replay --pack <pack> --spv sun.spv --sun-trust trust.bin --push radius=6 `
   --ab-spec 1007=1,0 --repeat 40 --out .scratch/far-split

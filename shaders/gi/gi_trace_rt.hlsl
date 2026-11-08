@@ -595,7 +595,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
           // Push::ao_direct bit 3) leaves the sun out: the point/spot term alone, as gi_hit_direct.
           if (kRtCompactHitState != 0u && compact_guard) guard_count(kGuardSet1);
           const float3 hit_n=kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh);const float hit_f=cone.f0+cone.spread*t;
-          g_hs_seed=pcg3d(uint3(fp,pc.frame*8u+r)^uint3(0x6a09e667u,0xbb67ae85u,0x3c6ef372u)).x;
+          g_hs_seed=pcg3d(uint3(fp,GI_RNG_FRAME*8u+r)^uint3(0x6a09e667u,0xbb67ae85u,0x3c6ef372u)).x;
           HdDirect sun;sun.radiance=0;sun.status=HdInvalid;
           if((pc.ao_direct&8u)!=0u)sun=native_hit_sun(material,hit_p,-dir,hit_n,hit_f);
           const bool sun_ok=sun.status==HdOk;
@@ -605,7 +605,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
           const bool sun_ao=sun_ok && any(sun.radiance>0) && !((pc.ao_direct&3u)==1u && (pc.ao_direct&12u)==12u);
           float hit_a=1.0;
           if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0)) || sun_ao){
-            hit_a=native_hit_ao(hit_p,hit_n,hit_f,uint3(fp,pc.frame*8u+r));
+            hit_a=native_hit_ao(hit_p,hit_n,hit_f,uint3(fp,GI_RNG_FRAME*8u+r));
             direct.radiance=native_hit_ao_direct(direct,hit_a);
           }
           const float3 sun_l=sun_ok?sun.radiance*(sun_ao?native_hit_ao_factor(hit_a):1.0):0.0.xxx;
@@ -618,7 +618,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
           // factor applies (lights at the game's visibility, or ao_direct != 1).
           if(any(direct.native>0) || ((pc.ao_direct&3u)!=1u && any(direct.radiance>0))) {
             if (kRtCompactHitState != 0u && compact_guard) guard_count(kGuardSet1);
-            direct.radiance=native_hit_ao_direct(direct,native_hit_ao(hit_p,kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh),cone.f0+cone.spread*t,uint3(fp,pc.frame*8u+r)));
+            direct.radiance=native_hit_ao_direct(direct,native_hit_ao(hit_p,kRtCompactHitState != 0u ? compact_n : rt_hit_normal(hh),cone.f0+cone.spread*t,uint3(fp,GI_RNG_FRAME*8u+r)));
           }
 #endif
           if(pc.rt_stats!=0u){

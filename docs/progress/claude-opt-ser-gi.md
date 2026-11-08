@@ -122,3 +122,38 @@
   (energy on a static camera, PT reference), or it should replace the compute pass outright and be gated against
   itself. The debug dump block is kept out of the tree (.scratch/ser/debug_ray0_block.hlsl). Compute requests:
   170/170 gi/ byte-identical to main.
+
+## Statistical gate for the raygen GI trace, and the game path design (branch claude/opt-ser-gi, offline, 2026-11-08)
+- Tool: frame_replay --seed-sweep plus --define GI_SEED_PUSH=1. Each measured dispatch gets its own random streams
+  through Push::bounce_spec (GI_RNG_FRAME in gi_common.hlsli and rt_common.hlsli; it expands to pc.frame without the
+  define). Push::frame cannot be varied: it stamps the hit-material records, and a changed frame makes every hidden
+  hit "unknown". tools/replay_seed_gate.py, with tests/replay_seed_gate_test.py (5 cases), runs the gate:
+  - (a) energy per channel: B-A within 3 SE of the compute draw spread;
+  - (b) per pixel: above one fp16 step and above 4 sigma; the fraction must not pass compute vs compute by more than
+    3 SE of a difference of two binomial fractions;
+  - (c) giRawDepth and the counter totals: the same rules.
+  All 221 requests are byte-identical to main.
+- Run: raygen without prepass or reorder vs production far + sun compute, 32 draws per set for the images, 16 draws per
+  set for the counters (rt_stats=1, 1038=0 as the diagnostic pipeline). Result: PASS on camp, inn and S8, on every
+  channel and both candidate sets.
+  - Energy B-A (giRaw r / alpha), bound in brackets: camp -1.8e-5 / +8.2e-5 [4.8e-5 / 1.1e-4];
+    inn -1.1e-5 / +1.3e-5 [7.1e-5 / 8.9e-5]; S8 -7.3e-6 / +1.5e-5 [1.7e-5 / 9.6e-5].
+  - Pixels above 4 sigma, alpha, candidate vs control (bound): camp 1.59e-4 vs 1.36e-4 (1.66e-4); inn 1.11e-4 vs
+    1.08e-4 (1.34e-4); S8 9.6e-5 vs 9.3e-5 (1.17e-4).
+  - giRawDepth is identical. Counters: 65-68 nonzero, 0 failing (limit 1.4-1.5) on every pack.
+- One correction during the run: the first bound counted only the candidate's binomial noise. With it, camp alpha set 0
+  failed (1.59e-4 > 1.57e-4). The correct rule for the difference of two fractions adds the control's noise too
+  (sqrt 2). It is fixed in the tool and applies to every pack the same way.
+- Negative control (S8, far on vs off, same tool): FAIL on every giRaw channel (energy -2e-3 vs bound 2.4e-5; pixels
+  5e-4 vs bound 1.1e-4), so the gate detects a real change.
+- PT residuals: no PT reference image exists for these packs. The earlier PT runs reported shares, not images, so
+  residuals were not computed and no new reference was built.
+- Design: docs/TRACK_C_GI.md "Ray tracing pipeline GI trace: game path design". Pieces:
+  - layer features (about 40 lines);
+  - vk_funcs entries (5);
+  - host_api ABI 28 -> 29 plus the DXC lib profile (about 20);
+  - the core pipeline / SBT / dispatch next to hit_gi_dispatch (about 150);
+  - 2 keys, gi_rt_pipeline (Performance) and gi_rt_pipeline_reorder (Advanced) (about 20);
+  - shader tooling for lib requests (about 30).
+  The doc also lists the risks (FG/Streamline, Script Extender, OMM, _em) and the live job: one launch per scene,
+  0/1 toggles in one run, the energy gate and the gpu ms.

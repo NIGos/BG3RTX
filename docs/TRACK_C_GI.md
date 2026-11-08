@@ -702,3 +702,71 @@ production ON-OFF median [95% median interval], ms: +0.439 [-0.313,+1.329] /
 No consistent timing gain; inn loses with roof/fade and S8 loses with shared stats.
 Rejected and all candidate code removed; 1039 retired, no shipped key or new shader request.
 Full diagnostic intervals and receipts: docs/progress/farregs.md and worktree .scratch/farregs/.
+
+## Ray tracing pipeline GI trace: game path design (claude/opt-ser-gi, 2026-11-08, design only)
+
+Evidence (docs/progress/claude-opt-ser-gi.md): on the camp, inn and S8 packs the production far + sun hit-GI trace
+runs faster as a ray generation shader over the same grid, with no reorder: camp -2.58 ms of 8.6, inn -0.61,
+S8 -0.28 (the 95% intervals exclude 0). The SER reorder adds about -0.7 ms, on camp only. The output is not
+bit-equal to the compute pass, because the driver compiles the arithmetic differently per stage. So qualification is
+statistical: tools/replay_seed_gate.py on a frame_replay --seed-sweep run checks energy, per-pixel 4 sigma and
+counters, with thresholds taken from compute vs compute. The body and the descriptors stay the same; only the stage
+changes.
+
+Pieces (size in changed lines, rough):
+1. Layer device creation (layer/rtscene.cpp, about 40). Next to the ray query block, enable
+   VK_KHR_ray_tracing_pipeline (rayTracingPipeline) and, if present, VK_EXT_ray_tracing_invocation_reorder
+   (rayTracingInvocationReorder), each only when the physical device supports it. Log what was added, as for ray
+   query. The existing rule stays: if the game already chains ray tracing features, leave the device alone (BG3 uses
+   none). Streamline (fg>=2) adds its own extensions in the same create call (layer.cpp:220): append ours after its
+   additions and check the merged chain for duplicates, as for ray query. A key `rt_pipeline_device=1` (Advanced,
+   restart) lets a user drop the features if a driver or overlay misbehaves.
+2. Entry points (common/vk_funcs.h, about 5): CreateRayTracingPipelinesKHR, GetRayTracingShaderGroupHandlesKHR and
+   CmdTraceRaysKHR go in BG3RTX_DEVICE_FUNCS. The host and the core share the table, so this is an ABI change.
+3. host_api.h (about 15, ABI 28 -> 29): a capability bit "ray tracing pipeline available", plus "reorder hint
+   available". The core also needs the shader group handle size and base alignment for the SBT. Shader compilation
+   already takes a profile (get_shader(file, entry, profile)). The layer's DXC call must drop `-E` for a lib_6_x
+   profile (layer/shaders.cpp:146/253, about 5 lines). Bump the ABI once and merge it early (AGENTS.md).
+4. Core (core/gi.cpp next to hit_gi_dispatch, about 150):
+   - a raygen variant of each hit-GI file: gi_trace_rt_hit_sun[_em].hlsl with GI_TRACE_RAYGEN and
+     GI_SER_PREPASS_RAYS=0, 4 new lib requests with and without RT_OMM_SCENE;
+   - one ray tracing pipeline per variant, with one general group. It keeps the same pipeline layout; its descriptor
+     set layouts and push range gain RAYGEN stage flags;
+   - an SBT buffer of one handle;
+   - the dispatch: bind at VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, push descriptors at that bind point, then
+     vkCmdTraceRaysKHR(half.x rounded up to 8, half.y rounded up to 8, 1). The barriers around the pass gain the ray
+     tracing shader stage.
+   Async pipeline creation (common/pipeline_async.h) needs a ray tracing create path. If any piece is missing, the
+   compute pass runs, logged once.
+5. Settings (about 20): `gi_rt_pipeline=0` (Performance, off by default; switches at the next pipeline refresh, no
+   restart) and `gi_rt_pipeline_reorder=0` (Advanced). The reorder key sets the spec 1050 hint: 2 = hit kind, the only
+   variant that met the rule on two packs. It needs the prepass (GI_SER_PREPASS_RAYS=2). Touches bg3rtx.ini,
+   gen_settings_defaults.py and the settings test.
+6. Shader tooling (about 30): shaders/variants.txt gains the lib requests. tools/shader_identity.py and
+   compile_shaders.py must compile lib_6_6 without -E. The compute requests stay byte-identical (checked).
+
+Risks:
+- Frame generation / Streamline: our device features are added under Streamline's chain. FG's own command lists do
+  not touch our pipelines. Check a fg>=2 smoke_ultra run with the key on (device creation log, no validation error).
+- Script Extender: it patches game code and some loader entry points, not the device functions resolved through the
+  layer chain. Our new functions come from the next layer's vkGetDeviceProcAddr, like the existing ones. Check one
+  launch with SE present.
+- OMM: ray queries in a raygen trace the same TLAS with the same flags (RT_OMM_SCENE variants). The OMM reference pass
+  (rt_stats) runs unchanged. The live job needs one window with OMM on.
+- _em variants: the emissive set 2 binds the same way, but this cannot be measured offline (the packs have no
+  emissive set). The live job is its first evidence.
+- Driver: on the 5090 driver the ray tracing stage reports no executable statistics (no register count). The stack
+  size is the driver default (one recursion level, no hit shaders).
+- Not bit-equal: every A/B is a statistical comparison, never a byte comparison.
+
+Live qualification. It runs one launch per scene (camp, inn, S8) and is READY_FOR_LIVE only after pieces 1-6 build and
+the offline gate passes on the shipped request:
+- Static camera, Ultra preset with gi_far and gi_hit_sun on. A session job toggles gi_rt_pipeline 0/1/0/1 in
+  120-frame windows (`expect_every` on the per-window lines).
+- Gates:
+  - energy of the pre-post scene colour (dumps.json float mean), key on vs key off, within the off-off spread of the
+    same run;
+  - the `gpu` line of the hit-GI pass, predicted delta camp -2.5 ms, inn -0.6, S8 -0.3 (committed in predicted.json
+    before the run);
+  - no new validation or device errors; FG presented frames unchanged.
+- One more short window with gi_rt_pipeline_reorder=2, on camp only (the one scene where SER helped).

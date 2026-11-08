@@ -89,6 +89,11 @@ uint32_t g_synth_size = 128;   // --synth-size N: --synthesize at N x N (a timin
 std::map<uint32_t, uint32_t> g_rgen_specs;   // --rgen-spec ID=V: B's specialization only (1050: the reorder hint)
 bool g_ab_require_equal = false;
 bool g_ab_numeric = false;
+// --seed-sweep (A/B mode, statistics only; compile both sides with --define GI_SEED_PUSH=1): measured dispatch d runs with
+// Push::bounce_spec = d + 1, the GI random streams' offset (gi_common.hlsli GI_RNG_FRAME; Push::frame stays: it stamps the
+// hit-material records and picks the 2x2 sample position), so every draw is an independent random stream; per side and set (phases 0-1 / 2-3) the
+// per-pixel mean and variance and per-draw channel means and counter totals are written (tools/replay_seed_gate.py).
+bool g_seed_sweep = false;
 bool g_require_live_equal = false;
 uint32_t g_ab_warmup = 0; // untimed GPU dispatches immediately before each A/B sample
 bool g_ab_blas = false, g_blas_control = false;
@@ -862,13 +867,14 @@ bool g_no_casters = false;
 bool g_origin = false;
 // --push FIELD=VALUE (repeatable): overwrite one Push field of the pack's push before the dispatch, as the live
 // core sets it per pass (e.g. radius=6: core/gi.cpp hit_gi_dispatch's gi_far ray length; rt_stats=0 / 1).
-// Fields: radius (float, offset 24), rays (uint, offset 32), rt_stats (uint, offset 124), gi_rt_radius (float, offset 112).
+// Fields: seed (uint, offset 76: Push::bounce_spec, unused by the pass, read only by a GI_SEED_PUSH build), radius (float, offset 24),
+// rays (uint, offset 32), rt_stats (uint, offset 124), gi_rt_radius (float, offset 112).
 std::vector<std::pair<std::string, std::string>> g_push_set;
 void apply_push_set(std::vector<uint8_t>& push) {
   for (const auto& [k, v] : g_push_set) {
     const bool f = k == "radius" || k == "gi_rt_radius";
-    const size_t off = k == "radius" ? 24 : k == "rays" ? 32 : k == "gi_rt_radius" ? 112 : k == "rt_stats" ? 124 : 0;
-    check(off && off + 4 <= push.size(), "--push: unknown field " + k + " (radius, rays, gi_rt_radius, rt_stats)");
+    const size_t off = k == "seed" ? 76 : k == "radius" ? 24 : k == "rays" ? 32 : k == "gi_rt_radius" ? 112 : k == "rt_stats" ? 124 : 0;
+    check(off && off + 4 <= push.size(), "--push: unknown field " + k + " (seed, radius, rays, gi_rt_radius, rt_stats)");
     if (f) { const float x = std::stof(v); std::memcpy(push.data() + off, &x, 4); }
     else { const uint32_t x = uint32_t(std::stoul(v)); std::memcpy(push.data() + off, &x, 4); }
   }
@@ -1466,7 +1472,15 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   std::ofstream ab_csv, numeric_csv;
   std::vector<double> ab_deltas;
   RunResult pair_reference, pair_other;   // phase 0 and phase 1 (the other pipeline) of the current quartet
-  uint32_t same_side_differs[2] = {0, 0};   // repeats of pipeline A / B within a quartet whose outputs or counters changed
+  uint32_t same_side_differs[2] = {0, 0};
+  struct SeedAcc { std::vector<double> s1, s2; uint32_t n = 0, comps = 0, w = 0, h = 0; };
+  std::map<std::string, SeedAcc> seed_acc;   // "<side><set>_<output>"
+  std::ofstream seed_csv, seed_counters;
+  if (g_seed_sweep) {
+    check(ab_mode(), "--seed-sweep needs an A/B mode");
+    seed_csv.open(out / "seed_means.csv"); seed_csv << "side,set,seed,output,c0,c1,c2,c3\n";
+    seed_counters.open(out / "seed_counters.csv"); seed_counters << "side,set,seed,counter,total\n";
+  }   // repeats of pipeline A / B within a quartet whose outputs or counters changed
   double quartet_ms[4]{};
   bool pair_outputs_equal = true, pair_counters_equal = true;
   bool all_outputs_equal = true, all_counters_equal = true;
@@ -1506,6 +1520,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     push = push_pack;
     if (hooks && hooks->patch) hooks->patch(run, push);
     apply_push_set(push);
+    if (g_seed_sweep && !warmup) {
+      const uint32_t sd = run - 3u; std::memcpy(push.data() + 76, &sd, 4);
+    }
     if (!g_sun_trust.empty()) {   // Push::ls_flags (offset 188, static_assert below) bit 25: a sun trust slot exists
       uint32_t lf; std::memcpy(&lf, push.data() + 188, 4); lf |= 1u << 25; std::memcpy(push.data() + 188, &lf, 4);
     }
@@ -1589,6 +1606,33 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       for (auto& r : rr.outputs)
         std::printf("  output %s %ux%u: mean %.7g %.7g %.7g %.7g, non-finite %llu, fnv1a %016llx\n", r.name.c_str(), r.w, r.h, r.mean[0], r.mean[1],
                     r.mean[2], r.mean[3], (unsigned long long)r.nonfinite, (unsigned long long)r.hash);
+    }
+    if (ab_mode() && !warmup && g_seed_sweep) {
+      const std::string side = use_b ? "B" : "A", set = phase < 2 ? "0" : "1";
+      uint32_t fr; std::memcpy(&fr, push.data() + 76, 4);
+      for (const auto& o : rr.outputs) {
+        const uint32_t comps = o.format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ? 3 :
+          o.format == VK_FORMAT_R16G16B16A16_SFLOAT || o.format == VK_FORMAT_R32G32B32A32_SFLOAT ? 4 : 1;
+        auto& acc = seed_acc[side + set + "_" + o.name];
+        const size_t px = size_t(o.w) * o.h;
+        if (acc.s1.empty()) { acc.s1.assign(px * comps, 0.0); acc.s2.assign(px * comps, 0.0); acc.comps = comps; acc.w = o.w; acc.h = o.h; }
+        for (size_t q = 0; q < px; ++q)
+          for (uint32_t k = 0; k < comps; ++k) {
+            const double v = image_component(o.raw, o.format, q, k, comps);
+            acc.s1[q * comps + k] += v; acc.s2[q * comps + k] += v * v;
+          }
+        ++acc.n;
+        seed_csv << side << ',' << set << ',' << fr << ',' << o.name;
+        seed_csv.precision(12);
+        for (int k = 0; k < 4; ++k) seed_csv << ',' << o.mean[k];
+        seed_csv << '\n';
+      }
+      const size_t counters = rr.raw_stats.size() / (64 * 4);
+      for (size_t ci = 0; ci < counters; ++ci) {
+        uint64_t total = 0;
+        for (size_t b = 0; b < 64; ++b) { uint32_t v; std::memcpy(&v, rr.raw_stats.data() + (ci * 64 + b) * 4, 4); total += v; }
+        if (total) seed_counters << side << ',' << set << ',' << fr << ',' << ci << ',' << total << '\n';
+      }
     }
     if (ab_mode() && !warmup) {
       // One balanced, adjacent cross-state comparison per quartet: phase 0/1.
@@ -1771,6 +1815,20 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                   all_outputs_equal ? "100% bit-equal" : "DIFFER", all_counters_equal ? "100% bit-equal" : "DIFFER");
     std::printf("[replay] %s\n", line);
     std::ofstream(out / "ab_summary.txt") << line << '\n';
+    if (g_seed_sweep) {   // per-pixel mean and population variance over the draws of each side and set (float32)
+      std::ofstream index(out / "seed_index.txt");
+      for (const auto& [key, acc] : seed_acc) {
+        std::vector<float> mean(acc.s1.size()), var(acc.s1.size());
+        for (size_t i = 0; i < acc.s1.size(); ++i) {
+          const double m1 = acc.s1[i] / acc.n;
+          mean[i] = float(m1); var[i] = float(std::max(acc.s2[i] / acc.n - m1 * m1, 0.0));
+        }
+        std::ofstream(out / ("seed_" + key + ".mean.f32"), std::ios::binary).write(reinterpret_cast<const char*>(mean.data()), mean.size() * 4);
+        std::ofstream(out / ("seed_" + key + ".var.f32"), std::ios::binary).write(reinterpret_cast<const char*>(var.data()), var.size() * 4);
+        index << key << ' ' << acc.w << ' ' << acc.h << ' ' << acc.comps << ' ' << acc.n << '\n';
+      }
+      std::printf("[replay] seed sweep: %zu accumulators written (seed_index.txt, seed_means.csv, seed_counters.csv)\n", seed_acc.size());
+    }
     // Same pipeline, same inputs, twice per quartet: a nonzero count means that pipeline is not deterministic.
     std::printf("[replay] same-pipeline repeats that changed outputs or counters: A %u of %zu, B %u of %zu\n",
                 same_side_differs[0], ab_deltas.size(), same_side_differs[1], ab_deltas.size());
@@ -3174,6 +3232,7 @@ int main(int argc, char** argv) {
       g_rgen_specs[uint32_t(std::stoul(kv.substr(0, eq), nullptr, 0))] = uint32_t(std::stoul(kv.substr(eq + 1), nullptr, 0));
     }
     else if (args[i] == "--ab-numeric") g_ab_numeric = true;
+    else if (args[i] == "--seed-sweep") g_seed_sweep = true;
     else if (args[i] == "--ab-require-equal") g_ab_require_equal = true;
     else if (args[i] == "--require-live-equal") g_require_live_equal = true;
     else if (args[i] == "--ab-warmup") {
