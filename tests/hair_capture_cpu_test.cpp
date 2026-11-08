@@ -54,6 +54,26 @@ int main(int argc, char** argv) {
   CHECK(full_mask({2048, 2048, 12, 0}, 0, 0));
   CHECK(!full_mask({1024, 1024, 11, 0}, 2048, 2048));        // smaller than seen before
   CHECK(upgrade({1024, 1024, 11, 0}, {2048, 2048, 12, 0}) && !upgrade({2048, 2048, 12, 0}, {2048, 2048, 12, 0}));
+  // Retry state machine (hcap2-capture 2026-11-08: placeholders seen first were never looked at again).
+  {
+    Retry r;
+    CHECK(should_look(r, 10, 0));                         // first sight
+    CHECK(!looked(r, false, false, 0));                   // a placeholder
+    CHECK(!should_look(r, 10, 1) && !should_look(r, 10, kRetryFrames - 1));   // same image: throttled
+    CHECK(should_look(r, 10, kRetryFrames));              // periodic look
+    CHECK(should_look(r, 11, kRetryFrames + 1));          // a new image (the upgrade): at once
+    looked(r, true, true, kRetryFrames + 1, {2048, 2048, 12, 0});
+    CHECK(r.state == RetryState::Captured && r.captured.width == 2048);
+    CHECK(!should_look(r, 11, 100000));                   // captured: never again for the same image
+    CHECK(should_look(r, 12, 100001));                    // a new image may be an upgrade (want() checks upgrade())
+    Retry far;                                            // a distant NPC whose mask never leaves 128 x 128
+    uint64_t now = 0;
+    int looks = 0, never = 0;
+    for (; now < 400 * kRetryFrames; ++now)
+      if (should_look(far, 7, now)) { ++looks; never += looked(far, false, false, now); }
+    CHECK(looks == int(kNeverFullChecks) && never == 1 && far.state == RetryState::NeverFull);
+    CHECK(should_look(far, 8, now) && far.state == RetryState::Waiting);   // its image changed: a fresh chance
+  }
   // Stretch.
   const float a[9] = {0, 0, 0, 1, 0, 0, 0, 1, 0}, b[9] = {0, 0, 0, 2, 0, 0, 0, 1, 0};
   Stretch s0 = stretch(a, a, 3), s1 = stretch(a, b, 3);

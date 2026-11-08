@@ -52,6 +52,7 @@ Job g_jobs[kJobs];
 int g_staged = -1;   // job staged this frame, recorded by record()
 uint64_t g_staged_frame = 0;
 std::unordered_set<uint64_t> g_tried;          // (index count, mask image id) decided once
+std::unordered_map<uint32_t, hc::Retry> g_retry;   // per style (index count): when to look at its mask again
 std::unordered_set<uint32_t> g_no_mask_counts;
 
 // Worker <-> main.
@@ -64,7 +65,7 @@ bool g_stop = false;
 std::atomic<bool> g_disk_full{false};
 std::atomic<uint32_t> g_busy{0};      // jobs queued or being processed by the worker
 
-struct Window { std::atomic<uint64_t> written{0}, placeholder{0}, no_mask{0}, cap{0}, other{0}, kept{0}, bytes{0}, dropped{0}; };
+struct Window { std::atomic<uint64_t> written{0}, placeholder{0}, no_mask{0}, cap{0}, other{0}, kept{0}, bytes{0}, dropped{0}, never_full{0}; };
 Window g_win;
 uint64_t g_win_start = 0;
 
@@ -341,19 +342,28 @@ void poll(DeviceData* dd, uint64_t now) {
   if (now - g_win_start >= 300) {
     const uint64_t w = g_win.written.exchange(0), p = g_win.placeholder.exchange(0), n = g_win.no_mask.exchange(0),
                    c = g_win.cap.exchange(0), o = g_win.other.exchange(0), k = g_win.kept.exchange(0), b = g_win.bytes.exchange(0),
-                   d = g_win.dropped.exchange(0);
-    if (w || p || n || c || o || k || d)
+                   d = g_win.dropped.exchange(0), nf = g_win.never_full.exchange(0);
+    uint64_t waiting = 0, never = 0;
+    for (const auto& [count, r] : g_retry) { waiting += r.state == hc::RetryState::Waiting; never += r.state == hc::RetryState::NeverFull; }
+    if (w || p || n || c || o || k || d || nf)
       log("[hair capture] %llu frames: %llu captured (%.1f MB written), %llu kept (not larger / exists), %llu skipped placeholder, "
-          "%llu skipped no mask, %llu skipped cap, %llu skipped other (format, usage, layout, size), %llu dropped, %u in the worker",
+          "%llu skipped no mask, %llu skipped cap, %llu skipped other (format, usage, layout, size), %llu dropped, %u in the worker; "
+          "styles: %llu waiting for a full mask, %llu never full-size (%llu new)",
           (unsigned long long)(now - g_win_start), (unsigned long long)w, double(b) / 1048576.0, (unsigned long long)k,
           (unsigned long long)p, (unsigned long long)n, (unsigned long long)c, (unsigned long long)o, (unsigned long long)d,
-          g_busy.load());
+          g_busy.load(), (unsigned long long)waiting, (unsigned long long)never, (unsigned long long)nf);
     g_win_start = now;
   }
 }
 
 bool want(DeviceData* dd, const Draw& d, uint64_t now) {
   if (!dd || !ready() || !d.mask || !d.mask_id || !d.count || d.count % 3 || (d.index_bytes != 2 && d.index_bytes != 4)) return false;
+  // Per style (index count): look again when its bound mask image changes, else every kRetryFrames, until it is
+  // captured or "never full-size" (common/hair_capture.h Retry). hcap2-capture 2026-11-08: a placeholder seen first
+  // was never looked at again (the old key was (count, image) and the summary showed 3 looks for 2 styles).
+  if (g_retry.size() >= kTriedMax && !g_retry.count(d.count)) return false;
+  hc::Retry& r = g_retry[d.count];
+  if (!hc::should_look(r, d.mask_id, now)) return false;
   VkImage image = VK_NULL_HANDLE;
   VkImageCreateInfo ci{};
   VkImageSubresourceRange range{};
@@ -366,14 +376,19 @@ bool want(DeviceData* dd, const Draw& d, uint64_t now) {
       if (im != tracker().images.end()) { image = v->second.image; ci = im->second.ci; image_id = im->second.id; range = v->second.range; }
     }
   }
-  if (!image || image_id != d.mask_id) { no_mask(d.count); return false; }
+  if (!image || image_id != d.mask_id) { hc::looked(r, false, false, now); no_mask(d.count); return false; }
   const uint64_t key = try_key(d.count, image_id);
-  if (g_tried.count(key)) return false;
+  if (g_tried.count(key)) { hc::looked(r, true, false, now); return false; }   // this image failed for another reason
   const uint32_t levels = range.levelCount == VK_REMAINING_MIP_LEVELS ? ci.mipLevels - (std::min)(ci.mipLevels, range.baseMipLevel)
                                                                       : range.levelCount;
   hc::MaskInfo m{ci.extent.width, ci.extent.height, (std::min)(levels, ci.mipLevels), uint32_t(ci.format)};
   // A view that starts below mip 0 has no resident full level: as a streaming placeholder.
-  if (range.baseMipLevel != 0 || !hc::full_mask(m, 0, 0)) { tried(key); ++g_win.placeholder; return false; }
+  if (range.baseMipLevel != 0 || !hc::full_mask(m, 0, 0)) {
+    ++g_win.placeholder;
+    if (hc::looked(r, false, false, now)) ++g_win.never_full;
+    return false;
+  }
+  if (r.state == hc::RetryState::Captured && !hc::upgrade(r.captured, m)) { hc::looked(r, true, false, now); return false; }
   const bool layout_ok = d.mask_layout != VK_IMAGE_LAYOUT_UNDEFINED && d.mask_layout != VK_IMAGE_LAYOUT_PREINITIALIZED;
   if (!supported_format(ci.format) || !(ci.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) || !layout_ok || ci.imageType != VK_IMAGE_TYPE_2D ||
       ci.samples != VK_SAMPLE_COUNT_1_BIT) {
@@ -405,6 +420,7 @@ bool want(DeviceData* dd, const Draw& d, uint64_t now) {
   j = Job{};
   if (!make_staging(dd, total, j.buf)) { j = Job{}; return false; }   // retried on a later frame
   tried(key);
+  hc::looked(r, true, true, now, m);
   j.used = true;
   j.frame = now;
   j.count = d.count; j.index_bytes = d.index_bytes; j.stride = d.stride; j.vk_format = uint32_t(ci.format);
@@ -480,6 +496,7 @@ void device_destroyed(DeviceData* dd) {
   for (Job& j : g_jobs) { free_staging(dd, j.buf); j = Job{}; }
   g_staged = -1;
   g_tried.clear();
+  g_retry.clear();
   g_no_mask_counts.clear();
 }
 

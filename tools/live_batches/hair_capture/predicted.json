@@ -12,16 +12,16 @@
    "written": "2026-11-08"
   }
  },
- "hcap2-capture": {
-  "captures": {
-   "predicted": ">= 1 written, mask 2048x2048 BC3 (fmt 137), 12 mips, stretch near 1",
-   "source": "hcap1-dialogue: 2 full masks, 424-600 unmatched count-unknown draws",
+ "hcap3-capture": {
+  "capture": {
+   "predicted": "8b32681bb9ecfc30 captured with its 2048x2048 BC3 mask (after the placeholder), stretch near 1; the regenerated groom: same index id, strand counts within dedupe ties, radii within the stretch",
+   "source": "hcap2-capture masks; offline hairconv equivalence (24 styles, bit-identical)",
    "written": "2026-11-08"
   }
  },
- "hcap2-strands": {
+ "hcap3-strands": {
   "strands": {
-   "predicted": "the converted style's groom indexed and drawn (groom instances >= 1)",
+   "predicted": "8b32681bb9ecfc30 indexed from the v3 file and drawn (groom instances >= 1)",
    "source": "offline: hairconv grooms decode in the layer reader (hairconv_test)",
    "written": "2026-11-08"
   }

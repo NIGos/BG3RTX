@@ -1,5 +1,5 @@
 {
- "name": "hcap2-capture",
+ "name": "hcap3-capture",
  "save": "Test Dialogue1",
  "session": false,
  "traces": 0,
@@ -36,8 +36,9 @@
  ],
  "expect": [
   "\\[auto\\] scene ready",
+  "\\[assetdb\\] loaded .*test-main.*data.assetdb.bg3rtx_assetdb\\.bin \\(from this checkout\\)",
   "\\[hair groom\\] device with linear swept spheres",
-  "\\[hair capture\\] [0-9a-f_A-Zcount]+: \\d+ indices, \\d+ vertices, mask \\d+x\\d+ fmt \\d+ mips \\d+, stretch [0-9.]+/[0-9.]+/[0-9.]+, \\d+ KB, written",
+  "\\[hair capture\\] 8b32681bb9ecfc30: \\d+ indices, \\d+ vertices, mask 2048x2048 fmt 137 mips 12, stretch [0-9.]+/[0-9.]+/[0-9.]+, \\d+ KB, written",
   "\\[hair capture\\] \\d+ frames: [1-9]\\d* captured"
  ],
  "forbid": [
@@ -47,8 +48,10 @@
   "FAILED, keeping previous",
   "compile call failed",
   "\\[hair groom\\] device WITHOUT",
-  "\\[hair capture\\] .* capturing stopped"
+  "\\[hair capture\\] .* capturing stopped",
+  "\\[hair capture\\] .* not copyable",
+  "\\[assetdb\\] not available"
  ],
- "post": "python tools/live_batches/hair_capture/stage.py convert",
+ "post": "python tools/live_batches/hair_capture/stage.py convert 8b32681bb9ecfc30",
  "post_gate": true
 }

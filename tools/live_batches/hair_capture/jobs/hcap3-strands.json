@@ -1,5 +1,5 @@
 {
- "name": "hcap2-strands",
+ "name": "hcap3-strands",
  "save": "Test Dialogue1",
  "session": false,
  "traces": 0,
@@ -36,8 +36,9 @@
  ],
  "expect": [
   "\\[auto\\] scene ready",
-  "\\[hair groom\\] indexed .*\\.hgrm: index id [0-9a-f]{16}",
-  "\\[hair groom\\] [0-9a-f]{16} LOD \\d decoded \\(v3\\): \\d+ points in \\d+ ms",
+  "\\[assetdb\\] loaded .*test-main.*data.assetdb.bg3rtx_assetdb\\.bin \\(from this checkout\\)",
+  "\\[hair groom\\] indexed .*8b32681bb9ecfc30\\.hgrm: index id 8b32681bb9ecfc30",
+  "\\[hair groom\\] 8b32681bb9ecfc30 LOD \\d decoded \\(v3\\): \\d+ points in \\d+ ms",
   "\\[hair groom\\] frame \\d+: [1-9]\\d* groom instances",
   "\\[hair primary\\] strand G-buffer draws GPU"
  ],
@@ -48,7 +49,9 @@
   "FAILED, keeping previous",
   "compile call failed",
   "\\[hair groom\\] device WITHOUT",
-  "\\[hair groom\\] .*file unreadable or changed since startup"
+  "\\[hair groom\\] .*file unreadable or changed since startup",
+  "\\[hair groom\\] .*8b32681bb9ecfc30.*malformed",
+  "\\[assetdb\\] not available"
  ],
  "post": "python tools/live_batches/hair_capture/stage.py cleanup",
  "post_gate": true

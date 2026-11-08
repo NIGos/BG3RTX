@@ -74,6 +74,42 @@ def test_head_from_roots():
     assert far[0][1] == 1e4   # too few roots: no proxy (as batch.head_proxy without head joints)
 
 
+def test_e2e_stage_never_writes_the_real_assetdb():
+    """tools/live_batches/hair_capture/stage.py: setup links the real assetdb minus the target into the tree, refuses a
+    tree that already has one, and cleanup removes only the links (the real files stay)."""
+    import importlib.util
+    import os
+    import tempfile
+    spec = importlib.util.spec_from_file_location("stage", ROOT / "tools/live_batches/hair_capture/stage.py")
+    with tempfile.TemporaryDirectory() as d:
+        main = Path(d) / "main"
+        (main / ".git").mkdir(parents=True)
+        real = main / "data" / "assetdb"
+        (real / "hair_grooms").mkdir(parents=True)
+        (real / "bg3rtx_assetdb.bin").write_bytes(b"db")
+        for name in ("aaaaaaaaaaaaaaaa", "8b32681bb9ecfc30"):
+            (real / "hair_grooms" / f"{name}.hgrm").write_bytes(b"groom " + name.encode())
+        tree = main / ".claude" / "worktrees" / "test-main"
+        tree.mkdir(parents=True)
+        old = os.getcwd()
+        os.chdir(tree)
+        try:
+            stage = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(stage)
+            assert stage.setup("8b32681bb9ecfc30") == 0
+            copy = tree / "data" / "assetdb"
+            assert (copy / "hair_grooms" / "aaaaaaaaaaaaaaaa.hgrm").read_bytes() == b"groom aaaaaaaaaaaaaaaa"
+            assert not (copy / "hair_grooms" / "8b32681bb9ecfc30.hgrm").exists()
+            assert os.stat(copy / "bg3rtx_assetdb.bin").st_nlink == 2   # a hard link, not a copy
+            assert stage.setup("8b32681bb9ecfc30") == 1                 # the tree has one already
+            assert stage.cleanup() == 0 and not copy.exists()
+            assert (real / "hair_grooms" / "8b32681bb9ecfc30.hgrm").exists() and (real / "bg3rtx_assetdb.bin").read_bytes() == b"db"
+            (copy).mkdir(parents=True)                                  # someone else's assetdb: left alone
+            assert stage.cleanup() == 1 and copy.exists()
+        finally:
+            os.chdir(old)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
