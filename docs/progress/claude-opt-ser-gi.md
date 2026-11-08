@@ -18,3 +18,7 @@
 - Not done, by design: no game path (the layer enables no ray tracing pipeline feature and vk_funcs.h has no RT
   entry points: an ABI change in the layer, owned by another stream), no live job. Recommendation: drop SER for
   now; the raygen path alone is ~40% slower on the fixture and the hint path is unsafe on this driver.
+- Correction (user, 2026-11-08): another game was running on the GPU during these runs, and it crashed too.
+  The timing (+0.31 ms raygen) and the hint-on device loss are CONFOUNDED: the verdict is "not proven", not
+  "dropped". Still valid: support check, hint-off output equality, compile/spirv-val. Rerun hint-off on an idle
+  GPU first (that path ran without errors); hint-on only with the uniform-control-flow fix and the user's OK.
