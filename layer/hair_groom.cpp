@@ -55,8 +55,14 @@ void load_all() {
     for (uint32_t k = 0; lods_ok && k < l->asset.lod_count && k < 8; ++k) {
       uint8_t h16[16];
       uint32_t points = 0;
+      l->lod_at[k] = at;
       lods_ok = _fseeki64(f, int64_t(at), SEEK_SET) == 0 && fread(h16, 1, 16, f) == 16 &&
                 lod_header(h16, at, &points, &l->asset.lod_segments[k], &at);
+    }
+    if (lods_ok) {   // the LODs end exactly at the end of the file (as parse() requires)
+      l->lod_at[l->asset.lod_count] = at;
+      lods_ok = _fseeki64(f, 0, SEEK_END) == 0 && uint64_t(_ftelli64(f)) == at;
+      l->size = at;
     }
     fclose(f);
     if (!lods_ok || g_assets.count(l->asset.index_id)) {
@@ -75,21 +81,29 @@ void load_all() {
 }
 }  // namespace
 
-bool read_full(const Loaded& l, std::vector<uint8_t>& bytes, Asset& full) {
+bool read_lod(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod& lod) {
   bytes.clear();
+  if (index >= l.asset.lod_count || index >= 8 || !l.size) return false;
+  const uint64_t begin = l.lod_at[index], end = l.lod_at[index + 1];
+  if (end <= begin || end - begin >= (uint64_t(1) << 31)) return false;
   FILE* f = nullptr;
   if (fopen_s(&f, l.path.c_str(), "rb") != 0 || !f) return false;
-  _fseeki64(f, 0, SEEK_END);
-  const int64_t size = _ftelli64(f);
-  _fseeki64(f, 0, SEEK_SET);
-  if (size > 0 && size < (int64_t(1) << 31)) {
-    bytes.resize(size_t(size));
-    if (fread(bytes.data(), 1, bytes.size(), f) != bytes.size()) bytes.clear();
+  // The index entry must still describe this file (it may have been replaced since startup): size and header.
+  uint8_t head[40 + kSamples * 8] = {};
+  bool ok = _fseeki64(f, 0, SEEK_END) == 0 && uint64_t(_ftelli64(f)) == l.size && _fseeki64(f, 0, SEEK_SET) == 0;
+  const size_t got = ok ? fread(head, 1, sizeof head, f) : 0;
+  Asset h;
+  ok = ok && parse_header(head, got, h) && h.index_id == l.asset.index_id && h.indices == l.asset.indices &&
+       h.lod_count == l.asset.lod_count;
+  if (ok) {
+    bytes.resize(size_t(end - begin));
+    ok = _fseeki64(f, int64_t(begin), SEEK_SET) == 0 && fread(bytes.data(), 1, bytes.size(), f) == bytes.size();
   }
   fclose(f);
-  // The index entry must still describe this file (it may have been replaced since startup).
-  return !bytes.empty() && parse(bytes.data(), bytes.size(), full) && full.index_id == l.asset.index_id &&
-         full.indices == l.asset.indices && full.lods.size() == l.asset.lod_count;
+  uint64_t at = 0;
+  ok = ok && parse_lod(bytes.data(), bytes.size(), at, l.asset.indices / 3, lod) && at == bytes.size();
+  if (!ok) bytes.clear();
+  return ok;
 }
 namespace {
 }  // namespace

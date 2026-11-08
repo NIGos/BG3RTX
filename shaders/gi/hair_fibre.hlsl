@@ -352,9 +352,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if (vs == kRtLit) {
       bool passes;
       float3 fs, fm;
+      // The sun's visibility as the buffer's sun term has it: the game's mask m (D-LS's ls_sun keeps it; with the core's
+      // RT sun mask it is that trace), times our scene ray (min(m, v): no light where either is shadowed, so no sun
+      // under roofs or missing casters). n from the groom query only sets T_f.
       hd_shade_pixel_parts(T, sf.V, Ls, hf_groom(ray, passes), colour, beta, fs, fm);
-      add_d += Esun * fm * f_sun.x;
-      add_s += Esun * fs * f_sun.y;
+      add_d += Esun * m * fm * f_sun.x;
+      add_s += Esun * m * fs * f_sun.y;
     }
   }
   const float3 od = max(gDiffuse[fp] - sub_d + add_d, 0.0), os = max(gSpecular[fp] - sub_s + add_s, 0.0);

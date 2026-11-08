@@ -563,6 +563,8 @@ add_custom_command(OUTPUT ${HAIR_DUAL_CHECK_SPV}
   COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/hair_dual_gpu_check.hlsl -spirv -fspv-target-env=vulkan1.3
           -HV 2021 -T cs_6_6 -E main -O3 -Fo ${HAIR_DUAL_CHECK_SPV}
   DEPENDS ${CMAKE_SOURCE_DIR}/tools/hair_dual_gpu_check.hlsl ${CMAKE_SOURCE_DIR}/shaders/rt/hair_dual.hlsli
+          ${CMAKE_SOURCE_DIR}/shaders/rt/hair_dual_table.hlsli ${CMAKE_SOURCE_DIR}/shaders/rt/hair_bsdf.hlsli
+          ${CMAKE_SOURCE_DIR}/shaders/rt/hair_depth_match.hlsli
           ${CMAKE_SOURCE_DIR}/shaders/rt/hair_volume_table.hlsli
           ${CMAKE_SOURCE_DIR}/shaders/rt/hair_dual_table.hlsli ${CMAKE_SOURCE_DIR}/shaders/rt/hair_bsdf.hlsli VERBATIM)
 set(HAIR_SHADOW_CHECK_SPV ${CMAKE_BINARY_DIR}/hair_shadow_gpu_check.spv)

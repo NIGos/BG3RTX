@@ -10,6 +10,8 @@
 
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
+static const uint hair_primary_slot_mask_offset = 3504u;   // common/hair_primary.h kSlotMaskOffset
+static const uint hair_primary_marker_card = 0x40u;        // common/hair_primary.h kMarkerCard
 
 struct Camera {               // set 0 binding 2
   row_major float4x4 view, proj, vp;
@@ -48,6 +50,7 @@ struct Out {
 };
 
 Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD0,
+         [[vk::location(1)]] float4 prev_clip : TEXCOORD1,   // native b70cadc5 location 1: the card's previous clip position
          [[vk::location(6)]] float4 aux : TEXCOORD6) {
   const float2 dx = ddx(card_uv), dy = ddy(card_uv);
   const uint64_t rec = record();
@@ -69,7 +72,23 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float3 cn = cross(ddx(pc), ddy(pc));
   const float cos_card = abs(dot(pc / max(t_card, 1e-30), cn)) / max(length(cn), 1e-30);
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
-  if (tag == 0u || grooms == 0u || width == 0u || height == 0u) { discard; return none; }
+  if (tag == 0u || width == 0u || height == 0u) { discard; return none; }
+  {   // Round 3 M2: the G-buffer drew this pixel's card in card mode (its accepted marker carries the card flag and its
+      // slot is in the header's card mask): the card's native motion vector (b70cadc5:157), not the strand's.
+    const uint2 cpx = min(uint2(pos.xy), uint2(width, height) - 1u);
+    const uint64_t cpix = addr2(vk::RawBufferLoad<uint2>(rec + 32u, 4));
+    const uint cacc = ld(cpix + uint64_t(width) * height * 16u + uint64_t(cpx.y * width + cpx.x) * 8u + 4u);
+    if ((tag & 0xFFFFFFu) != 0u && (cacc >> 8u) == (tag & 0xFFFFFFu) && (cacc & hair_primary_marker_card) != 0u &&
+        (((ld(rec + hair_primary_slot_mask_offset) >> 16u) >> (cacc & 15u)) & 1u) != 0u) {
+      const float2 prev_px = ((prev_clip.xy / prev_clip.w) * float2(0.5, -0.5) + 0.5) * gScreen.scale + gScreen.offset;
+      Out c;
+      c.mv = (pos.xy + float2(gPrev.jitter.x, -gPrev.jitter.y)) -
+             (prev_px * float2(gSize.m0, gSize.m1) + float2(gPrev.prev_jitter.x, -gPrev.prev_jitter.y));
+      c.depth = pos.z;
+      return c;
+    }
+  }
+  if (grooms == 0u) { discard; return none; }
   float3 org;   // this camera in the published groom's camera-relative frame (hp_rebase)
   if (!hp_rebase(rec, gCam.position, org)) { discard; return none; }
   const uint64_t pool = addr2(vk::RawBufferLoad<uint2>(rec + 24u, 4)), pixels = addr2(vk::RawBufferLoad<uint2>(rec + 32u, 4));

@@ -91,6 +91,8 @@ static_assert(kTagTracedOffset == 3920 && kTagPixelOffset == 3952 && kTagRefused
               "hair_primary_count.hlsl tag-window offsets");
 // The card-marker flag of a pixel whose strand trace skipped another groom (its slot neither swaps nor is this draw's).
 constexpr uint32_t kMarkerSkipped = 0x20;
+// The accepted-marker flag of a card-mode G-buffer pixel (round 3 M2): the swapped velocity variant writes its card MV.
+constexpr uint32_t kMarkerCard = 0x40;
 // The newest of the kCountTags tags (j = 0 newest) whose entries were found; -1 none.
 inline int newest_counted_tag(const uint32_t totals[kCountTags]) {
   for (int j = 0; j < int(kCountTags); ++j)
@@ -658,6 +660,46 @@ inline Upgrade upgrade_plan(const DrawSlots& record_slots, const uint64_t* keys_
   }
   if (!usable) for (auto& m : u.key_map) m = kDrawSlots;
   return u;
+}
+
+// Round 3 H2 (layer/bvhsplit.cpp groom instances): whether a groom row publishes its draw key (and primary ray mask
+// 0xFF). A new slot waits for its second points update (the first copies stale previous points); a slot that has
+// published its key keeps it on the frame its LOD switches (prev_frames 1: this build wrote the new LOD's points, UVs and
+// BLAS before the TLAS). Dropping it there freed the draw slot, made the submit draw the card and refused the next
+// frames: a strand-card-strand flash on every LOD change.
+inline bool groom_primary_key(bool has_uv, uint64_t hp_key, uint32_t prev_frames, bool keyed) {
+  return has_uv && hp_key && (prev_frames > 1 || (keyed && prev_frames >= 1));
+}
+// Round 3 M1: the row's previous points are valid only when they are the previous build frame's (the velocity variant
+// pairs them with the previous publish's camera): a slot that skipped updates (held, soup refused, crowd cards) returns
+// with points from an older frame. last_update: the build frame of the slot's last update before this one.
+inline bool groom_prev_points(uint32_t prev_frames_after, uint64_t last_update, uint64_t now) {
+  return prev_frames_after > 1 && last_update && last_update + 1 == now;
+}
+
+// Round 3 L4: the whole per-pending-header decision at vkQueueSubmit (layer/hair_primary.cpp hair_primary_submit_begin),
+// composed from ordered_publish and upgrade_plan so it is unit-tested as the layer runs it. Staged publish i: its pick,
+// submitted flag, header_usable, pixel count and keys. frame_known: the G-buffer frame's GbFrame is this recording's
+// (its swapped_slots are then the swap mask; otherwise every slot counts).
+struct SubmitDecision { int publish = -1; CurrentPick pick = CurrentPick::NotRecorded; Upgrade plan{}; uint32_t masks = 0; };
+template <class InSubmit>
+inline SubmitDecision submit_decision(const Staged* staged, const bool* submitted, const bool* usable, const uint32_t* pixels,
+                                      const uint64_t (*keys)[kMaxGrooms], int n, uint32_t record_tag, uint32_t record_pixels,
+                                      const DrawSlots& record_slots, int gbuffer_index, InSubmit in_submit, bool frame_known,
+                                      uint32_t swapped_slots) {
+  SubmitDecision d;
+  d.publish = ordered_publish(staged, submitted, n, record_tag, gbuffer_index, in_submit);
+  if (d.publish >= 0) {
+    d.plan = upgrade_plan(record_slots, keys[d.publish], usable[d.publish] && pixels[d.publish] == record_pixels);
+    d.pick = d.plan.card_slots ? CurrentPick::Incompatible : CurrentPick::Current;
+  } else {
+    for (uint32_t k = 0; k < kMaxGrooms; ++k) d.plan.key_map[k] = kDrawSlots;
+    bool newer = false;
+    for (int i = 0; i < n; ++i) newer |= staged[i].tag > record_tag;
+    d.pick = newer ? CurrentPick::AfterGbuffer : CurrentPick::NotRecorded;
+  }
+  d.masks = slot_masks(frame_known ? swapped_slots & ~d.plan.card_slots : kAllSwapSlots, d.plan.card_slots);
+  return d;
 }
 
 // Review 2026-11-08 item 19: a frame-level watchdog over the swapped draws of the counted G-buffer frame. card: their

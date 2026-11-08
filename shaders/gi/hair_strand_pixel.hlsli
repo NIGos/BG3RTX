@@ -1,9 +1,16 @@
 // The visible strand at a pixel (rt_hair_groom_primary): the layer's hair primary header, read through its device
 // address (specialization constants 1100/1101, core/gi.cpp refresh). Shared by gi/hair_fibre.hlsl (direct light after
-// D-LS) and gi/hair_fibre_spec.hlsl (specular indirect after D-RF). Needs rt/hair_primary.hlsli.
+// D-LS) and gi/hair_fibre_spec.hlsl (specular indirect after D-RF). Needs rt/hair_primary.hlsli and gi_common.hlsli.
 #pragma once
+#include "../rt/hair_depth_match.hlsli"
 [[vk::constant_id(1100)]] const uint kHfRecordLo = 0u;   // the layer's hair primary header (persist key)
 [[vk::constant_id(1101)]] const uint kHfRecordHi = 0u;
+
+// The view depth of the frustum rays: their tips lie on one plane (P = ray_at(uv) d), its distance from the camera.
+float hf_frustum_zr() {
+  const float3 n = cross(cam.ray1.xyz - cam.ray0.xyz, cam.ray2.xyz - cam.ray0.xyz);
+  return abs(dot(cam.ray0.xyz, n)) / max(length(n), 1e-30);
+}
 
 uint64_t hf_record() { return (uint64_t(kHfRecordHi) << 32) | uint64_t(kHfRecordLo); }
 uint hf_ld(uint64_t a) { return vk::RawBufferLoad<uint>(a, 4); }
@@ -19,7 +26,7 @@ bool hf_strand(uint2 fp, float d, out float3 T) {
   if (tag == 0u || grooms == 0u || any(fp >= uint2(width, height))) return false;
   const uint4 e = vk::RawBufferLoad<uint4>(hf_addr(rec + 32u) + uint64_t(fp.y * width + fp.x) * hair_primary_pixel_bytes, 16);
   if (e.w != hp_seal(e.xyz, tag) || e.x == hair_primary_no_strand || (e.x >> 24) >= grooms) return false;
-  if (abs(asfloat(e.z) - d) > 1e-6 * max(abs(d), 1e-6)) return false;   // something else won this pixel
+  if (!hair_depth_match(asfloat(e.z), d, hf_frustum_zr())) return false;   // something else won this pixel
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + (e.x >> 24) * 16u, 16);
   const uint64_t pool = hf_addr(rec + 24u);
   uint i0;

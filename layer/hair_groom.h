@@ -22,9 +22,12 @@ bool lss_enabled();
 struct Loaded {
   Asset asset;
   std::string path;
+  uint64_t size = 0;           // the file's size at indexing
+  uint64_t lod_at[9] = {};     // byte offset of each LOD's header; lod_at[lod_count] = the end (== size)
 };
-// The whole file of a groom, parsed (views into `bytes`); false when it changed or is malformed.
-bool read_full(const Loaded& l, std::vector<uint8_t>& bytes, Asset& full);
+// One LOD of a groom (round 3 M6): its bytes only, validated (parse_lod); `lod` views into `bytes`. False when the
+// file changed since indexing (size, header) or the LOD is malformed.
+bool read_lod(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod& lod);
 const Loaded* find(uint64_t index_id, uint32_t index_count);
 // Index counts of the loaded grooms: a draw with another count never matches (no hashing).
 bool count_known(uint32_t index_count);
