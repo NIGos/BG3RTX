@@ -517,7 +517,58 @@ static void test_zero_length_segment() {
   CHECK(!parse(b.data(), b.size(), a));
 }
 
+// Round 3: H2 key through a LOD switch, M1 previous points, L4 the composed submit decision, M6 one-LOD parse.
+static void test_round3() {
+  using namespace hair_primary;
+  // H2: a new slot waits for its second update; a published slot keeps its key on the switch frame (prev_frames 1).
+  CHECK(!groom_primary_key(true, 7, 1, false) && groom_primary_key(true, 7, 2, false));
+  CHECK(groom_primary_key(true, 7, 1, true));                                  // LOD switch frame: key kept
+  CHECK(!groom_primary_key(true, 7, 0, true) && !groom_primary_key(false, 7, 3, true) && !groom_primary_key(true, 0, 3, true));
+  {   // the switch frame's publish keeps the key, so the draw keeps its slot: no card mode, no refusal
+    uint64_t before[kMaxGrooms] = {0xA0, 0xB0}, after[kMaxGrooms] = {0xA0, 0xB0}, dropped[kMaxGrooms] = {0, 0xB0};
+    DrawSlots s;
+    s.publish(before, 2);
+    CHECK(upgrade_plan(s, after, true).card_slots == 0);
+    CHECK(upgrade_plan(s, dropped, true).card_slots == (1u << s.find(0xA0)));   // the old behaviour: card mode
+  }
+  // M1: previous points only when the slot's last update was the previous build frame.
+  CHECK(groom_prev_points(2, 99, 100) && !groom_prev_points(2, 97, 100) && !groom_prev_points(2, 0, 100));
+  CHECK(!groom_prev_points(1, 99, 100));
+  // L4: the composed decision. Record-time header tag 1000 (keys A, B), this frame's publish 1001 without B, built in
+  // this submit before the G-buffer: applied, B's slot cards, the swap mask without B.
+  const uint64_t A = 0xA0, B = 0xB0;
+  uint64_t rk[kMaxGrooms] = {A, B};
+  DrawSlots rs;
+  rs.publish(rk, 2);
+  Staged st[3] = {{1000, 1, 1}, {1001, 2, 2}, {0, 0, 0}};
+  const bool sub[3] = {true, false, false}, usable[3] = {true, true, false};
+  const uint32_t px[3] = {100, 100, 0};
+  uint64_t keys[3][kMaxGrooms] = {{A, B}, {A}, {}};
+  const uint32_t swapped = (1u << rs.find(A)) | (1u << rs.find(B));
+  SubmitDecision d = submit_decision(st, sub, usable, px, keys, 3, 1000, 100, rs, 1, [](int i) { return i == 1 ? 0 : -1; },
+                                     true, swapped);
+  CHECK(d.publish == 1 && d.pick == CurrentPick::Incompatible && d.plan.card_slots == (1u << rs.find(B)));
+  CHECK(d.masks == slot_masks(1u << rs.find(A), 1u << rs.find(B)) && d.plan.key_map[0] == rs.find(A));
+  d = submit_decision(st, sub, usable, px, keys, 3, 1000, 100, rs, 1, [](int i) { return i == 1 ? 3 : -1; }, true, swapped);
+  CHECK(d.publish < 0 && d.pick == CurrentPick::AfterGbuffer && d.masks == slot_masks(swapped, 0));
+  d = submit_decision(st, sub, usable, px, keys, 3, 1001, 100, rs, 1, [](int) { return -1; }, false, swapped);
+  CHECK(d.publish < 0 && d.pick == CurrentPick::NotRecorded && d.masks == kAllSwapSlots);
+  const uint32_t other_px[3] = {100, 50, 0};   // another pixel record size: every recorded slot cards
+  d = submit_decision(st, sub, usable, other_px, keys, 3, 1000, 100, rs, 1, [](int i) { return i == 1 ? 0 : -1; }, true, swapped);
+  CHECK(d.publish == 1 && d.plan.card_slots == swapped && (d.masks & 0xFFFFu) == 0);
+  // M6: parse_lod alone reads and validates one LOD in place.
+  std::vector<uint8_t> b = asset();
+  uint64_t at = 40;
+  Lod lod;
+  CHECK(bg3::hair_groom::parse_lod(b.data(), b.size(), at, 2, lod) && at == b.size() && lod.points == 3 && lod.segments == 2);
+  at = 40;
+  CHECK(!bg3::hair_groom::parse_lod(b.data(), b.size() - 1, at, 2, lod));
+  at = 40;
+  CHECK(!bg3::hair_groom::parse_lod(b.data(), b.size(), at, 1, lod));   // triangle 1 out of range for 1 triangle
+}
+
 int main() {
+  test_round3();
   test_header_version(); test_watchdog(); test_load_identity(); test_zero_length_segment();
   test_cascade_card_drop();
   test_participation();
