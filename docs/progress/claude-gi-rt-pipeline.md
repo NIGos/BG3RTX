@@ -33,3 +33,16 @@
   added with lint_snapshot.extend_readiness: [0, null], text new in this branch.
 - Only a live can answer: the emission variant, the real-frame cost, FG/Streamline with the extra device features,
   the Script Extender, the OMM raygen request (Ultra has OMM on), validation-clean binding at the RT bind point.
+
+## Live 2026-11-08 (grp2-inn VALID, grp1-camp not run)
+- Inn (The Blushing Mermaid - 96h 39m, Ultra, FG on, window unfocused), gi_rt_pipeline 0/1/0/1 in one run:
+  trace pass 12.09 / 11.88 ms OFF vs 10.03 / 9.86 ms ON: -1.95 and -2.13 ms (OFF spread 0.21). Whole GI -1.5 / -3.5 ms,
+  rt passes -1.7 / -2.1 ms. Offline predicted -0.6 (the pack's view is lighter; the live frame runs the emission variant).
+- The emission variant runs as a ray tracing pipeline; device features and the reorder extension are on; FG/Streamline
+  status 0x0, no device loss, no compute fallback beyond the first build.
+- First build of the raygen pipeline took about 60 s (compute meanwhile): fine as a fallback, but a cold start cost.
+- Energy (pre-post scene colour, m4_promotion_gate): ON vs mean OFF -0.32% and -0.35%; OFF-OFF spread 0.27% (one pair).
+  Gate band within; the old OFF-pair rule calls it DARKER. Not resolved with one OFF pair: needs more pairs.
+- Camp not run: "Campsite - 27h" no longer exists; the job now uses "Test Campsite" (not run).
+- Status: key stays off. Open: the energy question (more OFF/ON pairs), camp, the 60 s first build (warm the pipeline
+  at load), reorder=1 in game, launcher page.
