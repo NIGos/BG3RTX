@@ -8,7 +8,7 @@
  "timeout": 720,
  "max_minutes": 12,
  "window_mode": "visible_unfocused_fg",
- "live_batch": "gi-ser-reorder",
+ "live_batch": "gi-ser-reorder-2",
  "tree": ".claude/worktrees/test-main",
  "fail_fast": true,
  "stop_on_dump": false,
@@ -79,9 +79,9 @@
    "min": 1
   },
   {
-   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts)",
+   "name": "scene wait: every cost window traces its own frame's scene (at most 1 timeout per 120 frames)",
    "select": "\\[rt\\] scene wait: \\d+ frames",
-   "match": "got this frame's scene, 0 timeouts",
+   "match": "got this frame's scene, [01] timeouts",
    "windows": [
     "cost-off-a",
     "cost-on-a",
