@@ -27,6 +27,13 @@ Choice indices remain schema indices. Box On is index 1 (`all`, ls_box=2); legac
 | Performance | Faster bounce light tracing (`exp_gi_rt_pipeline`) | `gi_rt_pipeline` | Off / On | On / On / On / On | live (first enable may pause while the pipeline builds) |
 | Performance | Bounce trace reordering (`exp_gi_rt_pipeline_reorder`) | `gi_rt_pipeline_reorder` | Off / By hit kind / By hit kind and object | By hit kind (all presets) | hitch |
 
+Home (WebView, 2026-11-08): first page and the page the launcher opens on. Shortcuts only, no state of its own:
+Play card (preset Low-Ultra, Play, version · GPU · mod files; the header is hidden on Home and carries them elsewhere);
+RTX Hair (`exp_hair_groom_primary` control with its restart badge, the Preparation hair row, Pause/Resume, When to convert);
+Shaders (the Preparation shaders row with the driver pipeline line); Performance (`exp_gi_rt_pipeline`,
+`exp_gi_rt_pipeline_reorder`, `frame_generation`, and a link to the page). Same control ids and the same
+`set` / `prep` / `preset` / `play` messages as on their own pages. Missing or hidden settings are omitted.
+
 Apply exceptions: FG Off/on restarts; 2x/3x/4x live. Water and stock-hair Off live;
 water/stock-hair enable restarts. Bounce capture first enable/disable restarts.
 RT strength affects indirect light, local shadows and reflections. Frame limit counts rendered frames.

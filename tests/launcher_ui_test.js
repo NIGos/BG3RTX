@@ -23,6 +23,47 @@ const render=s=>receive({data:{...s,type:'state'}});
 const all=e=>[e,...e.children.flatMap(c=>typeof c==='object'?all(c):[])];
 render(fixture);
 assert(!ids.get('navigation').children.some(e=>e.id==='nav-Developer'));
+// Home: first in the navigation and the page the launcher opens on. Shortcuts only: the same control ids and the same
+// 'set' / 'prep' / 'preset' / 'play' messages as the controls on their own pages.
+{
+ const msg=()=>JSON.parse(JSON.stringify(sent.at(-1)));
+ const home=()=>all(ids.get('section-content'));
+ assert.strictEqual(ids.get('navigation').children[0].id,'nav-Home','Home is first');
+ assert.strictEqual(ids.get('nav-Home').attributes['aria-current'],'page','Home is the default page');
+ assert(ids.get('header').hidden,'Home carries the preset and GPU line itself');
+ for(const id of ['home-play-card','home-hair','home-shaders','home-performance'])assert(home().includes(ids.get(id)),id+' missing on Home');
+ assert(home().includes(ids.get('preset-3'))&&home().includes(ids.get('home-play')));
+ assert(ids.get('home-status').textContent.includes(fixture.version),'version on the Play card');
+ for(let p=0;p<4;p++){ids.get('preset-'+p).onclick();assert.deepStrictEqual(msg(),{type:'preset',value:p});}
+ assert.strictEqual(ids.get('home-play').disabled,!fixture.canPlay,'Home Play follows canPlay like the footer');
+ ids.get('home-play').onclick();assert.deepStrictEqual(msg(),{type:'play'});
+ const act=id=>{const e=ids.get(id);assert(e,id+' missing');if(e.type==='checkbox'){e.checked=!e.checked;e.onchange();}else e.onclick();return msg();};
+ const shortcuts=[['exp_hair_groom_primary',0,'home-hair','Lighting'],['exp_gi_rt_pipeline',0,'home-performance','Performance'],
+  ['exp_gi_rt_pipeline_reorder',2,'home-performance','Performance'],['frame_generation',3,'home-performance','Performance']];
+ for(const [id,index,box,page] of shortcuts){
+  render(fixture);const control='control-'+id+'-'+index;
+  assert(all(ids.get(box)).includes(ids.get(control)),control+' not on Home');
+  assert(ids.get(control).attributes['aria-describedby']==='needs-'+id);
+  const fromHome=act(control);assert.strictEqual(fromHome.type,'set');assert.strictEqual(fromHome.id,id);
+  ids.get('nav-'+page).onclick();assert(!ids.get('header').hidden);
+  assert(all(ids.get('card-'+id)).includes(ids.get(control)),control+' not on '+page);
+  assert.deepStrictEqual(act(control),fromHome,id+' sends the same message from Home and '+page);
+  ids.get('nav-Home').onclick();
+ }
+ assert.strictEqual(ids.get('home-hair').children[0].children[1].textContent,'Restart to apply','RTX Hair keeps its restart note');
+ // Preparation on Home: hair row with Pause and When to convert in the RTX Hair card, shaders row in the Shaders card.
+ assert(!ids.get('prep-pause')||!home().includes(ids.get('prep-pause')),'no hair actions without preparation data');
+ const prep={items:[{id:'hair',title:'Strand hair',line:'3 of 5 styles ready, 0.1 GB on disk.',detail:'Converting companions, about 2 min left.',progress:0.6,state:'running'},
+  {id:'shaders',title:'Shaders',line:'Preparing shaders: 4 of 9.',detail:'Your graphics driver still builds the first ray tracing pipeline in game, about a minute.',progress:0.4,state:'running'}],whilePlaying:false,paused:false,pausable:true};
+ render({...fixture,preparation:prep});
+ assert(all(ids.get('home-hair')).includes(ids.get('prep-hair'))&&all(ids.get('home-shaders')).includes(ids.get('prep-shaders')));
+ assert(all(ids.get('home-shaders')).some(e=>e.textContent==='Preparing shaders: 4 of 9.')&&all(ids.get('home-shaders')).some(e=>/first ray tracing pipeline/.test(e.textContent)));
+ ids.get('prep-pause').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'pause',value:0});
+ ids.get('prep-when-1').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'whilePlaying',value:1});
+ ids.get('prep-when-0').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'whilePlaying',value:0});
+ render({...fixture,preparation:{...prep,paused:true}});ids.get('prep-pause').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'resume',value:0});
+ ids.get('home-more-performance').onclick();assert.strictEqual(ids.get('nav-Performance').attributes['aria-current'],'page');
+}
 for(const category of new Set(fixture.settings.map(s=>s.category))){
  assert(ids.has('nav-'+category),category+' has no page');ids.get('nav-'+category).onclick();
  const cards=all(ids.get('section-content')).filter(e=>e.tagName==='article'&&e.id);
@@ -146,4 +187,4 @@ render({...fixture,preparation:{...prepState,paused:true}});ids.get('nav-Support
 render({...fixture,preparation:{...prepState,items:[{id:'hair',title:'Strand hair',line:'Not available: Python 3 was not found.',state:'unavailable'}]}});ids.get('nav-Support').onclick();
 assert(!all(ids.get('preparation')).some(e=>e.tagName==='button'||e.tagName==='input'),'no actions without a converter');
 render({...fixture,developer:true});assert(!ids.get('navigation').children.some(e=>e.className==='nav-foot'&&e.children.some(c=>c.className==='switch-row')),'developer mode keeps its own disclosure');
-console.log('Renderer: category reachability, requirements, costs, focus, native controls, presets and developer authorization pass.');
+console.log('Renderer: Home shortcuts, category reachability, requirements, costs, focus, native controls, presets and developer authorization pass.');

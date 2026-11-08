@@ -112,6 +112,18 @@ main { grid-area: main; min-width: 0; overflow: auto; padding: 24px 28px 32px; s
 .prep-title { font-weight: 600; }
 .prep-option { display: flex; align-items: center; gap: 8px; color: var(--text-2); }
 .prep-item progress { inline-size: 100%; block-size: 6px; accent-color: var(--gold); }
+/* Home: Play spans the row; RTX Hair, Shaders and Performance follow in the usual card grid. */
+.home { grid-auto-flow: row dense; align-items: start; }
+.home .home-play { grid-column: 1 / -1; background: var(--panel-hi); border-color: var(--line); }
+.home #home-hair { grid-row: span 2; }
+.prep-when { justify-self: start; }
+.home-play-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+.home-play-row .btn.play { min-height: 44px; padding: 8px 32px; font-size: 15px; }
+.home-facts { overflow-wrap: anywhere; }
+.home-row { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.home-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.home .card > .control { min-height: 36px; }
+.btn.link-btn { justify-self: start; align-self: flex-start; margin-top: 4px; }
 .help-copy { margin: 0; color: var(--text-2); line-height: 1.6; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
