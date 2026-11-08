@@ -186,6 +186,19 @@ void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV
   }
 }
 void gi_trace_px(uint3 tid) {
+#elif GI_TRACE_RAYGEN
+// SER prototype (docs/progress/claude-opt-ser-gi.md; tools/gi_trace_rgen.hlsl, frame_replay --ab-rgen): the same
+// body as a ray generation shader over the same thread grid, and one reorder hint per GI ray (kGiSerHint below).
+// Offline only: no game pipeline is built from it (the layer enables no ray tracing pipeline feature).
+#if !RT_HIT_GI_DIRECT
+#error GI_TRACE_RAYGEN needs RT_HIT_GI_DIRECT (the hint reads the hit's instance)
+#endif
+[[vk::constant_id(1050)]] const uint kGiSerHint = 0u;   // shader_variant.h kSpecIdGiSer: 0 no reorder, 1 hint
+[[vk::ext_capability(5388)]] [[vk::ext_extension("SPV_EXT_shader_invocation_reorder")]]
+[[vk::ext_instruction(5314)]] void gi_ser_reorder_hint(uint hint, uint bits);   // OpReorderThreadWithHintEXT
+[shader("raygeneration")]
+void main() {
+  const uint3 tid = DispatchRaysIndex();
 #else
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -297,6 +310,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
     float2 quv;
     float qd;
     bool onscreen = !aborted && t >= 0.0 && project(inv, o + dir * t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
+#if GI_TRACE_RAYGEN
+    // Group the threads by what this ray does next: 0 miss or unknown (nothing), 1 on screen (a depth test and a
+    // radiance read, mostly), else the hit's instance (its material row: the hidden-hit shading below).
+    if (kGiSerHint != 0u)
+      gi_ser_reorder_hint(aborted || t < 0.0 ? 0u : onscreen ? 1u : 2u + (hh.inst & 0x3FFFu), 16u);
+#endif
     bool visible = false;
 #if (RT_GI_FAR || defined(RT_SPEC_GI_FAR)) && RT_HIT_GI_SUN
     bool screen_roof_blocked = false;
