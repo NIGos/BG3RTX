@@ -250,18 +250,18 @@
        {"id": "far", "label": "Far (6 m)", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "0", "rf_hit_gi": "0", "rt_hit_emission": "1", "rt_emissive": "1", "gi_far": "1", "gi_far_m": "6"}, "needs": {"rt_geometry": 2, "gi": 2}, "migrate_from": ["gi_far"], "developer": false, "maturity": "qualified"},
        {"id": "reflections", "label": "Far + reflections", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "1", "rf_hit_gi": "1", "rt_hit_emission": "1", "rt_emissive": "1", "gi_far": "1", "gi_far_m": "6"}, "needs": {"rt_geometry": 2, "gi": 2, "reflections": 1}, "migrate_from": ["rf_hit_shade", "rf_hit_gi"], "developer": true, "maturity": "developer"}
      ]},
-    {"id": "exp_gi_rt_pipeline", "label": "Ray-tracing pipeline bounce trace",
-     "description": "Experimental: runs the off-screen bounce light trace as a ray tracing pipeline instead of a compute pass. The same lighting on average; faster in offline tests.",
-     "apply": "live", "apply_note": "live; may briefly pause the first time while the pipeline builds", "advanced": true, "experimental": true, "developer": true,
-     "category": "Performance", "summary": "Experimental: runs the off-screen bounce light trace as a ray tracing pipeline instead of a compute pass. The same lighting on average; faster in offline tests.",
-     "details": "Needs Off-screen bounce light. Without the ray tracing pipeline and reordering features the compute trace runs (logged once).",
-     "cost": {"status": "Estimate", "gpu": "About -2.5 ms at camp, -0.6 ms at the inn (offline replay)", "vram": "Under 1 MB", "provenance": "RTX 5090 offline replays of the far + sun trace: camp -2.58, inn -0.61, S8 -0.28 ms. Not yet measured in game."},
+    {"id": "exp_gi_rt_pipeline", "label": "Faster bounce light tracing",
+     "description": "Traces the off-screen bounce light with the GPU's ray tracing pipeline instead of a compute pass: the same lighting, about 2 ms faster on an RTX 5090.",
+     "apply": "live", "apply_note": "May briefly pause the first time while the pipeline builds", "advanced": false, "experimental": false, "developer": false,
+     "category": "Performance", "summary": "Traces the off-screen bounce light with the GPU's ray tracing pipeline instead of a compute pass: the same lighting, about 2 ms faster on an RTX 5090.",
+     "details": "Applies to Off-screen bounce light: without it this option does nothing. The first time, the pipeline builds for up to a minute while the usual trace keeps running. Without the GPU's ray tracing pipeline and reordering features the usual trace runs.",
+     "cost": {"status": "Measured", "gpu": "About -2 ms on the bounce light trace", "vram": "Under 1 MB", "provenance": "RTX 5090, Ultra, live 2026-11-08: GI trace -2.0 ms at the inn (12.0 to 9.95 ms) and -2.1 ms at the camp; scene energy unchanged within noise."},
      "required_on": {"rt": "1"},
      "required_from_choice": {"rt": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 1, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"gi_rt_pipeline": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"gi_rt_pipeline": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"gi_rt_pipeline": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"gi_rt_pipeline": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_gi_rt_pipeline_reorder", "label": "Bounce trace reordering",
      "description": "Experimental: sorts the bounce rays by what they hit before shading them (shader execution reordering). In offline tests it helped only at the camp.",

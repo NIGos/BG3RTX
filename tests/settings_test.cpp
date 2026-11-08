@@ -433,7 +433,7 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 1);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 17));
+  CHECK(dev.size() == size_t(kKnobCount - 18));
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
@@ -745,6 +745,10 @@ static void test_rendering_experiments() {
       if (std::string(k.id)=="fg_destroy_wait_exact" || std::string(k.id)=="fg_present_metering") {
         auto no_fg=preset_values(kLow); no_fg[knob_index("frame_generation")]=0;
         CHECK(!unmet_need(k,c,no_fg).empty()); // Low itself legitimately enables FG.
+      } else if (std::string(k.id)=="exp_gi_rt_pipeline_reorder") {
+        // Its prerequisite exp_gi_rt_pipeline is on in every preset since 2026-11-08 (qualified): Low satisfies it.
+        auto no_rt=preset_values(kLow); no_rt[knob_index("exp_gi_rt_pipeline")]=0;
+        CHECK(!unmet_need(k,c,no_rt).empty());
       } else CHECK(!unmet_need(k,c,preset_values(kLow)).empty());
     }
   }
@@ -1184,7 +1188,7 @@ static void test_consolidation_policy() {
 static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
     "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water", "dlss5_nr",
-    "exp_hidden_surface", "box_lights", "rr_post_temporal", "exp_native_coverage", "detailed_logging"};
+    "exp_hidden_surface", "exp_gi_rt_pipeline", "box_lights", "rr_post_temporal", "exp_native_coverage", "detailed_logging"};
   std::vector<std::string> visible;
   for (const auto& k : kKnobs) {
     if (knob_visible(k, false)) { visible.push_back(k.id); CHECK(std::string(k.category) != "Advanced"); }

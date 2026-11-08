@@ -2961,7 +2961,7 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  Pipe* rp=nullptr;VkPipelineLayout rt_layout=VK_NULL_HANDLE;uint32_t rt_slot=UINT32_MAX;
  {
   namespace rtp=bg3::rt_pipeline;
-  const bool key=host->cfg_int("gi_rt_pipeline",0)!=0,device=host->rt_pipeline.available!=0,fns=device && rt_pipe_entry_points();
+  const bool key=host->cfg_int("gi_rt_pipeline",1)!=0,device=host->rt_pipeline.available!=0,fns=device && rt_pipe_entry_points();
   const bool variant=sun && !s.sharc;   // gi_trace_rt_hit_sun[_em].hlsl: shader_variant.h raygen_entry
   bool ready=false;
   if(key && fns && variant){
