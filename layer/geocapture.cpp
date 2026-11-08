@@ -1454,7 +1454,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     // Ignore inactive captures, just as the shrink window does. Preserve the
     // learned movement reserve across inactivity and allocation replacement.
     const uint64_t wanted=demand?c->headroom.capacity(demand,g_storage_range,cap,3,
-        uint64_t(cascade_mb())<<20,c->xfb.size):c->xfb.size;
+        uint64_t(cascade_mb())<<20,c->xfb.size,cfg_int("rt_capture_rise_reserve",0)!=0):c->xfb.size;
     const uint64_t target=c->elastic.observe(c->xfb.size,wanted,c->cursor+c->c_over);
     if(target!=c->elastic_target && target!=c->xfb.size)
       log("[cascade] capture capacity demand %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
@@ -2149,8 +2149,13 @@ void rt_capture_stats(const Capture& c) {
         floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60),
         c.xfb.size-c.alpha_base,c.cursor+c.opaque_overflow_bytes):
         uint64_t(c.cursor+c.opaque_overflow_bytes);
+    // rt_capture_rise_reserve: learn the movement reserve from the demand without the alpha region the
+    // buffer reserves for itself (40% of its size at a wide stride): growing must not read as a camera step.
+    const uint64_t learn=g_alpha_mode?capture_budget::elastic_rt_demand(g_opaque_demand_prev.load(),c.alpha_demand,
+        floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60),
+        0,c.cursor+c.opaque_overflow_bytes):demand;
     const uint64_t predicted=g_scratch.headroom.capacity(demand,g_storage_range,elastic_cap(false),1,
-        uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size);
+        uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size,cfg_int("rt_capture_rise_reserve",0)!=0,learn);
     const uint64_t wanted=(std::max)(predicted,capture_budget::elastic_rt_capacity(demand,g_storage_range,
         elastic_cap(false),uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size));
     // rt_capture_stats runs only for the main (non-minor) scene capture.

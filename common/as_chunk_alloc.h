@@ -63,9 +63,11 @@ struct ChunkRanges : RangeAlloc {
   uint32_t arena = 0; // cached mesh, per-draw, or cascade lifetime; never move live ranges
   uint64_t live = 0;
   size_t kept = 0;
+  uint64_t empty_since = 0; // frame it was first seen empty (rt_as_chunk_reuse_frames), 0 = in use
   bool alloc(uint64_t size, uint64_t align, uint64_t* off) {
     if (!RangeAlloc::alloc(size, align, off)) return false;
     live += size;
+    empty_since = 0;
     return true;
   }
   void mark_pending(uint64_t size) { live -= size; }
@@ -74,7 +76,20 @@ struct ChunkRanges : RangeAlloc {
     release(off, size);
   }
   bool reclaimable() const { return cap && !used && !kept; }
+  bool retained() const { return reclaimable() && empty_since; } // kept empty for reuse (any arena)
 };
+
+// rt_as_chunk_reuse_frames (opt-vram, 2026-11-08): an empty chunk stays allocated for this many frames
+// and takes the next allocation that needs a new chunk, of any arena (it holds no range). The user's
+// 2026-11-08 log: 1531 chunk allocations in 4 minutes (1056 of 64 MB), "freed 85 (5972 MB)" in one
+// window: per-draw and cascade rebuilds empty a chunk, it is freed, the next frame allocates another.
+// Reuse never adds a chunk: peak reservation is unchanged, the free/alloc pair (and the overlap of
+// the deferred-freed chunk with its replacement) goes away. A VRAM guard ask frees every empty chunk.
+inline bool keep_empty_chunk(ChunkRanges& r, uint64_t now, uint64_t frames, bool yield) {
+  if (yield || !frames) return false;
+  if (!r.empty_since) r.empty_since = now ? now : 1;
+  return now - r.empty_since < frames;
+}
 
 // Pending ranges cannot be reused based on elapsed presents alone. The fence
 // AND the oldest potentially referenced scene slot must have retired.
@@ -86,6 +101,8 @@ inline bool retired(uint64_t frame, uint64_t now, uint64_t gpu_done, uint64_t ol
 // Try the fullest chunks first; skip holes (cap=0), preserve stable indices,
 // and still try less-full chunks when alignment/fragmentation prevents a fit.
 // Pending ranges count as occupied: they are not allocatable yet.
+// A retained empty chunk (rt_as_chunk_reuse_frames: no range, none pending, none kept) is taken by
+// any arena and joins it; with the key at 0 no chunk is retained and arenas never mix.
 template<class Chunks>
 int allocate_fullest(Chunks& chunks, uint64_t size, uint64_t align, uint64_t* off, int excluded = -1,
                      uint32_t arena = 0) {
@@ -93,7 +110,7 @@ int allocate_fullest(Chunks& chunks, uint64_t size, uint64_t align, uint64_t* of
   order.reserve(chunks.size());
   for (size_t i = 0; i < chunks.size(); ++i)
     if (int(i) != excluded && chunks[i].ra.cap &&
-        (arena == UINT32_MAX || chunks[i].ra.arena == arena) &&
+        (arena == UINT32_MAX || chunks[i].ra.arena == arena || chunks[i].ra.retained()) &&
         chunks[i].ra.cap - chunks[i].ra.used >= size) order.push_back(i);
   std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
     const double x = double(chunks[a].ra.used) / double(chunks[a].ra.cap);
@@ -101,7 +118,10 @@ int allocate_fullest(Chunks& chunks, uint64_t size, uint64_t align, uint64_t* of
     return x != y ? x > y : a < b;
   });
   for (size_t i : order)
-    if (chunks[i].ra.alloc(size, align, off)) return int(i);
+    if (chunks[i].ra.alloc(size, align, off)) {
+      if (arena != UINT32_MAX) chunks[i].ra.arena = arena;   // same arena, or an empty chunk joining it
+      return int(i);
+    }
   return -1;
 }
 } // namespace bg3::as_chunks
