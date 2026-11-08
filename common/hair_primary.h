@@ -76,7 +76,21 @@ constexpr uint32_t kRaySampleOffset = kTracedOffset + 16;
 constexpr uint32_t kCountTags = 4;
 constexpr uint32_t kTagCountOffset = kRaySampleOffset + 64;   // 1872
 constexpr uint32_t kCardCountOffset = kTagCountOffset + kCountTags * kMaxGrooms * 4;
-constexpr uint32_t kCountBytes = kCardCountOffset + kCountTags * kMaxGrooms * 4;
+// Then (review 2026-11-08, item 3) the strand diagnostics for the same four tag windows as the markers: the count of a
+// current-frame header runs before this frame's G-buffer, so the frame it judges is tag - 1 (the newest tag with
+// markers). Per tag j: traced entries and those with a strand (2 words), per groom k the strand pixels and the
+// pool-bound refusals; and per tag the card pixels whose strand trace skipped a card-kept groom's strand (mask holes,
+// a lower bound: the card marker of a later fragment may overwrite the flag). The C2 colour sample at kTransmitOffset
+// carries w = j + 1 for the tag window its sample was written in (0: none).
+constexpr uint32_t kTagTracedOffset = kCardCountOffset + kCountTags * kMaxGrooms * 4;   // 3920
+constexpr uint32_t kTagPixelOffset = kTagTracedOffset + kCountTags * 8;                 // 3952
+constexpr uint32_t kTagRefusedOffset = kTagPixelOffset + kCountTags * kMaxGrooms * 4;   // 4976
+constexpr uint32_t kMaskHoleOffset = kTagRefusedOffset + kCountTags * kMaxGrooms * 4;   // 6000
+constexpr uint32_t kCountBytes = kMaskHoleOffset + kCountTags * 4;                      // 6016
+static_assert(kTagTracedOffset == 3920 && kTagPixelOffset == 3952 && kTagRefusedOffset == 4976 && kMaskHoleOffset == 6000,
+              "hair_primary_count.hlsl tag-window offsets");
+// The card-marker flag of a pixel whose strand trace skipped another groom (its slot neither swaps nor is this draw's).
+constexpr uint32_t kMarkerSkipped = 0x20;
 // The newest of the kCountTags tags (j = 0 newest) whose entries were found; -1 none.
 inline int newest_counted_tag(const uint32_t totals[kCountTags]) {
   for (int j = 0; j < int(kCountTags); ++j)
@@ -106,8 +120,18 @@ static_assert(kRayDebugOffset == 3168, "shaders/rt/hair_primary_rebase.hlsli hai
 // host-visible buffer of the layer. The strand G-buffer variant checks each explicit buffer access against its range
 // and records a violation there (site, address; the access is skipped), and notes the last TLAS / pool / pixel
 // addresses it used. Read every 300 frames and after a device loss (kCrumbSites sites x 16 bytes, then the notes).
-constexpr uint32_t kCrumbAddrOffset = kRayDebugOffset + kRayDebugBytes, kKeyMapOffset = kCrumbAddrOffset + 16, kHeaderAllocAll = kKeyMapOffset + kMaxGrooms * 4;   // 3232, 3248, 3504
+// Slot masks at kSlotMaskOffset (review 2026-11-08, items 1/2), one word: bits 0-15 the draw slots whose G-buffer
+// draws swap to strands this frame (a strand of any other slot is skipped by the pixel trace: a card-kept groom's
+// strands no longer hide a swapped draw's own), bits 16-31 the slots whose recorded strand draws must draw their card
+// (the submit-time header no longer holds their groom). Written with the header; record-time headers: 0x0000FFFF.
+constexpr uint32_t kCrumbAddrOffset = kRayDebugOffset + kRayDebugBytes, kKeyMapOffset = kCrumbAddrOffset + 16;   // 3232, 3248
+constexpr uint32_t kSlotMaskOffset = kKeyMapOffset + kMaxGrooms * 4, kHeaderAllocAll = kSlotMaskOffset + 16;   // 3504, 3520
 static_assert(kKeyMapOffset == 3248, "hair_primary_gbuffer.hlsl hair_primary_key_map_offset");
+static_assert(kSlotMaskOffset == 3504, "hair_primary_gbuffer.hlsl hair_primary_slot_mask_offset");
+constexpr uint32_t kAllSwapSlots = 0xFFFFu;
+inline uint32_t slot_masks(uint32_t swap_slots, uint32_t card_slots) {
+  return (swap_slots & 0xFFFFu) | ((card_slots & 0xFFFFu) << 16);
+}
 static_assert(kCardCountOffset == 2896, "hair_primary_count.hlsl hair_primary_card_count_offset");
 constexpr uint32_t kCrumbSites = 16, kCrumbBytes = kCrumbSites * 16 * 2;
 static_assert(kCrumbAddrOffset == 3232, "shaders/rt/hair_primary_rebase.hlsli hair_primary_crumb_offset");
@@ -330,6 +354,9 @@ struct DepthLatch {
     return it == uncovered.end() || (frame > it->second && frame - it->second > 300);
   }
   void prepass(uint64_t key, uint64_t frame) { keys[key] = frame; }
+  // Review 2026-11-08 item 19: a G-buffer draw that needed its card depth back and had no fallback pipeline (an orphan:
+  // that draw lost its hair) blocks this key's prepass drop for 300 frames, as a pipeline with neither variant does.
+  void block(uint64_t key, uint64_t frame) { if (key) uncovered[key] = frame; }
   bool dropped(uint64_t key, uint64_t frame) const {
     const auto it = keys.find(key);
     return it != keys.end() && frame >= it->second && frame - it->second <= 2;
@@ -407,12 +434,13 @@ struct CoverageGate {
 // hair_primary_swap), per pass (0 G-buffer, 1 velocity, 2 prepass). Printed in the 300-frame period line.
 enum class Refusal : uint8_t {
   Publish, Quiet, CoverNone, CoverInvalidated, CoverStale, CoverLow, CoverHigh, Strike, Order, NoSlot, Passes,
-  Applied, PrepassDrop, NotDropped, NoStrand, Count
+  Applied, PrepassDrop, NotDropped, NoStrand, Watchdog, Count
 };
 inline const char* refusal_name(Refusal r) {
   static const char* const names[] = {"publish", "load quiet", "coverage none", "coverage invalidated", "coverage stale",
                                       "coverage low", "coverage high", "strike", "order 0", "no slot", "passes mask",
-                                      "not applied/live", "prepass drop", "card depth not dropped", "no strand variant"};
+                                      "not applied/live", "prepass drop", "card depth not dropped", "no strand variant",
+                                      "watchdog"};
   static_assert(sizeof names / sizeof names[0] == size_t(Refusal::Count), "one name per refusal");
   return r < Refusal::Count ? names[size_t(r)] : "?";
 }
@@ -470,11 +498,18 @@ inline int pick_publish(const Staged* staged, int n, uint64_t gbuffer_cmd, Submi
 // first publish, the level still streaming; strands enabled live after a load had survived).
 constexpr uint64_t kLoadQuietFrames = 300;
 struct LoadGuard {
-  uint64_t image = 0, quiet_until = 0;
-  // The G-buffer depth image of this frame; true at a boundary (the first image, or a different one).
-  bool observe(uint64_t depth_image, uint64_t now) {
-    if (!depth_image || depth_image == image) return false;
+  uint64_t image = 0, identity = 0, quiet_until = 0;
+  // The G-buffer depth image of this frame; true at a boundary (the first image, or a different one). identity: the
+  // layer's creation id of that image (tracker ImageRec::id; 0 unknown). Review 2026-11-08 item 14: a new level may
+  // destroy the depth image and get the same handle for its new one; the creation id differs, so that is a boundary too.
+  bool observe(uint64_t depth_image, uint64_t now, uint64_t image_identity = 0) {
+    if (!depth_image) return false;
+    if (depth_image == image && (!image_identity || !identity || image_identity == identity)) {
+      if (image_identity) identity = image_identity;
+      return false;
+    }
     image = depth_image;
+    identity = image_identity;
     quiet_until = now + kLoadQuietFrames;
     return true;
   }
@@ -552,7 +587,8 @@ inline uint32_t header_flags(const uint8_t* bytes) {
 inline bool header_usable(const uint8_t* bytes) { return (header_flags(bytes) & kFlagCamera) != 0; }
 
 inline const char* current_pick_name(CurrentPick p) {
-  static const char* const names[] = {"current", "not recorded", "build after the G-buffer", "different grooms"};
+  static const char* const names[] = {"current", "not recorded", "build after the G-buffer",
+                                      "different grooms (this frame's publish, missing draws as cards)"};
   return p < CurrentPick::Count ? names[size_t(p)] : "?";
 }
 // recorded: this frame's publish exists; submitted_before: its build went down in an earlier submit; build_index /
@@ -587,6 +623,85 @@ inline bool upgrade_safe(const uint64_t* keys_p, const DrawSlots& slots_p, const
   }
   return true;
 }
+// Review 2026-11-08 item 1: the header a G-buffer reads must be the version of the groom BLASes and points it traces.
+// Every build refits the BLASes and rewrites the points in place, so once a newer build is ordered before the G-buffer
+// on the GPU (submitted earlier, or earlier in the same submit) only that newest one is consistent: the record-time
+// header would trace its older TLAS over refit BLASes, rebased with its older camera. ordered_publish: the newest staged
+// publish newer than the record-time tag whose build is ordered before the G-buffer (-1: none, the record-time header is
+// still the GPU's version). in_submit(i): the position of staged publish i's recording in this submit (-1: not in it).
+template <class InSubmit>
+inline int ordered_publish(const Staged* staged, const bool* submitted, int n, uint32_t record_tag, int gbuffer_index,
+                           InSubmit in_submit) {
+  int best = -1;
+  for (int i = 0; i < n; ++i) {
+    if (!staged[i].tag || staged[i].tag <= record_tag) continue;
+    const int at = submitted[i] ? -1 : in_submit(i);
+    if (!submitted[i] && (at < 0 || gbuffer_index < 0 || at >= gbuffer_index)) continue;
+    if (best < 0 || staged[i].tag > staged[best].tag) best = i;
+  }
+  return best;
+}
+// The submit-time header from that publish for draws recorded against the record-time one: the draws were specialized
+// with the record-time draw slots, so each row maps to its key's record-time slot (a key the record-time header did
+// not slot: no slot, its strands accepted by no draw), and a record-time slot whose key has no row in the new publish
+// draws its card (card_slots; the strand variant then writes the card's native G-buffer and depth: card depth is not
+// lost although the prepass dropped it). usable false (no build camera) or another pixel record size: every slot cards.
+struct Upgrade { uint32_t key_map[kMaxGrooms]; uint32_t card_slots; };
+inline Upgrade upgrade_plan(const DrawSlots& record_slots, const uint64_t* keys_c, bool usable) {
+  Upgrade u{};
+  for (uint32_t k = 0; k < kMaxGrooms; ++k) u.key_map[k] = keys_c[k] ? record_slots.find(keys_c[k]) : kDrawSlots;
+  for (uint32_t i = 0; i < kDrawSlots; ++i) {
+    if (!record_slots.keys[i]) continue;
+    bool found = false;
+    for (uint32_t k = 0; k < kMaxGrooms && !found; ++k) found = keys_c[k] == record_slots.keys[i];
+    if (!found || !usable) u.card_slots |= 1u << i;
+  }
+  if (!usable) for (auto& m : u.key_map) m = kDrawSlots;
+  return u;
+}
+
+// Review 2026-11-08 item 19: a frame-level watchdog over the swapped draws of the counted G-buffer frame. card: their
+// card pixels (a draw with no marker at all counts its last frame's card pixels, as the dropout counter does), accepted:
+// their strand pixels. It trips when the frame's total ratio is below the lowest bound any of its draws may swap with:
+// the strict kCoverMin, or the offline minimum ratio minus the largest one-frame count noise of its measured draws
+// (cover_sigma, the hold's and footprint bound's own formula). So it never trips while every draw passes its own gate,
+// and it does trip on what the per-key gate under rt_hair_primary_hold cannot see: draws whose markers are all missing
+// (a measurement without card pixels carries no ratio there), e.g. a header whose strands all discard before their
+// markers. Those draws count only when no swapped draw of the frame left a marker (a whole frame without evidence; one
+// draw without pixels next to measured ones may simply have left the view). Tripped: no swap for kWatchdogFrames
+// G-buffer frames (the readback ring plus freshness: decisions taken before this evidence arrived).
+constexpr uint64_t kWatchdogFrames = kHoldFrames;
+struct Watchdog {
+  uint64_t until = 0, trips = 0, card = 0, accepted = 0, unmarked = 0;
+  double max_sigma = 0.0;
+  void begin() { card = accepted = unmarked = 0; max_sigma = 0.0; }
+  // One swapped draw of the judged frame: its card and strand pixels (card 0 with last_card: no marker at all).
+  void draw(uint32_t c, uint32_t s, uint32_t last_card) {
+    if (c) max_sigma = (std::max)(max_sigma, cover_sigma(s, c));
+    card += c;
+    accepted += s;
+    if (!c && last_card >= kDropoutMinCard) unmarked += last_card;
+  }
+  double bound() const { return (std::min)(kCoverMin, kCoverRatioMin - max_sigma); }
+  // True when the frame trips the watchdog.
+  bool judge(uint64_t now) {
+    if (!card) card = unmarked;
+    if (card < kDropoutMinCard || double(accepted) >= bound() * double(card)) return false;
+    until = now + kWatchdogFrames;
+    ++trips;
+    return true;
+  }
+  bool active(uint64_t now) const { return now < until; }
+};
+
+// Review 2026-11-08 item 12: rt_hair_groom_cascade_drop removes the hair cards from the game's sun cascades. The hair's
+// sun shadow then exists only where the core's RT sun shadow replaces the game's mask: the core publishes the frame of
+// its last applied RT sun shadow (frame_index + 1) in this persist key; the drop needs it from this or the last frame.
+constexpr const char* kSunRtPersistKey = "bg3rtx.rt_sun_applied";
+inline bool sun_rt_fresh(uint64_t applied_frame, uint64_t now) {
+  return applied_frame != 0 && applied_frame + 2 >= now + 1;
+}
+
 inline uint64_t coverage_bytes(uint32_t width, uint32_t height) {
   return uint64_t(width) * height * (kPixelBytes + 8); // packed card and accepted words
 }
@@ -623,6 +738,7 @@ struct Participation {
   enum Kind : uint32_t { kGbuffer = 0, kVelocity = 1, kPrepass = 2, kKinds = 3 };
   uint64_t main_total[kKinds] = {}, main_swapped[kKinds] = {}, other_total[kKinds] = {}, instanced = 0;
   uint64_t cascade_total = 0, cascade_dropped = 0;   // M2.2: static hair card draws in sun cascade passes
+  uint64_t cascade_no_rt_sun = 0;                    // item 12: kept because no RT sun shadow was applied
   void draw(uint32_t kind, bool main_view, bool inst) {
     if (kind >= kKinds) return;
     if (inst) ++instanced;

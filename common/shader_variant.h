@@ -61,6 +61,7 @@ enum SpecId : unsigned {
   kSpecIdHairGroomCoverage = 1042,   // M3.2 rt_hair_groom_coverage: two stratified strand rays per pixel (rt/hair_primary_gbuffer)
   kSpecIdRrHairGuides = 1043,        // M3.3 rr_hair_guides: class 5 RR guides (rr_guides.hlsl), metalness 0, fibre f0
   kSpecIdHairShadingSpace = 1045,    // 5g rt_hair_macro_normal / rt_hair_tangent_world: strand RT0/RT3 spaces (rt/hair_primary_gbuffer)
+  kSpecIdHairFibreCheck = 1046,      // rt_hair_fibre=2: the fibre pass's in-frame consistency check (gi/hair_fibre.hlsl)
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;

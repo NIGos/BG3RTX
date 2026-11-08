@@ -1201,7 +1201,7 @@ static void test_release_migration() {
     if (k) CHECK(choice_available(*k, 1, false, true, ~0u, true) && !choice_available(*k, 1, false, true, ~0u));
   }
   for (const char* id : {       "exp_omm", "exp_vt_alpha_masks", "rr_post", "exp_water_compose_shift", "exp_hair_pool_trim", "exp_ls_exact_k",
-       "exp_hit_reference", "exp_hair_primary_passes", "exp_hair_primary_order"})
+       "exp_hit_reference", "exp_hair_primary_passes"})
     CHECK(find_knob(id) && !opt_in_knob(*find_knob(id)) && !knob_visible(*find_knob(id), false, true));
   {
     Map opt = parse_ini("dev=0\npreset=ultra\nrt_water_surface_fresnel=1\nrt_hair_groom=1\nperf_submit_batch=1\n");
@@ -1406,6 +1406,62 @@ static void test_dlss5_native_setting() {
   enforce_release_policy(released);CHECK_EQ(get(released,"dlss5_nr"),"1");
 }
 
+// Review 2026-11-08 items 6/18 (docs/RTX_HAIR_PRIMARY.md 5j): one knob turns on the coherent strand path; every key
+// that only acts with strands on screen is written only by choices that need that knob (directly or transitively).
+static bool needs_knob(const Knob& k, int c, const char* id, int depth = 0) {
+  if (depth > 8 || c < 0 || c >= choice_count(k)) return false;
+  for (const Need& n : k.choices[c].need) {
+    if (!n.knob) continue;
+    if (std::string(n.knob) == id && n.min_choice >= 1) return true;
+    const Knob* dep = find_knob(n.knob);
+    if (dep && needs_knob(*dep, n.min_choice, id, depth + 1)) return true;
+  }
+  return false;
+}
+static void test_strand_bundle() {
+  const Knob* p = find_knob("exp_hair_groom_primary");
+  CHECK(p != nullptr);
+  if (!p) return;
+  const Map on = on_map(*p, 1);
+  for (const char* key : {"rt_hair_groom_primary", "rt_hair_groom_primary_order", "rt_hair_groom_primary_current",
+                          "rt_hair_primary_frame_tag", "rt_hair_groom_lod_keep", "rt_hair_primary_hold", "rt_hair_tangent_world"}) {
+    CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=1");
+    CHECK_EQ(std::string(key) + "=" + code_default(key), std::string(key) + "=0");   // off by default
+  }
+  CHECK(p->experimental && p->dev_only && p->choices[1].apply == Apply::Restart);
+  for (int pr = 0; pr < kPresetCount; ++pr) CHECK(p->preset[pr] == 0);   // strands stay off in every preset
+  for (int pr = 0; pr < kPresetCount; ++pr) {
+    Map preset;
+    for (const auto& kv : expand_preset(pr)) preset[kv.first] = kv.second;
+    CHECK(get(preset, "rt_hair_groom_primary") == "" || get(preset, "rt_hair_groom_primary") == "0");
+  }
+  CHECK(knob_value(*p, parse_ini("rt_hair_groom_primary=1\n")) == 1);   // an old file migrates to the whole bundle
+  CHECK(knob_value(*p, parse_ini("rt_hair_groom_primary=0\n")) == 0);
+  // The bundle's individual keys are developer diagnostics (bg3rtx.ini only), no knob of their own.
+  for (const char* id : {"exp_hair_primary_order", "exp_hair_primary_frame_tag", "exp_hair_groom_lod_keep", "exp_hair_tangent_world"})
+    CHECK(find_knob(id) == nullptr);
+  static const char* const strand_keys[] = {
+      "rt_hair_groom_primary_order", "rt_hair_groom_primary_current", "rt_hair_primary_frame_tag", "rt_hair_primary_hold",
+      "rt_hair_coverage_footprint", "rt_hair_tangent_world", "rt_hair_macro_normal", "rt_hair_groom_tips",
+      "rt_hair_groom_coverage", "rt_hair_groom_cascade_drop", "rt_hair_primary_passes", "rt_hair_groom_shadow_t",
+      "rt_hair_groom_ao_t", "rt_hair_fibre", "rt_hair_fibre_gi", "rt_hair_fibre_spec", "rt_hair_fibre_mapped"};
+  int writers = 0;
+  for (const Knob& k : kKnobs) {
+    if (std::string(k.id) == p->id) continue;
+    for (int c = 1; c < choice_count(k); ++c)
+      for (const KV& kv : k.choices[c].kv) {
+        if (!kv.key) continue;
+        for (const char* sk : strand_keys)
+          if (std::string(kv.key) == sk) {
+            ++writers;
+            if (!needs_knob(k, c, "exp_hair_groom_primary"))
+              CHECK_EQ(std::string(k.id) + " choice " + k.choices[c].id + " writes " + sk + " without Strand hair on screen", "");
+          }
+      }
+  }
+  CHECK(writers > 0);
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1434,6 +1490,7 @@ int main(int argc, char** argv) {
     CHECK(key_change_needs_restart("fg_present_metering","0","1"));
     CHECK(key_change_needs_restart("fg_present_metering","1","0"));
   }
+  test_strand_bundle();
   test_dlss5_native_setting();
   test_detailed_logging();
   test_release_fg_diagnostics();

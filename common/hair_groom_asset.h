@@ -167,6 +167,15 @@ inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
       uint32_t v;
       std::memcpy(&v, lod.segment + i, 4);
       if (v + 1 >= p) return false;
+      // A zero-length segment (both points on the same triangle at the same barycentrics coincide in every pose) has
+      // no tangent: malformed (review 2026-11-08 item 17; 0 in a 60-file sample of the shipped grooms, 61 M segments).
+      uint32_t t0, t1;
+      float b0[2], b1[2];
+      std::memcpy(&t0, lod.triangle + v, 4);
+      std::memcpy(&t1, lod.triangle + v + 1, 4);
+      std::memcpy(b0, lod.bary + 2 * uint64_t(v), 8);
+      std::memcpy(b1, lod.bary + 2 * uint64_t(v) + 2, 8);
+      if (t0 == t1 && b0[0] == b1[0] && b0[1] == b1[1]) return false;
     }
     out.lods.push_back(lod);
   }

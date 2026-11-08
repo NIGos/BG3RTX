@@ -334,14 +334,14 @@
      "description": "Experimental: displays converted hairstyles as individual strands.",
      "apply": "restart", "apply_note": "restart required; experimental activation safety gate", "advanced": false, "experimental": true, "developer": true,
      "category": "Advanced", "summary": "Experimental: displays converted hairstyles as individual strands.",
-     "details": "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Moving hair currently keeps camera motion vectors. Cost and appearance remain unqualified; activation requires restart after a reported device-loss incident.",
+     "details": "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Turns on the whole strand path: the frame record decided at submit, per-frame trace tags, LOD keep, coverage hold and the world-space tangent. Cost and appearance remain unqualified; activation requires restart after a reported device-loss incident.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {"rt": "1", "sharc_device": "1"},
      "required_from_choice": {"rt": 1, "sharc_device": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_hair_groom_primary": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "linear_swept_spheres", "shader_int64", "fragment_stores", "hair_grooms"], "keys": {"rt_hair_groom_primary": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "linear_swept_spheres", "shader_int64", "fragment_stores", "hair_grooms"], "keys": {"rt_hair_groom_primary": "1", "rt_hair_groom_primary_order": "1", "rt_hair_groom_primary_current": "1", "rt_hair_primary_frame_tag": "1", "rt_hair_groom_lod_keep": "1", "rt_hair_primary_hold": "1", "rt_hair_tangent_world": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": ["rt_hair_groom_primary"], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_fibre", "label": "Physical strand shading",
      "description": "Experimental: gives on-screen hair brighter, warmer shading.",
@@ -420,7 +420,7 @@
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_shadow_t": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_shadow_t": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_shadow_t": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_groom_ao_t", "label": "Strand AO transmittance",
      "description": "Experimental: ambient occlusion and indirect-light rays through strand hair pass with the fibre's forward-scattered light per crossing, as the strand shadows do, instead of stopping at the first strand. Appearance and cost are unqualified.",
@@ -433,7 +433,7 @@
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_ao_t": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_ao_t": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_ao_t": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_primary_passes", "label": "Strand passes that swap",
      "description": "Diagnostic for on-screen strands: which passes may replace the cards (G-buffer, motion vectors, depth prepass). Unqualified.",
@@ -446,23 +446,10 @@
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
        {"id": "all", "label": "All", "apply": "live", "caps": [], "keys": {"rt_hair_primary_passes": "15"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "gbuffer", "label": "G-buffer and probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "9"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "gbuffer_velocity", "label": "G-buffer, motion vectors and probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "11"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "no_probe", "label": "Swaps without the probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "7"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "none", "label": "No strand pass", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "0"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "exp_hair_primary_order", "label": "Strand header in G-buffer order",
-     "description": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Developer", "summary": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
-     "details": "",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_primary_order": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_primary_order": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "gbuffer", "label": "G-buffer and probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "9"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "gbuffer_velocity", "label": "G-buffer, motion vectors and probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "11"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "no_probe", "label": "Swaps without the probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "7"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "none", "label": "No strand pass", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "0"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_groom_tips", "label": "Dithered strand tips",
      "description": "Experimental: fades on-screen strand tips with the game mask alpha and temporal dither. Appearance and cost are unqualified.",
@@ -490,32 +477,6 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_coverage": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_groom_coverage": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
-    {"id": "exp_hair_primary_frame_tag", "label": "Strand hair: per-frame trace tags",
-     "description": "Experimental: every frame traces its own strands, never reusing an earlier frame's strand hits when it falls back to the previous groom publish. Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: every frame traces its own strands, never reusing an earlier frame's strand hits when it falls back to the previous groom publish. Unqualified.",
-     "details": "5i: CPU only, no cost. The coverage line's ambiguous tags drop to 0. Move the camera or watch a moving character in Test Dialogue1: no strand flashes.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_primary_frame_tag": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_frame_tag": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "exp_hair_groom_lod_keep", "label": "Strand hair: keep LOD while loading",
-     "description": "Experimental: a groom whose detail level changes keeps its current strands until the new level is loaded, instead of showing its hair cards for those frames. Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: a groom whose detail level changes keeps its current strands until the new level is loaded, instead of showing its hair cards for those frames. Unqualified.",
-     "details": "5i: CPU only, no cost. The [hair groom] line counts LOD switches kept vs groom dropped. Zoom or pan in the isometric view with characters on screen.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_lod_keep": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_lod_keep": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
     {"id": "exp_hair_macro_normal", "label": "Strand hair: card normal",
      "description": "Experimental: on-screen strands give the game's hair lighting the hair card's own normal (the hair volume's surface) instead of a normal facing the camera. Appearance is unqualified.",
      "apply": "restart", "apply_note": "restart to enable; switches live after", "advanced": true, "experimental": true, "developer": true,
@@ -528,19 +489,6 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_macro_normal": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_macro_normal": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "exp_hair_tangent_world", "label": "Strand hair: world-space tangent",
-     "description": "Experimental: on-screen strands write their tangent in world space, the space of the game's card tangent, so the hair highlights follow the strands. Appearance is unqualified.",
-     "apply": "restart", "apply_note": "restart to enable; switches live after", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: on-screen strands write their tangent in world space, the space of the game's card tangent, so the hair highlights follow the strands. Appearance is unqualified.",
-     "details": "5g: compiled into the strand pipelines at their creation; no extra cost. Compare the hair highlights in Test Dialogue1 (on/off/on).",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_tangent_world": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_tangent_world": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_groom_cascade_drop", "label": "Strand hair: no card shadows",
      "description": "Experimental: hair whose strands are in the ray-traced scene stops casting its card silhouette into the game's sun shadow maps. Where the game's shadow is still used, that hair casts no shadow. Unqualified.",

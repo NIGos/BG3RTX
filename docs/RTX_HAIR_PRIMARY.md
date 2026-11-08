@@ -564,6 +564,45 @@ still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per per
   on windows: ambiguous tags 0, "different grooms" near 0, coverage invalidated near 0, strand swaps resumed after card frames near the still
   windows' 0-9, "LOD switches ... (groom dropped)" 0; the dropouts line near 0 (not ~1000); no visible flash.
 
+## 5j. Layer-path review fixes (offline 2026-11-08, branch claude/hair-layer-fix)
+Independent review of the layer path; each finding verified in code before the fix.
+- 1 confirmed: every build refits the groom BLASes and rewrites the points in place, so once a newer build is ordered
+  before the G-buffer the record-time header traces a TLAS over refit BLASes with an old camera (upgrade_safe refusals:
+  a key gone, crowd cards, soup refusal, key 0; and always with current 0). Fix (no 2x memory): at submit the newest
+  publish ordered before the G-buffer is always applied (`hair_primary::ordered_publish`), its rows remapped to the
+  recorded draw slots (`upgrade_plan`); a recorded slot whose key it lacks is set in the header card mask (slot mask
+  word at kSlotMaskOffset 3504, bits 16-31) and its strand variant draws the card (card mode: native material at the
+  card UV, prepass alpha test, card normal and tangent, card depth). current 0 is a diagnostic only: such frames are
+  counted ("header/BLAS mismatch frames"). current on without header slots: no swap that frame.
+- 2 confirmed: keyed grooms whose draws keep their cards (no slot, refusals, extras) still hid swapped hair. Fix: the
+  header carries the slots that swap this frame (bits 0-15, decided at submit when every draw is recorded); the pixel
+  trace skips any other row's strand (up to 3, TMin past the 2 cm diameter bound); a draw whose own slot is not in the
+  mask (the coverage probe) traces privately for its own slot (not stored). Counter: mask-hole pixels (card marker flag
+  0x20, a lower bound). Record-time headers keep all slots (0xFFFF): unchanged behaviour except no-slot rows are skipped.
+- 3/4 confirmed: the count read colour and traced/hit for its own tag only, while the current header makes it judge
+  tag - 1: C2 a_f was never measured (shadow_t / ao_t rows 0) and every dropout was "unattributed". Fix: those counts
+  for all four tag windows; the layer takes the judged frame's window and maps groom rows with that frame's keys.
+- 5 confirmed: lod_keep restaged an evicted built LOD and released a new slot every frame of its first upload. Fixed.
+- 6/18: "Strand hair on screen" On writes the qualified bundle (order, current, frame_tag, lod_keep, hold,
+  tangent_world = 1); those keys lose their own knobs (developer diagnostics in bg3rtx.ini). Passes, shadow_t and ao_t
+  now need the strand knob. settings_test test_strand_bundle checks every strand key's dependency. Presets unchanged.
+- 12 confirmed: cascade_drop now needs the core's RT sun shadow applied this or the last frame (persist
+  `bg3rtx.rt_sun_applied`, core/gi.cpp; no ABI change) and strands on; kept draws are counted.
+- 13 confirmed: strands turned off live after a prepass drop now still restore the card depth (the draw hook stays on
+  while a latch is pending). 14: LoadGuard also compares the image's tracker creation id (a reused handle is a load);
+  verdict caches and counts already reset there. 15: groom LOD arrays leave the pool when rt_hair_groom is off.
+  17: zero-length segments rejected by the parser (0 in a 60-file sample) and discarded in the shader.
+- 19: frame watchdog (`hair_primary::Watchdog`): bound min(kCoverMin, kCoverRatioMin - largest cover_sigma of the
+  frame's draws), so it never trips while every draw passes its own gate; it catches marker-less frames the hold
+  ignores; cards for kHoldFrames. A no-fallback orphan blocks that key's prepass drop 300 frames.
+- 20: period line `[hair primary] header safety`: mismatch frames, card-draw upgrades, mask holes, watchdog trips, C2
+  colour samples; the frame line counts cascade draws kept for no RT sun shadow.
+- Cost: no game launched. Card mode and the skip loop run only where needed; the probe's private trace is one ray per
+  probe fragment (not per pixel) while a draw shows cards: unmeasured, read the strand G-buffer GPU ms line.
+- Live check (Test Dialogue1 + isometric, one session, strands on, characters entering and leaving): `header safety`
+  mismatch 0, card-draw upgrades only when a groom leaves; `shadow transmittance` draws measured > 0 with shadow_t on;
+  dropouts attributed (unattributed 0); no hole where two characters' hair overlaps; watchdog trips 0 in normal play.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
@@ -610,6 +649,22 @@ still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per per
   n: up to 8 groom hits toward the light. Checks: compiles + spirv-val (plain and both variants.txt requests,
   +2), shader identity vs main 236/237 (only hair_groom_update), 134/134 CTests, GPU `hd_shade_pixel` vs
   `dual.shade_table_pixel` max rel. 6.7e-6. Live: tools/live_batches/hair_primary shot-fibre-a / cost-fibre.
+  **3b-2c (2026-11-08, branch claude/hair-fibre-fix, offline):** review fixes. (1) k scales only the backward
+  multiple scattering (`dual.single_part`: f_s, or T_f f_s behind n fibres, is never scaled; before, a fibre behind
+  one strand got k 0.7 a_f = up to 2x the f_s of a directly lit one). (2) k is fitted on the path-traced diffuse
+  slab (`dual.make_table`, targets = make_volume_table's walks): the normal-incidence fit reflected 1.3-2.2x the
+  path-traced diffuse energy (white fibres 1.2-1.6 > 1) and zig-zagged in colour (heavy-tailed walk weights); now the
+  diffuse slab equals the walks within 0.03% at every grid entry, CHAR_Hair (held out) 1.001/1.002/0.998, k monotonic
+  in roughness; normal incidence reads 0.76/0.83/0.91 of its reference (one k cannot match both incidences;
+  a k(mu_i) table would need the volume normal). (3) hair_fibre replays D-LS's own ray (origin, soft sample, extent)
+  and strand decision (rt_groom_blocks' draw with the groom's a_f) instead of re-deriving them, and counts n on it.
+  (4) Every replaced term and the fibre response take the buffer's AO-on-direct factor (the game's, or D-LS's
+  ao_direct give-back for traced lights and the sun). (5) Single scattering to the specular buffer (the game's
+  R/TT/TRT are there; RR demodulates diffuse by the albedo), multiple scattering to diffuse. rt_hair_fibre=2
+  (constant 1046): the game's terms at the fibre's transmittance model on the D-LS-traced lights; strand pixels must
+  equal key off (exact without rt_hair_groom_shadow_t, in the mean with it). Known: behind n >= 1 strands Zinke's
+  pi d_b T_f f_back can exceed the direct d_b f_back (integrated over directions, c >= 0.35), and T_f f_s uses f_s
+  at the light direction, not the paper's azimuthally averaged f_s^scatter.
   Original design notes: where: D-LS (`shaders/gi/rt_local_shadows.hlsl`) already runs after the tiled
   lighting at full resolution, re-evaluates every local light's exact game term c_i (bg3_light_eval_mat, class
   5 = the game's Marschner) and the sun's (`ls_sun`, bg3_sun_eval_mat), and adds deltas into the game's
@@ -728,6 +783,10 @@ Not hair: hgn1/hgn2 empty generated-material runs and the hgn share-window row a
 | Review 7 P2 wrapped tag | Count skips low-24-bit zero tags, including untouched zero markers | working tree | hair_groom_test.test_strand_source_safety; hair_groom_asset_test four-tag marker fixture | closed offline |
 | Review 8 P2 totals | Log card totals and accepted totals separately | working tree | hair_groom_asset_test::test_card_accepted_totals | closed offline |
 | Review 9 P2 refusals | Separate feedback failures; reset both counters each period | working tree | hair_groom_asset_test::test_period_failures | closed offline |
+| Review 2026-11-08 #1 | Record-time header over in-place refit BLASes/points | hair-layer-fix | hair_groom_asset_test::test_header_version (build before G-buffer, shrinking groom set: ordered_publish, upgrade_plan card slots) | closed offline |
+| Review 2026-11-08 #2 | Card-kept keyed grooms hide swapped strands | hair-layer-fix | hair_groom_test.test_strand_source_safety (swap-mask skip, private probe trace, marker flag) | closed offline |
+| Review 2026-11-08 #3/#4 | Count colour/traced only for its own tag | hair-layer-fix | four-window count layout asserts; test_frame_tags | closed offline |
+| Review 2026-11-08 #13/#14/#17/#19 | Live-off latch, reused depth handle, zero segments, watchdog/orphan | hair-layer-fix | test_load_identity, test_zero_length_segment, test_watchdog | closed offline |
 
 Earlier review receipt: 151/151 CTests passed; the prescribed G-buffer/velocity/count validation passed 3/3.
 Closure receipt: 153/153 CTests passed (620.80 s), including hair_prefetch_test and hair_patterns_test. Hv9 lint: 1 job, 0 failing. Pattern audit: 101 checked, 0 missing positives, 0 forbidden hits.

@@ -1279,8 +1279,11 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(hair_primary::kSpecRecordHi, uint32_t(a >> 32));
   }
   // rt_hair_fibre_mapped (M4.3): the fibre pass also replaces the mapped local lights' hair term.
-  if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0)
+  // rt_hair_fibre=2: the in-frame check (the game's terms in place of the fibre response; must equal key off).
+  if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0) {
     specs.add(sv::kSpecIdHairFibreMapped, host->cfg_int("rt_hair_fibre_mapped", 0) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdHairFibreCheck, host->cfg_int("rt_hair_fibre", 0) == 2 ? 1u : 0u);
+  }
   slot_key += specs.key();
   Pipe::Variant& slot = p.variants[slot_key + "|" + std::to_string(uint64_t(lay))];
   const bool known = slot.pipeline && slot.file == slot_key;
@@ -3321,6 +3324,11 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     sunt_end(cmd);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
+    // The layer's rt_hair_groom_cascade_drop removes hair cards from the game's sun cascades only while this RT sun
+    // shadow (which traces the strands) is applied (common/hair_primary.h kSunRtPersistKey; no ABI change).
+    if (s.rt_sun)
+      if (auto* applied = static_cast<uint64_t*>(host->persist(hair_primary::kSunRtPersistKey, sizeof(uint64_t))))
+        *applied = host->frame_index() + 1;
     if (s.pan && s.rt_sun) {
       Bg3Binding im{};
       im.image = g_rt_vis.image; im.format = VK_FORMAT_R8G8B8A8_UNORM;

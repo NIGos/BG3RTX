@@ -26,7 +26,7 @@ static std::vector<uint8_t> asset(float radius = 0.0001f, uint32_t tri = 1, uint
   put<uint32_t>(b, 4); put<uint32_t>(b, 6); put<uint32_t>(b, 1); put<uint32_t>(b, 0);
   put<float>(b, 1.0f); put<uint32_t>(b, 3); put<uint32_t>(b, 2); put<uint32_t>(b, 0);
   for (int i = 0; i < 3; ++i) put<uint32_t>(b, tri);
-  for (int i = 0; i < 3; ++i) { put<float>(b, 0.25f); put<float>(b, 0.25f); }
+  for (int i = 0; i < 3; ++i) { put<float>(b, 0.25f + 0.1f * float(i)); put<float>(b, 0.25f); }   // distinct points
   for (int i = 0; i < 3; ++i) put<float>(b, radius);
   for (int i = 0; i < 3; ++i) put<uint8_t>(b, uint8_t(i * 100));
   put<uint32_t>(b, 0); put<uint32_t>(b, last_segment);
@@ -423,7 +423,102 @@ static void test_cascade_card_drop() {
   CHECK(!publish_fresh(8, 10) && !publish_fresh(12, 10));
 }
 
+// Review 2026-11-08 item 1 (replay of the ordering): frame N's G-buffer is recorded against the record-time header p
+// (publish of N - 1: keys A, B, C in slots 0, 1, 2). Frame N's build is recorded after the G-buffer pass but goes down in
+// an earlier submit (or earlier in the same one); it refits A's and B's BLASes and points in place and C left (its
+// character walked off, or its soup was refused: a shrinking groom set). The header the G-buffer reads must be N's:
+// A and B trace N's TLAS with their recorded slots, C's recorded strand draws draw their card (card depth kept).
+static void test_header_version() {
+  using namespace hair_primary;
+  const uint64_t A = 0xA0, B = 0xB0, C = 0xC0, D = 0xD0;
+  uint64_t keys_p[kMaxGrooms] = {A, B, C}, keys_c[kMaxGrooms] = {B, D, A};   // rows reordered, C gone, D new
+  DrawSlots sp, sc;
+  sp.publish(keys_p, 3);
+  sc = sp;
+  sc.publish(keys_c, 3);   // C's slot freed, D takes it (the old check refused this: "different grooms")
+  CHECK(!upgrade_safe(keys_p, sp, keys_c, sc));
+  Staged staged[3] = {{1000, 11, 1}, {1001, 12, 2}, {0, 0, 0}};   // p = 1000 (record time), c = 1001 (this frame)
+  bool submitted[3] = {true, false, false};
+  // c's build in this submit before the G-buffer (index 0 < 1): ordered before it -> must be applied
+  CHECK(ordered_publish(staged, submitted, 3, 1000, 1, [](int i) { return i == 1 ? 0 : -1; }) == 1);
+  // after the G-buffer in the same submit, or not submitted yet: the record-time header is still the GPU's version
+  CHECK(ordered_publish(staged, submitted, 3, 1000, 1, [](int i) { return i == 1 ? 2 : -1; }) < 0);
+  CHECK(ordered_publish(staged, submitted, 3, 1000, 1, [](int) { return -1; }) < 0);
+  submitted[1] = true;   // an earlier submit
+  CHECK(ordered_publish(staged, submitted, 3, 1000, 1, [](int) { return -1; }) == 1);
+  CHECK(ordered_publish(staged, submitted, 3, 1001, 1, [](int) { return -1; }) < 0);   // nothing newer than p
+  const Upgrade u = upgrade_plan(sp, keys_c, true);
+  const uint32_t a = sp.find(A), b = sp.find(B), c = sp.find(C);
+  CHECK(u.key_map[2] == a && u.key_map[0] == b);    // rows map to the recorded slots
+  CHECK(u.key_map[1] == kDrawSlots);                // D: recorded with no slot, accepted by no draw
+  CHECK(u.card_slots == (1u << c));                 // C's recorded strand draws draw their card
+  const Upgrade none = upgrade_plan(sp, keys_c, false);   // no build camera: every recorded slot draws its card
+  CHECK(none.card_slots == ((1u << a) | (1u << b) | (1u << c)));
+  for (uint32_t k = 0; k < kMaxGrooms; ++k) CHECK(none.key_map[k] == kDrawSlots);
+  uint64_t same[kMaxGrooms] = {C, B, A};
+  CHECK(upgrade_plan(sp, same, true).card_slots == 0);
+  CHECK(slot_masks(0x0005u, u.card_slots) == (0x0005u | (u.card_slots << 16)));
+  CHECK(slot_masks(kAllSwapSlots, 0) == 0xFFFFu);
+  static_assert(kSlotMaskOffset + 4 <= kHeaderAllocAll, "slot masks inside the header buffer");
+  static_assert(kCountBytes == kMaskHoleOffset + kCountTags * 4, "count layout");
+}
+
+// Item 19: the watchdog never trips while every swapped draw passes its own gate, and trips on a frame whose swapped
+// draws left no marker (or far too few strands).
+static void test_watchdog() {
+  using namespace hair_primary;
+  Watchdog w;
+  w.begin(); w.draw(5000, 4600, 5000); w.draw(430, 360, 430);   // 0.92 and 0.837 (inside its own footprint bound)
+  CHECK(!w.judge(100) && !w.active(100));
+  w.begin(); w.draw(5000, 4460, 5000);   // 0.892: passes the strict kCoverMin
+  CHECK(!w.judge(100));
+  w.begin(); w.draw(5000, 300, 5000); w.draw(5000, 4800, 5000);   // one draw dropped out: total 0.51
+  CHECK(w.judge(100) && w.active(100) && w.active(100 + kWatchdogFrames - 1) && !w.active(100 + kWatchdogFrames));
+  Watchdog n;
+  n.begin(); n.draw(0, 0, 5000); n.draw(0, 0, 3000);   // a whole frame without markers
+  CHECK(n.judge(10));
+  n = Watchdog{};
+  n.begin(); n.draw(0, 0, 5000); n.draw(4000, 3900, 4000);   // one draw left the view, the other measured fine
+  CHECK(!n.judge(10));
+  n.begin(); n.draw(0, 0, 30);   // too little evidence
+  CHECK(!n.judge(10));
+  // The no-fallback orphan blocks this key's prepass drop for 300 frames.
+  DepthLatch d;
+  d.prepass(7, 50);
+  CHECK(d.allow_prepass(7, 51));
+  d.block(7, 51);
+  CHECK(!d.allow_prepass(7, 52) && !d.allow_prepass(7, 351) && d.allow_prepass(7, 352));
+  // Item 12: the cascade drop needs an RT sun shadow applied this or the last frame.
+  CHECK(!sun_rt_fresh(0, 100) && sun_rt_fresh(100, 100) && sun_rt_fresh(99, 100) && !sun_rt_fresh(98, 100));
+  CHECK(sun_rt_fresh(101, 100));
+}
+
+// Item 14: a new level whose depth image reuses the destroyed one's handle is a boundary (new creation id).
+static void test_load_identity() {
+  using namespace hair_primary;
+  LoadGuard g;
+  CHECK(g.observe(0xA, 10, 5));
+  CHECK(!g.observe(0xA, 11, 5) && !g.observe(0xA, 12, 0));   // same image; id unknown this time: no boundary
+  CHECK(g.observe(0xA, 400, 9) && g.quiet(401));               // same handle, new image
+  CHECK(!g.observe(0xA, 401, 9));
+  LoadGuard h;
+  CHECK(h.observe(0xB, 10, 0) && !h.observe(0xB, 11, 3) && !h.observe(0xB, 12, 3));   // id learned without a boundary
+  CHECK(h.observe(0xB, 13, 4));
+}
+
+// Item 17: a segment whose two points coincide in every pose (same triangle, same barycentrics) is malformed.
+static void test_zero_length_segment() {
+  std::vector<uint8_t> b = asset();
+  Asset a;
+  CHECK(parse(b.data(), b.size(), a));
+  // point 1's barycentrics := point 0's (the header is 40 bytes, the LOD header 16, the triangles 3 x 4)
+  const size_t bary = 40 + 16 + 3 * 4;
+  std::memcpy(b.data() + bary + 8, b.data() + bary, 8);
+  CHECK(!parse(b.data(), b.size(), a));
+}
+
 int main() {
+  test_header_version(); test_watchdog(); test_load_identity(); test_zero_length_segment();
   test_cascade_card_drop();
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
@@ -757,7 +852,8 @@ int main() {
     CHECK(newest_counted_tag(current) == 0);
     const uint32_t none[kCountTags] = {0, 0, 0, 0};
     CHECK(newest_counted_tag(none) == -1);
-    CHECK(kTagCountOffset == 1872 && kCardCountOffset == kTagCountOffset + kCountTags * kMaxGrooms * 4 && kCountBytes == kCardCountOffset + kCountTags * kMaxGrooms * 4);
+    CHECK(kTagCountOffset == 1872 && kCardCountOffset == kTagCountOffset + kCountTags * kMaxGrooms * 4 &&
+          kTagTracedOffset == kCardCountOffset + kCountTags * kMaxGrooms * 4 && kCountBytes == kMaskHoleOffset + kCountTags * 4);
   }
   { // Real ordering: prepass(N), G-buffer(N), readback three publishes later.
     using namespace hair_primary;
