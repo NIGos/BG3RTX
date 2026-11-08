@@ -366,6 +366,8 @@ target_link_libraries(launcher_launch_test PRIVATE advapi32)
 add_test(NAME launcher_launch_test COMMAND launcher_launch_test)
 # Native strand groom converter (docs/RTX_HAIR_ROADMAP.md 2d): .hcap -> .hgrm v3, no Python / LSLib / granny2.
 add_library(hairconv_core STATIC tools/hairconv/core.cpp tools/hairconv/curves2d.cpp tools/hairconv/validate.cpp
+  tools/hairconv/pipeline.cpp tools/hairconv/pak.cpp tools/hairconv/granny.cpp tools/hairconv/dds.cpp tools/hairconv/catalogue.cpp
+  tools/hairconv/all.cpp
   tools/hairconv/io.cpp)
 target_compile_options(hairconv_core PRIVATE /O2 /fp:precise)
 add_executable(bg3rtx_hairconv tools/hairconv/main.cpp)
@@ -375,6 +377,11 @@ add_dependencies(bg3rtx_launcher bg3rtx_hairconv)
 add_executable(hairconv_test tests/hairconv_test.cpp)
 target_link_libraries(hairconv_test PRIVATE hairconv_core Cabinet)
 add_test(NAME hairconv_test COMMAND hairconv_test ${CMAKE_SOURCE_DIR}/tests/fixtures/hairconv)
+# --all inputs (roadmap 2f): synthetic LSPK v18 (LZ4 block / frame, zstd refused), patch override, catalogue, synthetic
+# GR2 walk without granny2.dll, Pillow-compatible DXT5, and the granny-less path (exit 3, "unavailable").
+add_executable(hairconv_all_test tests/hairconv_all_test.cpp)
+target_link_libraries(hairconv_all_test PRIVATE hairconv_core Cabinet)
+add_test(NAME hairconv_all_test COMMAND hairconv_all_test)
 # The layer capture's CPU side (common/hair_capture.h): full-mask rule, stretch, .hcap v2 round trip into hairconv.
 add_executable(hair_capture_cpu_test tests/hair_capture_cpu_test.cpp)
 target_link_libraries(hair_capture_cpu_test PRIVATE hairconv_core Cabinet)
