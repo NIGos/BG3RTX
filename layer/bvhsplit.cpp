@@ -1968,6 +1968,22 @@ void bvh_begin_capture(VkCommandBuffer) {
   g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
   const bool groom_key = cfg_hot(CfgHot::rt_hair_groom) != 0, lss = hair_groom::lss_enabled(), native = geo_native_hair_enabled();
   g_groom_on = groom_key && lss && native;
+  // Review 2026-11-08 item 15: grooms off: their LOD arrays leave the mesh pool (freed after the strand passes' lag;
+  // slots release their points as their draws are captured without a groom). A staged upload not yet recorded keeps
+  // its range until it is recorded (the copy still targets it), then goes the next frame.
+  if (!g_groom_on && g_groom_pool_used) {
+    uint64_t freed = 0;
+    const uint64_t now = frame_index();
+    for (auto& [id, a] : g_groom_assets)
+      for (auto& l : a.lods)
+        if (l.size && l.upload_rec) {
+          g_pending_free.push_back({now + kGroomFreeLag, -1, l.base, l.size});
+          g_groom_pool_used -= (std::min)(g_groom_pool_used, l.size);
+          freed += l.size;
+          l = {};
+        }
+    if (freed) log("[hair groom] off: %.1f MB of groom LOD arrays released from the mesh pool", double(freed) / 1048576.0);
+  }
   // The join's gate, logged when it changes (startup, key toggles, level loads that change the capture).
   static int logged_gate = -1;
   const int gate = int(groom_key) | int(lss) << 1 | int(native) << 2;
@@ -2459,7 +2475,16 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // made of Vulkan handles, which the new level reuses for other meshes; a stale verdict would give a new mesh with
   // the same index count another style's groom, and a UV readback issued before the load would land on a reused
   // identity. Drop the cached verdicts and the readbacks in flight (their copies still land; nothing reads them).
-  if (g_groom_load.observe(geo_gbuffer_depth_image(), now)) {
+  // Review 2026-11-08 item 14: with the image's creation id, so a new level whose depth image reuses the old handle is
+  // a boundary too (the join verdicts below are keyed by handles and must be rebuilt, index content id included).
+  const uint64_t groom_depth = geo_gbuffer_depth_image();
+  uint64_t groom_depth_id = 0;
+  if (groom_depth) {
+    std::shared_lock lock(tracker().mu);
+    const auto it = tracker().images.find(VkImage(groom_depth));
+    if (it != tracker().images.end()) groom_depth_id = it->second.id;
+  }
+  if (g_groom_load.observe(groom_depth, now, groom_depth_id)) {
     uint32_t pending = 0;
     for (GroomUvJob& job : g_groom_uv_jobs) {
       pending += job.used ? 1u : 0u;
@@ -2745,9 +2770,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       const GroomAsset::Lod* lp = crowd_cards ? nullptr : groom_lod(cmd, fd.groom_id, *groom_src, lod, now);
       // rt_hair_groom_lod_keep: the wanted LOD is still uploading (groom_lod staged it): keep drawing the built one and
       // ask again next frame instead of dropping the groom (the upload goes on either way).
-      if (!lp && !crowd_cards && g.lod >= 0 && g.lod != lod && g.pos_size && g.as.as &&
-          cfg_int("rt_hair_groom_lod_keep", 0) != 0) {
-        const GroomAsset::Lod* built = groom_lod(cmd, fd.groom_id, *groom_src, g.lod, now);
+      const bool lod_keep = cfg_int("rt_hair_groom_lod_keep", 0) != 0;
+      if (!lp && !crowd_cards && g.lod >= 0 && g.lod != lod && g.lod < int(groom_src->lods.size()) && g.pos_size &&
+          g.as.as && lod_keep) {
+        // Review 2026-11-08 item 5: only a still-resident built LOD is kept. groom_lod() would stage a new upload of an
+        // evicted one (its range freed by groom_make_room), churning the pool while the wanted LOD uploads.
+        GroomAsset::Lod& resident = groom_src->lods[size_t(g.lod)];
+        const GroomAsset::Lod* built = resident.ready ? &resident : nullptr;
+        if (built) resident.last_used = now;
         if (hair_groom::lod_this_frame(lod, g.lod, false, built != nullptr, true) == g.lod) {
           lp = built; lod = g.lod;
           g.lod_votes = 29;   // groom_pick_lod returns the wanted LOD again on the next frame
@@ -2815,6 +2845,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         ++g_groom_st.matched;
         ++g_groom_st.lod[size_t(lod)];
         w.refit ? ++g_groom_st.refits : ++g_groom_st.builds;
+      } else if (!crowd_cards && lod_keep && !lp && g.lod < 0 && !g.pos_size) {
+        // Item 5: a new slot whose first LOD is still uploading keeps its (empty) slot, its LOD choice and the crowd
+        // plan's entry instead of being released and made again every frame of the upload; cards meanwhile.
       } else if (!crowd_cards) {
         if (!lp && g.lod >= 0 && g.lod != lod) ++g_groom_st.lod_drops;   // a LOD switch dropped the groom (5i)
         groom_release(g, now);
