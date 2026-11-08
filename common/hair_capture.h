@@ -37,6 +37,43 @@ inline bool upgrade(const MaskInfo& captured, const MaskInfo& now) {
   return full_mask(now, captured.width, captured.height) && (now.width > captured.width || now.height > captured.height);
 }
 
+// Retry state per style (index count) for draws whose mask is not full yet (hcap2-capture 2026-11-08: the game binds
+// 128 x 128 one-mip placeholders first; an upgrade arrives as a new image). A style is looked at again at once when its
+// bound mask image changes, else every kRetryFrames; after kNeverFullChecks placeholder looks with no new image it is
+// "never full-size" (distant NPCs whose streaming never upgrades) and is left alone until its image changes.
+constexpr uint64_t kRetryFrames = 300;
+constexpr uint32_t kNeverFullChecks = 20;
+enum class RetryState : uint8_t { Waiting, Captured, NeverFull };
+struct Retry {
+  uint32_t image = 0;            // the mask image id last looked at
+  uint64_t last = 0;             // frame of the last look
+  uint32_t placeholder_looks = 0;
+  RetryState state = RetryState::Waiting;
+  bool seen = false;
+  MaskInfo captured;             // the mask of the capture (a later image re-captures only when upgrade() holds)
+};
+// Whether to look at the style's mask now (a hash lookup and a compare on every unmatched draw; the tracker lookup and
+// the copy only when this says so).
+inline bool should_look(Retry& r, uint32_t image, uint64_t now) {
+  if (!r.seen || image != r.image) {   // first sight or a new image (an upgrade, or another LOD's texture)
+    const bool was = r.seen;
+    r.seen = true;
+    r.image = image;
+    if (r.state == RetryState::NeverFull) r.state = RetryState::Waiting, r.placeholder_looks = 0;
+    return r.state != RetryState::Captured || was;   // a captured style looks again only for a new image (upgrade)
+  }
+  if (r.state != RetryState::Waiting) return false;
+  return now - r.last >= kRetryFrames;
+}
+// The outcome of a look. Returns true when the style just became "never full-size" (count it once).
+inline bool looked(Retry& r, bool full, bool captured, uint64_t now, const MaskInfo& mask = {}) {
+  r.last = now;
+  if (captured) { r.state = RetryState::Captured; r.captured = mask; return false; }
+  if (full || r.state != RetryState::Waiting) return false;
+  if (++r.placeholder_looks >= kNeverFullChecks) { r.state = RetryState::NeverFull; return true; }
+  return false;
+}
+
 // Card stretch: per triangle edge, the posed length over the first-seen length (min, median, max). Edges with a
 // first-seen length below 1e-6 m are skipped. corner positions are in index order (3 per triangle).
 struct Stretch { float min = 1, median = 1, max = 1; };

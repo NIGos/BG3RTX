@@ -1,4 +1,4 @@
-"""Writes tools/live_batches/hair_capture/jobs/hcap2-*.json: capture -> conversion -> strands (READY_FOR_LIVE, not
+"""Writes tools/live_batches/hair_capture/jobs/hcap3-*.json: capture -> conversion -> strands (READY_FOR_LIVE, not
 queued; docs/RTX_HAIR_ROADMAP.md 2d).
 
 Two launches of Test Dialogue1, run back to back, because the observable spans a game start: a style seen without a
@@ -7,6 +7,12 @@ converter (bin/bg3rtx_hairconv, the post step: stage.py convert) into a scratch 
 must show strands from the first frame of launch 2 (the groom index is built at startup). One launch is not possible
 without an in-run save reload (the plan runner has none; the layer's level-load re-scan is the in-game path and is
 covered by the same groom index code). Post of launch 2 removes the copy (stage.py cleanup).
+
+BEFORE queuing (offline file step; the queue's lint accepts only game jobs, so it is not a job), in the job tree:
+    python tools/live_batches/hair_capture/stage.py setup 8b32681bb9ecfc30
+It builds <tree>/data/assetdb as hard links of the real assetdb minus that companion's groom (never writing the real
+one). Both launches expect the layer to load that copy ("[assetdb] loaded ... (from this checkout)") and forbid the
+main checkout's: a run without the setup is INVALID at once.
 """
 import json
 import sys
@@ -57,26 +63,40 @@ def job(name, set_extra, expect, forbid, post):
             "patterns": PATTERNS, "expect": expect, "forbid": COMMON_FORBID + forbid, "post": post, "post_gate": True}
 
 
-capture = job("hcap2-capture", ",rt_hair_capture=1", [
+# The capture target: the close-up groom with the largest LOD 0 that hcap2-capture (2026-11-08 22:13) matched and
+# uploaded in Test Dialogue1 (8b32681bb9ecfc30, 33.2 MB LOD 0; its mask is one of the two 2048x2048 images seen 17 s
+# after the load). Removing it from the scratch copy makes that companion the style without a groom.
+TARGET = "8b32681bb9ecfc30"
+COPY_LOADED = "\\[assetdb\\] loaded .*test-main.*data.assetdb.bg3rtx_assetdb\\.bin \\(from this checkout\\)"
+# The copy is required by COPY_LOADED in expect (a forbid of "from the main checkout" would match every normal VALID log).
+COPY_FORBID = ["\\[assetdb\\] not available"]
+capture = job("hcap3-capture", ",rt_hair_capture=1", [
     "\\[auto\\] scene ready",
+    COPY_LOADED,
     "\\[hair groom\\] device with linear swept spheres",
-    "\\[hair capture\\] [0-9a-f_A-Zcount]+: \\d+ indices, \\d+ vertices, mask \\d+x\\d+ fmt \\d+ mips \\d+, stretch [0-9.]+/[0-9.]+/[0-9.]+, \\d+ KB, written",
+    f"\\[hair capture\\] {TARGET}: \\d+ indices, \\d+ vertices, mask 2048x2048 fmt 137 mips 12, stretch [0-9.]+/[0-9.]+/[0-9.]+, \\d+ KB, written",
     "\\[hair capture\\] \\d+ frames: [1-9]\\d* captured",
-], ["\\[hair capture\\] .* capturing stopped"], "python tools/live_batches/hair_capture/stage.py convert")
-strands = job("hcap2-strands", ",rt_hair_capture=0", [
+], ["\\[hair capture\\] .* capturing stopped", "\\[hair capture\\] .* not copyable"] + COPY_FORBID,
+    f"python tools/live_batches/hair_capture/stage.py convert {TARGET}")
+strands = job("hcap3-strands", ",rt_hair_capture=0", [
     "\\[auto\\] scene ready",
-    "\\[hair groom\\] indexed .*\\.hgrm: index id [0-9a-f]{16}",
-    "\\[hair groom\\] [0-9a-f]{16} LOD \\d decoded \\(v3\\): \\d+ points in \\d+ ms",
+    COPY_LOADED,
+    f"\\[hair groom\\] indexed .*{TARGET}\\.hgrm: index id {TARGET}",
+    f"\\[hair groom\\] {TARGET} LOD \\d decoded \\(v3\\): \\d+ points in \\d+ ms",
     "\\[hair groom\\] frame \\d+: [1-9]\\d* groom instances",
     "\\[hair primary\\] strand G-buffer draws GPU",
-], ["\\[hair groom\\] .*file unreadable or changed since startup"], "python tools/live_batches/hair_capture/stage.py cleanup")
+], ["\\[hair groom\\] .*file unreadable or changed since startup", f"\\[hair groom\\] .*{TARGET}.*malformed"] + COPY_FORBID,
+    "python tools/live_batches/hair_capture/stage.py cleanup")
 for j in (capture, strands):
     (B / "jobs" / f"{j['name']}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
 pred = json.loads((B / "predicted.json").read_text(encoding="utf-8")) if (B / "predicted.json").exists() else {}
-pred["hcap2-capture"] = {"captures": {"predicted": ">= 1 written, mask 2048x2048 BC3 (fmt 137), 12 mips, stretch near 1",
-                                      "source": "hcap1-dialogue: 2 full masks, 424-600 unmatched count-unknown draws", "written": "2026-11-08"}}
-pred["hcap2-strands"] = {"strands": {"predicted": "the converted style's groom indexed and drawn (groom instances >= 1)",
+for k in ("hcap2-capture", "hcap2-strands"):
+    pred.pop(k, None)
+pred["hcap3-capture"] = {"capture": {"predicted": f"{TARGET} captured with its 2048x2048 BC3 mask (after the placeholder), stretch near 1; "
+                                                  "the regenerated groom: same index id, strand counts within dedupe ties, radii within the stretch",
+                                     "source": "hcap2-capture masks; offline hairconv equivalence (24 styles, bit-identical)", "written": "2026-11-08"}}
+pred["hcap3-strands"] = {"strands": {"predicted": f"{TARGET} indexed from the v3 file and drawn (groom instances >= 1)",
                                      "source": "offline: hairconv grooms decode in the layer reader (hairconv_test)", "written": "2026-11-08"}}
 (B / "predicted.json").write_text(json.dumps(pred, indent=1) + "\n", encoding="utf-8")
-print("wrote hcap2-capture and hcap2-strands (READY_FOR_LIVE, not queued; run in this order)")
+print("wrote hcap3-capture, hcap3-strands (READY_FOR_LIVE, not queued; stage.py setup first, then in this order)")
 sys.exit(0)

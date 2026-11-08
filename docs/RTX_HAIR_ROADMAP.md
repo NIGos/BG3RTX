@@ -394,6 +394,23 @@ already builds, tests and packages C++ (no second toolchain in the build, merge-
   runner has no in-run save reload, so the capture (launch 1), the conversion (its post step, stage.py convert: moves
   the captures out of the real assetdb into a scratch assetdb copy in the job's tree and runs bg3rtx_hairconv there)
   and strands from a cold start (launch 2, whose post removes the copy) cannot share one launch.
+- hcap2 live (2026-11-08 22:13, both INVALID, nv153 0): nothing captured. The capture decided once per (index count,
+  mask image): a style whose first look found a 128x128 placeholder was never looked at again unless its image
+  changed, and the ~600 unmatched draws per 300 frames were two background styles drawn every frame (2 keys, 3 looks).
+  Their masks never left 128x128; the two 2048x2048 masks (images 14449, 14777, 17 s after the load, as new images)
+  belonged to styles that already had grooms. Fix: a per-style retry state (common/hair_capture.h Retry): look again at
+  once when the bound mask image changes, else every 300 frames; after 20 placeholder looks the style is "never
+  full-size" (counted in the summary, not retried until its image changes); a captured style re-captures only on an
+  upgrade. CPU test in hair_capture_cpu_test.
+- hcap3 (READY_FOR_LIVE, not queued, lint 0 failing; replaces hcap2): before queuing, `python
+  tools/live_batches/hair_capture/stage.py setup 8b32681bb9ecfc30` in the test tree builds <tree>/data/assetdb as hard
+  links of the real assetdb minus that close-up groom (the largest one hcap2 matched), so the layer loads the copy
+  ("from this checkout", required by both jobs) and the companion becomes the capture target with its full mask.
+  hcap3-capture expects `[hair capture] 8b32681bb9ecfc30: ... mask 2048x2048 fmt 137 mips 12 ... written`; its post
+  (stage.py convert) runs bg3rtx_hairconv into the copy and compares the regenerated groom with the removed original
+  (read-only): index id, strand and point counts, shared strand starts, radius median ratio, the converter's verdict
+  and IoU, in captures/hcap3_e2e.json: the first real-mask check. hcap3-strands expects the v3 file indexed and
+  decoded and groom instances; its post removes the copy (links only). The real assetdb is never written.
 - Resolved (coordinator, 2026-11-08): "Strand hair on screen" and "Strand hair in ray-traced lighting" need hardware only
   (kCapHairGrooms dropped); with no grooms cards stay, captures accumulate and strands follow conversion. Was:
   "Strand hair on screen" required local groom files (kCapHairGrooms), so on a fresh install with

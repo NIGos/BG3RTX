@@ -76527,6 +76527,37 @@
         "hcap1-dialogue.1.203259.log",
         "frozen VALID match"
       ]
+    ],
+    "\\[assetdb\\] loaded .*test-main.*data.assetdb.bg3rtx_assetdb\\.bin \\(from this checkout\\)": [
+      0,
+      null
+    ],
+    "\\[assetdb\\] not available": [
+      0,
+      null
+    ],
+    "\\[hair capture\\] .* not copyable": [
+      0,
+      null
+    ],
+    "\\[hair capture\\] 8b32681bb9ecfc30: \\d+ indices, \\d+ vertices, mask 2048x2048 fmt 137 mips 12, stretch [0-9.]+/[0-9.]+/[0-9.]+, \\d+ KB, written": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] .*8b32681bb9ecfc30.*malformed": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] 8b32681bb9ecfc30 LOD \\d decoded \\(v3\\): \\d+ points in \\d+ ms": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] indexed .*8b32681bb9ecfc30\\.hgrm: index id 8b32681bb9ecfc30": [
+      2,
+      [
+        "hcap1-dialogue.1.203259.log",
+        "frozen VALID match"
+      ]
     ]
   }
 }
