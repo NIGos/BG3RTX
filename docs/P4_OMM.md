@@ -646,8 +646,15 @@ release ships the tools, the user's own install is the source, the output lives 
   refused while live bytes stay >= L; those are counted deferred before any allocation or dispatch until the live
   bytes drop or 64 frames pass. Same micro-maps built; 0 restores the per-frame retry. The fault-range log keeps
   the first 32 lines per 600 frames and summarises the rest per name (common/log_budget.h).
-  Open: eviction (LRU by last use) and freeing the backend scratch after the build would let new foliage get
-  micro-maps again; both change which micro-maps exist, so they need their own A/B.
+  Backend scratch (not freed, measured): the session's 682 `[omm] recorded EXT build` lines sum to 254.57 MB of
+  micro-map storage and 1.39 MB of scratch (0.5%; about 80 B storage per triangle at level 4). Freeing the scratch
+  after the build would fit about 3-4 more micro-maps (mean 373 KB each) and needs a per-build-generation lifetime
+  (a replayed command buffer would rebuild into freed scratch): not worth it. Storage is the budget.
+  `rt_omm_dyn_evict_frames` (live, default 0, common/omm_dyn_evict.h): LRU eviction of ready micro-maps no draw
+  matched for N frames and no per-draw BLAS slot still holds, oldest first, at most 64 per build; the backend
+  destroys each after its registered GPU uses; an old scene slot that still lists one declines the accelerated
+  TLAS (reference scene). The `[omm dyn]` line counts "evicted". Changes which micro-maps exist: A/B against 0
+  (omm check violations 0, energy equal, micro-map share and failed per window).
 - Historical READY_FOR_LIVE preparation (now passed; section 1): `tools/live_batches/omm_qual` job om4 (camp, 123 s, one launch: REF / ON / REF via
   rt_omm_reference, diag-check with rt_stats=1); predictions in predicted.json (violations 0, micro-map share >= 90%
   of masked per-draw triangles, ~40-49% known, candidates 30-50% fewer, rt passes 1.5-3 ms lower, energy equal).

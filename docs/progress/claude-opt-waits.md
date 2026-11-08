@@ -19,6 +19,10 @@
   capture begin and hand it out at once) in TRACK_D_SCENE_BUILD.md; not implemented.
 - Expected: about 14-16 ms less scene wait in foliage-heavy late-session play (back to the 2-4 ms baseline), ~36 x 3
   fewer allocations and ~108 fewer log lines per frame. No shaders touched; no ABI change.
+- Follow-up: backend scratch is 1.39 MB of the 256 MB (storage 254.57 MB over 682 micro-maps): freeing it fits about
+  3-4 more micro-maps, so it was not done. `rt_omm_dyn_evict_frames` (off): LRU eviction of micro-maps unused for N
+  frames and held by no per-draw BLAS, 64 per build at most; unit-tested (omm_dyn_refusal_test). Suggested A/B:
+  600 against 0 in the same foliage walk.
 - Live check (one session, the same walk through foliage, rt_omm_dyn_retry_frames 64 / 0 / 64 toggled live):
   `[omm dyn]` failed per 300 builds near 0 with 64 (vs thousands with 0), `[rt] scene wait` mean back to 2-4 ms,
   cache size and micro-map share equal across the toggles.

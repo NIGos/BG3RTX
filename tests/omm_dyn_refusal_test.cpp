@@ -1,6 +1,7 @@
 // common/omm_dyn_refusal.h (rt_omm_dyn_retry_frames) and common/log_budget.h (fault-range log budget).
 #include "../common/log_budget.h"
 #include "../common/omm_dyn_refusal.h"
+#include "../common/omm_dyn_evict.h"
 #include <cstdio>
 #include <string>
 #define CHECK(x) do { if (!(x)) { std::printf("FAIL line %d: %s\n", __LINE__, #x); return 1; } } while (0)
@@ -49,6 +50,26 @@ int main() {
     CHECK(b.admit("A", 1300, &s) && s == "1 more in frames 600-1300: A x1");
     CHECK(b.admit("A", 1301, &s) && s.empty());              // a period without suppressed lines: no summary
     CHECK(b.admit("A", 1, &s));                              // frame counter reset: a new period
+  }
+  {
+    using bg3::omm_dyn::EvictCandidate;
+    using bg3::omm_dyn::pick_evictions;
+    const std::vector<EvictCandidate> all = {
+        {1, 100, true, false},   // unused 900 frames: evictable
+        {2, 50, true, false},    // unused 950 frames: evictable, oldest
+        {3, 950, true, false},   // used 50 frames ago: kept
+        {4, 10, true, true},     // a per-draw BLAS was built with it: kept
+        {5, 10, false, false},   // bake not run yet: kept (its own path discards it)
+        {6, 100, true, false}};  // same age as 1: key order
+    auto v = pick_evictions(all, 1000, 600, 64);
+    CHECK(v.size() == 3 && v[0] == 2 && v[1] == 1 && v[2] == 6);
+    v = pick_evictions(all, 1000, 600, 2);
+    CHECK(v.size() == 2 && v[0] == 2 && v[1] == 1);          // at most `max`, least recently used first
+    CHECK(pick_evictions(all, 1000, 0, 64).empty());          // key off: never
+    CHECK(pick_evictions(all, 1000, 600, 0).empty());
+    CHECK(pick_evictions(all, 650, 600, 64).size() == 1);     // exactly N frames unused: 2 only (650 - 50 = 600)
+  CHECK(pick_evictions(all, 649, 600, 64).empty());
+    CHECK(pick_evictions({{7, 2000, true, false}}, 1000, 600, 64).empty());   // frame counter reset: kept
   }
   std::printf("omm_dyn_refusal_test ok\n");
   return 0;

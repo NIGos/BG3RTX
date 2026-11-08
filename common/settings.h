@@ -777,6 +777,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_omm_dyn_bake_tris", "131072"},
     {"rt_omm_dyn_mb", "256"},
     {"rt_omm_dyn_retry_frames", "64"},
+    {"rt_omm_dyn_evict_frames", "0"},
     {"rt_native_hair", "0"},
     {"rt_hair_pool_trim", "0"},
     {"rt_scene_compact_holds", "1"},
