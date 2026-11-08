@@ -344,7 +344,7 @@
        {"id": "hair", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false, "maturity": "qualified"},
        {"id": "tilesets", "label": "+ Tilesets", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_tileset"], "developer": true, "maturity": "developer"}
      ]},
-    {"id": "exp_hair_groom", "label": "Strand hair in ray-traced lighting",
+    {"id": "exp_hair_groom", "label": "RTX Hair in ray-traced lighting",
      "description": "Experimental: uses individual strands for hair shadows and reflected light.",
      "apply": "live", "apply_note": "live; supported LSS hardware required; styles get strands once captured and converted", "advanced": false, "experimental": false, "developer": true,
      "category": "Advanced", "summary": "Experimental: uses individual strands for hair shadows and reflected light.",

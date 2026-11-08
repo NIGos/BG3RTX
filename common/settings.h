@@ -384,7 +384,7 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 2}}, {"rt_native_tileset"}, true, false, false, Apply::Restart}},
    {}, {0, 0, 0, 1}, false, {{"rt","1","Ray-tracing support"},{"rt_alpha","1","Foliage capture"},{"rt_bvh_split","1","Scene cache"}}, false, "Lighting", {"Measured", "RT 2.3–6.3 ms; indirect-light tracing 3.2–8.8 ms", "Unknown", "Recorded RTX 5090 increases: 2.3–6.3 ms in the ray-tracing pass and 3.2–8.8 ms in indirect-light tracing, depending on scene."}, "Needs Ray-tracing detail: Include foliage. Turning it on needs a game restart, and the first start may pause while shaders compile. Visible hair stays the game's own hair."},
 
-  {"exp_hair_groom", "Strand hair in ray-traced lighting",
+  {"exp_hair_groom", "RTX Hair in ray-traced lighting",
    "Experimental: uses individual strands for hair shadows and reflected light.",
    Kind::Choice, Apply::Live, "live; supported LSS hardware required; styles get strands once captured and converted", false,
    {{"off", "Off", 0, {{"rt_hair_groom", "0"}}, {}, {}, false, false, false, Apply::Live},

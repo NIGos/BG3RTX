@@ -78,7 +78,46 @@ int main() {
   // JSON for the bridge.
   const std::string j = to_json({it}, playing, true);
   check(j.find("{\"items\":[{\"id\":\"shaders\"") == 0 && j.find("\"whilePlaying\":true") != std::string::npos &&
-        j.find("\"pausable\":true") != std::string::npos && j.find("\"convertAll\":false") != std::string::npos, "json shape");
+        j.find("\"pausable\":true") != std::string::npos && j.find("\"convertAll\":false") != std::string::npos &&
+        j.find("\"hair\":{}") != std::string::npos && j.find("\"granny\":{\"path\":\"\",\"ok\":false}") != std::string::npos,
+        "json shape");
+  // RTX Hair panel (docs/RTX_HAIR_ROADMAP.md 2f): the player's granny2.dll, the numbers, Convert all styles.
+  check(hair_item(HairInput{}, d).title == "RTX Hair", "user text says RTX Hair");
+  Settings g; g.granny = "C:\\Tools\\ExportTool\\granny2.dll";
+  const std::string gm = merge_settings(ini, g);
+  check(parse_settings(gm).granny == g.granny && merge_settings(gm, parse_settings(gm)) == gm, "granny path round trip");
+  check(merge_settings("", d).find("hair_granny") == std::string::npos, "no granny line when unset");
+  check(granny_name_ok(L"C:\\x\\Granny2.DLL") && granny_name_ok(L"granny2.dll") && !granny_name_ok(L"C:\\x\\granny2.dll.txt") &&
+        !granny_name_ok(L"C:\\granny2.dll\\other.dll"), "granny file name");
+  check(convert_all_reason("", false, true) == "Needs granny2.dll: choose it below." &&
+        convert_all_reason("C:\\g\\granny2.dll", false, true).find("not found") != std::string::npos &&
+        convert_all_reason("C:\\g\\granny2.dll", true, false).find("game folder") != std::string::npos &&
+        convert_all_reason("C:\\g\\granny2.dll", true, true).empty(), "convert all reason");
+  check(hair_command(L"C:\\b\\conv.exe", L"C:\\cap", L"C:\\out", L"C:\\rep", 4, false, L"C:\\Game", L"") ==
+            L"\"C:\\b\\conv.exe\" \"C:\\cap\" --out \"C:\\out\" --report-dir \"C:\\rep\" --threads 4 --jobs 1",
+        "captures command");
+  check(hair_command(L"C:\\b\\conv.exe", L"C:\\cap", L"C:\\out", L"C:\\rep", 1, true, L"C:\\Game", L"C:\\g\\granny2.dll") ==
+            L"\"C:\\b\\conv.exe\" --all --game \"C:\\Game\" --granny \"C:\\g\\granny2.dll\" --out \"C:\\out\" --report-dir \"C:\\rep\" --threads 1 --jobs 1",
+        "convert all command");
+  // Facts tolerate missing fields (an older converter has no total or source) and report the captures and errors.
+  HairInput fi;
+  fi.status_json = status; fi.captured = 430;
+  HairFacts f = hair_facts(fi, d);
+  check(f.ready == 412 && f.finished == 430 && f.needed == 559 && f.total == -1 && f.captured == 430 && f.bytes == 2100000000 &&
+        f.eta_s == -1 && f.source == "seen" && f.error.empty(), "facts without total");
+  fi.status_json = "{\"ready\": 3, \"total\": 1530, \"source\": \"all\", \"eta_s\": 7300, \"error\": \"pak not found\"}";
+  f = hair_facts(fi, d);
+  check(f.total == 1530 && f.source == "all" && f.eta_s == 7300 && f.error == "pak not found" && f.needed == -1, "facts with total");
+  fi.failed = true; fi.error = "granny2.dll could not be loaded";
+  check(hair_facts(fi, d).error == "granny2.dll could not be loaded", "a failed run's error wins");
+  fi = {}; fi.status_json = "{\"mode\": \"all\"}";
+  check(hair_facts(fi, d).source == "all" && hair_facts(HairInput{}, g).source == "seen", "source from mode, else the setting");
+  Extra ex{f, true, ""};
+  const std::string jf = to_json({it}, g, true, ex);
+  check(jf.find("\"hair\":{\"ready\":3,\"captured\":430,\"total\":1530,") != std::string::npos && jf.find("\"etaSeconds\":7300") != std::string::npos &&
+        jf.find("\"source\":\"all\"") != std::string::npos && jf.find("\"finished\"") == std::string::npos &&
+        jf.find("\"granny\":{\"path\":\"C:\\\\Tools\\\\ExportTool\\\\granny2.dll\",\"ok\":true}") != std::string::npos &&
+        jf.find("\"convertAllReason\":\"\"") != std::string::npos, "json facts");
   std::printf("preparation: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
 }

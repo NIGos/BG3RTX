@@ -90,6 +90,18 @@ std::wstring choose_zip(HWND owner) {
   f.lpstrInitialDir=folder.c_str();f.Flags=OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR|OFN_EXPLORER;
   return GetSaveFileNameW(&f)?std::wstring(path):std::wstring();
 }
+// File picker for the player's granny2.dll; "" when cancelled.
+std::wstring browse_granny(HWND owner,const std::wstring& current) {
+  ComPtr<IFileOpenDialog> dialog;
+  if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&dialog))))return {};
+  const COMDLG_FILTERSPEC filter[]={{L"granny2.dll",L"granny2.dll"}};dialog->SetFileTypes(1,filter);
+  dialog->SetOptions(FOS_FORCEFILESYSTEM|FOS_FILEMUSTEXIST|FOS_PATHMUSTEXIST|FOS_NOCHANGEDIR);
+  dialog->SetTitle(L"Choose granny2.dll from your LSLib ExportTool folder");
+  if(!current.empty()){auto dir=current.substr(0,current.find_last_of(L"\\/"));ComPtr<IShellItem> folder;if(SUCCEEDED(SHCreateItemFromParsingName(dir.c_str(),nullptr,IID_PPV_ARGS(&folder))))dialog->SetFolder(folder.Get());}
+  std::wstring out;
+  if(SUCCEEDED(dialog->Show(owner))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){out=path;CoTaskMemFree(path);}}}
+  return out;
+}
 void send(Host& h,const std::string& json) {if(h.view)h.view->PostWebMessageAsJson(widen(json).c_str());}
 void refresh(Host& h) {
   if(h.busy||!h.bridge)return;
@@ -343,7 +355,15 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
       hooks.notices=[&h](){auto path=root_dir()+L"\\THIRD_PARTY.md";if(!file_exists(path))path=root_dir()+L"\\docs\\release\\THIRD_PARTY.md";ShellExecuteW(h.window,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL);};
       if(!h.no_game)h.prep=std::make_unique<prep::Manager>(root_dir(),h.game);
       hooks.preparation=[&h](){return h.prep?h.prep->json():std::string();};
-      hooks.prepare=[&h](const std::string& action,int value){if(!h.prep||!h.prep->act(action,value))return false;h.prep->tick(game_running());return true;};
+      hooks.prepare=[&h](const std::string& action,int value){
+        if(!h.prep)return false;
+        // The player's own granny2.dll (LSLib ExportTool) for "Convert all styles": picked here, kept by the Manager.
+        if(action=="browseGranny"){
+          auto path=browse_granny(h.window,h.prep->granny());
+          if(!path.empty()&&path!=h.prep->granny()&&!h.prep->set_granny(path))h.bridge->set_status("Choose the file named granny2.dll.");
+          h.prep->tick(game_running());return true;
+        }
+        if(!h.prep->act(action,value))return false;h.prep->tick(game_running());return true;};
       h.bridge=std::make_unique<Bridge>(h.state,std::move(hooks));
       h.bridge->set_game_path(narrow(h.game));
       h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,effective(h.state)):0);
