@@ -26,3 +26,8 @@
   +0.045 ms [-0.207, +0.298] on 1.36 ms (no difference resolved; the earlier +0.31 ms was GPU sharing); fixed
   ~35 us per launch at 64^2 (bit-equal). The raygen port costs nothing measurable; any SER gain needs the hint path,
   still untested (fix: reorder at uniform control flow), and a divergent fixture (this one has one material).
+- Hint ON, fixed (2026-11-08, claude/opt-ser-gi dfa47ce6): reorder at uniform control flow (both rays traced first);
+  validation layers (GPU-assisted + sync) clean, no device loss, output identical to hint off. 3072^2 vs compute on
+  an idle GPU: lit fixture +0.31 ms (hint off) / +0.64 ms (hint on, noisy); divergent stripe fixture +0.27 ms
+  (hint off) / +0.015 ms [-0.064, +0.047] (hint on). The hint only recovers the RT-pipeline port cost: PARKED.
+  Reopen only with a game-representative divergent fixture (replay pack) showing a gain.
