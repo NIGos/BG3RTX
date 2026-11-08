@@ -94,7 +94,7 @@ struct Choice {
   const char* id;
   const char* label;
   unsigned caps;   // Cap bits
-  KV kv[12];        // keys this choice writes (key == nullptr ends the list)
+  KV kv[18];        // keys this choice writes (key == nullptr ends the list)
   Need need[3];    // dependencies on other knobs (knob == nullptr ends the list)
   // Migration of a file whose keys match no choice exactly (written before the knob became one
   // level choice, or hand-edited): the highest choice one of whose `mark` keys has this choice's
@@ -373,18 +373,26 @@ inline constexpr Knob kKnobs[] = {
 
   {"exp_hair_groom_primary", "Strand hair on screen",
    "Experimental: displays converted hairstyles as individual strands.",
-   Kind::Choice, Apply::Restart, "restart required; experimental activation safety gate", false,
+   Kind::Choice, Apply::Restart, "restart required: strands on screen, the hair ray-origin reservation and the world-space tangent are set up at startup", false,
    {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}}, {}, {}, false, false, false, Apply::Restart},
     // Review 2026-11-08 (docs/RTX_HAIR_PRIMARY.md 5j): On is the one coherent strand path, the qualified bundle: header in
     // G-buffer order decided at submit (order, current), per-frame trace tags, LOD keep, coverage hold and the
     // world-space tangent. The individual keys stay as developer diagnostics in bg3rtx.ini only (order 0 and current 0
     // are known-broken off-paths). The mark migrates a file with only rt_hair_groom_primary=1 to the whole bundle.
+    // RTX Hair single option (user approval 2026-11-08): On also writes every key of the user's tested set (strands in
+    // RT, shadow/AO transmittance, no card shadows, physical fibre shading with GI/specular/mapped lights, RR hair
+    // guides, physical hair ray origins). Tips, sub-pixel coverage, card normal and footprint bounds stay off.
+    // Restart keys of the bundle: rt_hair_groom_primary (startup latch), rt_hair_physical_origin (startup
+    // reservation), rt_hair_tangent_world (compiled into the strand pipelines at creation). All others are live.
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores | kCapHairGrooms,
      {{"rt_hair_groom_primary", "1"}, {"rt_hair_groom_primary_order", "1"}, {"rt_hair_groom_primary_current", "1"},
       {"rt_hair_primary_frame_tag", "1"}, {"rt_hair_groom_lod_keep", "1"}, {"rt_hair_primary_hold", "1"},
-      {"rt_hair_tangent_world", "1"}},
+      {"rt_hair_tangent_world", "1"}, {"rt_hair_groom", "1"}, {"rt_hair_groom_shadow_t", "1"},
+      {"rt_hair_groom_ao_t", "1"}, {"rt_hair_groom_cascade_drop", "1"}, {"rt_hair_fibre", "1"},
+      {"rt_hair_fibre_gi", "1"}, {"rt_hair_fibre_spec", "1"}, {"rt_hair_fibre_mapped", "1"},
+      {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, true, "Advanced", {}, "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Turns on the whole strand path: the frame record decided at submit, per-frame trace tags, LOD keep, coverage hold and the world-space tangent. Cost and appearance remain unqualified; activation requires restart after a reported device-loss incident."},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, true, "Advanced", {}, "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified; turning it on needs a game restart."},
 
   {"exp_hair_fibre", "Physical strand shading",
    "Experimental: gives on-screen hair brighter, warmer shading.",

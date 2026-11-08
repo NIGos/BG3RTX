@@ -625,6 +625,14 @@ Independent review of the layer path; each finding verified in code before the f
 - L2 not changed: a single non-opaque traversal would commit LSS candidates (unproven here: hf_groom only walks them)
   and costs every strand ray; the 3-restart skip only runs where a non-swapping groom's strand is in front.
 
+## 5l. RTX Hair single option (2026-11-08, branch claude/opt-waits)
+- The user tested and approved strands with a hand-written set (root `bg3rtx_user.ini`). "Strand hair on screen" On
+  now writes that whole set: the 5j bundle plus rt_hair_groom, shadow_t, ao_t, cascade_drop, fibre, fibre_gi,
+  fibre_spec, fibre_mapped, rr_hair_guides and rt_hair_physical_origin. Tips, coverage, macro_normal and
+  coverage_footprint stay off. Off in every preset; the other hair knobs still show (and can override) their keys.
+- Restart keys in the bundle: rt_hair_groom_primary, rt_hair_physical_origin (0 -> 1), rt_hair_tangent_world
+  (compiled at pipeline creation). The knob's note says so. Choice `kv` grew from 12 to 18 entries.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

@@ -1424,9 +1424,27 @@ static void test_strand_bundle() {
   if (!p) return;
   const Map on = on_map(*p, 1);
   for (const char* key : {"rt_hair_groom_primary", "rt_hair_groom_primary_order", "rt_hair_groom_primary_current",
-                          "rt_hair_primary_frame_tag", "rt_hair_groom_lod_keep", "rt_hair_primary_hold", "rt_hair_tangent_world"}) {
+                          "rt_hair_primary_frame_tag", "rt_hair_groom_lod_keep", "rt_hair_primary_hold", "rt_hair_tangent_world",
+                          // RTX Hair single option (user-tested set, 2026-11-08)
+                          "rt_hair_groom", "rt_hair_groom_shadow_t", "rt_hair_groom_ao_t", "rt_hair_groom_cascade_drop",
+                          "rt_hair_fibre", "rt_hair_fibre_gi", "rt_hair_fibre_spec", "rt_hair_fibre_mapped",
+                          "rr_hair_guides", "rt_hair_physical_origin"}) {
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=1");
     CHECK_EQ(std::string(key) + "=" + code_default(key), std::string(key) + "=0");   // off by default
+  }
+  // Untested strand options stay out of the bundle.
+  for (const char* key : {"rt_hair_groom_tips", "rt_hair_groom_coverage", "rt_hair_macro_normal", "rt_hair_coverage_footprint"})
+    CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=<missing>");
+  // The bundle's restart keys are what makes the knob a restart knob.
+  CHECK(key_change_needs_restart("rt_hair_physical_origin", "0", "1"));
+  CHECK(std::string(p->apply_note).find("restart") != std::string::npos);
+  // A file with the full user-tested set reads as On (not custom), and saving it reproduces every key.
+  {
+    Map m = code_defaults();
+    std::string ini = "dev=1\n";   // developer knob: release policy would reset it
+    for (const KV& kv : p->choices[1].kv) if (kv.key) ini += std::string(kv.key) + "=" + kv.value + "\n";
+    apply_layer(m, parse_ini(ini));
+    CHECK(knob_value(*p, m) == 1);
   }
   CHECK(p->experimental && p->dev_only && p->choices[1].apply == Apply::Restart);
   for (int pr = 0; pr < kPresetCount; ++pr) CHECK(p->preset[pr] == 0);   // strands stay off in every preset

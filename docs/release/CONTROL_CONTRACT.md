@@ -69,7 +69,9 @@ Controls hidden from the three main pages (Experimental opt-ins remain available
 - `exp_alpha_metadata_cache`, `exp_water_empty_tiles`, `exp_water_compose_shift`, `exp_hair_groom`
 - `exp_hair_groom_primary`, `exp_hair_fibre`, `exp_hair_fibre_gi`, `exp_hair_groom_crowd`
 - `exp_hair_groom_shadow_t`, `exp_hair_primary_passes`, `exp_hair_groom_tips` (strand order/current/frame tag/LOD keep/
-  hold/world tangent are part of `exp_hair_groom_primary` On since 2026-11-08; no knob of their own)
+  hold/world tangent are part of `exp_hair_groom_primary` On since 2026-11-08; no knob of their own. On also writes
+  the user-tested set: rt_hair_groom, shadow/AO transmittance, cascade_drop, fibre/fibre_gi/fibre_spec/fibre_mapped,
+  rr_hair_guides, rt_hair_physical_origin; restart required)
 - `exp_hair_pool_trim`, `exp_hair_physical_origin`, `exp_alpha_spill`, `exp_hit_paks`
 - `exp_hit_reference`, `exp_ls_exact_k`, `exp_current_sun`
 Hidden choices: local_shadows Full + shadowed lights; box_lights legacy Shadowed;
