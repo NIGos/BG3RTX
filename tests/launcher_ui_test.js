@@ -139,7 +139,7 @@ render({...fixture,preparation:prepState});ids.get('nav-Support').onclick();
 {const prep=all(ids.get('preparation'));assert(prep.some(e=>e.id==='prep-hair')&&prep.some(e=>e.id==='prep-shaders'));assert.strictEqual(prep.filter(e=>e.tagName==='progress').length,1);
  const grid=ids.get('section-content').children.find(e=>e.className==='grid support');assert.strictEqual(grid.children[0].id,'preparation','Preparation is the first card');
  ids.get('prep-pause').onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'prep',action:'pause',value:0});
- const all_=ids.get('prep-convert-all');all_.checked=true;all_.onchange();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'prep',action:'convertAll',value:1});
+ assert(!ids.get('prep-convert-all')||!all(ids.get('preparation')).includes(ids.get('prep-convert-all')),'no Convert all with runtime capture');
  ids.get('prep-when-1').onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'prep',action:'whilePlaying',value:1});}
 render({...fixture,preparation:{...prepState,paused:true}});ids.get('nav-Support').onclick();assert.strictEqual(ids.get('prep-pause').textContent,'Resume');
 render({...fixture,preparation:{...prepState,items:[{id:'hair',title:'Strand hair',line:'Not available: Python 3 was not found.',state:'unavailable'}]}});ids.get('nav-Support').onclick();

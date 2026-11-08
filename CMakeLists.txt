@@ -363,6 +363,17 @@ add_executable(launcher_launch_test tools/launcher/launch_test.cpp)
 target_compile_definitions(launcher_launch_test PRIVATE UNICODE _UNICODE)
 target_link_libraries(launcher_launch_test PRIVATE advapi32)
 add_test(NAME launcher_launch_test COMMAND launcher_launch_test)
+# Native strand groom converter (docs/RTX_HAIR_ROADMAP.md 2d): .hcap -> .hgrm v3, no Python / LSLib / granny2.
+add_library(hairconv_core STATIC tools/hairconv/core.cpp tools/hairconv/curves2d.cpp tools/hairconv/validate.cpp
+  tools/hairconv/io.cpp)
+target_compile_options(hairconv_core PRIVATE /O2 /fp:precise)
+add_executable(bg3rtx_hairconv tools/hairconv/main.cpp)
+target_link_libraries(bg3rtx_hairconv PRIVATE hairconv_core Cabinet)
+# The launcher runs it (Preparation card) and ships beside it: building the launcher builds the converter.
+add_dependencies(bg3rtx_launcher bg3rtx_hairconv)
+add_executable(hairconv_test tests/hairconv_test.cpp)
+target_link_libraries(hairconv_test PRIVATE hairconv_core Cabinet)
+add_test(NAME hairconv_test COMMAND hairconv_test ${CMAKE_SOURCE_DIR}/tests/fixtures/hairconv)
 # Preparation card (hair conversion, shader compile before Play): settings, lines and run policy.
 add_executable(launcher_preparation_test tools/launcher/preparation_test.cpp tools/launcher/preparation.cpp tools/launcher/launch.cpp)
 target_compile_definitions(launcher_preparation_test PRIVATE UNICODE _UNICODE)

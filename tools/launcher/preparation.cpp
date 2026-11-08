@@ -121,6 +121,13 @@ Item hair_item(const HairInput& in, const Settings& s) {
     it.line = "Not converted yet.";
     it.progress = 0;
   }
+  if (!have && in.no_captures) {
+    it.state = "waiting";
+    it.line = "No hair styles captured yet.";
+    it.detail = "The game captures each style the first time it shows it; conversion follows.";
+    it.progress = -1;
+    return it;
+  }
   const bool left = !have || finished < needed;
   const std::string detail = json_string(in.status_json, "detail");
   if (in.running) {
@@ -224,19 +231,19 @@ uint64_t mtime(const std::wstring& path) {
   if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fad)) return 0;
   return (uint64_t(fad.ftLastWriteTime.dwHighDateTime) << 32) | fad.ftLastWriteTime.dwLowDateTime;
 }
-// A real Python 3 (never the Microsoft Store stub in WindowsApps): hair_python= in the launcher ini, else the PATH.
-std::wstring find_python(const std::string& ini) {
-  size_t pos = ini.find("hair_python=");
-  if (pos != std::string::npos && (pos == 0 || ini[pos - 1] == '\n')) {
-    size_t nl = ini.find('\n', pos);
-    std::wstring p = widen(trim(ini.substr(pos + 12, nl == std::string::npos ? std::string::npos : nl - pos - 12)));
-    if (file_exists(p)) return p;
-  }
-  for (const wchar_t* name : {L"python.exe", L"py.exe"}) {
-    wchar_t buf[MAX_PATH];
-    if (SearchPathW(nullptr, name, nullptr, MAX_PATH, buf, nullptr) && !wcsstr(buf, L"\\WindowsApps\\")) return buf;
-  }
-  return {};
+// The layer's captures (docs/RTX_HAIR_ROADMAP.md 2c): how many .hcap files and the newest one's time (new work).
+uint64_t captures(const std::wstring& dir, int* count) {
+  WIN32_FIND_DATAW fd{};
+  uint64_t newest = 0;
+  *count = 0;
+  HANDLE f = FindFirstFileW((dir + L"\\*.hcap").c_str(), &fd);
+  if (f == INVALID_HANDLE_VALUE) return 0;
+  do {
+    ++*count;
+    newest = std::max(newest, (uint64_t(fd.ftLastWriteTime.dwHighDateTime) << 32) | fd.ftLastWriteTime.dwLowDateTime);
+  } while (FindNextFileW(f, &fd));
+  FindClose(f);
+  return newest;
 }
 std::wstring quote(const std::wstring& s) { return L"\"" + s + L"\""; }
 
@@ -302,13 +309,13 @@ std::string last_line(const std::wstring& path) {
 }  // namespace
 
 struct Manager::Impl {
-  std::wstring root, game, ini_path, report_dir, groom_dir, seen_path, shader_status, python;
+  std::wstring root, game, ini_path, report_dir, groom_dir, capture_dir, shader_status, converter;
   std::string missing;
   Settings s;
   Child hair, shaders;
-  int hair_jobs = 0;
-  bool hair_all = false, hair_done = false, hair_failed = false, shaders_started = false;
-  uint64_t seen_mtime = 0;
+  int hair_jobs = 0, capture_count = 0;
+  bool hair_done = false, hair_failed = false, shaders_started = false;
+  uint64_t capture_mtime = 0;
   std::string hair_error;
 };
 
@@ -321,20 +328,13 @@ Manager::Manager(std::wstring root, std::wstring game_dir) : impl_(std::make_uni
   m.report_dir = local + L"\\BG3RTX\\hair_batch";
   m.shader_status = local + L"\\BG3RTX\\shader_cache\\precompile.json";
   m.groom_dir = m.root + L"\\data\\assetdb\\hair_grooms";
-  m.seen_path = m.root + L"\\data\\assetdb\\hair_seen.txt";
+  m.capture_dir = m.root + L"\\data\\assetdb\\hair_capture";
+  m.converter = exe_dir() + L"\\bg3rtx_hairconv.exe";   // native: no Python, LSLib, granny2 or PowerShell 7
   std::string ini;
   read_file(m.ini_path, ini);
   m.s = parse_settings(ini);
-  m.python = find_python(ini);
-  WIN32_FIND_DATAW fd{};
-  HANDLE f = FindFirstFileW((m.root + L"\\data\\assetdb\\mesh_materials*v2*.json").c_str(), &fd);
-  const bool catalogue = f != INVALID_HANDLE_VALUE;
-  if (catalogue) FindClose(f);
-  if (!file_exists(m.root + L"\\tools\\hair_groom\\batch.py")) m.missing = "the converter scripts are not installed";
-  else if (m.python.empty()) m.missing = "Python 3 was not found";
-  else if (!catalogue) m.missing = "the hair catalogue is missing";
-  else if (m.game.empty()) m.missing = "choose the game folder first";
-  m.seen_mtime = mtime(m.seen_path);
+  if (!file_exists(m.converter)) m.missing = "the hair converter is not installed";
+  m.capture_mtime = captures(m.capture_dir, &m.capture_count);
 }
 
 Manager::~Manager() = default;
@@ -343,7 +343,6 @@ bool Manager::act(const std::string& action, int value) {
   Impl& m = *impl_;
   if (action == "pause") m.s.paused = true;
   else if (action == "resume") { m.s.paused = false; m.hair_failed = false; }
-  else if (action == "convertAll") { m.s.convert_all = value != 0; m.hair_done = false; }
   else if (action == "whilePlaying") m.s.while_playing = value != 0;
   else return false;
   std::string ini;
@@ -356,24 +355,24 @@ void Manager::tick(bool game_running) {
   Impl& m = *impl_;
   SYSTEM_INFO si{};
   GetSystemInfo(&si);
-  // A new seen list (the game wrote hair_seen.txt at a level load) is work again.
-  const uint64_t seen = mtime(m.seen_path);
-  if (seen != m.seen_mtime) { m.seen_mtime = seen; m.hair_done = false; }
-  // Hair.
+  // New captures (the game captured a style it drew without a groom) are work again.
+  int count = 0;
+  const uint64_t newest = captures(m.capture_dir, &count);
+  if (newest != m.capture_mtime || count != m.capture_count) { m.capture_mtime = newest; m.capture_count = count; m.hair_done = false; }
+  // Hair: bg3rtx_hairconv over the captures, oldest first (the order the game saw them), resumable by its state.
   if (m.hair.active() && !m.hair.running()) {
     if (m.hair.exit_code == 0) m.hair_done = true;
     else { m.hair_failed = true; m.hair_error = last_line(m.report_dir + L"\\batch.log"); }
   }
-  const bool want = hair_should_run(m.s, m.missing.empty(), game_running, m.hair_done, m.hair_failed);
-  const int jobs = jobs_for(game_running, si.dwNumberOfProcessors);
-  if (m.hair.active() && (!want || jobs != m.hair_jobs || m.s.convert_all != m.hair_all)) m.hair.stop();   // resumable
+  const bool want = m.capture_count > 0 && hair_should_run(m.s, m.missing.empty(), game_running, m.hair_done, m.hair_failed);
+  const int threads = jobs_for(game_running, si.dwNumberOfProcessors);   // threads inside a style; one style at a time
+  if (m.hair.active() && (!want || threads != m.hair_jobs)) m.hair.stop();   // resumable
   if (!m.hair.active() && want) {
     CreateDirectoryW((m.report_dir.substr(0, m.report_dir.find_last_of(L'\\'))).c_str(), nullptr);
     CreateDirectoryW(m.report_dir.c_str(), nullptr);
-    std::wstring cmd = quote(m.python) + L" -m tools.hair_groom.batch --report-dir " + quote(m.report_dir) +
-                       L" --out-dir " + quote(m.groom_dir) + L" --seen " + quote(m.seen_path) + L" --game " +
-                       quote(m.game + L"\\Data") + L" --jobs " + std::to_wstring(jobs) + (m.s.convert_all ? L" --all" : L"");
-    if (m.hair.start(cmd, m.root, m.report_dir + L"\\batch.log")) { m.hair_jobs = jobs; m.hair_all = m.s.convert_all; }
+    const std::wstring cmd = quote(m.converter) + L" " + quote(m.capture_dir) + L" --out " + quote(m.groom_dir) +
+                             L" --report-dir " + quote(m.report_dir) + L" --threads " + std::to_wstring(threads) + L" --jobs 1";
+    if (m.hair.start(cmd, m.root, m.report_dir + L"\\batch.log")) m.hair_jobs = threads;
     else { m.hair_failed = true; m.hair_error = "the converter could not be started"; }
   }
   // Shaders: once per launcher session, before Play (never beside a running game: it compiles its own).
@@ -388,7 +387,7 @@ void Manager::tick(bool game_running) {
   // The card.
   std::string status;
   read_file(m.report_dir + L"\\preparation.json", status);
-  HairInput hi{m.missing, status, m.hair.active(), game_running, m.hair_failed, m.hair_error};
+  HairInput hi{m.missing, status, m.hair.active(), game_running, m.hair_failed, m.hair_error, m.capture_count == 0};
   Item h = hair_item(hi, m.s);
   std::string sstatus;
   read_file(m.shader_status, sstatus);

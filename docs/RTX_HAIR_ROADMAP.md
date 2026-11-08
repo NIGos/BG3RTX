@@ -278,6 +278,20 @@ lint 0 failing): mask format / size / mips per style (resident mip 0 vs the pak 
 many hair draws have no host-mapped index buffer (groom stats "not mapped"). Only a live run answers those and the
 real pose stretch (card edge lengths over a few frames).
 
+**Live result** (hcap1-dialogue, 2026-11-08 20:32, VALID, 142 s, nv153 0). Folded into the capture spec:
+- Masks are BC3_UNORM (format 137). 8 hair mask images were bound as 128x128 with 1 mip (streaming placeholders),
+  2 at 2048x2048 with 12 mips; noise textures 64x64 vs 1024x1024 likewise. So the capture waits for a full mask:
+  mip count > 1 and at least the size seen before for that join id (stored per id once seen); a placeholder never
+  feeds the converter, and a style captured from a placeholder (should one slip through) is re-captured when the
+  bound image is upgraded (new image id with more mips) and its groom rebuilt.
+- Indices: "not indexed 0" over the run and "not mapped 0": the index-range path covers every hair draw.
+- Unmatched hair draws: 424-600 per 300 frames, all "count unknown" (12 "UV pending"): in bvhsplit the count filter
+  `count_known(d.args.count)` runs before any join (CountUnknown = no groom file has that index count), so these
+  are exactly the styles without a groom, the set the capture feeds.
+- Card stretch in real poses: not measured by this job. The capture records it: per style the ratio of each card
+  edge's posed length to its length at the first capture (min / median / max over edges), logged with the capture
+  line and stored in the .hcap header, so the first capture run reports it.
+
 **On-the-fly variant (convert while the game runs, cards meanwhile).** Stage times today (`capture stages`, 12
 cached styles spread by size, one thread, synthetic mask with each style's strand counts; GR2 decode needs the paks
 and is not included: the 2026-11-07 batch seconds exceed these totals by a median 1.1 s with pak read and GR2 dump):
@@ -303,6 +317,52 @@ is latency: a style seen for the first time gets strands at the next level load 
 **Implementation size.** Layer capture + .hcap writer ~300-400 lines; groom re-index at a level load ~40; Python
 .hcap reader and batch source switch ~200 (tiers from the seen list); C++ converter port for the release
 (convert/strands2d/curves2d/analysis/render, ~2,000 Python lines) ~3,000-4,000 lines, the bulk of the work.
+
+## 2d. Native converter: bg3rtx_hairconv (C++, 2026-11-08; branch claude/hair-converter-native)
+C++ rather than Rust (coordinator decision): the speed comes from the algorithm, layout and threads, and the repo
+already builds, tests and packages C++ (no second toolchain in the build, merge-green or the installer).
+- `bin\bg3rtx_hairconv.exe` (tools/hairconv: core.cpp tracing / locate / runs / dedupe / analysis, curves2d.cpp the 2-D
+  tracer, validate.cpp the validation renderer, io.cpp .hcap reader and v3 writer, main.cpp CLI; static CRT).
+  Input: `.hcap` (tools/hair_groom/hcap.py layout: native indices, positions, UV, decoded RGBA8 mask, optional head
+  proxy and grid). Output: .hgrm v3 (per-file bits, LZMS), read by common/hair_groom_v3.h. The batch cache is a dev
+  input only through `python -m tools.hair_groom.hcap export` (cached meshes + a synthetic mask).
+- Same pipeline as batch.process (`hcap.reference` is the Python dev reference): grid, root check, trace (rows or 2-D),
+  dedupe, head (the file's or fitted to the strand roots), orientation / reorient, check, write. `--check full`
+  (default) adds the validation renders and batch.py's verdict rules; `--check cheap` keeps the structural rules.
+- Threads: cards in parallel for locate / runs, tiles in parallel for tracing, a spatial hash (cells of the 0.5 mm
+  threshold, 27 neighbours) for dedupe, views and fragment chunks in parallel for validation, the 7 LZMS streams in
+  parallel; `--jobs` runs styles in parallel. No per-point allocation in the inner loops.
+- State: `--report-dir` keeps state.json (input name, size, mtime, converter version) and writes preparation.json
+  (the Preparation card's fields) every 30 s; progress lines every 30 s; BelowNormal priority.
+- Speed (24 cached styles, 330-37,932 triangles, 1024 x 1024 synthetic masks; Python on a quiet machine; seconds per
+  style, median / p90; this PC):
+  | Stage | Python | C++ 4 threads |
+  |---|---|---|
+  | grid + root check | 0.015 / 0.028 | 0.001 / 0.002 |
+  | strand tracing | 12.1 / 17.4 | 0.195 / 0.292 |
+  | dedupe | 0.144 / 0.510 | 0.068 / 0.309 |
+  | validation renders | 1.00 / 2.34 | 0.065 / 0.165 |
+  | LODs + v3 write (LZMS) | 0.41 / 1.49 | 0.119 / 0.423 |
+  | total | 14.6 / 19.6, max 21.4 | **0.51 / 1.11, max 1.78** |
+  Largest style (162,380 strands): Python 17.9 s, C++ 1.27 s. One thread: 0.75 s median, 3.26 s max; 4 styles in
+  parallel (1 thread each): all 24 in 8.9 s. Targets (typical < 1 s, largest < 5 s on 4 threads) are met. What is
+  left of the time: LZMS (single-threaded per stream; the largest stream bounds the write), dedupe's pair counting on
+  the largest styles, and tracing (sequential per tile row by construction).
+- Equivalence gate (`python -m tools.hair_groom.hairconv_compare`, 24 cached styles of 330-37,932 triangles, 2 with a
+  curly atlas; the same synthetic mask on both sides): every verdict, IoU / coverage / radiance (3 decimals), grid,
+  card, strand and segment count identical; the 19 written grooms decode to identical LODs (triangles, roots,
+  segments, and barycentrics and radii bit-identical: 0 difference), same index id. The 2-D tracer matches to 2e-12 px
+  (numpy's own float32 sin/cos reproduced), the renderer to 9e-9. CTest `hairconv_test` runs a synthetic fixture
+  (tests/fixtures/hairconv, `hcap fixture`) against the reference's record and v3 file.
+- Launcher: the Preparation flow runs `bg3rtx_hairconv <assetdb>\hair_capture --out <assetdb>\hair_grooms
+  --report-dir %LOCALAPPDATA%\BG3RTX\hair_batch --threads N --jobs 1` (N: 1..4 with the game closed, 1 while playing),
+  oldest capture first, same pause, job objects and "When to convert" choice; new captures make it run again. The
+  hair line says "No hair styles captured yet." until the layer has captured one. "Convert all" is gone: with the
+  runtime capture only styles the game drew exist. Python (tools/hair_groom) stays the dev reference.
+- Release: scripts/package.ps1 ships `bin\bg3rtx_hairconv.exe`; verify_rc requires it and allows it among the
+  payload's executables; the launcher target builds it. The setup needs no Python, PowerShell 7, LSLib or granny2.
+- Left: the layer capture itself (2c: the .hcap writer with the full-mask rule and the stretch stat), the groom
+  re-index at a level load, and a live run of capture -> conversion -> strands.
 
 ## 3. Converter quality and validation (OFFLINE-NOW)
 On screen: fewer fake tips (strands are 14 mm median pieces: crossings in the painted mask), no doubled

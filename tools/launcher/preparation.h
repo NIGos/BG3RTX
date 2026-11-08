@@ -32,7 +32,8 @@ struct HairInput {
   std::string missing;           // non-empty: the converter cannot run (what is missing)
   std::string status_json;       // <report dir>\preparation.json, may be empty
   bool running = false, game_running = false, failed = false;
-  std::string error;             // the batch's last output line after a failure
+  std::string error;             // the converter's last output line after a failure
+  bool no_captures = false;      // the game has not captured a style without a groom yet
 };
 Item hair_item(const HairInput& in, const Settings& s);
 
