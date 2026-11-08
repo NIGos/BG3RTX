@@ -182,6 +182,8 @@ Get-ChildItem (Join-Path $root "shaders") -Recurse -File | Where-Object {
 foreach ($f in @('shaders\rt\alpha_fs.txt', 'shaders\rt\camera_fade_fs.txt')) {
   Copy-To (Join-Path $root $f) $f
 }
+# The launcher's compile-before-Play list (BG3RTX.exe --precompile-shaders).
+if (Test-Path (Join-Path $root 'shaders\precompile.txt')) { Copy-To (Join-Path $root 'shaders\precompile.txt') 'shaders\precompile.txt' }
 $seen = @{}
 $queue = New-Object System.Collections.Generic.Queue[string]
 Get-ChildItem (Join-Path $root "shaders") -Recurse -File -Include *.hlsl, *.hlsli, *.h | ForEach-Object { $queue.Enqueue($_.FullName) }

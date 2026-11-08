@@ -307,6 +307,158 @@ def decode(raw, codec="zstd"):
     return Hgrm(header, [l0] + [thin(l0, k) for k in keeps[1:]])
 
 
+# --- LZMS (Windows Compression API, cabinet.dll: the layer decodes it with the OS, nothing vendored) ------------
+_CAB = None
+COMPRESS_ALGORITHM_LZMS = 5
+
+
+def _cabinet():
+    global _CAB
+    if _CAB is None:
+        import ctypes
+        from ctypes import wintypes as wt
+        cab = ctypes.WinDLL("cabinet.dll")
+        H = ctypes.c_void_p
+        cab.CreateCompressor.argtypes = [wt.DWORD, ctypes.c_void_p, ctypes.POINTER(H)]
+        cab.Compress.argtypes = [H, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+        cab.CreateDecompressor.argtypes = [wt.DWORD, ctypes.c_void_p, ctypes.POINTER(H)]
+        cab.Decompress.argtypes = [H, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+        cab.CloseCompressor.argtypes = cab.CloseDecompressor.argtypes = [H]
+        _CAB = (ctypes, cab, H)
+    return _CAB
+
+
+def lzms_compress(data):
+    if not data:
+        return b""
+    ctypes, cab, H = _cabinet()
+    h = H()
+    if not cab.CreateCompressor(COMPRESS_ALGORITHM_LZMS, None, ctypes.byref(h)):
+        raise OSError("CreateCompressor(LZMS) failed")
+    try:
+        out = ctypes.create_string_buffer(len(data) + len(data) // 2 + (1 << 20))
+        n = ctypes.c_size_t()
+        if not cab.Compress(h, data, len(data), out, len(out), ctypes.byref(n)):
+            raise OSError(f"LZMS compress failed ({ctypes.GetLastError()})")
+        return out.raw[:n.value]
+    finally:
+        cab.CloseCompressor(h)
+
+
+def lzms_decompress(data, size):
+    if not size:
+        return b""
+    ctypes, cab, H = _cabinet()
+    h = H()
+    if not cab.CreateDecompressor(COMPRESS_ALGORITHM_LZMS, None, ctypes.byref(h)):
+        raise OSError("CreateDecompressor(LZMS) failed")
+    try:
+        out = ctypes.create_string_buffer(size)
+        n = ctypes.c_size_t()
+        if not cab.Decompress(h, data, len(data), out, size, ctypes.byref(n)) or n.value != size:
+            raise OSError("LZMS decompress failed")
+        return out.raw
+    finally:
+        cab.CloseDecompressor(h)
+
+
+# --- .hgrm version 3 (common/hair_groom_v3.h decodes it in the layer) ---------------------------------------
+# 'HGRM', 3, position id, index id, card vertices, card indices, lods, 0; UV samples (32 x 2 f32);
+# per LOD the v2 16-byte header (keep, points, segments, 0): the layer's index-time segment counts;
+# codec (1 = LZMS), barycentric bits, strands, stream count (7); per stream raw bytes u64, stored bytes u64, data.
+# Streams describe LOD 0: strand lengths (u8, 255 = escape), escapes (u16), triangle (zigzag delta, 4 byte planes),
+# bary 2nd and 3rd weight (wrapped zigzag delta of the fixed point code, 2 or 4 byte planes), radius (log2 code,
+# wrapped zigzag delta, 2 planes), root (mod-256 delta). The thinned LODs are thin(LOD 0, keep).
+V3 = 3
+CODEC_LZMS = 1
+MAX_BITS = 24
+
+
+def v3_streams(l0, bits):
+    off = strand_offsets(l0.points, l0.segment)
+    lengths = np.diff(off)
+    if lengths.max() > 65535:
+        raise ValueError("strand longer than 65535 points")
+    width = 2 if bits <= 16 else 4
+    s = [np.minimum(lengths, 255).astype(np.uint8).tobytes(), lengths[lengths >= 255].astype("<u2").tobytes(),
+         _shuffle(_zigzag(_delta(l0.triangle, off)), 4)]
+    s += [_shuffle(_wrap_delta(quant_bary(l0.bary[:, k], bits), off, bits), width) for k in range(2)]
+    s += [_shuffle(_wrap_delta(quant_radius(l0.radius), off, 16), 2), (_delta(l0.root, off) & 0xFF).astype(np.uint8).tobytes()]
+    return s, len(lengths)
+
+
+def _degenerate(l0, bary):
+    s = np.asarray(l0.segment, np.int64)
+    return int(np.sum((l0.triangle[s] == l0.triangle[s + 1]) & np.all(bary[s] == bary[s + 1], axis=1)))
+
+
+def pick_bits(l0, positions=None, tris=None):
+    """bits_for the card mesh, raised until no segment collapses to zero length after quantisation (parse_lod
+    rejects those); 18 without a mesh."""
+    bits = bits_for(positions, tris, l0.triangle) if positions is not None else 18
+    while bits < MAX_BITS and _degenerate(l0, dequant_bary(quant_bary(l0.bary, bits), bits)):
+        bits += 1
+    return bits
+
+
+def encode_v3(header, lods, bits):
+    """header: the v2 header bytes (40 + UV samples, any version); lods: [Lod] with lods[k] == thin(lods[0], keep)."""
+    if len(header) != 40 + 256:
+        raise ValueError("v3 needs the UV samples (v2 header)")
+    l0 = lods[0]
+    streams, strands = v3_streams(l0, bits)
+    out = [header[:4], struct.pack("<I", V3), header[8:]]
+    for l in lods:
+        out.append(struct.pack("<f3I", float(l.keep), l.points, len(l.segment), 0))
+    out.append(struct.pack("<4I", CODEC_LZMS, bits, strands, len(streams)))
+    for s in streams:
+        c = lzms_compress(s)
+        out.append(struct.pack("<2Q", len(s), len(c)) + c)
+    return b"".join(out)
+
+
+def decode_v3(raw):
+    """Hgrm (header as stored, every LOD rebuilt) of a version 3 file."""
+    if raw[:4] != b"HGRM" or struct.unpack_from("<I", raw, 4)[0] != V3:
+        raise ValueError("not an .hgrm v3")
+    nl, = struct.unpack_from("<I", raw, 32)
+    at = 40 + 256
+    table = [struct.unpack_from("<f3I", raw, at + 16 * k)[:3] for k in range(nl)]
+    at += 16 * nl
+    codec, bits, strands, n = struct.unpack_from("<4I", raw, at); at += 16
+    if codec != CODEC_LZMS or not (8 <= bits <= MAX_BITS) or n != 7:
+        raise ValueError("unknown v3 codec or layout")
+    streams = []
+    for _ in range(n):
+        size, csize = struct.unpack_from("<2Q", raw, at); at += 16
+        streams.append(lzms_decompress(raw[at:at + csize], size)); at += csize
+    if at != len(raw):
+        raise ValueError("trailing bytes")
+    points = table[0][1]
+    lengths = np.frombuffer(streams[0], "u1").astype(np.int64)
+    lengths[lengths == 255] = np.frombuffer(streams[1], "<u2").astype(np.int64)
+    if len(lengths) != strands or lengths.sum() != points:
+        raise ValueError("strand lengths do not match the points")
+    off = np.concatenate([[0], np.cumsum(lengths)])
+    width = 2 if bits <= 16 else 4
+    tri = _undelta(_unzigzag(_unshuffle(streams[2], 4, points)), off).astype(np.uint32)
+    bary = np.stack([dequant_bary(_unwrap_delta(_unshuffle(streams[3 + k], width, points), off, bits), bits) for k in range(2)], 1)
+    rad = dequant_radius(_unwrap_delta(_unshuffle(streams[5], 2, points), off, 16))
+    root = (_undelta(np.frombuffer(streams[6], "u1"), off) & 0xFF).astype(np.uint8)
+    l0 = Lod(np.float32(table[0][0]), tri, bary, rad, root, segment_starts(off))
+    lods = [l0] + [thin(l0, np.float32(k)) for k, _, _ in table[1:]]
+    for l, (k, p, s) in zip(lods, table):
+        if l.points != p or len(l.segment) != s:
+            raise ValueError("LOD table does not match the rebuilt LODs")
+    return Hgrm(raw[:40 + 256], lods)
+
+
+def read_any(path):
+    """Hgrm of a v1/v2 or v3 file."""
+    raw = Path(path).read_bytes()
+    return decode_v3(raw) if struct.unpack_from("<I", raw, 4)[0] == V3 else read(path)
+
+
 # --- error -----------------------------------------------------------------------------------------------------
 def position_error(l0, bary_q, positions, tris):
     """|p(bary) - p(bary_q)| in metres per point in the bind pose, and the point's radius."""
@@ -454,14 +606,68 @@ def codec_study(directory, cache_dir, sample, bits_list=(14, 16, 18), log=print)
     return results
 
 
+def dryrun(cache_dir, out_dir, limit, v2_dir=None, log=print):
+    """End-to-end check of the v3 writer without the paks: groom caches of a batch (cache/groom/*.npz) -> asset.write
+    (the batch's own call) into `out_dir`, plus <file>.ref = the Python reference decode in the v2 layout for
+    tests/hair_groom_v3_test.cpp --dir. Compares with the v2 file of the same name in `v2_dir` (read-only)."""
+    from . import asset, batch, convert
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files = sorted(glob.glob(str(Path(cache_dir) / "*.npz")), key=os.path.getsize)
+    pick = [files[int(i)] for i in np.linspace(0, len(files) - 1, limit)] if len(files) > limit else files
+    rows = []
+    for p in pick:
+        got = batch.load_groom_cache(Path(p))
+        if got is None:
+            continue
+        groom, hair = got[0], got[1]
+        name = f"{asset.index_id(hair.tris):016x}.hgrm"
+        path = out_dir / name
+        cid, _ = asset.content_id(hair.positions, hair.tris)
+        t = time.perf_counter()
+        bits = asset.write(path, cid, hair, [(k, convert.thin(groom, k)) for k in asset.LODS])
+        enc = time.perf_counter() - t
+        t = time.perf_counter()
+        ref = decode_v3(path.read_bytes())
+        dec = time.perf_counter() - t
+        ref.header = ref.header[:4] + struct.pack("<I", 2) + ref.header[8:]
+        Path(str(path) + ".ref").write_bytes(write_bytes(ref))
+        err = position_error(storage_lod0(groom), ref.lods[0].bary, hair.positions.astype(np.float64), hair.tris)
+        v2 = Path(v2_dir) / name if v2_dir else None
+        row = {"file": name, "points": int(len(groom.points)), "bits": bits, "v3_bytes": path.stat().st_size,
+               "v2_bytes": v2.stat().st_size if v2 and v2.exists() else None, "encode_s": round(enc, 2),
+               "python_decode_ms": round(dec * 1e3, 1), "pos_um_max": float(err.max() * 1e6)}
+        rows.append(row)
+        log(f"[hair storage] dry run {name}: {row}", flush=True)
+    return rows
+
+
+def storage_lod0(groom):
+    """storage.Lod of a converter Groom (LOD 0 only, as asset.write stores it)."""
+    from .bench_data import segment_starts as starts
+    return Lod(np.float32(1.0), np.asarray(groom.triangle, np.uint32), np.ascontiguousarray(groom.bary[:, 1:3], np.float32),
+               np.asarray(groom.radii, np.float32), np.clip(np.rint(groom.root_param * 255), 0, 255).astype(np.uint8),
+               starts(groom.offsets))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
+    dr = sub.add_parser("dryrun"); dr.add_argument("--cache", required=True); dr.add_argument("--out", required=True)
+    dr.add_argument("--limit", type=int, default=5); dr.add_argument("--v2")
     s = sub.add_parser("scan"); s.add_argument("--dir", default=str(ROOT / "data" / "assetdb" / "hair_grooms"))
     s.add_argument("--out")
     c = sub.add_parser("codec"); c.add_argument("--dir", default=str(ROOT / "data" / "assetdb" / "hair_grooms"))
     c.add_argument("--cache"); c.add_argument("--sample", type=int, default=24); c.add_argument("--out")
     a = ap.parse_args(argv)
+    if a.cmd == "dryrun":
+        rows = dryrun(a.cache, a.out, a.limit, a.v2)
+        v2 = [r for r in rows if r["v2_bytes"]]
+        if v2:
+            print(f"[hair storage] dry run: {len(rows)} styles, v2 {sum(r['v2_bytes'] for r in v2) / 1e6:.1f} MB -> v3 "
+                  f"{sum(r['v3_bytes'] for r in v2) / 1e6:.1f} MB ({sum(r['v2_bytes'] for r in v2) / sum(r['v3_bytes'] for r in v2):.1f}x), "
+                  f"max position error {max(r['pos_um_max'] for r in rows):.3f} um")
+        return 0
     if a.cmd == "scan":
         rows = scan(a.dir)
         tot = sum(r["size"] for r in rows)

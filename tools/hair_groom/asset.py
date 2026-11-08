@@ -22,6 +22,7 @@ Layout v2 (little endian; v1 = the same without the UV samples):
 from __future__ import annotations
 
 import argparse
+import os
 import struct
 from pathlib import Path
 
@@ -77,24 +78,44 @@ def uv_samples(hair):
     return np.ascontiguousarray(hair.uv[corners[at]], "<f4")
 
 
+def file_version(path):
+    """The .hgrm version of an existing file (0 when unreadable)."""
+    try:
+        with open(path, "rb") as f:
+            h = f.read(8)
+        return struct.unpack_from("<I", h, 4)[0] if len(h) == 8 and h[:4] == MAGIC else 0
+    except OSError:
+        return 0
+
+
 def write(path, cid, hair, lods):
-    """lods: [(keep_fraction, Groom)]. cid: the position ID. Exclusive creation. Every LOD is checked before the file
-    is created: a refused style leaves no file (a header-only stub once made the layer log it as malformed, and the
-    batch's exists() check would never have retried it)."""
+    """lods: [(keep_fraction, Groom)], LOD 0 first, the others convert.thin of it. cid: the position ID.
+    Writes version 3 (tools/hair_groom/storage.py encode_v3: LOD 0 only, barycentric bits from the card mesh so every
+    point stays under the 0.38 um threshold, LZMS). Every LOD is checked before the file is written: a refused style
+    leaves no file. Written to a temporary file and moved over the target (replaces an older version's file)."""
+    from . import storage
     for keep, g in lods:
         if not (np.all(g.radii > 0) and np.all(g.radii < 0.01)):
             raise ValueError(f"LOD {keep}: radius outside (0, 10 mm): the layer would reject the file")
-    with open(path, "xb") as f:
-        f.write(MAGIC + struct.pack("<IQQ4I", 2, cid, index_id(hair.tris), len(hair.positions), hair.tris.size, len(lods), 0))
-        f.write(uv_samples(hair).tobytes())
-        for keep, g in lods:
-            starts = segment_starts(g.offsets)
-            f.write(struct.pack("<f3I", keep, len(g.points), len(starts), 0))
-            f.write(np.asarray(g.triangle, "<u4").tobytes())
-            f.write(np.ascontiguousarray(g.bary[:, 1:3], "<f4").tobytes())
-            f.write(np.asarray(g.radii, "<f4").tobytes())
-            f.write(np.clip(np.rint(g.root_param * 255), 0, 255).astype(np.uint8).tobytes())
-            f.write(starts.astype("<u4").tobytes())
+    sl = [storage.Lod(np.float32(keep), np.asarray(g.triangle, np.uint32), np.ascontiguousarray(g.bary[:, 1:3], np.float32),
+                      np.asarray(g.radii, np.float32), np.clip(np.rint(g.root_param * 255), 0, 255).astype(np.uint8),
+                      segment_starts(g.offsets)) for keep, g in lods]
+    for l in sl[1:]:
+        if not storage.lods_equal(l, storage.thin(sl[0], l.keep)):
+            raise ValueError(f"LOD {l.keep} is not convert.thin of LOD 0: v3 cannot rebuild it")
+    header = MAGIC + struct.pack("<IQQ4I", 2, cid, index_id(hair.tris), len(hair.positions), hair.tris.size, len(lods), 0)
+    header += uv_samples(hair).tobytes()
+    bits = storage.pick_bits(sl[0], hair.positions, hair.tris)
+    data = storage.encode_v3(header, sl, bits)
+    path = Path(path)
+    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
+    try:
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    return bits
 
 
 def build(hair, mask, step=16, grid_mesh=None):

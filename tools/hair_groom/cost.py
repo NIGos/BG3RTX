@@ -38,8 +38,12 @@ def lods_of(path):
         if head[:4] != b"HGRM" or len(head) < 40:
             raise ValueError(f"{path}: not a groom file")
         version, _, _, _, indices, lods, _ = struct.unpack_from("<IQQIIII", head, 4)
-        at = 40 + (32 * 8 if version == 2 else 0)
+        at = 40 + (32 * 8 if version >= 2 else 0)
         out = []
+        if version == 3:   # the LOD headers are one table; the arrays are compressed after it
+            f.seek(at)
+            out = [struct.unpack_from("<fIII", f.read(16))[:3] for _ in range(lods)]
+            return indices, out
         for _ in range(lods):
             f.seek(at)
             keep, points, segments, _ = struct.unpack("<fIII", f.read(16))

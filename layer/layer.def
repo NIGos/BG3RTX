@@ -2,3 +2,5 @@ EXPORTS
   vkGetInstanceProcAddr
   vkGetDeviceProcAddr
   vkNegotiateLoaderLayerInterfaceVersion
+  ; launcher preparation (layer/shaders.cpp): compile the shader requests into the runtime cache before Play
+  bg3rtx_precompile

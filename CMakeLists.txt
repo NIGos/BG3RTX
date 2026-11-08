@@ -159,7 +159,7 @@ if(NOT EXISTS "${BG3RTX_WEBVIEW2_SDK}/include/WebView2.h" OR NOT EXISTS "${BG3RT
 endif()
 add_executable(bg3rtx_launcher WIN32 tools/launcher/main.cpp tools/launcher/launch.cpp tools/launcher/gpu.cpp
   tools/launcher/diagnostics.cpp tools/launcher/compatibility.cpp tools/launcher/web_bridge.cpp
-  tools/launcher/web_host.cpp tools/launcher/launcher.rc)
+  tools/launcher/web_host.cpp tools/launcher/preparation.cpp tools/launcher/launcher.rc)
 set_target_properties(bg3rtx_launcher PROPERTIES OUTPUT_NAME BG3RTX)
 target_include_directories(bg3rtx_launcher PRIVATE ${VULKAN_SDK}/Include "${BG3RTX_WEBVIEW2_SDK}/include" "${CMAKE_SOURCE_DIR}/tools/launcher")
 target_compile_definitions(bg3rtx_launcher PRIVATE UNICODE _UNICODE)
@@ -363,6 +363,11 @@ add_executable(launcher_launch_test tools/launcher/launch_test.cpp)
 target_compile_definitions(launcher_launch_test PRIVATE UNICODE _UNICODE)
 target_link_libraries(launcher_launch_test PRIVATE advapi32)
 add_test(NAME launcher_launch_test COMMAND launcher_launch_test)
+# Preparation card (hair conversion, shader compile before Play): settings, lines and run policy.
+add_executable(launcher_preparation_test tools/launcher/preparation_test.cpp tools/launcher/preparation.cpp tools/launcher/launch.cpp)
+target_compile_definitions(launcher_preparation_test PRIVATE UNICODE _UNICODE)
+target_link_libraries(launcher_preparation_test PRIVATE advapi32 shell32 ole32)
+add_test(NAME launcher_preparation_test COMMAND launcher_preparation_test)
 add_executable(launcher_ui_state_test tools/launcher/ui_state_test.cpp)
 add_test(NAME launcher_ui_state_test COMMAND launcher_ui_state_test)
 add_executable(launcher_web_bridge_test tools/launcher/web_bridge_test.cpp
@@ -470,6 +475,9 @@ add_executable(pak_uv_join_test tests/pak_uv_join_test.cpp layer/shader_cache.cp
 add_test(NAME pak_uv_join_test COMMAND pak_uv_join_test)
 add_executable(hair_groom_asset_test tests/hair_groom_asset_test.cpp)
 add_test(NAME hair_groom_asset_test COMMAND hair_groom_asset_test)
+# .hgrm v3 (common/hair_groom_v3.h, LZMS via the Windows Compression API) against the Python reference decode.
+add_executable(hair_groom_v3_test tests/hair_groom_v3_test.cpp)
+add_test(NAME hair_groom_v3_test COMMAND hair_groom_v3_test ${CMAKE_SOURCE_DIR}/tests/fixtures/hair_v3)
 add_executable(native_vt_recipes_test tests/native_vt_recipes_test.cpp)
 add_test(NAME native_vt_recipes_test COMMAND native_vt_recipes_test)
 # rt_hit_material_instanced (common/native_hit_instanced.h): per-draw rows of instanced wind / 2S draws.

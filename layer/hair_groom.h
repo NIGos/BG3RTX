@@ -33,4 +33,11 @@ const Loaded* find(uint64_t index_id, uint32_t index_count);
 bool count_known(uint32_t index_count);
 // The loaded grooms with this index count (the UV join's candidates).
 std::vector<const Loaded*> with_count(uint32_t index_count);
+// Hair drawn without a groom (docs/RTX_HAIR_ROADMAP.md 2b): the converter does these styles first. note_seen is a
+// set insert (called on the miss paths, which already log once per index count); flush_seen merges them into
+// <assetdb dir>\hair_seen.txt ("<index count> <index id hex>", id 0 when unknown) at a level load and at device
+// destroy, so the file is written at most once per level. tools/hair_groom/prepare.py parse_seen reads it.
+void note_seen(uint32_t index_count, uint64_t index_id);
+void flush_seen();
+std::string seen_path();
 }  // namespace bg3::hair_groom

@@ -31,11 +31,29 @@ _CATEGORY_TIER = {"companion": 1, "player": 2, "named NPC": 3, "hat variant": 4,
 SECONDS_PER_STYLE = 27.0   # one job, batch 2026-11-07 (used until the report has its own timings)
 
 
+def seen_keys(row):
+    """The seen-list tokens a row answers to: its index id, and its index count (for draws whose id is unknown)."""
+    keys = set()
+    if row.get("index_id"):
+        keys.add("id:" + str(row["index_id"]).lower())
+    if row.get("indices"):
+        keys.add(f"n:{int(row['indices'])}")
+    return keys
+
+
 def tier(row, seen_ids):
-    """Tier index of one batch/reach row: {"name", "lod", "category"?, "index_id"?}."""
-    if row.get("index_id") and row["index_id"] in seen_ids:
+    """Tier index of one batch/reach row: {"name", "lod", "category"?, "index_id"?, "indices"?}."""
+    if seen_ids and seen_keys(row) & seen_ids:
         return 0
     return _CATEGORY_TIER.get(row.get("category") or "", 5)
+
+
+def unresolved(rows, seen_ids):
+    """Seen tokens no row answers to (their styles need the GR2 decode to be named)."""
+    known = set()
+    for r in rows:
+        known |= seen_keys(r)
+    return set(seen_ids) - known
 
 
 def order(rows, seen_ids=frozenset(), convert_all=False):
@@ -45,15 +63,23 @@ def order(rows, seen_ids=frozenset(), convert_all=False):
     return [k[3] for k in sorted(keep, key=lambda k: k[:3])]
 
 
-def status(rows, done, sizes, seen_ids=frozenset(), convert_all=False, jobs=4, seconds=None, running=False, paused=False):
-    """The launcher's Preparation block for hair.
+TIER_TEXT = {"seen": "styles seen in game", "companion": "companions", "player": "character creation looks",
+             "named": "named characters", "hat": "hair under hats", "other": "other characters", "unused": "unused styles"}
+
+
+def status(rows, done, sizes, seen_ids=frozenset(), convert_all=False, jobs=4, seconds=None, running=False, paused=False,
+           eta_s=None):
+    """The launcher's Preparation block for hair (written by the batch as <report-dir>/preparation.json).
 
     rows: every catalogue row; done: {name: verdict} of the rows the batch already processed (pass, needs-review,
     reject); sizes: bytes of each groom file on disk. A processed row is finished whatever its verdict (a reject keeps
-    its cards); ready counts the rows with a groom. ETA = remaining rows x seconds per style / jobs."""
+    its cards); ready counts the rows with a groom. ETA: `eta_s` (the running batch's rate) or remaining rows x
+    seconds per style / jobs."""
     needed = order(rows, seen_ids, convert_all)
     left = [r for r in needed if r["name"] not in done]
     per = statistics.median(seconds) if seconds else SECONDS_PER_STYLE
+    if eta_s is None:
+        eta_s = len(left) * per / max(jobs, 1)
     ready = sum(1 for r in needed if done.get(r["name"]) == "pass")
     tiers = []
     for i, name in enumerate(TIERS):
@@ -61,6 +87,8 @@ def status(rows, done, sizes, seen_ids=frozenset(), convert_all=False, jobs=4, s
         if members:
             tiers.append({"tier": name, "total": len(members), "finished": sum(1 for r in members if r["name"] in done)})
     first = next((t["tier"] for t in tiers if t["finished"] < t["total"]), None)
+    size = int(sum(sizes))
+    state = "paused" if paused else "running" if running else "done" if not left else "waiting"
     return {
         "kind": "hair_grooms",
         "ready": ready,
@@ -68,29 +96,58 @@ def status(rows, done, sizes, seen_ids=frozenset(), convert_all=False, jobs=4, s
         "needed": len(needed),
         "all": len(rows),
         "convert_all": bool(convert_all),
-        "bytes": int(sum(sizes)),
-        "eta_s": int(round(len(left) * per / max(jobs, 1))),
-        "state": "paused" if paused else "running" if running else "done" if not left else "waiting",
+        "bytes": size,
+        "eta_s": int(round(eta_s)),
+        "state": state,
         "next_tier": first,
         "tiers": tiers,
-        "line": line(ready, len(needed), len(left), int(sum(sizes)), len(left) * per / max(jobs, 1), paused, running),
+        "line": line(ready, len(needed), size),
+        "detail": detail(state, first, len(left), eta_s),
     }
 
 
-def line(ready, needed, left, size, eta_s, paused=False, running=False):
-    """The one-line text of the Preparation card (plain, short)."""
-    gb = f"{size / 1e9:.1f} GB" if size >= 1e8 else f"{size / 1e6:.0f} MB"
+def _size(size):
+    return f"{size / 1e9:.1f} GB" if size >= 1e8 else f"{size / 1e6:.0f} MB"
+
+
+def line(ready, needed, size):
+    """The status line of the Preparation card (plain, short)."""
+    return f"{ready} of {needed} styles ready, {_size(size)} on disk."
+
+
+def detail(state, tier_name, left, eta_s):
+    """The second line: what happens now."""
     if not left:
-        return f"Strand hair: {ready} of {needed} styles ready, {gb}."
+        return "All needed styles are done."
     eta = f"about {max(1, round(eta_s / 60))} min left" if eta_s < 5400 else f"about {eta_s / 3600:.1f} h left"
-    verb = "paused" if paused else "converting" if running else "waiting"
-    return f"Strand hair: {ready} of {needed} styles ready, {gb}, {verb}, {eta}."
+    what = TIER_TEXT.get(tier_name or "", "styles")
+    if state == "running":
+        return f"Converting {what}, {eta}."
+    if state == "paused":
+        return f"Paused. {left} styles left, {eta}."
+    return f"{left} styles left, {eta}."
+
+
+def parse_seen(text):
+    """The layer's hair_seen.txt (layer/hair_groom.cpp note_seen): "<index count> <index id hex>" per line, id 0 when
+    the draw's index buffer is not host data (then the count names the candidates). '#' lines are comments."""
+    out = set()
+    for line in text.splitlines():
+        parts = line.split("#", 1)[0].split()
+        if len(parts) < 2 or not parts[0].isdigit():
+            continue
+        iid = parts[1].lower()
+        if iid.strip("0"):
+            out.add("id:" + iid.rjust(16, "0"))
+        else:
+            out.add(f"n:{int(parts[0])}")
+    return frozenset(out)
 
 
 def read_seen(path):
     if not path or not Path(path).is_file():
         return frozenset()
-    return frozenset(x.strip().lower() for x in Path(path).read_text(encoding="utf-8").splitlines() if x.strip())
+    return parse_seen(Path(path).read_text(encoding="utf-8", errors="replace"))
 
 
 def _rows_from_report(report_dir):
@@ -99,11 +156,11 @@ def _rows_from_report(report_dir):
     reach = {}
     rp = Path(report_dir) / "reach.json"
     if rp.is_file():
-        reach = {r["name"]: r["category"] for r in json.loads(rp.read_text(encoding="utf-8"))["rows"]}
+        reach = json.loads(rp.read_text(encoding="utf-8")).get("categories", {})
     rows, done, secs = [], {}, []
     for name, r in state.items():
-        rows.append({"name": name, "lod": r.get("lod", 0), "category": reach.get(name),
-                     "index_id": (r.get("asset") or "")[:16] or None})
+        rows.append({"name": name, "lod": r.get("lod", 0), "category": reach.get(name), "indices": r.get("indices"),
+                     "index_id": r.get("index_id") or (r.get("asset") or "")[:16] or None})
         if r.get("verdict"):
             done[name] = r["verdict"]
         if r.get("seconds"):

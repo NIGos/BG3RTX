@@ -103,6 +103,37 @@ def test_bits_for_bounds_the_error():
     assert storage.bits_for(positions * 0.5, tris, l0.triangle) == bits - 1
 
 
+FIXTURE = ROOT / "tests" / "fixtures" / "hair_v3"
+
+
+def fixture_bytes():
+    """The C++ test's fixture (tests/hair_groom_v3_test.cpp): a synthetic groom (no game data) as v3, and the Python
+    reference decode as a v2 file (every LOD's arrays)."""
+    h, _ = synthetic(strands=60, seed=7)
+    bits = storage.pick_bits(h.lods[0])
+    v3 = storage.encode_v3(h.header, h.lods, bits)
+    ref = storage.decode_v3(v3)
+    ref.header = ref.header[:4] + struct.pack("<I", 2) + ref.header[8:]
+    return v3, storage.write_bytes(ref)
+
+
+def test_v3_round_trip_and_fixture():
+    h, _ = synthetic()
+    for bits in (16, 18, 20):
+        v3 = storage.encode_v3(h.header, h.lods, bits)
+        assert struct.unpack_from("<I", v3, 4)[0] == 3
+        back = storage.decode_v3(v3)
+        a, b = back.lods[0], h.lods[0]
+        assert np.array_equal(a.triangle, b.triangle) and np.array_equal(a.root, b.root) and np.array_equal(a.segment, b.segment)
+        step = (1 + 2 * storage.BARY_PAD) / ((1 << bits) - 1)
+        assert np.abs(a.bary.astype(np.float64) - b.bary).max() <= 0.5 * step + 1e-7
+        assert [len(l.segment) for l in back.lods] == [len(l.segment) for l in h.lods]
+        assert all(storage.lods_equal(x, storage.thin(a, x.keep)) for x in back.lods[1:])
+    v3, ref = fixture_bytes()
+    assert (FIXTURE / "groom.v3.hgrm").read_bytes() == v3, "fixture stale: python tests/hair_storage_test.py --write-fixture"
+    assert (FIXTURE / "groom.ref.hgrm").read_bytes() == ref, "fixture stale: python tests/hair_storage_test.py --write-fixture"
+
+
 def test_prepare_order_and_status():
     rows = [{"name": "unused0", "lod": 0, "category": "unused"},
             {"name": "npc1", "lod": 1, "category": "named NPC"},
@@ -112,18 +143,67 @@ def test_prepare_order_and_status():
             {"name": "hat0", "lod": 0, "category": "hat variant"}]
     names = [r["name"] for r in prepare.order(rows)]
     assert names == ["comp0", "cc0", "npc0", "npc1", "hat0"], names
-    seen = frozenset({"00000000000000aa"})
+    # The layer's hair_seen.txt: "<count> <id>"; id 0 = only the count is known.
+    seen = prepare.parse_seen("# seen\n1500 00000000000000AA\n2400 0\nbad line\n")
+    assert seen == {"id:00000000000000aa", "n:2400"}, seen
     assert [r["name"] for r in prepare.order(rows, seen)][:2] == ["cc0", "comp0"]
+    rows[1]["indices"] = 2400   # npc1 answers to the count-only entry
+    assert [r["name"] for r in prepare.order(rows, seen)][:3] == ["cc0", "npc1", "comp0"]
+    assert prepare.unresolved(rows, seen | {"id:00000000000000bb"}) == {"id:00000000000000bb"}
+    del rows[1]["indices"]
     assert [r["name"] for r in prepare.order(rows, convert_all=True)][-1] == "unused0"
     s = prepare.status(rows, {"comp0": "pass", "cc0": "reject"}, [3_000_000_000], jobs=2, seconds=[30, 30, 10])
     assert (s["ready"], s["finished"], s["needed"], s["all"]) == (1, 2, 5, 6)
     assert s["eta_s"] == 3 * 30 // 2 and s["state"] == "waiting" and s["next_tier"] == "named"
-    assert s["line"] == "Strand hair: 1 of 5 styles ready, 3.0 GB, waiting, about 1 min left.", s["line"]
+    assert s["line"] == "1 of 5 styles ready, 3.0 GB on disk.", s["line"]
+    assert s["detail"] == "3 styles left, about 1 min left.", s["detail"]
+    r = prepare.status(rows, {"comp0": "pass"}, [5e7], running=True, eta_s=600)
+    assert r["detail"] == "Converting character creation looks, about 10 min left.", r["detail"]
     done = {r["name"]: "pass" for r in rows}
-    assert prepare.status(rows, done, [5e8])["line"] == "Strand hair: 5 of 5 styles ready, 0.5 GB."
+    d = prepare.status(rows, done, [5e8])
+    assert (d["line"], d["detail"], d["state"]) == ("5 of 5 styles ready, 0.5 GB on disk.", "All needed styles are done.", "done")
+
+
+def test_batch_seen_and_categories():
+    """batch.resolve_seen names seen styles from index_map.json (GR2 decode only for unknown GR2s);
+    load_categories reuses reach.json when it covers the styles and never fails the batch."""
+    import json
+    from tools.hair_groom import batch
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        (d / "index_map.json").write_text(json.dumps({"a.gr2": {"HairA": [1500, "00000000000000aa"]}}))
+        rows = [{"name": "A", "style": {"gr2": "a.gr2", "mesh": "HairA"}},
+                {"name": "B", "style": {"gr2": "b.gr2", "mesh": "HairB"}}]
+        seen = prepare.parse_seen("1500 00000000000000aa\n")
+        decoded = []
+        orig = batch.map_gr2
+        try:
+            batch.map_gr2 = lambda *a: decoded.append(a) or ("b.gr2", {})
+            assert batch.resolve_seen(rows, seen, None, None, d, 1, log=lambda *_: None) == 0 and not decoded
+        finally:
+            batch.map_gr2 = orig
+        assert rows[0]["index_id"] == "00000000000000aa" and prepare.tier(rows[0], seen) == 0
+        todo = [{"name": "A", "visual": "v"}]
+        (d / "reach.json").write_text(json.dumps({"categories": {"A": "companion"}}))
+        assert batch.load_categories(d, None, todo, log=lambda *_: None) == {"A": "companion"}
+        # Not covered and classification impossible (no paks here): {} and the batch goes on.
+        assert batch.load_categories(d, None, todo + [{"name": "B", "visual": "w"}], log=lambda *_: None) == {}
+    raw = bytearray(b"GR2D" + struct.pack("<II", 1, 1))
+    name = b"HairA"
+    raw += struct.pack("<I", len(name)) + name + struct.pack("<3I", 3, 6, 0) + bytes(3 * 28) + struct.pack("<6I", 0, 1, 2, 0, 2, 1)
+    from tools.hair_groom import asset
+    got = batch.dump_meshes(bytes(raw))
+    assert got == {"HairA": (6, f"{asset.index_id([0, 1, 2, 0, 2, 1]):016x}")}, got
 
 
 if __name__ == "__main__":
+    if "--write-fixture" in sys.argv:
+        FIXTURE.mkdir(parents=True, exist_ok=True)
+        v3, ref = fixture_bytes()
+        (FIXTURE / "groom.v3.hgrm").write_bytes(v3)
+        (FIXTURE / "groom.ref.hgrm").write_bytes(ref)
+        print(f"wrote {FIXTURE}: v3 {len(v3)} bytes, reference {len(ref)} bytes")
+        sys.exit(0)
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
             fn()

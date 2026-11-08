@@ -176,6 +176,54 @@ beside v2. (2) Needed set: (a) + seen list (recommended), or (c) only.
 game is not running (BelowNormal; the game's level load starves otherwise), or also in the background.
 (5) Shader preload: ship the SPIR-V seed (C) or prewarm in the launcher (B). (6) Delete the batch cache per style.
 
+**Implemented (user decisions 2026-11-08: per-file bits, needed first with Convert all off, the player picks when to
+convert, compile before Play, cache deleted per style).** Branch claude/hair-groom-storage.
+- Format v3 (`common/hair_groom_v3.h`, writer `tools/hair_groom/storage.py encode_v3`, `asset.write`): the v2 header
+  and UV samples, the LOD table (v2's 16-byte LOD headers, so the crowd plan's segment counts stay index-time), then
+  LOD 0 as 7 streams; the thinned LODs are rebuilt by `decode_v3_lod` exactly as convert.thin. Barycentric bits per
+  file from the card mesh (`pick_bits`: bits_for, raised until no segment collapses; 16-20 seen). The converter writes
+  v3 only and replaces an older file of the same name; the layer and launcher read v1-v3.
+- Codec: LZMS through the Windows Compression API (`common/hair_groom_lzms.h`, cabinet.dll), not zstd: there is no
+  zstd source in external/ or anywhere on this PC, and vendoring it means a download that needs the user's approval.
+  LZMS is part of Windows: nothing to vendor or license. The codec word allows zstd later (one id + the vendored
+  decoder). Ratio: the 5-style dry run below 10.4x (zstd 19 in the study: 11.1x).
+- Dry run (`python -m tools.hair_groom.storage dryrun --cache <batch cache>/groom --out .scratch/assetdb_v3/hair_grooms
+  --limit 5 --v2 data/assetdb/hair_grooms`; the batch's own `asset.write` on cached grooms: the paks on D:\ were not
+  read): 4 styles with a v2 file 176.7 MB -> 16.9 MB (10.4x; 3.3 M-point style 121 -> 9.6 MB, 12.6x), max position
+  error 0.358 um (threshold 0.38). Encode 0.7-6.8 s per style (largest), against ~27 s of conversion.
+- C++ decode (`hair_groom_v3_test <fixture> --dir <dir>`, RelWithDebInfo, all 3 LODs, each decoding the file):
+  equal to the Python reference on all 5 (triangle, root, segments exact; barycentrics and radius within 1e-7 /
+  1e-6). 98-110 ms for 0.35-0.40 M-point styles, 194 ms for 0.8 M, 757 ms for 3.3 M; LZMS is 80% of it. The layer
+  decodes one LOD per upload (`read_lod`, logged `LOD n decoded (v3): points in ms`): ~1/3 of those numbers, on the
+  upload path, once per groom LOD. Open: decode on a worker or keep the last decoded LOD 0 if a live shows hitches.
+- Seen list: the layer's miss paths (`index id has no groom file`, unmatched CountUnknown / UvMismatch hair draws,
+  already deduplicated per index count) call `hair_groom::note_seen`; `flush_seen` merges them into
+  `data/assetdb/hair_seen.txt` ("<index count> <index id>", id 0 = only the count known) at a level load and at device
+  destroy. The batch (`--seen`) names them through `index_map.json` (the GR2 decode only, for GR2s no recorded row
+  explains) and converts them first (`prepare.order`).
+- Batch: needed-first order (seen, companion, player, named, hat, other; unused only with `--all`), categories from
+  `<report-dir>/reach.json` (computed once with tools.hair_groom.reach from the paks, else name order), every row
+  records its index id and count, the groom cache is deleted after each style and a GR2 dump after the GR2's last row
+  (`--keep-cache` for developers), `<report-dir>/preparation.json` (prepare.status: ready / needed, bytes, ETA, tier,
+  detail line) every 30 s.
+- Launcher (`tools/launcher/preparation.{h,cpp}`): the Preparation card, first on Help & support. Hair: "412 of 559
+  styles ready, 1.1 GB on disk." + "Converting named characters, about 35 min left." + progress; Pause/Resume, "Convert
+  all styles, also those the game does not use", "When to convert: Game closed / Also while playing" (one core at
+  low priority). Settings in bg3rtx_launcher.ini (`hair_convert_all`, `hair_while_playing`, `prep_paused`; optional
+  `hair_python`), never game keys; save_game_dir keeps them. The converter runs as `python -m tools.hair_groom.batch`
+  in a kill-on-close job object at BelowNormal (closing the launcher, Pause or a policy change stops the whole tree;
+  the batch resumes by state.json), 1..4 jobs with the game closed, 1 while playing; it stops when the game starts
+  unless "Also while playing". Shaders: once per launcher session with the game closed, `BG3RTX.exe
+  --precompile-shaders` (child, BelowNormal) loads the layer and calls its `bg3rtx_precompile` export: the requests
+  of `shaders/precompile.txt` (an Ultra session's 71) and the player's requests.txt, with the game's DXC, arguments,
+  key and cache folder; cached requests are not compiled (test: 2 compiled in 1.2 s, then 0 in 0.07 s). The card says
+  the driver still builds the first ray tracing pipeline in game. The layer's log goes to bg3rtx.precompile.log.
+- Before a release build: the release ships no Python, no converter scripts, no LSLib/granny2 and no mesh_materials
+  catalogue, so the hair line says "Not available: ..." on a player's PC (needs a frozen converter or an embedded
+  Python, plus LSLib and PowerShell 7, and the catalogue); the full conversion run on the user's PC (scheduled by the
+  coordinator); a live check of the v3 upload decode cost and of hair_seen.txt. The batch replaces only the files it
+  writes: the 312 v2 files of older batches in data/assetdb/hair_grooms stay (and load) until someone deletes them.
+
 ## 3. Converter quality and validation (OFFLINE-NOW)
 On screen: fewer fake tips (strands are 14 mm median pieces: crossings in the painted mask), no doubled
 strands, cleaner partings. Method: (a) stitch across card seams (end of a strand on card A to the start on

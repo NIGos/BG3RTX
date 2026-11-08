@@ -4,6 +4,7 @@
 #include "session_logging.h"
 #include "version.h"
 #include "dlss5_runtime.h"
+#include "preparation.h"
 #include <wrl.h>
 #include <windowsx.h>
 #include <dwmapi.h>
@@ -59,6 +60,7 @@ struct Host {
   std::thread worker;
   std::atomic<bool> cancel{false};
   std::string reply, after_work;
+  std::unique_ptr<prep::Manager> prep;   // Preparation card: the hair conversion and shader compile children
   // Frameless window chrome (see window_proc): logical-pixel metrics scale with the window DPI.
   int dpi=96, hover=HTNOWHERE, pressed=HTNOWHERE;
   bool active=true;
@@ -94,7 +96,9 @@ void refresh(Host& h) {
   auto session=session_token();
   if(session!=h.session){h.session=session;h.baseline=effective(h.state);h.bridge->set_restart_count(0);}
   h.bridge->set_mod_status(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?"Mod files present":"Mod files missing");
-  h.bridge->set_can_play(!h.no_game&&valid_game_dir(h.game)&&!game_running());
+  const bool playing=game_running();
+  h.bridge->set_can_play(!h.no_game&&valid_game_dir(h.game)&&!playing);
+  if(h.prep)h.prep->tick(playing);
   send(h,h.bridge->state_json());
 }
 void fail(Host& h, const char* stage="WebView2 initialization", HRESULT error=E_FAIL) {
@@ -328,7 +332,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&dialog))))return narrow(h.game);
         dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_NOCHANGEDIR);
         dialog->SetTitle(L"Choose the game folder containing bin\\bg3.exe");
-        if(SUCCEEDED(dialog->Show(h.window))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){auto dir=game_dir_from_path(path);if(valid_game_dir(dir)){std::wstring error;if(save_game_dir(dir,&error))h.game=dir;else h.bridge->set_status("Game folder not saved. "+narrow(error));}else h.bridge->set_status("Choose the game folder containing bin\\bg3.exe.");CoTaskMemFree(path);}}}
+        if(SUCCEEDED(dialog->Show(h.window))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){auto dir=game_dir_from_path(path);if(valid_game_dir(dir)){std::wstring error;if(save_game_dir(dir,&error)){h.game=dir;if(h.prep)h.prep=std::make_unique<prep::Manager>(root_dir(),h.game);}else h.bridge->set_status("Game folder not saved. "+narrow(error));}else h.bridge->set_status("Choose the game folder containing bin\\bg3.exe.");CoTaskMemFree(path);}}}
         h.state.dlss5_runtime_status=launcher::dlss5::discovery_status(h.state,h.game);
         h.bridge->set_can_play(valid_game_dir(h.game)&&!game_running());return narrow(h.game);
       };
@@ -337,6 +341,9 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
       hooks.browseDlss5Runtime=[&h](){return h.no_game?h.state.dlss5_runtime_path:launcher::dlss5::browse(h.window,h.state.dlss5_runtime_path);};
       hooks.recheck=[](){return inspect_graphics();};
       hooks.notices=[&h](){auto path=root_dir()+L"\\THIRD_PARTY.md";if(!file_exists(path))path=root_dir()+L"\\docs\\release\\THIRD_PARTY.md";ShellExecuteW(h.window,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL);};
+      if(!h.no_game)h.prep=std::make_unique<prep::Manager>(root_dir(),h.game);
+      hooks.preparation=[&h](){return h.prep?h.prep->json():std::string();};
+      hooks.prepare=[&h](const std::string& action,int value){if(!h.prep||!h.prep->act(action,value))return false;h.prep->tick(game_running());return true;};
       h.bridge=std::make_unique<Bridge>(h.state,std::move(hooks));
       h.bridge->set_game_path(narrow(h.game));
       h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,effective(h.state)):0);

@@ -87,6 +87,7 @@ struct Asset {
   uint32_t vertices = 0, indices = 0;
   bool has_uv = false;
   float uv[kSamples * 2] = {};   // v2: UV0 of the sampled corners
+  uint32_t version = 0;          // 1, 2 or 3 (3: compressed, common/hair_groom_v3.h)
   uint32_t lod_count = 0;        // from the header (parse_header leaves `lods` empty)
   uint32_t lod_segments[8] = {}; // per LOD, from lod_header (the crowd plan's costs before an upload)
   std::vector<Lod> lods;
@@ -119,10 +120,11 @@ inline bool parse_header(const uint8_t* bytes, uint64_t size, Asset& out, uint64
   std::memcpy(&out.vertices, bytes + 24, 4);
   std::memcpy(&out.indices, bytes + 28, 4);
   std::memcpy(&lods, bytes + 32, 4);
-  if ((version != 1 && version != 2) || !out.indices || out.indices % 3 || !lods || lods > 8 || !out.index_id) return false;
+  if ((version < 1 || version > 3) || !out.indices || out.indices % 3 || !lods || lods > 8 || !out.index_id) return false;
   out.lod_count = lods;
+  out.version = version;
   uint64_t at = 40;
-  if (version == 2) {
+  if (version >= 2) {   // v3 (common/hair_groom_v3.h) keeps v2's header and UV samples
     if (size - at < sizeof out.uv) return false;
     std::memcpy(out.uv, bytes + at, sizeof out.uv);
     at += sizeof out.uv;
@@ -184,7 +186,7 @@ inline bool parse_lod(const uint8_t* bytes, uint64_t size, uint64_t& at, uint32_
 // `bytes` must outlive the views. Every range and index is checked; false on anything malformed.
 inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
   uint64_t at = 0;
-  if (!parse_header(bytes, size, out, &at)) return false;
+  if (!parse_header(bytes, size, out, &at) || out.version == 3) return false;   // v3: common/hair_groom_v3.h
   const uint32_t triangles = out.indices / 3, lods = out.lod_count;
   for (uint32_t l = 0; l < lods; ++l) {
     Lod lod;
