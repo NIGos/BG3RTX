@@ -79,9 +79,9 @@
    "min": 1
   },
   {
-   "name": "scene wait: every cost window traces its own frame's scene (at most 1 timeout per 120 frames)",
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts)",
    "select": "\\[rt\\] scene wait: \\d+ frames",
-   "match": "got this frame's scene, [01] timeouts",
+   "match": "got this frame's scene, 0 timeouts",
    "windows": [
     "cost-off-a",
     "cost-on-a",

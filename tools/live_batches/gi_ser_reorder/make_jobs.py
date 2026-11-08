@@ -84,10 +84,10 @@ for name, save, short, ms in SCENES:
         "expect_every": [
             {"name": "gpu: the hit-GI trace pass line in every cost window (gi_rt_pipeline_reorder 0/1/0/1)",
              "select": "gi: trace pass \\(ray-traced", "match": "GPU median [0-9.]+ ms", "windows": COST, "min": 1},
-            # One late frame in a 120-frame line cannot move a 300-frame GPU median; two or more fail the window
-            # (both runs of 2026-11-08 18:09 stopped on a single 1-of-120 timeout).
-            {"name": "scene wait: every cost window traces its own frame's scene (at most 1 timeout per 120 frames)",
-             "select": "\\[rt\\] scene wait: \\d+ frames", "match": "got this frame's scene, [01] timeouts",
+            # The 18:19 rerun allowed 1 timeout per 120 frames; the project lint (tests/queue_gates_test.py) requires
+            # 0 for every lean job, so the generator is back on 0 (the runs of 2026-11-08 are recorded in progress).
+            {"name": "scene wait: every cost window traces its own frame's scene (0 timeouts)",
+             "select": "\\[rt\\] scene wait: \\d+ frames", "match": "got this frame's scene, 0 timeouts",
              "windows": COST, "min": 1},
             {"name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every cost window",
              "select": "\\[geo\\] RT capture, last \\d+ frames:", "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
