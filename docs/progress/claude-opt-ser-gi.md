@@ -18,3 +18,17 @@
 - Not done, by design: no game path (the layer enables no ray tracing pipeline feature and vk_funcs.h has no RT
   entry points: an ABI change in the layer, owned by another stream), no live job. Recommendation: drop SER for
   now; the raygen path alone is ~40% slower on the fixture and the hint path is unsafe on this driver.
+
+## SER prototype: rerun on idle GPU, hint off only (branch claude/opt-ser-gi, offline, 2026-11-08)
+- The first fixture runs shared the GPU with another game (that game crashed too), so their timing and the hint-on
+  device loss are confounded. Rerun with nvidia-smi at 5-6% (desktop apps only), no game process, hint off only
+  (spec 1050 = 0); hint on was not run. Sources: this branch's shaders, exported (the worktree was on opt-bundle2).
+- 64x64 (128^2 pack, validation on): compute 0.0017 ms, raygen 0.0374 ms; delta mean +0.0356 ms, 95% CI
+  [+0.0353, +0.0359] (40 ABBA/BAAB pairs): about 35 us of fixed ray tracing launch cost. Outputs and counters
+  100% bit-equal.
+- 3072x3072 (2 rays, gi_rt_radius 6, 3.4% hits): compute mean 1.363 ms, raygen 1.409 ms; delta mean +0.045 ms,
+  95% CI [-0.207, +0.298] (median delta +0.075, CI [-0.048, +0.202]); repeats spread 0.35-4.08 ms (clocks), so
+  no difference is resolved. Outputs: 37 of 9.4M half components differ by 1 ulp, channel means equal to 7 digits;
+  counter totals equal.
+- Reading: the earlier +0.31 ms was the shared GPU. The raygen port alone costs nothing measurable beyond ~35 us
+  per launch; any SER gain still depends on the hint path, which stays untested. Fixture not representative.
