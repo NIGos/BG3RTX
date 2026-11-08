@@ -1,0 +1,43 @@
+{
+ "name": "cards",
+ "tile_grid": [
+  8,
+  1
+ ],
+ "cards": 8,
+ "triangles": 96,
+ "cards_in_one_tile": 1.0,
+ "mixed_winding_cards": 0,
+ "uv_overlap_samples": 0,
+ "unmapped_share": 0.0,
+ "root_row_corr_median": 1.0,
+ "strands": 48,
+ "segments": 384,
+ "dedupe_dropped": 0,
+ "reversed_cards": 0,
+ "tracer": "rows",
+ "iou": [
+  0.299,
+  0.0,
+  0.299
+ ],
+ "coverage_delta": [
+  -0.231,
+  1.0,
+  -0.231
+ ],
+ "radiance_delta": [
+  -0.406,
+  0.617,
+  -0.503
+ ],
+ "verdict": "reject",
+ "reasons": [
+  "silhouette IoU 0.00",
+  "coverage differs by +1.00",
+  "mean radiance differs by +62%",
+  "silhouette IoU 0.00"
+ ],
+ "asset_bits": 18,
+ "asset": "1969d9b004e0bc55.hgrm"
+}

@@ -36,6 +36,10 @@ int main() {
   hi = {};
   it = hair_item(hi, d);
   check(it.state == "waiting" && it.line == "Not converted yet." && it.progress == 0, "not converted yet");
+  hi.no_captures = true;
+  it = hair_item(hi, d);
+  check(it.state == "waiting" && it.line == "No hair styles captured yet." && it.progress < 0, "no captures yet");
+  hi.no_captures = false;
   hi.status_json = status; hi.running = true;
   it = hair_item(hi, d);
   check(it.state == "running" && it.line == "412 of 559 styles ready, 2.1 GB on disk." &&

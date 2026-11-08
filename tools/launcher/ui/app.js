@@ -178,8 +178,8 @@ function shortcutsCard(id) {
  return box;
 }
 // First-run preparation (docs/RTX_HAIR_ROADMAP.md 2b, tools/launcher/preparation.cpp): the host sends
-// state.preparation = {items:[{id,title,line,detail,progress?,state}],convertAll,whilePlaying,paused,pausable}.
-// Actions apply at once (launcher-only settings, no Save): pause/resume, convertAll, whilePlaying.
+// state.preparation = {items:[{id,title,line,detail,progress?,state}],whilePlaying,paused,pausable}. Convert all is gone with the
+// runtime capture (only styles the game drew can be converted). Actions apply at once (no Save): pause/resume, whilePlaying.
 function preparationCard(prep) {
  const box=el('article','card preparation');box.id='preparation';box.append(el('h3','','Preparation'));
  const badges={done:'Ready',running:'Working',waiting:'Waiting',paused:'Paused',unavailable:'Unavailable',failed:'Stopped'};
@@ -195,8 +195,6 @@ function preparationCard(prep) {
  if(hair&&hair.state!=='unavailable'){
   const foot=el('div','card-foot');
   if(prep.pausable){const b=el('button','btn',prep.paused?'Resume':'Pause');b.id='prep-pause';b.onclick=()=>send('prep',{action:prep.paused?'resume':'pause',value:0});foot.append(b);}
-  const all=el('label','prep-option'),ai=el('input');ai.type='checkbox';ai.id='prep-convert-all';ai.checked=!!prep.convertAll;
-  ai.onchange=()=>send('prep',{action:'convertAll',value:ai.checked?1:0});all.append(ai,el('span','','Convert all styles, also those the game does not use'));foot.append(all);
   const when=el('div','seg prep-when');when.setAttribute('role','group');when.setAttribute('aria-label','When to convert');
   [['Game closed',0],['Also while playing',1]].forEach(([text,value])=>{const on=!!prep.whilePlaying===!!value,b=el('button',on?'on':'',text);b.id='prep-when-'+value;b.setAttribute('aria-pressed',on?'true':'false');b.onclick=()=>send('prep',{action:'whilePlaying',value});when.append(b);});
   foot.append(el('p','help-copy','When to convert. While playing it uses one core at low priority.'),when);

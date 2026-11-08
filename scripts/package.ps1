@@ -156,7 +156,8 @@ function Copy-To([string]$src, [string]$rel) {
 # Binaries.
 Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.dll") "bin\VkLayer_bg3rtx.dll"
 Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.json") "bin\VkLayer_bg3rtx.json"
-foreach ($f in @("bg3rtx_core.dll", "BG3RTX.exe")) { Copy-To (Join-Path $bin $f) "bin\$f" }
+# bg3rtx_hairconv.exe: the native strand groom converter the launcher runs (no Python, LSLib, granny2 or PowerShell 7).
+foreach ($f in @("bg3rtx_core.dll", "BG3RTX.exe", "bg3rtx_hairconv.exe")) { Copy-To (Join-Path $bin $f) "bin\$f" }
 foreach ($entry in $launcherFiles) { Copy-To $entry.Source $entry.Destination }
 # Only the manifest can add a third-party binary to the payload.
 foreach ($entry in $thirdParty.binaries) {

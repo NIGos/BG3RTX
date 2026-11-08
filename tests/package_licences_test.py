@@ -113,7 +113,7 @@ class PackageLicencesTest(unittest.TestCase):
             (self.root / folder).mkdir(parents=True, exist_ok=True)
         manifest = json.loads((self.root / 'scripts/package-third-party.json').read_text())
         names = [e['destination'] for e in manifest['binaries']]
-        names += ['bin/VkLayer_bg3rtx.json', 'bin/bg3rtx_core.dll', 'bin/BG3RTX.exe']
+        names += ['bin/VkLayer_bg3rtx.json', 'bin/bg3rtx_core.dll', 'bin/BG3RTX.exe', 'bin/bg3rtx_hairconv.exe']
         for name in names:
             path = self.root / name
             if name == 'bin/VkLayer_bg3rtx.json' or name.startswith('bin/sl/'):

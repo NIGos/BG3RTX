@@ -131,7 +131,7 @@ try {
     Run 'build launcher' ('& ' + (Quote (Join-Path $root 'scripts\build.ps1')) + ' -Launcher')
     Run 'build lean layer' ('& ' + (Quote (Join-Path $root 'scripts\build.ps1')) + ' -ReleaseLayer')
   }
-  foreach ($output in @('bin\bg3rtx_core.dll','bin\BG3RTX.exe','build-nodiag\bin\VkLayer_bg3rtx.dll')) {
+  foreach ($output in @('bin\bg3rtx_core.dll','bin\BG3RTX.exe','bin\bg3rtx_hairconv.exe','build-nodiag\bin\VkLayer_bg3rtx.dll')) {
     Require (Test-Path -LiteralPath (Join-Path $root $output) -PathType Leaf) "Missing build output: $output"
   }
   $cache = Get-Content -LiteralPath (Join-Path $root 'build-nodiag\CMakeCache.txt') -Raw
@@ -218,7 +218,7 @@ try {
   $allowedDlls = @('bin\VkLayer_bg3rtx.dll','bin\bg3rtx_core.dll') + @($thirdParty.binaries | ForEach-Object { $_.destination.Replace('/', '\') })
   $bad = @($actual | Where-Object {
     $_ -match '(?i)\.(pdb|ilk|obj|lib|exp|py|pyc|pyd|spv|nupkg)$|(^|\\)(external|sdk|tools|tests|sl_dev|development|__pycache__)(\\|$)' -or
-    ($_ -match '(?i)\.(exe|msi)$' -and $_ -ine 'bin\BG3RTX.exe') -or
+    ($_ -match '(?i)\.(exe|msi)$' -and $_ -ine 'bin\BG3RTX.exe' -and $_ -ine 'bin\bg3rtx_hairconv.exe') -or
     ($_ -match '(?i)\.dll$' -and $_ -notin $allowedDlls)
   })
   Require ($bad.Count -eq 0) "Forbidden payload: $($bad -join ', ')"
