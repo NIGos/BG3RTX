@@ -22,3 +22,7 @@
   The timing (+0.31 ms raygen) and the hint-on device loss are CONFOUNDED: the verdict is "not proven", not
   "dropped". Still valid: support check, hint-off output equality, compile/spirv-val. Rerun hint-off on an idle
   GPU first (that path ran without errors); hint-on only with the uniform-control-flow fix and the user's OK.
+- Rerun on idle GPU (2026-11-08, util 5-6%, hint off only, claude/opt-ser-gi 278e5b6d): raygen vs compute at 3072^2
+  +0.045 ms [-0.207, +0.298] on 1.36 ms (no difference resolved; the earlier +0.31 ms was GPU sharing); fixed
+  ~35 us per launch at 64^2 (bit-equal). The raygen port costs nothing measurable; any SER gain needs the hint path,
+  still untested (fix: reorder at uniform control flow), and a divergent fixture (this one has one material).
