@@ -729,9 +729,20 @@ def test_strand_source_safety():
             re.match(r'\s*return\s+\w+\s*;', code[m.end():]) for m in rejects))
     src = (ROOT / 'shaders/rt/hair_primary_gbuffer.hlsl').read_text()
     check('transparent card marker uses native combined alpha and grazing before strand rejection',
-          'if (hp_tips_keep(card_M.w * grazing, pos.xy, tag, aux.x))\n    vk::RawBufferStore<uint>(marker, packed_marker, 4);' in src
-          and src.index('const float4 card_M = max(sign(card_ma), sign(card_mb))') < src.index('hp_tips_keep(card_M.w')
+          'const bool card_marked = hp_tips_keep(card_M.w * grazing, pos.xy, tag, aux.x);\n  if (card_marked)\n'
+          '    vk::RawBufferStore<uint>(marker, packed_marker, 4);' in src
+          and src.index('const float4 card_M = max(sign(card_ma), sign(card_mb))') < src.index('= hp_tips_keep(card_M.w')
           < src.index('if (e.x == hair_primary_no_strand)'))
+    # Review 2026-11-08: card mode (submit-time header without this draw's groom) before any strand work, with the
+    # prepass alpha test and card depth; the pixel trace skips slots outside the swap mask; the probe traces privately.
+    check('card mode keeps card depth and the prepass alpha test, before the rebase',
+          'if (((masks >> 16u) >> kDrawSlot) & 1u) {' in src and 'o.depth = pos.z;' in src
+          and src.index('if (((masks >> 16u) >> kDrawSlot) & 1u) {') < src.index('if (!hp_rebase(rec, gCam.position, org))'))
+    check('pixel trace accepts only swapping slots and skips the others',
+          'if (slot >= 16u || ((accept >> slot) & 1u) == 0u) {' in src and 'tmin = th + 2.0 * hair_primary_max_radius;' in src
+          and 'swap_slots, grooms, pool' in src and '1u << kDrawSlot, grooms, pool' in src)
+    check('count accepts the skipped-marker flag on card words only',
+          '(mark.x & 0xD0u) == 0u' in count and 'mark.y == card_word' in count)
 
 
 def rotation(rng):
@@ -826,10 +837,11 @@ def test_coverage():
     check(f"coverage pair: 3 x 3 box flicker {pair['box_temporal_std']:.4f} below the single ray's "
           f"{single['box_temporal_std']:.4f}", pair["box_temporal_std"] < single["box_temporal_std"])
     src = (ROOT / "shaders/rt/hair_primary_gbuffer.hlsl").read_text()
-    pair_if = "if (kHairGroomCoverage != 0u && (ld(rec + 60u) & hair_primary_flag_coverage) != 0u && e.w != hp_seal(e.xyz, tag))"
-    check("G-buffer pair behind specialization 1042 and header flag 8, before the single ray's unchanged block",
-          "[[vk::constant_id(1042)]] const uint kHairGroomCoverage = 0u;" in src and pair_if in src
-          and src.index(pair_if) < src.index("RayQuery<RAY_FLAG_FORCE_OPAQUE> q;\n    q.TraceRayInline"))
+    pair_if = "if (kHairGroomCoverage != 0u && (ld(rec + 60u) & hair_primary_flag_coverage) != 0u) {"
+    single = "const bool hit = hp_trace(rec, org, dir, accept, grooms, pool, pool_bytes, crumbs, pool_end, e, t, skipped);"
+    check("G-buffer pair behind specialization 1042 and header flag 8, before the single ray (hp_pixel)",
+          "[[vk::constant_id(1042)]] const uint kHairGroomCoverage = 0u;" in src and pair_if in src and single in src
+          and src.index(pair_if) < src.index(single) and "if (e.w != hp_seal(e.xyz, tag)) {" in src)
     layer = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
     check("layer specializes the strand G-buffer pipelines and sets header flag kFlagCoverage from rt_hair_groom_coverage",
           layer.count("shader_variant::kSpecIdHairGroomCoverage") == 2 and "hair_primary::kFlagCoverage" in layer)

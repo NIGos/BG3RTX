@@ -3321,6 +3321,11 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     sunt_end(cmd);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
+    // The layer's rt_hair_groom_cascade_drop removes hair cards from the game's sun cascades only while this RT sun
+    // shadow (which traces the strands) is applied (common/hair_primary.h kSunRtPersistKey; no ABI change).
+    if (s.rt_sun)
+      if (auto* applied = static_cast<uint64_t*>(host->persist(hair_primary::kSunRtPersistKey, sizeof(uint64_t))))
+        *applied = host->frame_index() + 1;
     if (s.pan && s.rt_sun) {
       Bg3Binding im{};
       im.image = g_rt_vis.image; im.format = VK_FORMAT_R8G8B8A8_UNORM;
