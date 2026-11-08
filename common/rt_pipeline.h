@@ -99,5 +99,9 @@ inline const char* path_name(Path p) {
 // gi_rt_pipeline_reorder -> specialization constant 1050 (kSpecIdGiSer): 0 no reorder (no prepass), 1 hit kind,
 // 2 hit kind + instance. The shader's values are 0 none, 1 kind + instance, 2 kind.
 inline uint32_t reorder_spec(int key) { return key == 1 ? 2u : key == 2 ? 1u : 0u; }
+// The value the core passes: a device whose driver reports no reordering (Bg3RtPipelineInfo::reorder_hint 0) gets 0,
+// no prepass and no hint (the reorder would cost the prepass for nothing). A device without the reorder extension
+// never reaches this: the raygen modules declare its capability, so such a device keeps the compute trace.
+inline uint32_t reorder_spec(int key, bool reorder_hint) { return reorder_hint ? reorder_spec(key) : 0u; }
 
 }  // namespace bg3::rt_pipeline

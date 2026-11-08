@@ -433,7 +433,18 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 1);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 18));
+  CHECK(dev.size() == size_t(kKnobCount - 19));
+  {  // SER (user decision 2026-11-08): on in every preset; choosing it in release raises the ray tracing pipeline trace.
+    const int rt = knob_index("exp_gi_rt_pipeline"), ser = knob_index("exp_gi_rt_pipeline_reorder");
+    for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[rt] == 1 && preset_values(p)[ser] == 1);
+    for (int c = 1; c <= 2; ++c) {
+      auto v = preset_values(kLow); v[rt] = 0; v[ser] = 0;
+      std::vector<int> raised;
+      CHECK(raise_needs(v, ser, c, false, false, kCapRayQuery, false, &raised));
+      CHECK(v[rt] == 1 && raised.size() == 1 && raised[0] == rt);   // the caller then sets v[ser] = c
+    }
+    CHECK_EQ(code_default("gi_rt_pipeline_reorder"), "1");
+  }
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
@@ -1188,7 +1199,7 @@ static void test_consolidation_policy() {
 static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
     "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water", "dlss5_nr",
-    "exp_hidden_surface", "exp_gi_rt_pipeline", "box_lights", "rr_post_temporal", "exp_native_coverage", "detailed_logging"};
+    "exp_hidden_surface", "exp_gi_rt_pipeline", "exp_gi_rt_pipeline_reorder", "box_lights", "rr_post_temporal", "exp_native_coverage", "detailed_logging"};
   std::vector<std::string> visible;
   for (const auto& k : kKnobs) {
     if (knob_visible(k, false)) { visible.push_back(k.id); CHECK(std::string(k.category) != "Advanced"); }

@@ -264,18 +264,18 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"gi_rt_pipeline": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_gi_rt_pipeline_reorder", "label": "Bounce trace reordering",
-     "description": "Experimental: sorts the bounce rays by what they hit before shading them (shader execution reordering). In offline tests it helped only at the camp.",
-     "apply": "hitch", "apply_note": "May briefly pause when changed", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: sorts the bounce rays by what they hit before shading them (shader execution reordering). In offline tests it helped only at the camp.",
-     "details": "Needs Ray-tracing pipeline bounce trace.",
-     "cost": {"status": "Estimate", "gpu": "Camp about -0.7 ms more; inn about +0.4 ms (offline replay)", "vram": "Unknown", "provenance": "RTX 5090 offline replays against the plain ray tracing pipeline trace. Not yet measured in game."},
+     "description": "Sorts the bounce rays by what they hit before shading them (shader execution reordering): about 1.5 ms faster at the camp and 0.8 ms at the inn on top of the faster bounce light tracing, same lighting.",
+     "apply": "hitch", "apply_note": "May briefly pause when changed", "advanced": false, "experimental": false, "developer": false,
+     "category": "Performance", "summary": "Sorts the bounce rays by what they hit before shading them (shader execution reordering): about 1.5 ms faster at the camp and 0.8 ms at the inn on top of the faster bounce light tracing, same lighting.",
+     "details": "Needs Faster bounce light tracing. By hit kind is the default; by hit kind and object is the alternative. Without the GPU's reordering support the rays are traced unsorted.",
+     "cost": {"status": "Measured", "gpu": "About -1.5 ms at the camp, -0.8 ms at the inn", "vram": "Unknown", "provenance": "RTX 5090, Ultra, live 2026-11-08 on top of the ray tracing pipeline trace: camp -1.5 / -1.6 ms (two runs), inn -0.8 ms (one clean window); scene energy unchanged. Shipped on the user's decision; the inn result is one window."},
      "required_on": {"rt": "1"},
      "required_from_choice": {"rt": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 1, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "hitch", "caps": [], "keys": {"gi_rt_pipeline_reorder": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "kind", "label": "By hit kind", "apply": "hitch", "caps": ["ray_query"], "keys": {"gi_rt_pipeline_reorder": "1"}, "needs": {"exp_gi_rt_pipeline": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "object", "label": "By hit kind and object", "apply": "hitch", "caps": ["ray_query"], "keys": {"gi_rt_pipeline_reorder": "2"}, "needs": {"exp_gi_rt_pipeline": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "hitch", "caps": [], "keys": {"gi_rt_pipeline_reorder": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "kind", "label": "By hit kind", "apply": "hitch", "caps": ["ray_query"], "keys": {"gi_rt_pipeline_reorder": "1"}, "needs": {"exp_gi_rt_pipeline": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "object", "label": "By hit kind and object", "apply": "hitch", "caps": ["ray_query"], "keys": {"gi_rt_pipeline_reorder": "2"}, "needs": {"exp_gi_rt_pipeline": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "box_lights", "label": "Interior light shadows",
      "description": "Adds shadows from rectangular interior lights that are meant to cast them. About 0.13 ms on an RTX 5090 at Grymforge.",

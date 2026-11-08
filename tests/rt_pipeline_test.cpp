@@ -61,6 +61,11 @@ int main() {
   for (uint32_t p = 0; p <= 5; ++p) CHECK(path_name(Path(p))[0] != '?');
   // The reorder key: 1 = the hit-kind hint (shader value 2), 2 = kind + instance (1), else none.
   CHECK(reorder_spec(0) == 0 && reorder_spec(1) == 2 && reorder_spec(2) == 1 && reorder_spec(7) == 0 && reorder_spec(-1) == 0);
+  // Device fallback: a driver without reordering (hint mode NONE) gets no hint and no prepass for every key.
+  for (int key = -1; key <= 3; ++key) CHECK(reorder_spec(key, false) == 0 && reorder_spec(key, true) == reorder_spec(key));
+  // No reorder extension: decide_features never requests the pipeline (the raygen module declares the capability).
+  DeviceQuery no_reorder = q; no_reorder.reorder_extension = false;
+  CHECK(decide_features(no_reorder).result == Feature::kUnsupported);
 
   std::printf("rt_pipeline_test: %d checks, %d failures\n", g_checks, g_fail);
   return g_fail ? 1 : 0;

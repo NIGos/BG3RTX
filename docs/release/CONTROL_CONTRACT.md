@@ -24,6 +24,7 @@ Choice indices remain schema indices. Box On is index 1 (`all`, ls_box=2); legac
 | Performance | Rendered frame limit (`fps_cap`) | `fps_cap` | Off / 30-240 fps, step 1 | 0 / 0 / 0 / 58 | live |
 | Performance | NVIDIA Reflex (`reflex`) | `reflex` | Off / On / On + Boost | On / On / On / On | live |
 | Performance | Faster bounce light tracing (`exp_gi_rt_pipeline`) | `gi_rt_pipeline` | Off / On | On / On / On / On | live (first enable may pause while the pipeline builds) |
+| Performance | Bounce trace reordering (`exp_gi_rt_pipeline_reorder`) | `gi_rt_pipeline_reorder` | Off / By hit kind / By hit kind and object | By hit kind (all presets) | hitch |
 
 Apply exceptions: FG Off/on restarts; 2x/3x/4x live. Water and stock-hair Off live;
 water/stock-hair enable restarts. Bounce capture first enable/disable restarts.
@@ -68,7 +69,9 @@ Automatic release policies (also after stale user INI layering):
 - Release profile no longer pins `ls_box` or `rt_emissive` Off.
 - `gi_rt_pipeline=1` in every preset (user decisions 2026-11-08; live inn/camp GI trace about -2 ms, energy unchanged).
   A no-op without the hit-GI trace (Off-screen bounce light Off, SHaRC); compute fallback without the device features.
-  `gi_rt_pipeline_reorder` stays developer only (0).
+  `gi_rt_pipeline_reorder=1` (by hit kind) in every preset, user decision 2026-11-08 ("Yes, turn it on"): camp -1.5 / -1.6 ms
+  in two runs, inn -0.8 ms in one clean window (the committed two-scene rule is not met: the inn's scene thread hits wait
+  timeouts in its OFF windows). Needs the ray tracing pipeline trace; a driver without reordering gets no hint.
 
 Controls hidden from the three main pages (Experimental opt-ins remain available there):
 - `rt_trace_scale`, `water_surface_fresnel`, `exp_omm`, `exp_vt_alpha_masks`

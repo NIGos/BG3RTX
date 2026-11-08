@@ -1287,7 +1287,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(sv::kSpecIdGiFarRoofEarly,
               host->cfg_int("rt_stats", 0) == 0 && host->cfg_int("gi_far_roof_early", 1) != 0 ? 1u : 0u);
   }
-  if (raygen) specs.add(sv::kSpecIdGiSer, bg3::rt_pipeline::reorder_spec(host->cfg_int("gi_rt_pipeline_reorder", 0)));
+  // gi_rt_pipeline_reorder (default 1, hit kind): 0 when the driver reports no reordering (common/rt_pipeline.h).
+  if (raygen) specs.add(sv::kSpecIdGiSer, bg3::rt_pipeline::reorder_spec(host->cfg_int("gi_rt_pipeline_reorder", 1), host->rt_pipeline.reorder_hint != 0));
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
     specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
@@ -2975,11 +2976,13 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
   }
   const rtp::Path path=rtp::choose_path(key,device,fns,variant,ready);
   // The state is the path and the reorder mode: a reorder toggle on the same path logs its line too.
-  const uint32_t rt_state=uint32_t(path)|(uint32_t(host->cfg_int("gi_rt_pipeline_reorder",0))<<8);
+  const int reorder=host->cfg_int("gi_rt_pipeline_reorder",1);
+  const uint32_t rt_state=uint32_t(path)|(uint32_t(reorder)<<8);
   if(rt_state!=g_rt_path_logged && (key || g_rt_path_logged!=UINT32_MAX)){
    g_rt_path_logged=rt_state;
-   host->log("gi: gi_rt_pipeline: the hit-GI trace runs %s%s%s (reorder %d)",path==rtp::Path::kRaygen?"as a ":"as compute: ",
-             rtp::path_name(path),path==rtp::Path::kRaygen?(em?", emission variant":", sun variant"):"",host->cfg_int("gi_rt_pipeline_reorder",0));
+   host->log("gi: gi_rt_pipeline: the hit-GI trace runs %s%s%s (reorder %d)%s",path==rtp::Path::kRaygen?"as a ":"as compute: ",
+             rtp::path_name(path),path==rtp::Path::kRaygen?(em?", emission variant":", sun variant"):"",reorder,
+             reorder && path==rtp::Path::kRaygen && !host->rt_pipeline.reorder_hint?"; the driver reports no reordering: no hint, no prepass":"");
   }
  }
  auto traversal=prepare_omm_traversal(cmd,b,rp?rp->pipeline:p.pipeline);if(!traversal.valid())return false;
