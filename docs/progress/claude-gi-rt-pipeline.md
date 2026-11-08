@@ -1,60 +1,31 @@
-## Ray tracing pipeline GI trace, game path (branch claude/gi-rt-pipeline, READY_FOR_LIVE, 2026-11-08)
-- What: the Ultra hit-GI trace (gi_trace_rt_hit_sun[_em].hlsl without SHaRC) can run as a ray generation shader
-  over the same grid and descriptors (docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"). Keys gi_rt_pipeline
-  (Performance) and gi_rt_pipeline_reorder (Advanced; 1 hit kind, 2 kind + instance): live, off in every preset,
-  dev-only knobs until qualified. ABI 28 -> 29: rebuild both DLLs and restart the game.
-- Layer, about 175 lines: layer/rt_pipeline.cpp enables VK_KHR_ray_tracing_pipeline + VK_EXT_ray_tracing_invocation_reorder
-  only when both are supported. It never overrides an application struct and is dropped first on a device creation
-  failure. The alpha and emissive set layouts name the raygen stage; layer/shaders.cpp drops -E for lib profiles.
-- ABI, about 20: Bg3HostApi::rt_pipeline (handle size, alignments, reorder mode) and 3 VkDeviceFuncs entry points.
-- Core, about 185: refresh(raygen) and build_pipeline (ray tracing pipeline, one general group), raygen-only
-  pipeline layouts on the compute set layouts, a 64-slot SBT, vkCmdTraceRaysKHR with full barriers. It falls back
-  to compute on any missing piece; choose_path logs each reason once. Reorder is constant 1050 (no prepass at 0).
-- Pure logic, about 100, with tests/rt_pipeline_test.cpp: common/rt_pipeline.h covers the feature decision, the SBT
-  layout and alignment, and the compute fallback decision.
-- Settings, about 50: bg3rtx.ini, 2 knobs, generated defaults, settings_schema.json. Tooling, about 40:
-  shader_variant.h kRtPipeline (raygen_entry, profile), shader_identity.py lib profile without -E, frame_replay
-  --ab-rgen <file> adds GI_TRACE_RAYGEN=1, and RT_SPEC_CASCADE replaces a pack's RT_CASCADE_MASKS.
-- Shaders: variants.txt +4 requests (hit_sun, hit_sun_em, each with and without OMM; GI_TRACE_RAYGEN=1, lib_6_6),
-  4/4 compiled and spirv-val clean. The other 221 requests are byte-identical to main (shader_identity --baseline main).
-- Seed gate on the shipped request (compute vs raygen, reorder 0, 32 draws per set, rt_stats sweeps 16), PASS on
-  every channel:
-  - camp: energy r -1.8e-5 (bound 4.8e-5), alpha +8.2e-5 (1.1e-4); alpha pixels 1.59e-4 vs control 1.36e-4
-    (bound 1.66e-4); counters 0 of 67 fail;
-  - inn: r -2.8e-5 (7.1e-5), alpha +3.4e-5 (8.8e-5); pixels 1.24e-4 vs 1.27e-4; counters 1 of 66 (limit 1.4);
-  - S8: r -7.3e-6 (1.7e-5), alpha +1.5e-5 (9.6e-5); pixels 9.6e-5 vs 9.3e-5; counters 0 of 68.
-  No emission (not in the packs). The inn sun-trust is now CTY_Main_A, the correct level for The Blushing Mermaid.
-- Live job: tools/live_batches/gi_rt_pipeline (grp1-camp, grp2-inn; visible_unfocused_fg, one launch each, 104 s,
-  0/1/0/1 with exposure held, trace pass GPU ms, energy from dumps.json). live_flow lint passes; predicted.json
-  committed (camp -2.5 ms, inn -0.6 ms, energy 0). NOT queued, NOT authorized.
-- Tests: build.ps1 -Test 209/212. release_install_test and release_setup_test fail only through this shell's
-  PowerShell 7 PSModulePath (Get-FileHash missing) and pass with the machine path; batch_jobs_lint_test fails on main already
-  (rp-camp / rp-lowercity patterns missing from the frozen snapshot). The new jobs' regex and readiness entries were
-  added with lint_snapshot.extend_readiness: [0, null], text new in this branch.
-- Only a live can answer: the emission variant, the real-frame cost, FG/Streamline with the extra device features,
-  the Script Extender, the OMM raygen request (Ultra has OMM on), validation-clean binding at the RT bind point.
-
-## Live 2026-11-08 (grp2-inn VALID, grp1-camp not run)
-- Inn (The Blushing Mermaid - 96h 39m, Ultra, FG on, window unfocused), gi_rt_pipeline 0/1/0/1 in one run:
-  trace pass 12.09 / 11.88 ms OFF vs 10.03 / 9.86 ms ON: -1.95 and -2.13 ms (OFF spread 0.21). Whole GI -1.5 / -3.5 ms,
-  rt passes -1.7 / -2.1 ms. Offline predicted -0.6 (the pack's view is lighter; the live frame runs the emission variant).
-- The emission variant runs as a ray tracing pipeline; device features and the reorder extension are on; FG/Streamline
-  status 0x0, no device loss, no compute fallback beyond the first build.
-- First build of the raygen pipeline took about 60 s (compute meanwhile): fine as a fallback, but a cold start cost.
-- Energy (pre-post scene colour, m4_promotion_gate): ON vs mean OFF -0.32% and -0.35%; OFF-OFF spread 0.27% (one pair).
-  Gate band within; the old OFF-pair rule calls it DARKER. Not resolved with one OFF pair: needs more pairs.
-- Camp not run: "Campsite - 27h" no longer exists; the job now uses "Test Campsite" (not run).
-- Status: key stays off. Open: the energy question (more OFF/ON pairs), camp, the 60 s first build (warm the pipeline
-  at load), reorder=1 in game, launcher page.
-
-## Live 2026-11-08 17:16 (grp1-camp, Test Campsite: VALID, one GPU error)
-- The raygen pipeline was ready at the first ON switch (driver cache from the inn run): no 60 s build.
-- nvlddmkm event 153 ("Error occurred on GPUID: 100") at 17:18:05, inside cost-on-a (ON since 17:17:48). No device
-  loss, no fault line in bg3rtx.log, the game continued. It is the only nv153 in 42 queue runs of more than 30 s
-  (the 10:59-11:02 burst was the SER/other-game crash in the morning). Treated as a possible RT pipeline fault.
-- cost-on-a is confounded by it: every pass slower, also those the key does not touch (rf +0.95, ls +0.75 ms).
-  cost-on-b: trace pass -2.12 ms (12.30 / 13.78 OFF vs 10.92 ON; OFF spread 1.48 ms), whole GI -1.09, rt passes -1.48.
-- Energy: ON vs mean OFF +0.13% and -0.04% (OFF-OFF spread 0.13%): unchanged. With the inn (-0.32 / -0.35%) the sign
-  is not consistent, so no energy shift is shown.
-- Status: key stays off. Blocker before any qualification: explain the nv153 (validation layers and device-fault
-  reports on the raygen path offline; no rerun of the live until then).
+## Ray tracing pipeline GI trace (branches claude/gi-rt-pipeline, claude/gi-rt-pipeline-ultra; on by default, 2026-11-08)
+- What: the hit-GI trace (gi_trace_rt_hit_sun[_em].hlsl without SHaRC) runs as a ray generation shader over the
+  same grid and descriptors (docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"). ABI 29 (Bg3HostApi::rt_pipeline,
+  3 VkDeviceFuncs entry points). Layer: VK_KHR_ray_tracing_pipeline + VK_EXT_ray_tracing_invocation_reorder when
+  both are supported, dropped first on a device creation failure. Compute fallback for any missing piece, logged once.
+- Shaders: +4 lib_6_6 requests (hit_sun, hit_sun_em, each with and without OMM); every other request byte-identical.
+  Reorder is constant 1050 (gi_rt_pipeline_reorder; no prepass at 0).
+- Offline seed gate on the shipped request (raygen vs compute, 32 draws per set, thresholds from compute vs compute):
+  PASS on camp, inn and S8 (energy, per-pixel 4 sigma, counters).
+- Live inn (The Blushing Mermaid, Ultra, FG): trace pass 12.09 / 11.88 ms OFF vs 10.03 / 9.86 ON, about -2.0 ms;
+  the emission variant ran as a ray tracing pipeline, FG status 0x0, no device loss. Energy -0.32 / -0.35%
+  (OFF-OFF spread 0.27%, one pair).
+- Live camp (Test Campsite): clean window cost-on-b trace -2.12 ms (OFF spread 1.48); energy +0.13 / -0.04% (spread
+  0.13%). Across both scenes the energy signs disagree, so no energy shift is shown.
+- First raygen build about 60 s on a cold driver cache (compute meanwhile); instant once the driver caches it.
+- Open caveat: one nvlddmkm event 153 at 17:18:05 in the camp's first ON window (cost-on-a). The GPU recovered and the
+  game continued, with no fault line and no device loss. It is the only one in 42 queue runs over 30 s. Not
+  explained. Check offline: frame_replay --ab-rgen with validation and GPU-assisted validation on the packs, and
+  layer/devfault.cpp (VK_EXT_device_fault) output if it recurs.
+- User decisions 2026-11-08: ship it ("in game mi sembra tutto ok, quindi se gira meglio teniamolo"), then on in
+  every preset ("perchè non attivarlo sempre?").
+- claude/gi-rt-pipeline-ultra:
+  - exp_gi_rt_pipeline ("Faster bounce light tracing") is a qualified Performance control (no longer experimental or
+    developer-only), preset {1,1,1,1}; code default gi_rt_pipeline=1 (bg3rtx.ini, kDefaults, core fallback). The
+    release profile does not pin it, so release is 1. The exp_hidden_surface need is dropped: the key is a no-op
+    without the hit-GI trace (core/gi.cpp hit_gi_dispatch is its only reader).
+  - gi_rt_pipeline_reorder stays experimental, developer only, 0.
+  - Tests updated with reasons: release control count 17 -> 18 (settings, web bridge, web bridge JSON); the reorder
+    knob's prerequisite is now on in every preset (its unmet-need check uses gi_rt_pipeline off).
+    CONTROL_CONTRACT.md has the new row.
+  - No shader or request change (identity checked).

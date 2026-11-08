@@ -324,13 +324,15 @@ inline constexpr Knob kKnobs[] = {
     {"gi_rt_fallback","0","Hidden-surface lighting mode",1}}, false, "Lighting", {"Estimate", "Near about 0.6 ms; Far about 4 ms", "Unknown", "Estimated cost on RTX 5090: about 0.6 ms for Near or 4 ms for Far."}, "Needs Ray-tracing detail: Include foliage and Indirect lighting: Ray-traced. Turning it on or off needs a game restart; switching between Near and Far may briefly pause the game."},
 
   // gi_rt_pipeline (docs/TRACK_C_GI.md "Ray tracing pipeline GI trace"): the hit-GI trace as a ray tracing pipeline.
-  // READY_FOR_LIVE (tools/live_batches/gi_rt_pipeline): off in every preset until its live qualification.
-  {"exp_gi_rt_pipeline", "Ray-tracing pipeline bounce trace",
-   "Experimental: runs the off-screen bounce light trace as a ray tracing pipeline instead of a compute pass. The same lighting on average; faster in offline tests.",
-   Kind::Choice, Apply::Live, "live; may briefly pause the first time while the pipeline builds", true,
+  // Qualified, on in every preset (user decisions 2026-11-08; live inn and camp about -2 ms, energy unchanged); a no-op when the
+  // hit-GI trace does not run (core/gi.cpp hit_gi_dispatch is its only reader). The id keeps its
+  // exp_ prefix for saved selections. The reorder option below stays experimental and developer-only.
+  {"exp_gi_rt_pipeline", "Faster bounce light tracing",
+   "Traces the off-screen bounce light with the GPU's ray tracing pipeline instead of a compute pass: the same lighting, about 2 ms faster on an RTX 5090.",
+   Kind::Choice, Apply::Live, "May briefly pause the first time while the pipeline builds", false,
    {{"off", "Off", 0, {{"gi_rt_pipeline", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"gi_rt_pipeline", "1"}}, {{"exp_hidden_surface", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Performance", {"Estimate", "About -2.5 ms at camp, -0.6 ms at the inn (offline replay)", "Under 1 MB", "RTX 5090 offline replays of the far + sun trace: camp -2.58, inn -0.61, S8 -0.28 ms. Not yet measured in game."}, "Needs Off-screen bounce light. Without the ray tracing pipeline and reordering features the compute trace runs (logged once)."},
+    {"on", "On", kCapRayQuery, {{"gi_rt_pipeline", "1"}}, {}, {}, false, false, false, Apply::Live}},
+   {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "About -2 ms on the bounce light trace", "Under 1 MB", "RTX 5090, Ultra, live 2026-11-08: GI trace -2.0 ms at the inn (12.0 to 9.95 ms) and -2.1 ms at the camp; scene energy unchanged within noise."}, "Applies to Off-screen bounce light: without it this option does nothing. The first time, the pipeline builds for up to a minute while the usual trace keeps running. Without the GPU's ray tracing pipeline and reordering features the usual trace runs."},
 
   {"exp_gi_rt_pipeline_reorder", "Bounce trace reordering",
    "Experimental: sorts the bounce rays by what they hit before shading them (shader execution reordering). In offline tests it helped only at the camp.",
@@ -839,7 +841,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
-    {"gi_rt_pipeline", "0"},
+    {"gi_rt_pipeline", "1"},
     {"gi_rt_pipeline_reorder", "0"},
     {"gi_far_roof_early", "1"},
     {"sharc", "0"},

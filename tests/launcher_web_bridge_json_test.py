@@ -48,11 +48,11 @@ print("Consolidated cards, qualified box shadows and developer visibility verifi
 expected = {
  "Lighting": ["DLSS Ray Reconstruction", "Ray-tracing detail", "Sun shadows", "Indirect lighting", "Local light shadows", "Mod lighting strength", "Off-screen bounce light", "Interior light shadows", "Hair shadows"],
  "Surfaces": ["Reflections", "Water lighting", "Depth of field and bloom smoothing"],
- "Performance": ["Frame Generation", "Rendered frame limit", "NVIDIA Reflex"],
+ "Performance": ["Frame Generation", "Rendered frame limit", "NVIDIA Reflex", "Faster bounce light tracing"],   # gi_rt_pipeline, qualified 2026-11-08
  "Support": ["Detailed logging"],
  "DLSS 5": ["DLSS 5 Neural Rendering (experimental)"],
 }
-assert len(state["settings"]) == 17
+assert len(state["settings"]) == 18   # 17 + exp_gi_rt_pipeline (qualified release control, 2026-11-08)
 for page, labels in expected.items():
     assert {s["title"] for s in state["settings"] if s["category"] == page} == set(labels)
 assert not state["developer"] and not state["experimental"]
@@ -69,6 +69,7 @@ choices = {
  "reflections": ["Off", "Glossy", "Standard", "Rough"],
  "exp_water": ["Off", "Reflections", "Reflections and shadows", "Include refraction"],
  "frame_generation": ["Off", "2x", "3x", "4x"], "reflex": ["Off", "On", "On + Boost"],
+ "exp_gi_rt_pipeline": ["Off", "On"],
 }
 for setting in state["settings"]:
     if setting["id"] in choices:

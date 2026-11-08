@@ -23,6 +23,7 @@ Choice indices remain schema indices. Box On is index 1 (`all`, ls_box=2); legac
 | Performance | Frame Generation (`frame_generation`) | `fg` | Off / 2x / 3x / 4x | 2x / 2x / 2x / 2x | restart |
 | Performance | Rendered frame limit (`fps_cap`) | `fps_cap` | Off / 30-240 fps, step 1 | 0 / 0 / 0 / 58 | live |
 | Performance | NVIDIA Reflex (`reflex`) | `reflex` | Off / On / On + Boost | On / On / On / On | live |
+| Performance | Faster bounce light tracing (`exp_gi_rt_pipeline`) | `gi_rt_pipeline` | Off / On | On / On / On / On | live (first enable may pause while the pipeline builds) |
 
 Apply exceptions: FG Off/on restarts; 2x/3x/4x live. Water and stock-hair Off live;
 water/stock-hair enable restarts. Bounce capture first enable/disable restarts.
@@ -65,6 +66,9 @@ Automatic release policies (also after stale user INI layering):
   -0.38/-0.34/+0.12%, within OFF spread 0.89%. Stale raw k/rest overrides cannot disable or change it.
 - Hidden candidates and perf_* overrides are reset; unknown unrelated keys remain preserved.
 - Release profile no longer pins `ls_box` or `rt_emissive` Off.
+- `gi_rt_pipeline=1` in every preset (user decisions 2026-11-08; live inn/camp GI trace about -2 ms, energy unchanged).
+  A no-op without the hit-GI trace (Off-screen bounce light Off, SHaRC); compute fallback without the device features.
+  `gi_rt_pipeline_reorder` stays developer only (0).
 
 Controls hidden from the three main pages (Experimental opt-ins remain available there):
 - `rt_trace_scale`, `water_surface_fresnel`, `exp_omm`, `exp_vt_alpha_masks`

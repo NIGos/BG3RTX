@@ -158,7 +158,7 @@ int main(int argc,char** argv){
       const auto before=s.values;bridge.handle("{\"type\":\"set\",\"id\":\""+std::string(k.id)+"\",\"value\":"+std::to_string(c)+"}");check(s.values==before);
     }
   }
-  check(visible==17);
+  check(visible==18);   // 17 + exp_gi_rt_pipeline (qualified release control, 2026-11-08)
   // Support edits stay independent of the rendering preset and last-session evidence.
   {
     launcher::State ls;ls.caps=~0u;ls.base={{"dev","0"}};ls.values=st::preset_values(st::kHigh);ls.preset=st::kHigh;

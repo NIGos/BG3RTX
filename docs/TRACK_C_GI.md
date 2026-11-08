@@ -705,7 +705,21 @@ Full diagnostic intervals and receipts: docs/progress/farregs.md and worktree .s
 
 ## Ray tracing pipeline GI trace: game path design (claude/opt-ser-gi, 2026-11-08; implemented claude/gi-rt-pipeline)
 
-Implemented (claude/gi-rt-pipeline, ABI 29, READY_FOR_LIVE; the design text below stays as written):
+Qualification (user decisions 2026-11-08; on in every preset since claude/gi-rt-pipeline-ultra):
+- Live inn (The Blushing Mermaid, Ultra, FG 2): the trace pass went from 12.09 / 11.88 ms OFF to 10.03 / 9.86 ms ON,
+  about -2.0 ms. Live camp (Test Campsite), clean ON window: -2.12 ms. Scene energy (pre-post float mean) at the
+  inn -0.32 / -0.35% (OFF-OFF 0.27%) and at the camp +0.13 / -0.04% (OFF-OFF 0.13%): the signs disagree, so no
+  energy shift is shown. The emission variant ran as a ray tracing pipeline, FG status 0x0, no device loss.
+- User: "in game mi sembra tutto ok, quindi se gira meglio teniamolo", then "perchè non attivarlo sempre?". So
+  exp_gi_rt_pipeline is a qualified Performance control, preset On everywhere, code default 1. It is a no-op without
+  the hit-GI trace (hit_gi_dispatch is the key's only reader); gi_rt_pipeline_reorder stays developer only, 0.
+- Open caveat: one nvlddmkm event 153 (17:18:05, camp, first ON window). The GPU recovered; no device loss or fault
+  line. Not explained. Check offline: frame_replay --ab-rgen with the Khronos validation layer and GPU-assisted
+  validation on the three packs (the 64x64 fixture was clean). If it recurs live, use the VK_EXT_device_fault
+  report (layer/devfault.cpp) and Aftermath (aftermath=1).
+- Cold start: the first raygen build takes about 60 s without a driver cache; the compute trace runs meanwhile.
+
+Implemented (claude/gi-rt-pipeline, ABI 29; the design text below stays as written):
 - Layer: layer/rt_pipeline.cpp enables VK_KHR_ray_tracing_pipeline + VK_EXT_ray_tracing_invocation_reorder when the
   device supports both, after hair_groom's request. It never overrides an application struct
   (common/rt_pipeline.h decide_features) and is the first optional request dropped when device creation fails
