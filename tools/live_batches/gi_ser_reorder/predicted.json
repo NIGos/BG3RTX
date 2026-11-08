@@ -1,0 +1,27 @@
+{
+ "_rule": "Written and committed BEFORE any run (a later commit is post hoc). gpu_ms: predicted change of the 'gi: trace pass' GPU median ON minus OFF (reorder 1 minus reorder 0, both on the ray tracing pipeline). energy: predicted relative change of the pre-post scene colour (5c3fdabc float mean) of each ON shot against its OFF neighbours.",
+ "ser1-camp": {
+  "gpu_ms": {
+   "predicted": -0.6,
+   "source": "frame_replay on replay-20261102-013545-2: hint kind -3.21 vs plain raygen -2.58 ms against compute (docs/progress/claude-opt-ser-gi.md); no emission in the pack",
+   "written": "2026-11-08"
+  },
+  "energy": {
+   "predicted": 0.0,
+   "source": "reordering changes the thread order only; the seed gate passes",
+   "written": "2026-11-08"
+  }
+ },
+ "ser2-inn": {
+  "gpu_ms": {
+   "predicted": 0.4,
+   "source": "replay-20261102-013914-3: hint kind -0.16 vs plain raygen -0.61 ms against compute; no emission in the pack",
+   "written": "2026-11-08"
+  },
+  "energy": {
+   "predicted": 0.0,
+   "source": "as camp",
+   "written": "2026-11-08"
+  }
+ }
+}

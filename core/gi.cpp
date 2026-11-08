@@ -2974,8 +2974,10 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
    }
   }
   const rtp::Path path=rtp::choose_path(key,device,fns,variant,ready);
-  if(uint32_t(path)!=g_rt_path_logged && (key || g_rt_path_logged!=UINT32_MAX)){
-   g_rt_path_logged=uint32_t(path);
+  // The state is the path and the reorder mode: a reorder toggle on the same path logs its line too.
+  const uint32_t rt_state=uint32_t(path)|(uint32_t(host->cfg_int("gi_rt_pipeline_reorder",0))<<8);
+  if(rt_state!=g_rt_path_logged && (key || g_rt_path_logged!=UINT32_MAX)){
+   g_rt_path_logged=rt_state;
    host->log("gi: gi_rt_pipeline: the hit-GI trace runs %s%s%s (reorder %d)",path==rtp::Path::kRaygen?"as a ":"as compute: ",
              rtp::path_name(path),path==rtp::Path::kRaygen?(em?", emission variant":", sun variant"):"",host->cfg_int("gi_rt_pipeline_reorder",0));
   }
