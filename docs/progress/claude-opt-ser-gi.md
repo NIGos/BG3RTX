@@ -95,3 +95,30 @@
 - Next: find the lane-dependent result (it may affect the compute pass as well); then a raygen GI trace without
   prepass (largest, simplest win), with the reorder hint only as an option for divergent scenes.
 - Receipts: worktree .scratch/ser/<pack>-{self,rgen*,bd-*}/ (run.log, ab.csv, guards).
+
+## Raygen vs compute mismatch: cause (branch claude/opt-ser-gi, offline, 2026-11-08)
+- Not lane-dependent. Compute is a pure function of the pixel: GI_DEBUG_SWIZZLE (new offline define,
+  gi_trace_rt.hlsl:290, id ^= k) remaps pixels to other lanes (k=1), the other wave of the 8x8 group (4) or
+  another group (8, 9). Production far + sun module vs remapped: 100% bit-equal outputs and counters on camp
+  (k 1, 4, 8), inn (9) and S8 (4). Production is not affected (no flicker or noise from the thread mapping).
+- Cause: the driver compiles the same arithmetic differently for the compute and the ray generation stage. A temporary
+  debug dump of ray 0's inputs on camp, before any ray query: the pixel position P (ray_at(uv) * d,
+  gi_common.hlsli:132) differs in the last bits on 54% of pixels, the normal N (decode_normal +
+  to_lighting_space, gi_common.hlsli:116-127) on 30%, the ray direction on 79%; rtOrigin (a texture read) on 0%.
+  The SPIR-V is the same in both modules (no RelaxedPrecision; the same execution modes). Then the hits on foliage
+  amplify these last-bit differences into different leaves (camp: 92541 hit/miss flips of 2.73M rays; S8 1.3%).
+  - FMA contraction: DXC -Gis (NoContraction on every operation) makes P equal and cuts the camp mismatch from 380866
+    to 83825 pixels.
+  - Approximate operations: even with -Gis, dot(dn, dn) after the 2.0 / t division in decode_normal, rsqrt and 1 / x
+    give a different last bit in the two stages (Vulkan allows 2.5 ulp for OpFDiv and leaves sqrt / rsqrt / sin
+    / cos implementation-defined, so the driver may pick a different sequence per pipeline).
+  The hint-on output change is most likely the same thing: the reorder instruction changes the raygen code the driver
+  emits (inferred, not tested separately).
+- No small shader fix makes the stages bit-equal: it would need correctly rounded division, sqrt, rsqrt, normalize
+  and sin/cos written out on the whole GI and shading path, and that would change the compute output too. Gate
+  (hint-off raygen vs compute, --ab-require-equal, three packs): FAILS, not fixable in the shader. Means stay
+  equal within 0.04%, counter totals within 0.04%: a different noise draw, the same expected value.
+- Consequence: a raygen GI trace cannot pass a bit-equality gate against compute. It needs a statistical gate instead
+  (energy on a static camera, PT reference), or it should replace the compute pass outright and be gated against
+  itself. The debug dump block is kept out of the tree (.scratch/ser/debug_ray0_block.hlsl). Compute requests:
+  170/170 gi/ byte-identical to main.

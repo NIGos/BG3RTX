@@ -287,6 +287,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
   g_rt_pass = kRtPassGI;   // aborted queries count as this pass's unknowns (rt_common.hlsli)
   uint2 id = tid.xy;
+#ifdef GI_DEBUG_SWIZZLE
+  id ^= uint2(GI_DEBUG_SWIZZLE, GI_DEBUG_SWIZZLE);   // offline diagnosis: another thread / group computes each pixel
+#endif
   if (any(id >= pc.half)) return;
   uint2 fp = gi_fp(id);
   float d = gDepth.Load(int3(fp, 0));
