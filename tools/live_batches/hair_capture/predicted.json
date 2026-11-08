@@ -1,0 +1,15 @@
+{
+ "_rule": "Written and committed BEFORE any run.",
+ "hcap1-dialogue": {
+  "mask_mip0": {
+   "predicted": "full size and all mips resident in a dialogue close-up (BC7 or BC3)",
+   "source": "NATIVE_HAIR.md: mask is a plain 2D view (set 1 binding 4), not VT",
+   "written": "2026-11-08"
+  },
+  "index_buffer": {
+   "predicted": "not mapped > 0 (the game's hair index buffers are device-local)",
+   "source": "hair_groom UV join exists for this case (RTX_HAIR_PRIMARY)",
+   "written": "2026-11-08"
+  }
+ }
+}

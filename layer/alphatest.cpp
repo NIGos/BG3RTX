@@ -862,6 +862,31 @@ void alpha_begin_capture() {
   g_fade_capsule_ok = false;
 }
 
+// Runtime capture source study (docs/RTX_HAIR_ROADMAP.md 2c): once per CHAR_Hair mask image (at most 64), what a
+// groom capture would read back: the bound mask/noise views' format, size, mips and layout. Log only, rt_native_hair.
+static void hair_mask_probe(uint64_t fs, const Bg3Binding& t, const Bg3Binding& c) {
+  static std::mutex mu;
+  static std::unordered_set<uint32_t> seen;
+  for (const Bg3Binding* b : {&t, &c}) {
+    if (!b->view) continue;
+    VkImageCreateInfo ci{};
+    uint32_t id = 0, base = 0, levels = 0;
+    {
+      std::shared_lock lock(tracker().mu);
+      const auto v = tracker().views.find(b->view);
+      if (v == tracker().views.end()) continue;
+      const auto im = tracker().images.find(v->second.image);
+      if (im == tracker().images.end()) continue;
+      ci = im->second.ci; id = im->second.id; base = v->second.range.baseMipLevel; levels = v->second.range.levelCount;
+    }
+    std::lock_guard<std::mutex> lock(mu);
+    if (seen.size() >= 64 || !seen.insert(id).second) continue;
+    log("[hair capture] fs %016llx %s image %u: format %d, %ux%u, %u mips (view base %u, %u levels), layout %d, usage 0x%x",
+        (unsigned long long)fs, b == &t ? "mask" : "noise", id, int(ci.format), ci.extent.width, ci.extent.height,
+        ci.mipLevels, base, levels, int(b->layout), unsigned(ci.usage));
+  }
+}
+
 // Shared canonical capture: never touches the camera capture's mutable record
 // or descriptor-index arrays. Ordinary camera adds use the same raw bindings.
 static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint32_t tris,
@@ -966,6 +991,7 @@ static bool capture_source_material(VkCommandBuffer cmd,const AlphaFs& a,uint32_
         },captured) || !query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,a.cache_set,a.cache_bind,0,&c) || !c.view) {
       ++g_hair_invalid; return false;
     }
+    hair_mask_probe(a.hash, t, c);
     // Fixed208B payload: material48B, VP64B, viewport16B, near/far8B,
     // projection flag4B. Header scale.xy holds native frame phase/mode.
     auto* bytes = reinterpret_cast<uint8_t*>(&r);

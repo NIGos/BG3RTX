@@ -224,6 +224,86 @@ convert, compile before Play, cache deleted per style).** Branch claude/hair-gro
   coordinator); a live check of the v3 upload decode cost and of hair_seen.txt. The batch replaces only the files it
   writes: the 312 v2 files of older batches in data/assetdb/hair_grooms stay (and load) until someone deletes them.
 
+## 2c. Runtime capture as the converter's source (2026-11-08, offline study; branch claude/hair-runtime-capture)
+Why: granny2.dll cannot be redistributed (RAD licence; BG3 ships none), so the release converter cannot read GR2.
+Verdict: **feasible**. A groom is (card triangle in native order, barycentrics from UV, radius from the UV -> world
+Jacobian, root from the mask); every one of those inputs is drawn by the game and reachable by the layer.
+
+**What the layer sees for a CHAR_Hair draw (read-only code study).**
+- Soup (layer/geocapture.cpp): every captured draw's transform feedback, per corner in index order; position at 0
+  recovered as camera-relative world W (post-skin, post-wind: posed, not bind pose), UV0 at +16 at every alpha stride
+  (24 by default; 88 with rt_native_hair adds world N/T/B, post-wind camera-relative position and fade). No root or
+  strand channel exists on the vertices: root, alpha and strand ID are the mask's channels.
+- Indices: the draw's index range; the layer reads it when host-mapped (groom_join, index id) and can copy it by
+  GPU otherwise (buffer and offset are tracked). With the range, vertex numbering is native, so cards and the index
+  id are exact. Without it, welding identical corners breaks both (measured: 258 -> 230 vertices on one style).
+- Mask: the CHAR_Hair material binds it as a plain 2D view (NATIVE_HAIR.md: static set 1 binding 4, instanced
+  0/3; layer/alphatest.cpp kind 4 queries it with the noise view), not a VT page. Readback: a transfer copy of mip 0
+  (raw BC blocks) or the replay pack's shader read (layer/replay.cpp, shaders/replay_image.hlsl, "BCn decoded").
+- Join: the index id (when the range is read) or count + 32 UV samples (the UV join): both already name a groom file.
+
+**GR2 fields the converter uses, and the runtime replacement.**
+| GR2 field | Used by | Runtime | Loss |
+|---|---|---|---|
+| UV0 per vertex | grid, tracing, embedding | soup +16 | none (bit-identical) |
+| triangles, native order and vertex numbering | cards, triangle ids, index id, UV samples | index range (+ soup order) | none with the range |
+| bind-pose positions | radius (Jacobian), dedupe (0.5 mm), validation renders, content id | posed soup positions | radius scales with the pose's local stretch; dedupe borderline flips; position id differs (unused by the join) |
+| bone joints / weights | old .bgrm bench only | none | none for v3 |
+| skeleton Head_M / HeadEnd | head proxy (orientation, root from geometry) | sphere fit to strand roots (`capture.head_from_roots`) | a proxy, tested on synthetic roots |
+| mesh name, LOD row, catalogue category, visual id | names, LOD1 grid from LOD0, tiers, reach | index id; LOD1 linked to LOD0 by the same mask image | tiers become "seen" order; Convert all can only convert captured styles |
+| mask DDS (pak) | tracing, root, validation | bound mask mip 0 | identical if mip 0 is resident at full size (live) |
+
+**Offline equivalence** (`python -m tools.hair_groom.capture equivalence`, 3 cached styles of 330, 1178 and 25710
+triangles; the same synthetic mask on both sides, since no game texture is on this PC; CTest hair_capture_test on
+synthetic cards): with the index range, a rigid pose gives bit-identical strands, triangles and barycentrics and the
+same index id and UV samples, radii within 7e-5; a bent pose (2% of the mesh size) keeps the embedding exact and
+moves radii by 1.5-6.6% (the stretch). Before dedupe the largest style is identical too; after it 3 of 125,678
+strands differ (pairs at the 0.5 mm threshold). Without the range (welding) the embedding and the id change.
+
+**Capture design.** In bvhsplit's existing miss path (a hair draw with no groom: CountUnknown / NoFile / UvMismatch,
+already logged once per index count): once per style, record GPU copies of (1) the index range (count x 2-4 B), (2)
+the draw's soup range (count x stride: 1178-triangle style 85 KB at stride 24; 25710 triangles 1.9 MB), (3) mask mip
+0 (raw BC blocks, 2048^2 BC7 4 MB) into a host-visible staging buffer in the next capture submit; read back with the
+existing readback_state machinery and written by a worker thread to `<assetdb>/hair_capture/<index id>.hcap`
+(header: index count, stride, mask format and size, the draw's material hash; then the three blobs, LZMS). Cost: a
+few MB of copies once per style, no per-frame work (the miss set is already deduplicated); at most one capture per
+frame. The converter reads .hcap instead of GR2 + pak (`capture.from_capture` + BCn decode: Pillow reads the DDS
+formats; or the layer stores the shader-decoded RGBA8). Probe in this branch: `[hair capture] fs .. mask image N:
+format, size, mips (view base, levels), layout, usage` once per mask image (layer/alphatest.cpp, rt_native_hair only).
+Legal: the capture copies only what the game itself uploaded on the player's PC, kept locally for the player's own
+use; nothing is redistributed.
+
+**Live job** (READY_FOR_LIVE, not queued: tools/live_batches/hair_capture, hcap1-dialogue, Test Dialogue1, live_flow
+lint 0 failing): mask format / size / mips per style (resident mip 0 vs the pak DDS), stride 88 with UV, and how
+many hair draws have no host-mapped index buffer (groom stats "not mapped"). Only a live run answers those and the
+real pose stretch (card edge lengths over a few frames).
+
+**On-the-fly variant (convert while the game runs, cards meanwhile).** Stage times today (`capture stages`, 12
+cached styles spread by size, one thread, synthetic mask with each style's strand counts; GR2 decode needs the paks
+and is not included: the 2026-11-07 batch seconds exceed these totals by a median 1.1 s with pak read and GR2 dump):
+| Stage | Median s | p90 s | Share |
+|---|---|---|---|
+| grid detection + root check | 0.04 | 0.07 | 0.3% |
+| strand tracing (convert) | 4.6 | 6.3 | 46% |
+| dedupe | 0.7 | 2.2 | 14% |
+| validation renders (3 views x cards, fibres, strands) | 1.8 | 4.1 | 21% |
+| LODs + v3 write (bits, LZMS) | 1.6 | 4.0 | 18% |
+| total | 8.6 | 15.3 (max 45, 4.95 M points) | |
+Minimal runtime path: tracing + dedupe + LODs/write, with validation replaced by one cheap check (strand count and
+radius range; IoU/coverage/radiance deferred to the launcher, which can delete a failing groom): ~6.9 s typical,
+~38 s for the largest, one core. Two threads halve a party's wall time (styles in parallel), not one style's. A party
+(4 characters, hair + beards, LOD0 + LOD1: ~8-12 captures) needs ~1-1.5 min of one core. A C++ port (needed anyway:
+the release has no Python) should cut this 5-10x (typical ~1 s). Also needed for in-game swaps: the layer indexes
+groom files once; it must re-scan at a level load (~40 lines). Recommendation: **capture in game, convert in the
+launcher** (the existing child, which already offers "Also while playing" at one BelowNormal job), not an in-process
+converter: no Python or GB-scale numpy memory inside the game's process, no CPU competition in CPU-bound scenes
+(Lower City's scene thread is at its limit), and the full validation stays before a groom replaces cards. The cost
+is latency: a style seen for the first time gets strands at the next level load after its conversion.
+
+**Implementation size.** Layer capture + .hcap writer ~300-400 lines; groom re-index at a level load ~40; Python
+.hcap reader and batch source switch ~200 (tiers from the seen list); C++ converter port for the release
+(convert/strands2d/curves2d/analysis/render, ~2,000 Python lines) ~3,000-4,000 lines, the bulk of the work.
+
 ## 3. Converter quality and validation (OFFLINE-NOW)
 On screen: fewer fake tips (strands are 14 mm median pieces: crossings in the painted mask), no doubled
 strands, cleaner partings. Method: (a) stitch across card seams (end of a strand on card A to the start on
