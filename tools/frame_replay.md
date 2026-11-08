@@ -179,6 +179,15 @@ Ordinary output files contain the final dispatch; use `ab.csv` for paired timing
 
 `--ab-self-test` checks drift cancellation and confidence bounds without a GPU.
 
+The A/B summary also prints `same-pipeline repeats that changed outputs or counters: A n of N, B n of N`: each
+quartet runs each pipeline twice on identical inputs, so a nonzero count means that pipeline is not deterministic.
+
+SER prototype (branch claude/opt-ser-gi): `--ab-rgen tools/gi_trace_rgen_sun.hlsl` (or `gi_trace_rgen.hlsl` for
+gi_hit_direct) makes B the same pass as a ray generation shader (ray tracing pipeline, `vkCmdTraceRaysKHR` over A's
+grid); `--rgen-spec 1050=0|1|2` selects no reorder, a hit kind + instance hint, or a hit kind hint;
+`--define GI_SER_PREPASS_RAYS=0u` traces every ray in the loop (no prepass, no reorder). `--pipeline-stats` also
+requests ray tracing pipeline statistics (the 5090 driver reports no executable for them).
+
 ```powershell
 bin/frame_replay --pack <pack> --spv sun.spv --sun-trust trust.bin --push radius=6 `
   --ab-spec 1007=1,0 --repeat 40 --out .scratch/far-split

@@ -102,6 +102,74 @@ bool gi_hit_term_ok(float3 c, uint bin) {
 #endif
 [[vk::constant_id(1007)]] const uint kSpecGiFar = 0u;
 #endif
+#if GI_TRACE_RAYGEN
+// SER prototype (docs/progress/claude-opt-ser-gi.md; tools/gi_trace_rgen.hlsl, frame_replay --ab-rgen): the same
+// body as a ray generation shader over the same thread grid, and one reorder hint per GI ray (kGiSerHint below).
+// Offline only: no game pipeline is built from it (the layer enables no ray tracing pipeline feature).
+#if !RT_HIT_GI_DIRECT
+#error GI_TRACE_RAYGEN needs RT_HIT_GI_DIRECT (the hint reads the hit's instance)
+#endif
+[[vk::constant_id(1050)]] const uint kGiSerHint = 0u;   // shader_variant.h kSpecIdGiSer: 0 no reorder, 1 kind+instance, 2 kind
+[[vk::ext_capability(5388)]] [[vk::ext_extension("SPV_EXT_shader_invocation_reorder")]]
+[[vk::ext_instruction(5314)]] void gi_ser_reorder_hint(uint hint, uint bits);   // OpReorderThreadWithHintEXT
+// The first two GI rays are traced up front (the same setup, random stream and query as the loop below), their
+// hints combined, and the reorder issued once in uniform control flow: every thread of the launch reaches it (no
+// thread has returned yet; the constant's branch is uniform). The loop then reads these hits instead of tracing.
+// Per ray: 0 miss or unknown (nothing to shade), 1 on screen (a depth test and a radiance read, mostly), else
+// 2 + the hit's instance (its material row: the hidden-hit shading). Hint = ray 0 (high bits) | ray 1.
+static const uint kGiSerRays = 2u, kGiSerRayBits = 7u;
+#ifndef GI_SER_PREPASS_RAYS
+#define GI_SER_PREPASS_RAYS 2u   // offline diagnosis: 0 traces every ray in the body loop (no prepass hits)
+#endif
+static RtHit g_ser_hit[kGiSerRays];
+void gi_ser_prepass(uint2 id) {
+  g_rt_pass = kRtPassGI;   // as the body: aborted prepass queries count as GI unknowns
+  uint hint = 0u;
+  if (all(id < pc.half)) {
+    const uint2 fp = gi_fp(id);
+    const float d = gDepth.Load(int3(fp, 0));
+    const float2 enc = gNormal.Load(int3(fp, 0)).xy;
+    const float2 e = enc * 3.5554 - 1.7777;
+    if (!(d <= 0.0 || dot(e, e) + 1.0 > 5.4e10)) {
+      const float2 uv = (float2(fp) + 0.5) / float2(pc.full);
+      const float3 P = ray_at(uv) * d;
+      const float3 N = to_lighting_space(decode_normal(enc));
+      const float3x3 inv = frustum_inverse();
+      const float dist = length(P);
+      const float pa = pixel_angle(uv);
+      RtCone cone = {dist * pa * 2.0, pa * 2.0};
+      const float4 org = rt_origin_at(fp);
+#if RT_GI_FAR
+#error GI_TRACE_RAYGEN supports RT_SPEC_GI_FAR, not the old RT_GI_FAR define build
+#elif defined(RT_SPEC_GI_FAR)
+      const float R = kSpecGiFar != 0u ? max(pc.radius, pc.gi_rt_radius) : pc.gi_rt_radius;   // the body's R
+#else
+      const float R = pc.gi_rt_radius;
+#endif
+      uint seed = pixel_seed(fp, 0u);
+      for (uint r = 0; r < min(pc.rays, GI_SER_PREPASS_RAYS); ++r) {
+        const float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
+        const float3 o = RT_SECONDARY_ORIGIN(fp, org, P, N, dist * pa, dir);
+#ifdef RT_SPEC_NATIVE
+        if (kRtGroomAoT != 0u) g_rt_groom_ao = true;
+#endif
+        g_ser_hit[r] = rt_closest_hit(o, dir, R, cone);
+#ifdef RT_SPEC_NATIVE
+        if (kRtGroomAoT != 0u) g_rt_groom_ao = false;
+#endif
+        const RtHit hh = g_ser_hit[r];
+        float2 quv;
+        float qd;
+        const bool onscreen = !hh.aborted && hh.t >= 0.0 && project(inv, o + dir * hh.t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
+        const uint h = hh.aborted || hh.t < 0.0 ? 0u : onscreen ? 1u : kGiSerHint == 2u ? 2u : 2u + (hh.inst & 0x7Fu) % 126u;
+        hint |= h << ((kGiSerHint == 2u ? 2u : kGiSerRayBits) * (kGiSerRays - 1u - r));
+      }
+    }
+  }
+  // 1: kind + instance (7 bits per ray); 2: the hit kind only (miss, on screen, hidden: 2 bits per ray).
+  if (kGiSerHint != 0u) gi_ser_reorder_hint(hint, (kGiSerHint == 2u ? 2u : kGiSerRayBits) * kGiSerRays);
+}
+#endif
 #if RT_GI_FAR || defined(RT_SPEC_GI_FAR)
 // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"; core/gi.cpp hit_gi_dispatch, request flag kGiFar on
 // the gi_hit_sun files): rays of Push::radius (gi_far_m) instead of gi_rt_radius, the per-ray rule of
@@ -162,9 +230,30 @@ bool gi_far_roof_clear(float3 o, float3 d, float t) {
 }
 #endif
 static uint g_far_stat[kGiFarStatCount];
+#if !GI_TRACE_RAYGEN
 groupshared uint gs_far_stat[kGiFarStatCount];
+#endif
 void far_stat(uint k, float v) { g_far_stat[k] += uint(clamp(v, 0.0, 8.0) * 8192.0 + 0.5); }
 void gi_trace_px(uint3 tid);
+#if GI_TRACE_RAYGEN
+// SER prototype, far + sun (tools/gi_trace_rgen_sun.hlsl): the prepass and its reorder first, then the same body. A ray
+// generation shader has no group-shared memory: the far counters take one wave sum and one atomic per wave into the
+// bin of the wave's first lane's 8x8 compute group, as stat_add bins (totals equal the compute pass; bins may move).
+[shader("raygeneration")]
+void main() {
+  const uint3 tid = DispatchRaysIndex();
+  gi_ser_prepass(tid.xy);
+  for (uint k = 0; k < kGiFarStatCount; ++k) g_far_stat[k] = 0u;
+  gi_trace_px(tid);
+  if (pc.rt_stats != 0u && kSpecGiFar != 0u) {
+    const uint bin = WaveReadLaneFirst(((tid.x >> 3) * 7u + (tid.y >> 3) * 13u) & 63u);
+    for (uint k = 0; k < kGiFarStatCount; ++k) {
+      const uint s = WaveActiveSum(g_far_stat[k]);
+      if (WaveIsFirstLane() && s) rtStats.InterlockedAdd(((kGiFarStatFirst + k) * 64u + bin) * 4u, s);
+    }
+  }
+}
+#else
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV_GroupIndex) {
   for (uint k = 0; k < kGiFarStatCount; ++k) g_far_stat[k] = 0u;
@@ -185,63 +274,9 @@ void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV
     if (gix < kGiFarStatCount && gs_far_stat[gix]) rtStats.InterlockedAdd(((kGiFarStatFirst + gix) * 64u + bin) * 4u, gs_far_stat[gix]);
   }
 }
+#endif
 void gi_trace_px(uint3 tid) {
 #elif GI_TRACE_RAYGEN
-// SER prototype (docs/progress/claude-opt-ser-gi.md; tools/gi_trace_rgen.hlsl, frame_replay --ab-rgen): the same
-// body as a ray generation shader over the same thread grid, and one reorder hint per GI ray (kGiSerHint below).
-// Offline only: no game pipeline is built from it (the layer enables no ray tracing pipeline feature).
-#if !RT_HIT_GI_DIRECT
-#error GI_TRACE_RAYGEN needs RT_HIT_GI_DIRECT (the hint reads the hit's instance)
-#endif
-[[vk::constant_id(1050)]] const uint kGiSerHint = 0u;   // shader_variant.h kSpecIdGiSer: 0 no reorder, 1 hint
-[[vk::ext_capability(5388)]] [[vk::ext_extension("SPV_EXT_shader_invocation_reorder")]]
-[[vk::ext_instruction(5314)]] void gi_ser_reorder_hint(uint hint, uint bits);   // OpReorderThreadWithHintEXT
-// The first two GI rays are traced up front (the same setup, random stream and query as the loop below), their
-// hints combined, and the reorder issued once in uniform control flow: every thread of the launch reaches it (no
-// thread has returned yet; the constant's branch is uniform). The loop then reads these hits instead of tracing.
-// Per ray: 0 miss or unknown (nothing to shade), 1 on screen (a depth test and a radiance read, mostly), else
-// 2 + the hit's instance (its material row: the hidden-hit shading). Hint = ray 0 (high bits) | ray 1.
-static const uint kGiSerRays = 2u, kGiSerRayBits = 7u;
-static RtHit g_ser_hit[kGiSerRays];
-void gi_ser_prepass(uint2 id) {
-  uint hint = 0u;
-  if (all(id < pc.half)) {
-    const uint2 fp = gi_fp(id);
-    const float d = gDepth.Load(int3(fp, 0));
-    const float2 enc = gNormal.Load(int3(fp, 0)).xy;
-    const float2 e = enc * 3.5554 - 1.7777;
-    if (!(d <= 0.0 || dot(e, e) + 1.0 > 5.4e10)) {
-      const float2 uv = (float2(fp) + 0.5) / float2(pc.full);
-      const float3 P = ray_at(uv) * d;
-      const float3 N = to_lighting_space(decode_normal(enc));
-      const float3x3 inv = frustum_inverse();
-      const float dist = length(P);
-      const float pa = pixel_angle(uv);
-      RtCone cone = {dist * pa * 2.0, pa * 2.0};
-      const float4 org = rt_origin_at(fp);
-      const float R = pc.gi_rt_radius;
-      uint seed = pixel_seed(fp, 0u);
-      for (uint r = 0; r < min(pc.rays, kGiSerRays); ++r) {
-        const float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
-        const float3 o = RT_SECONDARY_ORIGIN(fp, org, P, N, dist * pa, dir);
-#ifdef RT_SPEC_NATIVE
-        if (kRtGroomAoT != 0u) g_rt_groom_ao = true;
-#endif
-        g_ser_hit[r] = rt_closest_hit(o, dir, R, cone);
-#ifdef RT_SPEC_NATIVE
-        if (kRtGroomAoT != 0u) g_rt_groom_ao = false;
-#endif
-        const RtHit hh = g_ser_hit[r];
-        float2 quv;
-        float qd;
-        const bool onscreen = !hh.aborted && hh.t >= 0.0 && project(inv, o + dir * hh.t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
-        const uint h = hh.aborted || hh.t < 0.0 ? 0u : onscreen ? 1u : 2u + (hh.inst & 0x7Fu) % 126u;
-        hint |= h << (kGiSerRayBits * (kGiSerRays - 1u - r));
-      }
-    }
-  }
-  if (kGiSerHint != 0u) gi_ser_reorder_hint(hint, kGiSerRayBits * kGiSerRays);
-}
 [shader("raygeneration")]
 void main() {
   const uint3 tid = DispatchRaysIndex();
@@ -322,7 +357,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
 #if GI_TRACE_RAYGEN
     RtHit hh;
-    if (r < kGiSerRays) hh = g_ser_hit[r];   // traced before the reorder (gi_ser_prepass)
+    if (r < GI_SER_PREPASS_RAYS) hh = g_ser_hit[r];   // traced before the reorder (gi_ser_prepass)
     else hh = rt_closest_hit(o, dir, R, cone);
     float t = hh.t;
     const bool aborted = hh.aborted;

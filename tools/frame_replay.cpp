@@ -540,6 +540,7 @@ std::vector<uint32_t> compile(const fs::path& hlsl, const std::vector<std::strin
   return code32;
 }
 
+void print_pipeline_stats(VkPipeline pipeline);
 // Pipeline creation is shared by replay and the pack-free GI compiler. Statistics describe
 // the specialized driver executable, rather than the unspecialized SPIR-V module.
 VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout layout) {
@@ -559,7 +560,12 @@ VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout la
   if (g.pipeline_stats) cpi.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
   VkPipeline pipeline; vkcheck(vkCreateComputePipelines(g.dev, VK_NULL_HANDLE, 1, &cpi, nullptr, &pipeline), "compute pipeline");
   vkDestroyShaderModule(g.dev, module, nullptr);
-  if (!g.pipeline_stats) return pipeline;
+  if (g.pipeline_stats) print_pipeline_stats(pipeline);
+  return pipeline;
+}
+
+// --pipeline-stats: every driver executable of a pipeline created with CAPTURE_STATISTICS (compute or ray tracing).
+void print_pipeline_stats(VkPipeline pipeline) {
   VkPipelineInfoKHR info{VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR}; info.pipeline = pipeline;
   uint32_t count = 0;
   vkcheck(g.executableProperties(g.dev, &info, &count, nullptr), "pipeline executable count");
@@ -598,7 +604,6 @@ VkPipeline make_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout la
     }
   }
   std::fflush(stdout);
-  return pipeline;
 }
 
 // --ab-rgen: a ray tracing pipeline of one raygen group (ray queries only: no miss, hit or callable records) and its
@@ -626,7 +631,9 @@ RtPipe make_rt_pipeline(const std::vector<uint32_t>& spirv, VkPipelineLayout lay
   ci.stageCount = 1; ci.pStages = &stage; ci.groupCount = 1; ci.pGroups = &group;
   ci.maxPipelineRayRecursionDepth = 1; ci.layout = layout;
   RtPipe r;
+  if (g.pipeline_stats) ci.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
   vkcheck(g.createRT(g.dev, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &ci, nullptr, &r.pipeline), "ray tracing pipeline");
+  if (g.pipeline_stats) print_pipeline_stats(r.pipeline);
   vkDestroyShaderModule(g.dev, module, nullptr);
   const uint32_t hs = g.rtp.shaderGroupHandleSize, base = g.rtp.shaderGroupBaseAlignment;
   std::vector<uint8_t> handle(hs);
@@ -1458,7 +1465,8 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   const uint32_t dispatches = ab_mode() ? 4 + repeat * 4 : repeat;
   std::ofstream ab_csv, numeric_csv;
   std::vector<double> ab_deltas;
-  RunResult pair_reference;
+  RunResult pair_reference, pair_other;   // phase 0 and phase 1 (the other pipeline) of the current quartet
+  uint32_t same_side_differs[2] = {0, 0};   // repeats of pipeline A / B within a quartet whose outputs or counters changed
   double quartet_ms[4]{};
   bool pair_outputs_equal = true, pair_counters_equal = true;
   bool all_outputs_equal = true, all_counters_equal = true;
@@ -1607,6 +1615,15 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
         pair_reference = rr;
         pair_outputs_equal = pair_counters_equal = true;
       } else {
+        // Determinism of each pipeline on its own: phase 2 repeats phase 1's pipeline, phase 3 phase 0's.
+        auto same = [](const RunResult& x, const RunResult& y) {
+          bool eq = x.raw_stats == y.raw_stats && x.outputs.size() == y.outputs.size();
+          for (size_t i = 0; eq && i < x.outputs.size(); ++i) eq = x.outputs[i].raw == y.outputs[i].raw;
+          return eq;
+        };
+        if (phase == 1) pair_other = rr;
+        else if (phase == 2) same_side_differs[use_b] += same(pair_other, rr) ? 0u : 1u;
+        else same_side_differs[use_b] += same(pair_reference, rr) ? 0u : 1u;
         pair_counters_equal &= pair_reference.raw_stats == rr.raw_stats;
         pair_outputs_equal &= pair_reference.outputs.size() == rr.outputs.size();
         for (size_t i = 0; i < rr.outputs.size() && i < pair_reference.outputs.size(); ++i)
@@ -1754,6 +1771,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                   all_outputs_equal ? "100% bit-equal" : "DIFFER", all_counters_equal ? "100% bit-equal" : "DIFFER");
     std::printf("[replay] %s\n", line);
     std::ofstream(out / "ab_summary.txt") << line << '\n';
+    // Same pipeline, same inputs, twice per quartet: a nonzero count means that pipeline is not deterministic.
+    std::printf("[replay] same-pipeline repeats that changed outputs or counters: A %u of %zu, B %u of %zu\n",
+                same_side_differs[0], ab_deltas.size(), same_side_differs[1], ab_deltas.size());
     if (g_ab_require_equal && !(all_outputs_equal && all_counters_equal)) g_reference_mismatch = true;
   }
   std::sort(timings.begin(), timings.end());

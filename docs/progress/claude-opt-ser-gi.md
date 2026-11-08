@@ -53,3 +53,45 @@
   the game path needs the layer: RT pipeline feature, entry points, ABI). Recommendation: park SER.
 - Status on main (2026-11-08): verdict NOT EVALUATED ON GAME DATA (fixtures have one material, no sun or far-field);
   next step is the production far+sun variant on game replay packs (below).
+
+## SER on game frames: production far + sun trace (branch claude/opt-ser-gi, offline, 2026-11-08)
+- Setup: packs camp 013545-2, inn 013914-3, S8 142819-1 (test-main captures, read-only). Production Ultra compute
+  module gi_trace_rt_hit_sun.hlsl (RT_SPEC_NATIVE, RT_SPEC_HIT_INST, RT_SPEC_GI_FAR; the pack's RT_CASCADE_MASKS=1
+  on camp/inn instead of RT_SPEC_CASCADE, which cannot combine with it), specs 1003=1 1004=1 1007=1 1008=0 1010=0
+  1020=0 1026=0 1029=1 1038=1 1044=0, --sun-trust (pt_roofs levels WLD_Main_A / SCL_Main_A / CTY_Main_A), push
+  radius 6, rays 2, rt_stats 0, --ab-warmup 8, 40 ABBA/BAAB pairs. No emission (the packs have no emissive set).
+  Every run guarded by nvidia-smi (3-6% idle, desktop apps only) and a process check: no game, no DXC; all clean.
+- Baseline (same-module control, ms): camp 8.64 (delta +0.009 [-0.112, +0.079]), inn 2.32 (+0.100 [-0.164, +0.218]),
+  S8 3.12 (+0.082 [-0.010, +0.198]); outputs and counters 100% bit-equal. Inn and S8 absolute ms move 2.2-3.8 between
+  runs (clocks at this low load); only paired deltas are compared.
+- Port: tools/gi_trace_rgen_sun.hlsl = the far + sun module as a raygen; the far counters' group-shared reduction is a
+  per-wave sum into the first lane's 8x8-group bin (totals equal compute; bins may move). rt_stats=0 path unchanged.
+  Hint 1050=1 kind + instance (14 bits), 1050=2 kind only (4 bits); GI_SER_PREPASS_RAYS=0u = raygen without prepass.
+  spirv-val passes; validation layers: no error except the replay's missing set 1 b19 (tileset sampler, both
+  pipelines, unused at 1008=0). No device loss. Compute requests: 30/30 gi_trace_rt* byte-identical to main.
+- NOT bit-equal on game data (the --ab-require-equal gate fails): raygen vs compute differ on camp 380866 of 2.73M
+  pixels (14%), S8 1.3%; the old hit_direct port too (fixture: 37 components). Each pipeline is deterministic (new
+  same-pipeline check: 0 of 40 repeats changed); channel means equal within 0.04%, rt_stats=1 counter totals within
+  0.04% (rays equal). The hint changes outputs too (camp 376222 pixels vs hint off), which the fixture never showed:
+  some result depends on the lane/wave placement of a thread. Cause not found (no wave op or missing
+  NonUniformResourceIndex outside stats; candidates: tie order of equal-t candidates, an undefined read).
+- Raygen vs production compute, median delta [95% CI] ms, 40 pairs each:
+  - camp: no prepass -2.577 [-2.826, -2.394]; prepass, hint off -2.501 [-2.678, -2.386];
+    hint kind + instance -3.205 [-3.298, -3.030]; hint kind -3.210 [-3.356, -3.100].
+  - inn: -0.611 [-0.666, -0.440]; -0.181 [-0.312, -0.016]; -0.241 [-0.309, -0.107]; -0.160 [-0.283, -0.094].
+  - S8: -0.278 [-0.353, -0.147]; -0.045 [-0.216, +0.065]; -0.120 [-0.285, +0.000]; -0.202 [-0.260, -0.141].
+- Reading: the ray tracing stage itself is faster than the compute dispatch on all three packs (camp 30%), with no
+  reorder. SER adds about -0.7 ms on camp (foliage, divergent) over the prepass, little on S8, and the prepass costs
+  0.1-0.4 ms (inn: no prepass -0.61 beats every hint variant). The driver reports no ray tracing pipeline statistics,
+  so the stage's register / occupancy difference cannot be read (compute: 243 registers, 44 B shared).
+- Cost breakdown of the compute trace (paired, ms of A in the same run): far on/off 1007: camp -5.75 of 8.66 (66%),
+  inn -2.51 of 3.78, S8 -2.50 of 3.79; hidden-hit shading (hit_direct vs gi_trace_rt base, far off): camp -1.05 of
+  2.43, inn -0.34 of 1.36, S8 -0.94 of 1.65; sun (sun vs direct module, far off): camp -0.31, inn +0.04 (noise),
+  S8 -0.21 [-0.33, +0.004]; roof early 1038 off: camp -0.05 (noise), inn +0.82, S8 +0.92 (it saves that much);
+  compact hit state 1029 off: noise on all. Rays 1 (unpaired runs): camp 4.6 vs 8.6 ms. Far-field rays dominate.
+- Verdict by the rule (hint-on CI below the control's lower bound on 2 of 3 packs): met by the kind hint (camp,
+  S8), not by kind + instance (camp only). Not productised: the gain is mostly the stage, not reordering, the outputs
+  are not bit-equal, and a game path needs the layer's ray tracing pipeline (feature, entry points, ABI).
+- Next: find the lane-dependent result (it may affect the compute pass as well); then a raygen GI trace without
+  prepass (largest, simplest win), with the reorder hint only as an option for divergent scenes.
+- Receipts: worktree .scratch/ser/<pack>-{self,rgen*,bd-*}/ (run.log, ab.csv, guards).
