@@ -46,3 +46,15 @@
 - Camp not run: "Campsite - 27h" no longer exists; the job now uses "Test Campsite" (not run).
 - Status: key stays off. Open: the energy question (more OFF/ON pairs), camp, the 60 s first build (warm the pipeline
   at load), reorder=1 in game, launcher page.
+
+## Live 2026-11-08 17:16 (grp1-camp, Test Campsite: VALID, one GPU error)
+- The raygen pipeline was ready at the first ON switch (driver cache from the inn run): no 60 s build.
+- nvlddmkm event 153 ("Error occurred on GPUID: 100") at 17:18:05, inside cost-on-a (ON since 17:17:48). No device
+  loss, no fault line in bg3rtx.log, the game continued. It is the only nv153 in 42 queue runs of more than 30 s
+  (the 10:59-11:02 burst was the SER/other-game crash in the morning). Treated as a possible RT pipeline fault.
+- cost-on-a is confounded by it: every pass slower, also those the key does not touch (rf +0.95, ls +0.75 ms).
+  cost-on-b: trace pass -2.12 ms (12.30 / 13.78 OFF vs 10.92 ON; OFF spread 1.48 ms), whole GI -1.09, rt passes -1.48.
+- Energy: ON vs mean OFF +0.13% and -0.04% (OFF-OFF spread 0.13%): unchanged. With the inn (-0.32 / -0.35%) the sign
+  is not consistent, so no energy shift is shown.
+- Status: key stays off. Blocker before any qualification: explain the nv153 (validation layers and device-fault
+  reports on the raygen path offline; no rerun of the live until then).
