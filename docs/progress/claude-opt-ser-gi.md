@@ -32,3 +32,22 @@
   counter totals equal.
 - Reading: the earlier +0.31 ms was the shared GPU. The raygen port alone costs nothing measurable beyond ~35 us
   per launch; any SER gain still depends on the hint path, which stays untested. Fixture not representative.
+
+## SER prototype: reorder hint at uniform control flow (branch claude/opt-ser-gi, offline, 2026-11-08)
+- Fix: gi_ser_prepass traces the first two GI rays up front (same setup, random stream and query), combines their
+  hints (7 bits each: 0 miss/unknown, 1 on screen, 2 + instance) and issues one OpReorderThreadWithHintEXT (14 bits)
+  before any thread returns; the loop then reads those hits. SPV_EXT_shader_invocation_reorder only restricts the
+  instruction to RayGenerationKHR (the hint form needs no hit object; no control-flow rule is stated).
+  spirv-val passes; compute requests 221/221 byte-identical to main 11d14456.
+- 64x64 with the Khronos validation layer plus GPU-assisted and sync validation: hint OFF and hint ON, no validation
+  error, no device loss, outputs and counters bit-equal to compute.
+- 3072^2 lit fixture (3.4% hits), 40 ABBA/BAAB pairs each vs compute: raygen OFF +0.307 ms median [+0.247, +0.314]
+  (the up-front traces cost about 0.25 ms more than the in-loop version above), hint ON +0.638 [+0.165, +1.535]
+  (clock-noisy). Hint ON output = hint OFF output, 0 differing components.
+- Striped fixture (--synth-stripes, synthetic: one material quad behind 2-pixel strips, neighbouring threads alternate
+  miss / qualified hidden hit, 37% hits): compute median 0.979 ms; raygen OFF +0.266 [+0.155, +0.386];
+  raygen + hint +0.015 [-0.064, +0.047] (mean -0.175 [-0.424, +0.074]). Outputs: hint ON = hint OFF exactly; vs
+  compute 258 of 9.4M half components differ by 1 ulp (stage codegen); counters equal.
+- Reading: the hint recovers the raygen port's cost on divergent work but does not beat compute here. Not
+  representative (one material, no sun/far; the production far + sun variant with groupshared stats is not ported;
+  the game path needs the layer: RT pipeline feature, entry points, ABI). Recommendation: park SER.
