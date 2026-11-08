@@ -154,9 +154,11 @@ document.fonts?.ready?.then(fitChoices);
 function sectionHead(root,id) {const head=el('div','section-head');head.append(el('h2','section-title',labels[id]||id));if(leads[id])head.append(el('p','section-lead',leads[id]));root.append(head);}
 function shortcutsCard(id) {
  const box=el('article','card shortcuts');box.append(el('h3','','Keyboard shortcuts'));
- const name=id==='hotkey_rt_toggle'?'All ray tracing off/on':'DLSS 5 off/on';
+ const names={hotkey_rt_toggle:'All ray tracing off/on',hotkey_dlss5:'DLSS 5 off/on',hotkey_rtx_hair:'RTX Hair off/on'};
+ const defaults={hotkey_rt_toggle:'Ctrl+Shift+F9',hotkey_dlss5:'Ctrl+Shift+F8',hotkey_rtx_hair:'Ctrl+Shift+F7'};
+ const name=names[id];
  const label=el('label','shortcut-label',name),input=el('input');input.type='text';input.readOnly=true;input.id=id;
- input.value=state.shortcuts?.[id]||(id==='hotkey_rt_toggle'?'Ctrl+Shift+F9':'Ctrl+Shift+F8');
+ input.value=state.shortcuts?.[id]||defaults[id];
  input.placeholder='Press a key combination';input.setAttribute('aria-label',name+' ? press a key combination');
  const help=el('p','help-copy','Select the field and press a key combination. Delete or Backspace disables it. Escape cancels.');
  input.onfocus=()=>{input.value='';};input.onblur=()=>{input.value=state.shortcuts?.[id]||'None';};
@@ -174,8 +176,8 @@ function shortcutsCard(id) {
    if(!/^(F[1-9]|F1[0-2]|[A-Z0-9])$/.test(key))return;
    value=(e.ctrlKey?'Ctrl+':'')+(e.shiftKey?'Shift+':'')+(e.altKey?'Alt+':'')+key;
   }
-  const other=id==='hotkey_dlss5'?'hotkey_rt_toggle':'hotkey_dlss5';
-  if(value!=='None'&&((e.ctrlKey&&e.shiftKey&&e.key.toUpperCase()==='F10')||value===state.shortcuts?.[other])){help.textContent='This shortcut is already in use. Choose another combination.';input.value=value;return;}
+  const others=Object.keys(names).filter(o=>o!==id);
+  if(value!=='None'&&((e.ctrlKey&&e.shiftKey&&e.key.toUpperCase()==='F10')||others.some(o=>value===state.shortcuts?.[o]))){help.textContent='This shortcut is already in use. Choose another combination.';input.value=value;return;}
   send('shortcut',{id,value});
  };
  const reset=el('button','btn','Reset to default');reset.onclick=()=>send('resetShortcut',{id});
@@ -183,6 +185,7 @@ function shortcutsCard(id) {
  input.setAttribute('aria-describedby',id+'-help');help.id=id+'-help';
  const actions=el('div','row');actions.append(reset,disable);label.append(input);box.append(label,help,actions);
  if(id==='hotkey_dlss5')box.append(el('p','help-copy','Works while playing when DLSS 5 was On at game start.'));
+ if(id==='hotkey_rtx_hair')box.append(el('p','help-copy','Turns RTX Hair off and on while playing. Saving RTX Hair applies the saved choice again.'));
  return box;
 }
 // First-run preparation (docs/RTX_HAIR_ROADMAP.md 2b, tools/launcher/preparation.cpp): the host sends
@@ -309,6 +312,7 @@ function renderSettings() {
   const d=el('details','exp');d.open=experimentalOpen;const summary=el('summary');summary.id='experimental-summary';summary.append(pill('Experimental','exp'),el('span','','Unqualified features. Cost and output may vary.'));d.append(summary);const g=el('div','grid');experimental.forEach(s=>g.append(card(s)));if(!experimental.length)g.append(el('p','help-copy','Experimental choices are available on their feature cards when expanded.'));d.append(g);d.ontoggle=()=>{if(experimentalOpen!==d.open){experimentalOpen=d.open;send('experimental',{value:d.open});}};root.append(d);
  }
  if(section==='Advanced'||section==='DLSS 5')root.append(shortcutsCard(section==='Advanced'?'hotkey_rt_toggle':'hotkey_dlss5'));
+ if(section==='Lighting')root.append(shortcutsCard('hotkey_rtx_hair'));
  fitChoices();
 }
 function renderNavigation() {

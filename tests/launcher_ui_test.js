@@ -50,7 +50,8 @@ assert(!ids.get('navigation').children.some(e=>e.id==='nav-Developer'));
   assert.deepStrictEqual(act(control),fromHome,id+' sends the same message from Home and '+page);
   ids.get('nav-Home').onclick();
  }
- assert.strictEqual(ids.get('home-hair').children[0].children[1].textContent,'Restart to apply','RTX Hair keeps its restart note');
+ // 5m: RTX Hair applies while playing (a session started without it gets the restart banner, not a card badge).
+ assert.strictEqual(ids.get('home-hair').children[0].children[1].textContent,'Applies after saving','RTX Hair shows its live note');
  // Preparation on Home: hair row with Pause and When to convert in the RTX Hair card, shaders row in the Shaders card.
  assert(!ids.get('prep-pause')||!home().includes(ids.get('prep-pause')),'no hair actions without preparation data');
  const prep={items:[{id:'hair',title:'Strand hair',line:'3 of 5 styles ready, 0.1 GB on disk.',detail:'Converting companions, about 2 min left.',progress:0.6,state:'running'},
@@ -105,6 +106,13 @@ ids.get('nav-Lighting').onclick();
 assert.deepStrictEqual(all(ids.get('section-content')).filter(e=>e.tagName==='article'&&e.id).map(e=>e.id),
  // RTX Hair (exp_hair_groom_primary) is a release Lighting card since 0.9.5, after Hair shadows.
  ['rt_geometry','rr','sun_shadows','gi','exp_hidden_surface','local_shadows','box_lights','exp_native_coverage','exp_hair_groom_primary','rt_intensity'].map(id=>'card-'+id));
+// hotkey_rtx_hair (5m): the RTX Hair shortcut sits on Lighting, below the cards; a combination another shortcut holds
+// never reaches the bridge.
+const hairKey=ids.get('hotkey_rtx_hair');assert(hairKey,'RTX Hair shortcut missing on Lighting');
+count=sent.length;hairKey.onkeydown(event('F9'));assert.strictEqual(sent.length,count,'RTX Hair shortcut conflict reached bridge');
+hairKey.onkeydown(event('F10'));assert.strictEqual(sent.length,count,'reserved F10 reached bridge');
+hairKey.onkeydown({...event('H'),ctrlKey:false,shiftKey:false,altKey:true});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'shortcut',id:'hotkey_rtx_hair',value:'Alt+H'});
 assert(!ids.has('summary')&&!ids.has('report'),'duplicate summary or report entry');
 const rr=ids.get('control-rr-0');assert(rr.type==='checkbox'&&rr.attributes['aria-label']);
 rr.focus();render(fixture);assert.strictEqual(document.activeElement,ids.get(rr.id),'focus lost on bridge update');

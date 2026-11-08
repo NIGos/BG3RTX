@@ -333,7 +333,7 @@ void load_state(State& s) {
   s.values = st::knob_values(raw);
   s.loaded = s.values;
   s.dlss5_runtime_path = s.loaded_dlss5_runtime_path = st::lookup(raw, "dlss5_nr_runtime");
-  for(int i=0;i<2;++i){const char* key=i==0?"hotkey_rt_toggle":"hotkey_dlss5";auto v=st::lookup(raw,key);s.shortcuts[i]=s.loaded_shortcuts[i]=v.empty()?st::code_default(key):v;}
+  for(int i=0;i<3;++i){const char* key=i==0?"hotkey_rt_toggle":i==1?"hotkey_dlss5":"hotkey_rtx_hair";auto v=st::lookup(raw,key);s.shortcuts[i]=s.loaded_shortcuts[i]=v.empty()?st::code_default(key):v;}
   auto it = s.user.find("preset");
   int p = it == s.user.end() ? -1 : st::preset_from_id(it->second);
   if (p < 0) p = st::matching_preset(s.values);
@@ -342,7 +342,7 @@ void load_state(State& s) {
 
 st::KVList forced_keys(const State& s) {
   st::KVList f;
-  f.emplace_back("hotkey_rt_toggle",s.shortcuts[0]);f.emplace_back("hotkey_dlss5",s.shortcuts[1]);
+  f.emplace_back("hotkey_rt_toggle",s.shortcuts[0]);f.emplace_back("hotkey_dlss5",s.shortcuts[1]);f.emplace_back("hotkey_rtx_hair",s.shortcuts[2]);
   f.emplace_back("dlss5_nr_runtime", s.dlss5_runtime_path);
   // No ray query: nothing to enable at device creation.
   if (s.have_gpu && !(s.caps & st::kCapRayQuery)) f.emplace_back("rt", "0");
@@ -359,7 +359,7 @@ bool save_state(State& s, std::wstring* err) {
   s.user_text = text;
   s.user = st::parse_ini(text);
   s.loaded = s.values;
-  for(int i=0;i<2;++i)s.loaded_shortcuts[i]=s.shortcuts[i];
+  for(int i=0;i<3;++i)s.loaded_shortcuts[i]=s.shortcuts[i];
   s.loaded_dlss5_runtime_path = s.dlss5_runtime_path;
   return true;
 }
