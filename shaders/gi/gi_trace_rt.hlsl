@@ -196,9 +196,56 @@ void gi_trace_px(uint3 tid) {
 [[vk::constant_id(1050)]] const uint kGiSerHint = 0u;   // shader_variant.h kSpecIdGiSer: 0 no reorder, 1 hint
 [[vk::ext_capability(5388)]] [[vk::ext_extension("SPV_EXT_shader_invocation_reorder")]]
 [[vk::ext_instruction(5314)]] void gi_ser_reorder_hint(uint hint, uint bits);   // OpReorderThreadWithHintEXT
+// The first two GI rays are traced up front (the same setup, random stream and query as the loop below), their
+// hints combined, and the reorder issued once in uniform control flow: every thread of the launch reaches it (no
+// thread has returned yet; the constant's branch is uniform). The loop then reads these hits instead of tracing.
+// Per ray: 0 miss or unknown (nothing to shade), 1 on screen (a depth test and a radiance read, mostly), else
+// 2 + the hit's instance (its material row: the hidden-hit shading). Hint = ray 0 (high bits) | ray 1.
+static const uint kGiSerRays = 2u, kGiSerRayBits = 7u;
+static RtHit g_ser_hit[kGiSerRays];
+void gi_ser_prepass(uint2 id) {
+  uint hint = 0u;
+  if (all(id < pc.half)) {
+    const uint2 fp = gi_fp(id);
+    const float d = gDepth.Load(int3(fp, 0));
+    const float2 enc = gNormal.Load(int3(fp, 0)).xy;
+    const float2 e = enc * 3.5554 - 1.7777;
+    if (!(d <= 0.0 || dot(e, e) + 1.0 > 5.4e10)) {
+      const float2 uv = (float2(fp) + 0.5) / float2(pc.full);
+      const float3 P = ray_at(uv) * d;
+      const float3 N = to_lighting_space(decode_normal(enc));
+      const float3x3 inv = frustum_inverse();
+      const float dist = length(P);
+      const float pa = pixel_angle(uv);
+      RtCone cone = {dist * pa * 2.0, pa * 2.0};
+      const float4 org = rt_origin_at(fp);
+      const float R = pc.gi_rt_radius;
+      uint seed = pixel_seed(fp, 0u);
+      for (uint r = 0; r < min(pc.rays, kGiSerRays); ++r) {
+        const float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
+        const float3 o = RT_SECONDARY_ORIGIN(fp, org, P, N, dist * pa, dir);
+#ifdef RT_SPEC_NATIVE
+        if (kRtGroomAoT != 0u) g_rt_groom_ao = true;
+#endif
+        g_ser_hit[r] = rt_closest_hit(o, dir, R, cone);
+#ifdef RT_SPEC_NATIVE
+        if (kRtGroomAoT != 0u) g_rt_groom_ao = false;
+#endif
+        const RtHit hh = g_ser_hit[r];
+        float2 quv;
+        float qd;
+        const bool onscreen = !hh.aborted && hh.t >= 0.0 && project(inv, o + dir * hh.t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
+        const uint h = hh.aborted || hh.t < 0.0 ? 0u : onscreen ? 1u : 2u + (hh.inst & 0x7Fu) % 126u;
+        hint |= h << (kGiSerRayBits * (kGiSerRays - 1u - r));
+      }
+    }
+  }
+  if (kGiSerHint != 0u) gi_ser_reorder_hint(hint, kGiSerRayBits * kGiSerRays);
+}
 [shader("raygeneration")]
 void main() {
   const uint3 tid = DispatchRaysIndex();
+  gi_ser_prepass(tid.xy);
 #else
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -273,7 +320,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #ifdef RT_SPEC_NATIVE
     if (kRtGroomAoT != 0u) g_rt_groom_ao = true;   // rt_hair_groom_ao_t: this ray sees the strands' transmittance
 #endif
-#if SHARC_QUERY_PASS || RT_HIT_GI_DIRECT
+#if GI_TRACE_RAYGEN
+    RtHit hh;
+    if (r < kGiSerRays) hh = g_ser_hit[r];   // traced before the reorder (gi_ser_prepass)
+    else hh = rt_closest_hit(o, dir, R, cone);
+    float t = hh.t;
+    const bool aborted = hh.aborted;
+#elif SHARC_QUERY_PASS || RT_HIT_GI_DIRECT
     RtHit hh = rt_closest_hit(o, dir, R, cone);
     float t = hh.t;
     const bool aborted = hh.aborted;
@@ -310,12 +363,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
     float2 quv;
     float qd;
     bool onscreen = !aborted && t >= 0.0 && project(inv, o + dir * t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
-#if GI_TRACE_RAYGEN
-    // Group the threads by what this ray does next: 0 miss or unknown (nothing), 1 on screen (a depth test and a
-    // radiance read, mostly), else the hit's instance (its material row: the hidden-hit shading below).
-    if (kGiSerHint != 0u)
-      gi_ser_reorder_hint(aborted || t < 0.0 ? 0u : onscreen ? 1u : 2u + (hh.inst & 0x3FFFu), 16u);
-#endif
     bool visible = false;
 #if (RT_GI_FAR || defined(RT_SPEC_GI_FAR)) && RT_HIT_GI_SUN
     bool screen_roof_blocked = false;
