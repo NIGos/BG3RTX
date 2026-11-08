@@ -51,3 +51,5 @@
 - Reading: the hint recovers the raygen port's cost on divergent work but does not beat compute here. Not
   representative (one material, no sun/far; the production far + sun variant with groupshared stats is not ported;
   the game path needs the layer: RT pipeline feature, entry points, ABI). Recommendation: park SER.
+- Status on main (2026-11-08): verdict NOT EVALUATED ON GAME DATA (fixtures have one material, no sun or far-field);
+  next step is the production far+sun variant on game replay packs (below).

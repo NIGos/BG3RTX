@@ -1,0 +1,11 @@
+{
+ "job": "sh1-camp-scene-wait-fg2",
+ "observable": "[pace] rendered frame time median per window, [rt] scene wait mean per 120-frame window",
+ "predictions": [
+  {"window": "cost-wait-on-a / cost-wait-on-b", "scene_wait_mean_ms": "2-4 (session baseline after the OMM refusal fix)"},
+  {"window": "cost-wait-off", "scene_wait": "0 waited"},
+  {"metric": "frame time(on) - frame time(off)", "expected_ms": "0 to 3",
+   "decision": "< 0.5 ms (within the on-a/on-b spread): the wait is off the critical path, drop the handout; >= 1 ms: build the update-after-bind handout (TRACK_D_SCENE_BUILD.md)"},
+  {"metric": "rt passes GPU ms, gi GPU ms", "expected": "equal across windows within noise"}
+ ]
+}
