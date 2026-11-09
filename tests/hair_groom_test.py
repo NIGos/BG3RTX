@@ -795,6 +795,59 @@ def test_shading_spaces(rng):
           and "kFlagMacroNormal = 1u << 4, kFlagTangentWorld = 1u << 5" in header)
 
 
+def test_strand_edge():
+    """5m (rr_hair_strand_aa): the twins of rr_strand_aa.hlsl and the offline edge model (tools/hair_groom/edge_stability.py)."""
+    from tools.hair_groom import edge_stability as es
+    rng = np.random.default_rng(7)
+    u = rng.uniform(-0.5, 0.5, (400000, 2))
+    worst = 0.0
+    for d, w, a in ((0.2, 0.15, 0.4), (0.0, 0.05, 1.1), (0.55, 0.2, 2.0), (-0.3, 0.4, 0.0), (0.1, 0.02, 0.785)):
+        nx, ny = np.cos(a), np.sin(a)
+        mc = (np.abs(u @ np.array([nx, ny]) - d) < w).mean()
+        worst = max(worst, abs(mc - float(es.box_strand_coverage(np.array([d]), w, nx, ny)[0])))
+    # Monte Carlo sigma <= 0.5 / sqrt(400000) = 0.0008: 4 sigma.
+    check(f"strand edge: box coverage of a band equals Monte Carlo (worst {worst:.4f})", worst < 0.0032)
+    worst = 0.0
+    for d, w, a in ((0.2, 0.05, 0.4), (1.3, 0.1, 1.1), (0.0, 0.02, 2.0), (0.7, 0.3, 0.2)):
+        nx, ny = np.cos(a), np.sin(a)
+        j = u[:20000]
+        hit = np.zeros(len(j), bool)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):   # the ray of the neighbour (dx, dy) samples its unjittered centre plus the jitter
+                hit |= np.abs(d + nx * dx + ny * dy - (j @ np.array([nx, ny]))) < w
+        worst = max(worst, abs(hit.mean() - float(es.found_probability(np.array([d]), w, nx, ny)[0])))
+    check(f"strand edge: found probability equals the 3 x 3 jittered rays (worst {worst:.4f})", worst < 0.015)
+    # The game's resolve twin is the identity on a uniform image and keeps a pixel without both groups.
+    x = np.full((8, 8), 0.3)
+    tags = np.zeros((8, 8), bool); tags[2:5, 2:5] = True
+    check("strand edge: resolve twin keeps a uniform image", np.allclose(es.resolve(x, tags), 0.3))
+    check("strand edge: resolve twin leaves untagged images alone", np.array_equal(es.resolve(x * np.arange(1, 9), tags * False), x * np.arange(1, 9)))
+    # Decorrelated rays (rejected): the shared Halton jitter converges faster on an ideal accumulator.
+    res = es.strand_aa_run(frames=54, angles=(0.37, 1.1), strand_px=0.3, window=1, box="centre", weight=True)
+    tags = es.resolve_run(frames=54, angles=(0.37, 1.1), strand_px=0.3)
+    print(json.dumps({"strand_edge": res, "strand_tags": {k: tags[k] for k in ("off", "on")}}))
+    on, aa, off = res["on"], res["aa"], tags["off"]
+    check(f"strand edge: analytic coverage halves the accumulated edge flicker of the raw strands ({aa['ema_flicker']:.4f} vs "
+          f"{on['ema_flicker']:.4f}) and is below the card-tag resolve's ({off['ema_flicker']:.4f})",
+          aa["ema_flicker"] < 0.5 * on["ema_flicker"] and aa["ema_flicker"] < off["ema_flicker"])
+    check(f"strand edge: analytic coverage error below the raw samples' ({aa['ema_rmse']:.4f} vs {on['ema_rmse']:.4f})",
+          aa["ema_rmse"] < on["ema_rmse"])
+    # Coverage model change, gated against the area reference (whole image): its bias (the found strands' summed
+    # overlap) below the bias of the path it replaces (the game's resolve on card tags); the raw path is the unbiased
+    # control, within 4 binomial sigma of its mean.
+    sig = 4 * np.sqrt(0.25 / (on["edge_pixels"] * 36))
+    check(f"strand edge: analytic coverage edge energy {aa['energy']:+.4f} closer to the reference than the card-tag "
+          f"resolve's {off['energy']:+.4f} (whole image {aa['frame_energy']:+.4f} vs {off['frame_energy']:+.4f}); raw "
+          f"{on['frame_energy']:+.4f} within {sig:.4f}",
+          abs(aa["energy"]) < abs(off["energy"]) and abs(on["frame_energy"]) < sig)
+    check(f"strand edge: untagged strands remove the card-tag resolve bias ({tags['on']['energy']:+.4f} vs {off['energy']:+.4f})",
+          abs(tags["on"]["energy"]) < abs(off["energy"]))
+    src = (ROOT / "shaders/rr_strand_aa.hlsl").read_text()
+    layer = (ROOT / "layer/rrpost.cpp").read_text(encoding="utf-8")
+    check("strand edge: the shader's estimator is sum of c / P over the 3 x 3 found strands, the layer dispatches it by key",
+          "cov += hp_box_coverage(d, w, n2) * along / max(pf, 1e-3);" in src and 'cfg_int("rr_hair_strand_aa", 0)' in layer
+          and '"strand_resolve") == 0) return "rr_strand_aa.hlsl";' in layer)
+
 def test_coverage():
     """M3.2 (rt_hair_groom_coverage): the pair's twins and its offline gate against the supersampled area coverage."""
     py, px = np.mgrid[0:4, 0:4]
@@ -1466,7 +1519,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_strand_edge, test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

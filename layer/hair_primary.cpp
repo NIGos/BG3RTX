@@ -923,6 +923,17 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     } else {
       dsv.depthWriteEnable = VK_FALSE;
     }
+    {   // 5m (rr_hair_strand_aa): which hair passes write the stencil tags the game's dither resolve (7401d785) reads.
+      static int stencil_notes = 0;
+      if (stencil_notes < 6) {
+        ++stencil_notes;
+        char t[200];
+        std::snprintf(t, sizeof t, "[hair primary] %s hair pipeline stencil: test %u, write mask 0x%02x, pass op %d, reference 0x%02x",
+                      pass == Pass::Gbuffer ? "G-buffer" : pass == Pass::Velocity ? "velocity" : "prepass", ds->stencilTestEnable,
+                      ds->front.writeMask, int(ds->front.passOp), ds->front.reference);
+        notes.push_back(t);
+      }
+    }
     VkGraphicsPipelineCreateInfo vci = ci;
     vci.pStages = stages.data();
     vci.pDepthStencilState = &dsv;

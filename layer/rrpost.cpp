@@ -28,6 +28,7 @@
 #include "host.h"
 #include "recording_init.h"
 #include "../common/pipeline_async.h"
+#include "../common/hair_primary.h"
 
 #include <cmath>
 #include <cstring>
@@ -83,6 +84,16 @@ struct Push {
   uint32_t bmin[2], bmax[2];
 };
 static_assert(sizeof(Push) == 96, "Push must match rr_post.hlsl");
+
+// rr_hair_strand_aa: rr_strand_aa.hlsl's push (the same 96-byte range), sent through run() in a Push's bytes.
+struct StrandPush {
+  float vp[16];        // this frame's G-buffer camera-relative jittered view-projection (row-major, v * M)
+  float cam[3];        // its camera position
+  uint32_t jitter;     // half2 jitter in render pixels
+  uint32_t bmin, bmax; // x | y << 15; bmin bits 30-31 the mode
+  uint32_t header[2];  // hair primary header address
+};
+static_assert(sizeof(StrandPush) == sizeof(Push), "StrandPush must match rr_strand_aa.hlsl");
 
 struct Binds {
   VkImageView in[3] = {};
@@ -159,8 +170,8 @@ struct Pipe {
   VkPipeline pipe = VK_NULL_HANDLE;
   uint64_t gen = 0;
 };
-Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"temporal"}, {"temporal_final"}};
-enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_TEMPORAL, P_TEMPORAL_FINAL };
+Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"temporal"}, {"temporal_final"}, {"strand_resolve"}};
+enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_TEMPORAL, P_TEMPORAL_FINAL, P_STRAND };
 std::string g_last_logged_why;
 uint64_t g_completed = 0, g_broken_frames = 0;
 
@@ -367,6 +378,7 @@ bool ensure_layout(DeviceData* dd) {
 // asking rr_post.hlsl for a temporal entry fails to compile ("missing entry point definition").
 const char* entry_source(const char* entry) {
   if (strcmp(entry, "temporal") == 0 || strcmp(entry, "temporal_final") == 0) return "rr_post_temporal.hlsl";
+  if (strcmp(entry, "strand_resolve") == 0) return "rr_strand_aa.hlsl";
   return "rr_post.hlsl";
 }
 
@@ -833,6 +845,54 @@ void on_dof(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
   g_ch.stage = 2;
 }
 
+// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5m): with strands on screen, the dither resolve with the strand footprint
+// untagged (1), plus the analytic strand coverage (2), rr_strand_aa.hlsl. Needs the hair primary header and this frame's
+// G-buffer camera; without them (or with the key off) the game's resolve runs as before. Live.
+uint32_t half_bits(float v) {
+  const uint32_t f = [&] { uint32_t u; memcpy(&u, &v, 4); return u; }();
+  const uint32_t sign = (f >> 16) & 0x8000u;
+  const int e = int((f >> 23) & 0xFF) - 127 + 15;
+  if (e <= 0) return sign;                       // |v| < 2^-14: flushed (a jitter below 6e-5 px)
+  if (e >= 31) return sign | 0x7BFFu;
+  return sign | (uint32_t(e) << 10) | ((f >> 13) & 0x3FFu);
+}
+uint64_t g_strand_frames = 0, g_strand_missing = 0, g_strand_logged_at = 0;
+int g_strand_mode_logged = -1;
+bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const Push& pc, const uint32_t ext[2]) {
+  const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 2);
+  if (mode != g_strand_mode_logged) {
+    g_strand_mode_logged = mode;
+    log("[rrpost] rr_hair_strand_aa=%d: %s", mode, mode == 0 ? "the game's dither resolve" :
+        mode == 1 ? "dither resolve with the strand footprint untagged" : "strand footprint untagged + analytic strand coverage");
+  }
+  if (mode <= 0) return false;
+  const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
+  StrandPush sp{};
+  float jit[2] = {};
+  const bool ok = hp && hp->header && pc.bmax[0] < 32768u && pc.bmax[1] < 32768u &&
+                  ngx_gbuffer_camera(sp.vp, sp.cam, jit, g_ch.w, g_ch.h);
+  if (ok) {
+    sp.jitter = half_bits(jit[0]) | (half_bits(jit[1]) << 16);
+    sp.bmin = pc.bmin[0] | (pc.bmin[1] << 15) | (uint32_t(mode) << 30);
+    sp.bmax = pc.bmax[0] | (pc.bmax[1] << 15);
+    sp.header[0] = uint32_t(hp->header);
+    sp.header[1] = uint32_t(hp->header >> 32);
+    Push raw;
+    memcpy(&raw, &sp, sizeof raw);
+    if (!run(dd, cmd, P_STRAND, b, raw, (ext[0] + 15) / 16, (ext[1] + 15) / 16)) return false;   // not built yet: the game's
+    ++g_strand_frames;
+  } else {
+    ++g_strand_missing;
+  }
+  if (frame_index() >= g_strand_logged_at + 600) {
+    g_strand_logged_at = frame_index();
+    log("[rrpost] strand resolve (rr_hair_strand_aa=%d): %llu frames, %llu without the hair header or the G-buffer camera",
+        mode, (unsigned long long)g_strand_frames, (unsigned long long)g_strand_missing);
+    g_strand_frames = g_strand_missing = 0;
+  }
+  return ok;
+}
+
 void on_resolve(DeviceData* dd, VkCommandBuffer cmd) {
   g_step = "resolve (U)";
   touch(cmd);
@@ -861,6 +921,7 @@ void on_resolve(DeviceData* dd, VkCommandBuffer cmd) {
   b.out11 = g_xr.view;
   to_general(dd, cmd, {&g_xr});
   uint32_t ext[2] = {pc.bmax[0] - pc.bmin[0] + 1, pc.bmax[1] - pc.bmin[1] + 1};
+  if (strand_resolve(dd, cmd, b, pc, ext)) { g_ch.stage = 3; return; }
   if (!run(dd, cmd, P_RESOLVE, b, pc, (ext[0] + 15) / 16, (ext[1] + 15) / 16)) return breaks("resolve pipeline");
   g_ch.stage = 3;
 }
@@ -1153,9 +1214,10 @@ void rrpost_prewarm(DeviceData* dd) {
   g_prewarmed = true;
   unsigned count = 0;
   for (const auto& p : g_pipes)
-    count += g_builds.prewarm(p.entry, uint64_t(g_pl), [dd, entry=p.entry] {
-      return compile_background(dd, entry);
-    }) ? 1u : 0u;
+    if (strcmp(p.entry, "strand_resolve") != 0 || cfg_int("rr_hair_strand_aa", 0) != 0)
+      count += g_builds.prewarm(p.entry, uint64_t(g_pl), [dd, entry=p.entry] {
+        return compile_background(dd, entry);
+      }) ? 1u : 0u;
   log("[rrpost] Experimental prewarm: %u startup pipelines (RR order, below normal priority)", count);
 }
 void rrpost_join_prewarm() { g_builds.join(); g_prewarmed = false; }
