@@ -52,10 +52,12 @@ def make_plan():
                 wait_log_timeout=180)
     warm_inputs = timed(step("warm-inputs", 2, frames=0), 1.1)   # pan_inputs=1 once before the measured windows
     warm_inputs["set"] = warm_inputs["set"].replace(",pan_inputs=0", ",pan_inputs=1")
-    plan = [warm, warm_inputs, timed(step("warm-debug", 3, frames=0), 1.1), timed(step("warm-untag", 1, frames=0), 1.1),
+    # f-debug (mode 3) is captured already (he1 2026-11-09 03:01, trace 20261109-030300); its readiness timed out on the
+    # 03:04 rerun before the bursts, so this job measures the static pairs and the two bursts only.
+    plan = [warm, warm_inputs, timed(step("warm-untag", 1, frames=0), 1.1),
             timed(step("warm-base", 0, frames=0), 1.1),
             step("a-off", 0, True), step("b-aa", 2, True), step("c-off", 0, True), step("d-aa", 2, True),
-            step("e-untag", 1, True), step("f-debug", 3, True)]
+            step("e-untag", 1, True)]
     # K8 bursts on a still camera (edge flicker without registration), in timed windows that outlast the capture: the
     # 2026-11-09 he1 burst-off window closed with its 60-frame stats period (2 s at 30 fps) while the burst armed at
     # 01:41:57.998 was still recording, so its completion line fell outside (fail-fast 01:42:00.025). Like
@@ -106,7 +108,6 @@ def make_job(plan):
     j["expect"] += [r"\[hair primary\] (?:prepass|G-buffer) hair pipeline stencil: test \d, write mask 0x[0-9a-f]{2}",
                     r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built",
                     r"\[rrpost\] rr_hair_strand_aa=0:", r"\[rrpost\] rr_hair_strand_aa=1:", r"\[rrpost\] rr_hair_strand_aa=2:",
-                    r"\[rrpost\] rr_hair_strand_aa=3:",
                     r"\[rrpost\] strand snapshots \(rr_hair_strand_aa=\d\): [1-9]\d* at the lighting pass"]
     j["patterns"] += [r"\[rrpost\]", r"hair pipeline stencil"]
     # The edge resolve must build: a pipeline creation or DXC call failure (layer/rrpost.cpp compile_pipeline, which

@@ -107,7 +107,6 @@
     "\\[rrpost\\] rr_hair_strand_aa=0:",
     "\\[rrpost\\] rr_hair_strand_aa=1:",
     "\\[rrpost\\] rr_hair_strand_aa=2:",
-    "\\[rrpost\\] rr_hair_strand_aa=3:",
     "\\[rrpost\\] strand snapshots \\(rr_hair_strand_aa=\\d\\): [1-9]\\d* at the lighting pass"
   ],
   "forbid": [
@@ -145,17 +144,16 @@
   "expect_runner": [
     "window-mode.*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=15\\b",
-    "\\[motion-trace\\] phase=6 label=a-off repeat=0",
-    "\\[motion-trace\\] phase=7 label=b-aa repeat=0",
-    "\\[motion-trace\\] phase=8 label=c-off repeat=0",
-    "\\[motion-trace\\] phase=9 label=d-aa repeat=0",
-    "\\[motion-trace\\] phase=10 label=e-untag repeat=0",
-    "\\[motion-trace\\] phase=11 label=f-debug repeat=0"
+    "\\[motion-plan\\] complete phases=13\\b",
+    "\\[motion-trace\\] phase=5 label=a-off repeat=0",
+    "\\[motion-trace\\] phase=6 label=b-aa repeat=0",
+    "\\[motion-trace\\] phase=7 label=c-off repeat=0",
+    "\\[motion-trace\\] phase=8 label=d-aa repeat=0",
+    "\\[motion-trace\\] phase=9 label=e-untag repeat=0"
   ],
   "stop_on_dump": true,
   "purpose": "rr_hair_strand_aa 0/2/0/2 (+1) in one Test Dialogue1 run with RTX Hair on: PNG pairs and K8 pan bursts for strand edge flicker (tools/hair_groom/temporal_burst.py), energy and the render-res chain GPU ms. READY_FOR_LIVE, not authorized.",
-  "estimated_phase_seconds": 91.0,
+  "estimated_phase_seconds": 81.7,
   "expect_every": [
     {
       "name": "zero refused pipelines",
@@ -169,7 +167,6 @@
         "c-off",
         "d-aa",
         "e-untag",
-        "f-debug",
         "burst-off",
         "burst-aa"
       ]
@@ -186,7 +183,6 @@
         "c-off",
         "d-aa",
         "e-untag",
-        "f-debug",
         "burst-off",
         "burst-aa"
       ],
@@ -204,7 +200,6 @@
         "c-off",
         "d-aa",
         "e-untag",
-        "f-debug",
         "burst-off",
         "burst-aa"
       ],
@@ -222,7 +217,6 @@
         "c-off",
         "d-aa",
         "e-untag",
-        "f-debug",
         "burst-off",
         "burst-aa"
       ]
@@ -258,8 +252,7 @@
         "b-aa",
         "c-off",
         "d-aa",
-        "e-untag",
-        "f-debug"
+        "e-untag"
       ]
     }
   ],
