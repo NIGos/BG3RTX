@@ -1,0 +1,199 @@
+{
+ "name": "sh2-s8-scene-handout",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 900,
+ "max_minutes": 15,
+ "repeat": 1,
+ "live_batch": "rel095-verify",
+ "tree": ".claude/worktrees/test-main",
+ "fail_fast": true,
+ "stop_on_dump": false,
+ "set": "preset=ultra,fg=3,fps_cap=0,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rr_hair_strand_aa=2,rt_capture_wide_split=1,rt_scene_handout_layout=1,rt_scene_handout=0,rt_stats_period_frames=60,rt_hit_material=0,rt_hit_material_instanced=0,rt_hit_material_wind_rgb=0,gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rf_hit_gi=0,rt_hit_emission=0,rt_emissive=0,gi_far=0",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "tools/live_batches/rel095_verify/plans/sh2_s8.json"
+ ],
+ "patterns": [
+  "\\[auto\\]",
+  "\\[cfg\\]",
+  "\\[hot\\]",
+  "\\[watch\\]",
+  "\\[trace\\]",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[mem\\]",
+  "\\[vram\\]",
+  "\\[cascade\\]",
+  "\\[geo\\] RT capture",
+  "\\[bvh\\] mesh (cache|pool)",
+  "\\[rt\\] scene wait",
+  "rt passes: GPU cost",
+  "gi: GPU cost",
+  "\\[sl\\] DLSS-G frame",
+  "\\[sl\\] warn",
+  "\\[rrpost\\] strand resolve",
+  "\\[rrpost\\] exposure (held|hold)",
+  "\\[hair primary\\] frame",
+  "VK_ERROR",
+  "\\[log\\]",
+  "\\[rt\\] scene handout",
+  "\\[core\\] scene handout",
+  "\\[alpha\\] set 1 layout",
+  "\\[rt\\] \\+ scene handout",
+  "\\[pace\\]",
+  "rt stats \\(",
+  "\\[rt\\] scene build GPU"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[cfg\\] settings read",
+  "\\[mem\\] ours \\(\\w+\\): BLAS chunks \\d+ MB reserved in \\d+ chunks",
+  "\\[mem\\] device-local VRAM of this process: used [1-9]\\d* MB, budget [1-9]\\d* MB",
+  "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+  "\\[geo\\] RT capture, last \\d+ frames:",
+  "\\[trace\\] frame \\d+ written",
+  "\\[rt\\] \\+ scene handout layout: storage buffer, sampled image",
+  "\\[rt\\] scene handout layout on \\(set 1 update-after-bind\\)",
+  "\\[alpha\\] set 1 layout update-after-bind",
+  "\\[rt\\] scene handout: dummy TLAS \\(0 instances",
+  "\\[rt\\] scene handout: \\d+ frames, reserved",
+  "\\[pace\\] rendered frame time over \\d+ frames",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "\\[cascade\\] could not allocate",
+  "\\[log\\] reached \\d+ MB",
+  "\\[sl\\] .*eWarnOutOfVRAM",
+  "\\[rt\\] scene handout layout off",
+  "\\[rt\\] scene handout: dummy TLAS (allocation|creation) failed",
+  "\\[layer\\] optional scene handout update-after-bind request failed"
+ ],
+ "expect_every": [
+  {
+   "name": "handout: no wait in the ON windows (every first query handed out or got its scene at once, mean < 0.1 ms)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "(\\d+) waited \\(\\1 got this frame's scene, 0 timeouts, \\d+ skipped\\), wait mean 0\\.0\\d\\d ms, max [0-9.]+ ms, handed out [1-9]",
+   "min": 1,
+   "windows": [
+    "turn-on-r",
+    "turn-on-l",
+    "static-on"
+   ]
+  },
+  {
+   "name": "handout: 0 fallbacks and 0 pairing mismatches in the steady ON windows",
+   "select": "\\[rt\\] scene handout: \\d+ frames, reserved",
+   "match": "fallbacks 0 \\(.*\\), pairing mismatches 0,",
+   "min": 1,
+   "windows": [
+    "turn-on-l",
+    "static-on"
+   ],
+   "period_frames": 120
+  },
+  {
+   "name": "handout: frames handed out in the ON windows",
+   "select": "\\[rt\\] scene handout: \\d+ frames, reserved",
+   "match": "handed out [1-9]",
+   "min": 1,
+   "windows": [
+    "turn-on-r",
+    "turn-on-l",
+    "static-on"
+   ],
+   "period_frames": 120
+  },
+  {
+   "name": "scene wait: 0 timeouts in every timed window",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-on-r",
+    "turn-on-l",
+    "static-on",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  },
+  {
+   "name": "primary-ray check in every check window (match compared offline: ON equal to OFF within the OFF a/b spread)",
+   "select": "rt stats \\(\\d+ frames, alpha test on\\): primary-ray check match",
+   "match": "primary-ray check match [0-9.]+%",
+   "min": 1,
+   "windows": [
+    "check-off-a",
+    "check-on",
+    "check-off-b"
+   ],
+   "period_frames": 60
+  },
+  {
+   "name": "frame time in every timed window",
+   "select": "\\[pace\\] rendered frame time over \\d+ frames",
+   "match": "median [0-9.]+ ms",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-on-r",
+    "turn-on-l",
+    "static-on",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  },
+  {
+   "name": "capacity: RT capture drops no opaque draw in every timed window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-on-r",
+    "turn-on-l",
+    "static-on",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  }
+ ],
+ "expect_runner": [
+  "\\[motion-trace\\] phase=4 label=static-off-a repeat=0",
+  "\\[motion-trace\\] phase=8 label=static-on repeat=0",
+  "\\[motion-trace\\] phase=12 label=static-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=15\\b",
+  "^Run ended: done"
+ ],
+ "live_flow": {
+  "expected_fps": 60,
+  "settings_latency_s": 1,
+  "trace_stall_s": 3,
+  "startup_only": [
+   "rt_scene_handout_layout"
+  ]
+ },
+ "estimated_phase_seconds": 315,
+ "purpose": "rt_scene_handout 0 / 2 / 0 at S8, uncapped and focused (Ultra without native hit materials): with the handout the lighting's first RT query no longer waits for the scene build (wait mean 2-7 ms -> < 0.1 ms, got = waited, 0 timeouts), 0 fallbacks and 0 pairing mismatches in the steady ON windows, rt_primary_check match and the static energy equal to the OFF windows, rendered frame time lower by up to the OFF wait."
+}

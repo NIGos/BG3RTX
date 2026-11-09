@@ -1593,6 +1593,36 @@ void alpha_stamp_scene(uint32_t slot, uint64_t reference, uint64_t traversal) {
   w[4] = uint32_t(reference); w[5] = uint32_t(reference >> 32);
   w[6] = uint32_t(traversal); w[7] = uint32_t(traversal >> 32);
 }
+// rt_scene_handout=2 (common/scene_handout.h): a slot's set (fixed per slot for the device's lifetime).
+VkDescriptorSet alpha_slot_set(uint32_t slot) { return slot < kRing ? g_sets[slot] : VK_NULL_HANDLE; }
+
+// The handout fallback: set `dst` becomes a copy of set `src` (every binding the layer writes; the immutable samplers
+// 4/5 are the layout's). Only with the update-after-bind layout: `dst` may already be bound by a recording that is not
+// submitted yet. The views and tables of `src` now live in `dst` too (its dirty ranges and life-extended handles).
+bool alpha_copy_set(uint32_t src, uint32_t dst) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_dd || !g_uab || src >= kRing || dst >= kRing || src == dst || !g_set_init[src]) return false;
+  VkCopyDescriptorSet copies[13]{};
+  uint32_t count = 0;
+  for (uint32_t binding : {0u, 1u, 2u, 3u, 6u, 7u, 8u, 9u, 10u, 11u, 19u}) {
+    if (binding == 19 && !g_tileset_binding) continue;
+    if ((binding == 10 || binding == 11) && !g_omm_layout) continue;
+    auto& c = copies[count++];
+    c = {VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
+    c.srcSet = g_sets[src]; c.dstSet = g_sets[dst]; c.srcBinding = c.dstBinding = binding;
+    c.descriptorCount = binding == 19 ? kNativeSamplers : binding == 2 ? kTextures : binding == 3 ? kCaches : 1u;
+  }
+  g_dd->vk.UpdateDescriptorSets(g_dd->device, 0, nullptr, count, copies);
+  // The whole arrays were copied: the next commit into `dst` rewrites at least what `src` held.
+  g_set_tex[dst] = (std::max)(g_set_tex[dst], g_set_tex[src]);
+  g_set_cache[dst] = (std::max)(g_set_cache[dst], g_set_cache[src]);
+  g_set_init[dst] = true;
+  g_set_handles[dst] = g_set_handles[src];
+  g_set_extended[dst] = 0;
+  g_slot_native_samplers[dst] = g_slot_native_samplers[src];
+  return true;
+}
+
 bool alpha_stamp_traversal_to_reference(uint32_t slot) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_stamp_map || slot >= kRing) return false;

@@ -266,9 +266,116 @@ job3["expect_runner"] = [
     "^Run ended: done",
 ]
 
+# sh2 (scene handout increment 3, claude/scene-handout-3, docs/SCENE_HANDOUT_DESIGN.md 6): Water Queens House, uncapped
+# and focused (frame time is the deliverable), rt_scene_handout 0 / 2 / 0 in turns and static windows of one launch.
+# rt_scene_handout_layout=1 from launch (startup key: the update-after-bind set 1 and the dummy TLAS; it changes no
+# frame by itself, increment 1). Native hit materials off (exp_hidden_surface Off): their per-dispatch query reads the
+# committed slot on the CPU, so the handout is refused with them (increment 4). Short rt_stats + rt_primary_check
+# windows (about 80 ms/frame) only after the timed windows of each state.
+PLAN4 = "tools/live_batches/rel095_verify/plans/sh2_s8.json"
+NO_HIT = ("rt_hit_material=0,rt_hit_material_instanced=0,rt_hit_material_wind_rgb=0,gi_hit_direct=0,gi_hit_sun=0,"
+          "rf_hit_shade=0,rf_hit_gi=0,rt_hit_emission=0,rt_emissive=0,gi_far=0")
+SET4 = (SET.replace("fg=3", "fg=3,fps_cap=0").replace("rt_capture_rise_reserve=0", "rt_capture_rise_reserve=1") +
+        ",rt_capture_wide_split=1,rt_scene_handout_layout=1,rt_scene_handout=0,rt_stats_period_frames=60," + NO_HIT)
+
+
+QUIET4 = "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+
+
+def phase4(label, seconds, handout, kind="static", direction=0, hold=1, trace=None, check=False, toggle=False):
+    p = phase(label, seconds, (0, 1), kind, direction, None, hold, trace)
+    p["set"] = (f"rt_scene_handout={handout},rt_stats={int(check)},rt_primary_check={int(check)},"
+                f"qa_exposure_hold={hold}")
+    # A toggle of rt_scene_handout re-selects constant 1051 in every gi/ and water pipeline: wait for a quiet driver
+    # (tools/live_batches/pipeline_readiness.py) before the window's clock starts.
+    if toggle:
+        p["wait_log"] = [QUIET4]
+        p["wait_log_fresh"] = [QUIET4]
+        p["wait_log_timeout"] = 60.0
+    return p
+
+
+plan4 = [
+    phase4("warmup", 20, 0, hold=0),
+    phase4("warm-on", 8, 2, hold=0, toggle=True),   # builds the constant-1051 pipelines before the first measured ON window
+    phase4("turn-off-a-r", 20, 0, "rotate", 1, toggle=True),
+    phase4("turn-off-a-l", 20, 0, "rotate", -1),
+    phase4("static-off-a", 15, 0, trace=12),
+    phase4("check-off-a", 40, 0, check=True),
+    phase4("turn-on-r", 20, 2, "rotate", 1, toggle=True),
+    phase4("turn-on-l", 20, 2, "rotate", -1),
+    phase4("static-on", 15, 2, trace=12),
+    phase4("check-on", 40, 2, check=True),
+    phase4("turn-off-b-r", 20, 0, "rotate", 1, toggle=True),
+    phase4("turn-off-b-l", 20, 0, "rotate", -1),
+    phase4("static-off-b", 15, 0, trace=12),
+    phase4("check-off-b", 40, 0, check=True),
+    phase4("restore", 2, 0, hold=0),
+]
+ON4 = ["turn-on-r", "turn-on-l", "static-on"]
+STEADY4 = ["turn-on-l", "static-on"]
+OFF4 = ["turn-off-a-r", "turn-off-a-l", "static-off-a", "turn-off-b-r", "turn-off-b-l", "static-off-b"]
+CHECK4 = ["check-off-a", "check-on", "check-off-b"]
+TIMED4 = OFF4[:3] + ON4 + OFF4[3:]
+WAIT_LINE = "\\[rt\\] scene wait: \\d+ frames"
+HANDOUT_LINE = "\\[rt\\] scene handout: \\d+ frames, reserved"
+job4 = copy.deepcopy(job)
+job4.update({
+    "name": "sh2-s8-scene-handout",
+    "set": SET4,
+    "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", PLAN4],
+    "fail_fast": True,
+    "timeout": 900,
+    "max_minutes": 15,
+    "estimated_phase_seconds": sum(p["seconds"] for p in plan4),
+    "purpose": "rt_scene_handout 0 / 2 / 0 at S8, uncapped and focused (Ultra without native hit materials): with the "
+               "handout the lighting's first RT query no longer waits for the scene build (wait mean 2-7 ms -> < 0.1 ms, "
+               "got = waited, 0 timeouts), 0 fallbacks and 0 pairing mismatches in the steady ON windows, rt_primary_check "
+               "match and the static energy equal to the OFF windows, rendered frame time lower by up to the OFF wait.",
+})
+job4.pop("window_mode")   # focused (the game takes the focus: no unfocused 30 fps cap; ask the user first)
+job4["patterns"] = job["patterns"] + ["\\[rt\\] scene handout", "\\[core\\] scene handout", "\\[alpha\\] set 1 layout",
+                                      "\\[rt\\] \\+ scene handout", "\\[pace\\]", "rt stats \\(", "\\[rt\\] scene build GPU"]
+job4["expect"] = [e for e in job["expect"] if "exposure held" not in e] + [
+    "\\[rt\\] \\+ scene handout layout: storage buffer, sampled image",
+    "\\[rt\\] scene handout layout on \\(set 1 update-after-bind\\)",
+    "\\[alpha\\] set 1 layout update-after-bind",
+    "\\[rt\\] scene handout: dummy TLAS \\(0 instances",
+    HANDOUT_LINE,
+    "\\[pace\\] rendered frame time over \\d+ frames",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+]
+job4["forbid"] = job["forbid"] + ["\\[rt\\] scene handout layout off", "\\[rt\\] scene handout: dummy TLAS (allocation|creation) failed",
+                                  "\\[layer\\] optional scene handout update-after-bind request failed"]
+job4["expect_every"] = [
+    every("handout: no wait in the ON windows (every first query handed out or got its scene at once, mean < 0.1 ms)",
+          WAIT_LINE, "(\\d+) waited \\(\\1 got this frame's scene, 0 timeouts, \\d+ skipped\\), wait mean 0\\.0\\d\\d ms, "
+          "max [0-9.]+ ms, handed out [1-9]", ON4),
+    every("handout: 0 fallbacks and 0 pairing mismatches in the steady ON windows", HANDOUT_LINE,
+          "fallbacks 0 \\(.*\\), pairing mismatches 0,", STEADY4, period_frames=120),
+    every("handout: frames handed out in the ON windows", HANDOUT_LINE, "handed out [1-9]", ON4, period_frames=120),
+    every("scene wait: 0 timeouts in every timed window", WAIT_LINE, "got this frame's scene, 0 timeouts", TIMED4),
+    every("primary-ray check in every check window (match compared offline: ON equal to OFF within the OFF a/b spread)",
+          "rt stats \\(\\d+ frames, alpha test on\\): primary-ray check match", "primary-ray check match [0-9.]+%", CHECK4,
+          period_frames=60),
+    every("frame time in every timed window", "\\[pace\\] rendered frame time over \\d+ frames", "median [0-9.]+ ms", TIMED4),
+    every("capacity: RT capture drops no opaque draw in every timed window",
+          "\\[geo\\] RT capture, last \\d+ frames:", "opaque draws dropped \\(buffer full\\) 0\\.00,", TIMED4),
+]
+job4["expect_runner"] = [
+    "\\[motion-trace\\] phase=4 label=static-off-a repeat=0",
+    "\\[motion-trace\\] phase=8 label=static-on repeat=0",
+    "\\[motion-trace\\] phase=12 label=static-off-b repeat=0",
+    f"\\[motion-plan\\] complete phases={len(plan4)}\\b",
+    "^Run ended: done",
+]
+job4["live_flow"] = {"expected_fps": 60, "settings_latency_s": 1, "trace_stall_s": 3,
+                     "startup_only": ["rt_scene_handout_layout"]}
+
 (HERE / "plans" / "rv1_s8.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
 (HERE / "plans" / "rv2_s8.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
 (HERE / "plans" / "rv3_s8.json").write_text(json.dumps(plan3, indent=1) + "\n", encoding="utf-8")
-for j in (job, job2, job3):
+(HERE / "plans" / "sh2_s8.json").write_text(json.dumps(plan4, indent=1) + "\n", encoding="utf-8")
+for j, pl in ((job, plan), (job2, plan), (job3, plan3), (job4, plan4)):
     (HERE / "jobs" / f"{j['name']}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
-    print(f"{j['name']}: {len(plan3 if j is job3 else plan)} phases, {j['estimated_phase_seconds']} s")
+    print(f"{j['name']}: {len(pl)} phases, {j['estimated_phase_seconds']} s")

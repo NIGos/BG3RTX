@@ -177,6 +177,10 @@ Corrections to 3.3/3.4: water binding 64 is the water-surface TLAS, not the scen
 rt_common (binding 18) and gets 1051 like the GI passes. The dummy at binding 18 moves to increment 3: while a
 spec-0 pipeline may still run (async rebuild after a toggle) binding 18 must stay the real TLAS.
 
+Increment 3 done (2026-11-09, branch claude/scene-handout-3, off by default, READY_FOR_LIVE, no live): `rt_scene_handout=2`,
+common/scene_handout.h + scene_handout_test (every interleaving, mutation control), ABI 30, live job sh2-s8-scene-handout.
+Not covered (increment 4): OMM acceleration on reserved slots, native hit materials (Ultra's Far bounce refuses the handout).
+
 Total 4-5.5 days after a go from increment 0. Gate to start 1: sh1 frame time(on) - frame time(off) >= 1 ms
 (below 0.5 ms, inside the on-a/on-b spread: drop the handout, keep only S1/S2 if cheap).
 

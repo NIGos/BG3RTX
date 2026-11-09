@@ -75950,6 +75950,131 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_scene_handout",
+          "2"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_scene_handout",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "qa_exposure_hold",
+          "1"
+        ],
+        [
+          "rt_scene_handout",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_primary_check",
+          "0"
+        ],
+        [
+          "rt_scene_handout",
+          "2"
+        ],
+        [
+          "rt_stats",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_primary_check",
+          "0"
+        ],
+        [
+          "rt_scene_handout",
+          "0"
+        ],
+        [
+          "rt_stats",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -78512,6 +78637,38 @@
       null
     ],
     "\\[bvh\\] allocation failed": [
+      0,
+      null
+    ],
+    "\\[rt\\] \\+ scene handout layout: storage buffer, sampled image": [
+      0,
+      null
+    ],
+    "\\[rt\\] scene handout layout on \\(set 1 update-after-bind\\)": [
+      0,
+      null
+    ],
+    "\\[alpha\\] set 1 layout update-after-bind": [
+      0,
+      null
+    ],
+    "\\[rt\\] scene handout: dummy TLAS \\(0 instances": [
+      0,
+      null
+    ],
+    "\\[rt\\] scene handout: \\d+ frames, reserved": [
+      0,
+      null
+    ],
+    "\\[rt\\] scene handout layout off": [
+      0,
+      null
+    ],
+    "\\[rt\\] scene handout: dummy TLAS (allocation|creation) failed": [
+      0,
+      null
+    ],
+    "\\[layer\\] optional scene handout update-after-bind request failed": [
       0,
       null
     ]

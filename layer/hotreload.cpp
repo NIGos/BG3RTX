@@ -215,6 +215,7 @@ void core_init(DeviceData* dd) {
   g_host.rr_active = &ngx_rr_active;
   g_host.rt_emissive = &em_scene;
   g_host.rt_scene_set = &rt_scene_set;
+  g_host.rt_scene_handout = &rt_scene_handout;   // ABI 30
   g_host.rt_omm_scene_reference=&rt_omm_scene_reference;
   g_host.rt_sun_scene = nullptr; // Retired current-sun callback; ABI slot remains reserved.
   g_host.rt_hit_material_use=&rt_hit_material_use;

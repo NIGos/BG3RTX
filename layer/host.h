@@ -601,6 +601,10 @@ bool rt_scene_handout_layout();
 // The empty dummy TLAS (scene handout): VK_NULL_HANDLE until its build was recorded into a command buffer that was
 // submitted. Recorded once into the first scene build's command buffer (rt_after_capture) when the layout is on.
 VkAccelerationStructureKHR rt_scene_dummy_tlas();
+// rt_scene_handout=2 (increment 3, common/scene_handout.h): the reserved slot's set and the dummy TLAS for `cmd`
+// (no wait, no scene lock); and the resolution of open handouts at every vkQueueSubmit, before the driver call.
+bool rt_scene_handout(VkCommandBuffer cmd, VkDescriptorSet* set, VkAccelerationStructureKHR* dummy, uint64_t* frame);
+void rt_scene_handout_submit(const std::vector<VkCommandBuffer>& cmds);
 void rt_device_destroyed(DeviceData* dd);
 bool rt_enabled();                         // AS + ray query are on the device
 // Build the scene this frame: rt_build (after the settings layer resolves
@@ -1010,6 +1014,9 @@ bool alpha_omm_commit(VkCommandBuffer cmd,uint32_t slot);
 // sets the traversal address to the reference one (true when it changed).
 void alpha_stamp_scene(uint32_t slot, uint64_t reference, uint64_t traversal);
 bool alpha_stamp_traversal_to_reference(uint32_t slot);
+// rt_scene_handout=2: a slot's set; the fallback copy of set `src` into set `dst` (update-after-bind layout only).
+VkDescriptorSet alpha_slot_set(uint32_t slot);
+bool alpha_copy_set(uint32_t src, uint32_t dst);
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);

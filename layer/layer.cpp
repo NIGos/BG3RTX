@@ -530,6 +530,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
     if(submits[i].commandBufferCount) cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
   if (trace_recording()) trace_on_submit(cmds);
   order_log_submit("submit", cmds);
+  rt_scene_handout_submit(cmds);   // rt_scene_handout=2: resolve a handed-out scene set before anything marks this batch
   if (geo_submit_wanted()) geo_on_submit(cmds);
   if(!batch || !cmds.empty()) bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   if(!batch || !cmds.empty()) pan_on_submit(cmds);
@@ -597,6 +598,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   }
   submits=content.data_or(submits);
   order_log_submit("submit", cmds);
+  rt_scene_handout_submit(cmds);   // rt_scene_handout=2: resolve a handed-out scene set before anything marks this batch
   if (geo_submit_wanted()) geo_on_submit(cmds);
   if(!batch || !cmds.empty()) bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   if(!batch || !cmds.empty()) pan_on_submit(cmds);

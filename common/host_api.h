@@ -28,7 +28,8 @@
 // 28: GPU completion and retained exact recording lifecycle queries. Rebuild both DLLs.
 // 29: ray tracing pipeline GI trace (gi_rt_pipeline): Bg3HostApi::rt_pipeline (appended), the three ray tracing
 //     pipeline entry points in VkDeviceFuncs (common/vk_funcs.h). Rebuild both DLLs.
-#define BG3RTX_ABI_VERSION 29
+// 30: scene handout (docs/SCENE_HANDOUT_DESIGN.md increment 3): Bg3HostApi::rt_scene_handout (appended). Rebuild both DLLs.
+#define BG3RTX_ABI_VERSION 30
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -395,6 +396,13 @@ struct Bg3HostApi {
   // layer enabled VK_KHR_ray_tracing_pipeline + VK_EXT_ray_tracing_invocation_reorder and their features, resolved the
   // entry points, and the alpha (set 1) and emissive descriptor set layouts also name the raygen stage.
   Bg3RtPipelineInfo rt_pipeline;
+  // ABI 30 (rt_scene_handout=2, layer/rtscene.cpp, common/scene_handout.h): this frame's reserved scene set and the
+  // empty dummy TLAS for the RT passes recorded into `cmd`, before the scene is built: no wait. Binding 18 then takes
+  // the dummy; spec-1051 shaders trace the scene by the address the build writes into the set's stamp. Every command
+  // buffer that binds the pair calls it (the layer resolves the set at that buffer's submit): the first with *set null,
+  // the others with *set = the set they bind (they join only that handout). false: no handout (the caller takes
+  // rt_scene_set as before). *frame: the frame it was handed out in.
+  bool (*rt_scene_handout)(VkCommandBuffer cmd, VkDescriptorSet* set, VkAccelerationStructureKHR* dummy, uint64_t* frame);
 };
 
 struct Bg3CoreApi {
