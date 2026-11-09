@@ -23,3 +23,5 @@
   confounded (whole-frame flicker +130% between them). Energy +0.31%, cost +0.11 ms. tools/hair_groom/edge_burst.py added.
 - Snapshot sites (rr_hair_strand_snap_site 0/1/2/3 merged) with per-site device-local counters; he1 with site 3, a counter
   window and counterbalanced bursts off/aa/off/aa; predicted.json revised before the run.
+- he1 04:02: not a pass: band/core flicker ratio unchanged (no edge-specific temporal gain), edge hf -14%, d-aa trace
+  unchanged, energy -0.55%, cost +0.18 ms. Not proposed for the bundle.
