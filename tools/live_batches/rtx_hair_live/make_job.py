@@ -50,20 +50,24 @@ def phase(label, seconds, keys, trace=True, wait=None, fresh=None, timeout=20, f
 
 ON_EDGE = "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch {n}\\)"
 OFF_EDGE = "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch {n}\\)"
+# Readiness waits on pipeline quiescence only (pipeline_readiness adds it for the changed keys). The switch edges are
+# job expectations, never readiness patterns: rhl1 2026-11-09 went INVALID because a second settings read after the
+# edge moved camera-plan's fresh-observation start past it (scripts/camera-plan.ps1 takes the last acknowledging
+# [cfg] keys record), although the edge was logged 3 ms after the first one.
 W = 12   # seconds per measured window (FRAMES at the lint's unfocused FPS model plus the trace)
 plan = [
     phase("warmup", 20, f"rt_hair=1,{OFF}", trace=False, wait=["\\[auto\\] scene ready", "\\[cfg\\] settings read", QUIET],
           fresh=[QUIET], timeout=180),
     # Every value once before the measured windows (strand variants, fibre and guide pipelines resident). This is the
     # session's first strand activation: the game started cards only.
-    phase("warmup-on", 10, f"rt_hair=1,{ON}", trace=False, wait=[ON_EDGE.format(n=1), QUIET], fresh=[ON_EDGE.format(n=1), QUIET],
+    phase("warmup-on", 10, f"rt_hair=1,{ON}", trace=False, wait=[QUIET], fresh=[QUIET],
           timeout=90),
-    phase("warmup-off", 6, f"rt_hair=0,{ON}", trace=False, wait=[OFF_EDGE.format(n=1)], fresh=[OFF_EDGE.format(n=1)]),
+    phase("warmup-off", 6, f"rt_hair=0,{ON}", trace=False),
     phase("base-a", W, f"rt_hair=1,{OFF}", frames=FRAMES),                                   # cards only
-    phase("on-a", W, f"rt_hair=1,{ON}", wait=[ON_EDGE.format(n=2)], fresh=[ON_EDGE.format(n=2)], frames=FRAMES),
-    phase("off-a", W, f"rt_hair=0,{ON}", wait=[OFF_EDGE.format(n=2)], fresh=[OFF_EDGE.format(n=2)], frames=FRAMES),
-    phase("on-b", W, f"rt_hair=1,{ON}", wait=[ON_EDGE.format(n=3)], fresh=[ON_EDGE.format(n=3)], frames=FRAMES),
-    phase("off-b", W, f"rt_hair=0,{ON}", wait=[OFF_EDGE.format(n=3)], fresh=[OFF_EDGE.format(n=3)], frames=FRAMES),
+    phase("on-a", W, f"rt_hair=1,{ON}", frames=FRAMES),
+    phase("off-a", W, f"rt_hair=0,{ON}", frames=FRAMES),
+    phase("on-b", W, f"rt_hair=1,{ON}", frames=FRAMES),
+    phase("off-b", W, f"rt_hair=0,{ON}", frames=FRAMES),
     phase("base-b", W, f"rt_hair=1,{OFF}", frames=FRAMES),                                   # cards only, explicit keys
     phase("restore", 2, f"rt_hair=1,{OFF}", trace=False),
 ]
@@ -148,6 +152,10 @@ pred = {
         "energy_off_vs_cards": {"predicted": 0.0, "tolerance": "within the base-a vs base-b difference (static camera, exposure held)",
                                 "source": "rt_hair=0 makes every RTX Hair key read 0: the same settings as the cards-only windows",
                                 "written": "2026-11-09"},
+        "first_swap": {"predicted": "warmup-on: strand G-buffer draws within about 2 s of switch 1, as switch 2 in rhl1 01:07 "
+                                    "(was 12 s: 3.6 s render-thread groom indexing plus a 300-frame first-image load pause)",
+                       "source": "rhl1-dialogue.1.010732.log; hair_groom startup index thread, LoadGuard tracked while off",
+                       "written": "2026-11-09"},
         "device_loss": {"predicted": "none (no VK_ERROR_DEVICE_LOST, no [fault] line, no depth orphan)", "written": "2026-11-09"},
         "startup_cost": {"predicted": "'strand variants' line: a few hundred pipelines in about 100 ms (hcap3 2026-11-08: the first "
                                       "batch of 6+ G-buffer variants took 96 ms after the header)", "written": "2026-11-09"},

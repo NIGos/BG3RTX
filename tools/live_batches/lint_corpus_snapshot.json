@@ -75221,6 +75221,137 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rr_hair_guides",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "1"
+        ],
+        [
+          "rt_hair_fibre",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "1"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "1"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "1"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "1"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "1"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "1"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -77663,6 +77794,10 @@
       null
     ],
     "\\[shaders\\] rr_strand_aa\\.hlsl:strand_resolve compile call failed": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] [1-9]\\d* groom files loaded in \\d+ ms, \\d+ ignored": [
       0,
       null
     ],

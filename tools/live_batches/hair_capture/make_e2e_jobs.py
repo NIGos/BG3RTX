@@ -81,7 +81,8 @@ capture = job("hcap3-capture", ",rt_hair_capture=1", [
 strands = job("hcap3-strands", ",rt_hair_capture=0", [
     "\\[auto\\] scene ready",
     COPY_LOADED,
-    f"\\[hair groom\\] indexed .*{TARGET}\\.hgrm: index id {TARGET}",
+    # 5m: one index summary line; the decode line below names the target groom.
+    "\\[hair groom\\] [1-9]\\d* groom files loaded in \\d+ ms, \\d+ ignored",
     f"\\[hair groom\\] {TARGET} LOD \\d decoded \\(v3\\): \\d+ points in \\d+ ms",
     "\\[hair groom\\] frame \\d+: [1-9]\\d* groom instances",
     "\\[hair primary\\] strand G-buffer draws GPU",
