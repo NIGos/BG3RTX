@@ -1140,10 +1140,12 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 // (launcher: "Show experimental options", Experimental page). Rejected candidates
 // (compact hit state, alpha metadata cache, empty water tiles), perf_* keys, diagnostics and
 // knobs owned by an automatic release policy are not listed and stay developer only.
-// Release 2026-11: Water surface reflections only. Strand hair (exp_hair_*) is a post-release
+// Release 2026-11: Water surface reflections, FG pacing tests and the strand edge resolve. Other strand hair (exp_hair_*) is a post-release
 // update and returns to this list with it; until then release resets its keys.
 inline constexpr const char* kOptInKnobs[] = {
-  "water_surface_fresnel", "fg_destroy_wait_exact", "fg_present_metering"};
+  "water_surface_fresnel", "fg_destroy_wait_exact", "fg_present_metering",
+  // 5n: lets players judge the strand edge resolve live themselves (RTX Hair dithering).
+  "exp_hair_strand_aa"};
 inline bool opt_in_knob(const Knob& k) {
   for (const char* id : kOptInKnobs) if (std::string(id) == k.id) return true;
   return false;
