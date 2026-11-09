@@ -224,8 +224,8 @@ void device_created(DeviceData*, bool rt_enabled) {
   {
     std::lock_guard lock(g_mu);
     g_enabled = g_requested && rt_enabled;
-    if (cfg_int("rt_hair_groom", 0))
-      log("[hair groom] device %s linear swept spheres", g_enabled ? "with" : "WITHOUT (card path stays)");
+    // Always: RTX Hair can be switched on live (5m), so jobs that start cards-only still need the device verdict.
+    log("[hair groom] device %s linear swept spheres", g_enabled ? "with" : "WITHOUT (card path stays)");
     if (!g_enabled || g_loaded) return;
   }
   // docs/RTX_HAIR_PRIMARY.md 5m: index the groom files at startup on a below-normal thread, not at the first use. A
