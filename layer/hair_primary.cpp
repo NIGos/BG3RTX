@@ -197,6 +197,11 @@ std::unordered_map<uint64_t, uint32_t> g_last_card;   // per draw key: its card 
 uint64_t g_mask_holes = 0, g_colour_samples = 0, g_header_mismatch = 0, g_card_upgrades = 0, g_card_slots = 0;
 hair_primary::Watchdog g_watchdog;
 uint64_t g_watchdog_logged = 0, g_watchdog_period = 0;
+// rt_hair_watchdog_draw (read once per publish): the per-draw watchdog decides instead of the frame one. Both judge
+// every counted frame (the period line reports both); trips of the per-draw one since the last line.
+hair_primary::DrawWatchdog g_draw_watchdog;
+bool g_cfg_watchdog_draw = false;
+uint64_t g_draw_watchdog_period = 0;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
 float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
 uint64_t g_last_pub_camera_frame = 0;
@@ -383,6 +388,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
       // 5h dropouts and the frame watchdog (item 19): the swapped draws of the judged frame against their card pixels
       // (same pass, same tag). The trace counts are of that frame's window too: always attributed (item 4).
       g_watchdog.begin();
+      g_draw_watchdog.begin();
       for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) {
         const uint64_t key = gf->draw_keys[k];
         if (!key) continue;
@@ -396,12 +402,20 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
             if (g_drop.firsts < 4) g_drop.first[g_drop.firsts++] = {gf->frame, key, card, acc, why};
           }
           g_watchdog.draw(card, acc, last_card);
+          g_draw_watchdog.draw(key, card, acc, last_card);
         }
         if (card) g_last_card[key] = card;
       }
+      if (const uint32_t tripped = g_draw_watchdog.judge(gf->frame)) {
+        g_draw_watchdog_period += tripped;
+        if (g_cfg_watchdog_draw && g_watchdog_logged++ < 8)
+          log("[hair primary] per-draw watchdog: G-buffer frame %llu: %u draws under their bound for %u judged frames in a "
+              "row: their cards for %llu frames", (unsigned long long)gf->frame, tripped, hair_primary::kWatchdogDrawBad,
+              (unsigned long long)hair_primary::kWatchdogFrames);
+      }
       if (g_watchdog.judge(gf->frame)) {
         ++g_watchdog_period;
-        if (g_watchdog_logged++ < 8)
+        if (!g_cfg_watchdog_draw && g_watchdog_logged++ < 8)
           log("[hair primary] watchdog: G-buffer frame %llu swapped draws wrote %llu strand pixels of %llu card pixels "
               "(bound %.4f): cards for %llu frames", (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
               (unsigned long long)g_watchdog.card, g_watchdog.bound(), (unsigned long long)hair_primary::kWatchdogFrames);
@@ -643,6 +657,7 @@ uint64_t image_identity(uint64_t image) {
 void observe_depth(uint64_t image, uint64_t now, uint64_t identity) {
   if (!g_load.observe(image, now, identity)) return;
   g_watchdog = hair_primary::Watchdog{};
+  g_draw_watchdog = hair_primary::DrawWatchdog{};
   g_gate.clear();
   g_coverage.clear(); g_last_swap_frame.clear();
   g_depth_safe_keys.clear();
@@ -1538,7 +1553,8 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   const auto cover = g_coverage.why(key, now + 1);
   if (g_published + 2 < now + 1) refuse(Refusal::Publish);
   else if (g_load.quiet(now)) refuse(Refusal::Quiet);
-  else if (g_watchdog.active(now + 1)) refuse(Refusal::Watchdog);   // item 19: a counted frame lost its strands
+  else if (g_cfg_watchdog_draw ? g_draw_watchdog.active(key, now + 1) : g_watchdog.active(now + 1))
+    refuse(Refusal::Watchdog);   // item 19: a counted frame lost its strands (rt_hair_watchdog_draw: this draw did)
   else if (cover != hair_primary::CoverageGate::Why::Ok) refuse(hair_primary::coverage_refusal(cover));
   else if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
                                                                                          : g_gate.allow_prepass(key)))
@@ -1694,7 +1710,8 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (!dd) return;
   g_cfg_passes = cfg_int("rt_hair_primary_passes", 15);                   // the draw hook's keys (round 3 L5)
   g_cfg_cascade_drop = cfg_int("rt_hair_groom_cascade_drop", 0) != 0;
-  count = (std::min)(count, hair_primary::kMaxGrooms);
+  g_cfg_watchdog_draw = cfg_int("rt_hair_watchdog_draw", 0) != 0;
+  count =(std::min)(count, hair_primary::kMaxGrooms);
   const uint64_t now = frame_index();
   observe_depth(depth_image, now, identity);
   if (!count || !tlas || !width || !height || !viewport || viewport[2] == 0.0f || viewport[3] == 0.0f) {
@@ -1804,7 +1821,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       return it == g_key_seen.end() || it->second + kKeyForgetFrames < now;
     };
     auto prune = [&](auto& map) { for (auto it = map.begin(); it != map.end();) it = unseen(it->first) ? map.erase(it) : std::next(it); };
-    prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame); prune(g_first_pub);
+    prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame); prune(g_first_pub); prune(g_draw_watchdog.keys);
     prune(g_coverage.latest); prune(g_coverage.incomplete); prune(g_coverage.swapping);
     for (auto it = g_key_seen.begin(); it != g_key_seen.end();) it = it->second + kKeyForgetFrames < now ? g_key_seen.erase(it) : std::next(it);
   }
@@ -1900,15 +1917,18 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     }
     log_stats("[hair primary] header safety (last %u frames): header/BLAS mismatch frames %llu (record-time header older "
         "than a build ordered before its G-buffer), submit headers with card draws %llu (draw slots %llu), mask-hole pixels "
-        "%llu (strand traces that skipped a card-kept groom), watchdog trips %llu, C2 colour samples %llu; build camera "
+        "%llu (strand traces that skipped a card-kept groom), watchdog trips %llu, per-draw watchdog trips %llu (deciding: %s), "
+        "C2 colour samples %llu; build camera "
         "re-read at submit (item 11): %llu publishes checked, %llu differ from the record-time read (max %.4f m), %llu "
         "header cameras copied on the GPU",
         stats_period(300), (unsigned long long)g_header_mismatch, (unsigned long long)g_card_upgrades,
         (unsigned long long)g_card_slots, (unsigned long long)g_mask_holes, (unsigned long long)g_watchdog_period,
+        (unsigned long long)g_draw_watchdog_period, g_cfg_watchdog_draw ? "per draw" : "frame",
         (unsigned long long)g_colour_samples, (unsigned long long)g_cam_check.checked,
         (unsigned long long)g_cam_check.differ, g_cam_check.max_m, (unsigned long long)g_cam_check.gpu);
     g_header_mismatch = g_card_upgrades = g_card_slots = g_mask_holes = g_watchdog_period = g_colour_samples = 0;
     g_cam_check = CamCheck{};
+    g_draw_watchdog_period = 0;
     g_depth_orphan_count = 0;
   }
   if (stats_due(now) && (cfg_int("rt_hair_groom_shadow_t", 0) != 0 || cfg_int("rt_hair_groom_ao_t", 0) != 0)) {

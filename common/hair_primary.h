@@ -761,6 +761,58 @@ struct Watchdog {
   bool active(uint64_t now) const { return now < until; }
 };
 
+// rt_hair_watchdog_draw (off; docs/RTX_HAIR_PRIMARY.md 5i item 11): the item 19 watchdog judged per draw key instead of
+// per frame. A swapped draw is bad when its strand pixels fall under its own bound (the frame watchdog's per-draw term:
+// min(kCoverMin, kCoverRatioMin - cover_sigma) of its own measurement); a draw without any marker counts its last card
+// pixels with no strands, but only when no swapped draw of the frame left a marker (the frame watchdog's rule: one draw
+// without pixels next to measured ones may simply have left the view). Fewer than kDropoutMinCard card pixels: no
+// evidence, the key's run is unchanged. A key trips after kWatchdogDrawBad bad judged G-buffer frames in a row and keeps
+// its cards for kWatchdogFrames; every other draw keeps swapping.
+// kWatchdogDrawBad = 2: a G-buffer frame applies exactly one header (GbFrame: one tag, unique_frame), so a fault of one
+// publish (its header camera or rows) can make at most one judged frame bad; a second bad frame in a row needs a fault
+// that outlives a publish, which is what the hold is for.
+constexpr uint32_t kWatchdogDrawBad = 2;
+struct DrawWatchdog {
+  struct Key { uint32_t bad = 0; uint64_t last = 0, until = 0; };
+  struct Seen { uint64_t key = 0; uint32_t card = 0, accepted = 0, last_card = 0; };
+  std::unordered_map<uint64_t, Key> keys;
+  Seen seen[kDrawSlots] = {};
+  uint32_t n = 0;
+  bool marked = false;
+  uint64_t trips = 0;
+  void begin() { n = 0; marked = false; }
+  void draw(uint64_t key, uint32_t c, uint32_t s, uint32_t last_card) {
+    if (key && n < kDrawSlots) seen[n++] = {key, c, s, last_card};
+    marked |= c != 0;
+  }
+  // The judged G-buffer frame `frame` (each frame judged once per key): the number of keys that tripped now.
+  uint32_t judge(uint64_t frame) {
+    uint32_t tripped = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+      const Seen& d = seen[i];
+      uint32_t card = d.card;
+      double sigma = 0.0;
+      if (card) sigma = cover_sigma(d.accepted, card);
+      else if (!marked && d.last_card >= kDropoutMinCard) card = d.last_card;
+      if (card < kDropoutMinCard) continue;
+      Key& k = keys[d.key];
+      if (k.last >= frame) continue;
+      k.last = frame;
+      if (double(d.accepted) >= (std::min)(kCoverMin, kCoverRatioMin - sigma) * double(card)) { k.bad = 0; continue; }
+      if (++k.bad < kWatchdogDrawBad) continue;
+      k.bad = 0;
+      k.until = frame + kWatchdogFrames;
+      ++trips;
+      ++tripped;
+    }
+    return tripped;
+  }
+  bool active(uint64_t key, uint64_t now) const {
+    const auto it = keys.find(key);
+    return it != keys.end() && now < it->second.until;
+  }
+};
+
 // Review 2026-11-08 item 12: rt_hair_groom_cascade_drop removes the hair cards from the game's sun cascades. The hair's
 // sun shadow then exists only where the core's RT sun shadow replaces the game's mask: the core publishes the frame of
 // its last applied RT sun shadow (frame_index + 1) in this persist key; the drop needs it from this or the last frame.
