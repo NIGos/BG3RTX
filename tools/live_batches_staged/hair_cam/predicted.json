@@ -1,0 +1,19 @@
+{
+ "batch": "hair-cam",
+ "written": "2026-11-09, claude/hair-header-cam, before any run (staged, not queued: no live permission)",
+ "predictions": {
+  "hc1-s8-header-cam": {
+   "proof_counter_off": "turn-off-a/b: 'build camera re-read at submit (item 11): N publishes checked, M differ' with M > 0 in the turns and max 0.026-0.155 m (the sampled origins of rv3 220145); if M = 0 in every turn while origins stay nonzero, the record-time read is not the cause (hypothesis rejected: look at the G-buffer camera instead)",
+   "proof_counter_on": "the counter compares the CPU reads, so it stays > 0 in the cam windows as in the OFF ones; it proves the cause, not the fix",
+   "origin_off": "nonzero sampled origins (cm) in most turn-off lines, 0 in a few (rv3: 7 of 15 counted frames nonzero)",
+   "origin_cam": "-0.0000/0.0000 in every turn-cam and turn-both line; a rare nonzero line is possible only when the counted G-buffer applied an older publish (about 1-3% of frames: 'this frame's publish' 291-299 of 300)",
+   "watchdog_off": "frame watchdog trips 5-23 per 300 frames in the turns (rv3: 0-23), swap refusals 'watchdog' hundreds to 2000 per line",
+   "watchdog_cam": "0 frame watchdog trips and no 'watchdog' swap refusal in turn-cam and turn-both",
+   "watchdog_draw_only": "turn-draw: frame watchdog still trips (it judges, does not decide); per-draw trips fewer than frame trips x draws (one bad frame no longer trips; 2 in a row needed), watchdog refusals per line far below the OFF windows",
+   "strand_share_cam": "evidence strand share 0.94-0.99 in the cam windows (rv3 origin-0 frames: 94-98.5%), never below kCoverMin 0.891",
+   "header_cameras_gpu": "'N header cameras copied on the GPU' with N about the publishes of the line (one per frame) in the cam windows, 0 in the others",
+   "cost": "one 16-thread compute dispatch, two 12-byte copies and three barriers per publish: below the gpu line resolution (< 0.01 ms); report the strand G-buffer draws GPU line and rt passes GPU cost of turn-cam vs turn-off as recorded",
+   "unchanged": "scene wait 0 timeouts in every window, no device loss, no 'strand feedback unavailable'"
+  }
+ }
+}
