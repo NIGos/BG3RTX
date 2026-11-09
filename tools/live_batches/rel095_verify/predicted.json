@@ -35,6 +35,18 @@
    "first_on_pair": "turn-on-r/l: an admission burst (hundreds of new meshes per line, BLAS p99 up to the OFF level) while the cache fills; not judged",
    "unchanged": "0 opaque draws dropped, 0 alpha made opaque, 0 wide draws left out, cascade buffer full 0.0, rejected N/0/0 (no instance or audit mismatch) in every window, key on and off",
    "off_b": "returns to the OFF-a numbers within their spread (the first OFF build evicts down to the old accounting)"
+  },
+  "sh2-s8-scene-handout": {
+   "written": "2026-11-09, claude/scene-handout-3, before any sh2 run (no live of increment 3 yet)",
+   "scene_wait_off": "OFF windows: mean 2-4 ms static, 5-8 ms in the turns (rv2 S8 14:55-14:57: 2.1-3.4 static, 5.0-7.8 turning); got = waited, 0 timeouts",
+   "scene_wait_on": "ON windows: every first query handed out (', handed out N (0 ms)' with N close to the frame count), mean < 0.1 ms over the waited calls (water's per-frame settle waits about 0 ms: the scene is committed by run_post), got = waited, 0 timeouts",
+   "handout_line_on": "reserved and handed out close to the frames of the window, in order = handed out, fallbacks 0, pairing mismatches 0 in turn-on-l and static-on; turn-on-r may show at most a few fallbacks while the constant-1051 pipelines warm (settled frames)",
+   "core_line_on": "'[core] scene handout': settled to the committed scene once per frame (water at S8) and 0 'pipeline without constant 1051' after warm-on",
+   "primary_check": "check-on match within the check-off-a / check-off-b spread (the same scene content, no one-frame-old geometry)",
+   "energy": "static-on dumps.json pre-post mean within the static-off-a / static-off-b band (same scene, same shading)",
+   "frame_time": "static-on and turn-on rendered median lower than the OFF windows by up to the OFF wait mean (0-7 ms); equal within the OFF a/b spread means the wait was not on the critical path (then the handout is not worth its risk)",
+   "gpu": "rt passes GPU cost and scene build GPU equal within noise (the handout changes no GPU work; OMM acceleration is off under the handout: a small RT GPU cost increase is possible, report it)",
+   "unchanged": "0 opaque draws dropped, 0 timeouts, no device loss, no '[rt] scene handout layout off'"
   }
  }
 }

@@ -38,6 +38,7 @@
 #include "../common/water_build_camera.h"
 #include "../common/hair_cost_epoch.h"
 #include "../common/scene_handout_layout.h"
+#include "../common/scene_handout.h"
 
 #include <intrin.h>
 
@@ -180,12 +181,24 @@ std::atomic<uint64_t> g_scene_phase_frame{0};
 struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; uint64_t at[kScenePhases] = {}, traced = 0; };
 void scene_phase(int p) { g_scene_phase.store(p, std::memory_order_relaxed); g_scene_phase_frame.store(frame_index(), std::memory_order_relaxed); }
 WaitStats g_wait;
+// g_wait and its log line: own lock, so the handout path (lighting thread, never g_mu) can count its frames.
+// Lock order: g_mu -> g_wait_mu -> g_handout_mu.
+std::mutex g_wait_mu;
+uint64_t g_wait_handed = 0;   // frames whose first RT query took a handout (counted as waited 0 ms, got)
+// rt_scene_handout=2 (increment 3, docs/SCENE_HANDOUT_DESIGN.md 3.1, common/scene_handout.h): the reservation state
+// machine. g_handout_mu is a leaf for the lighting thread: it never takes g_mu, so a scene build in progress (which
+// holds g_mu) never blocks the lighting's first RT query.
+std::mutex g_handout_mu;
+scene_handout::Machine g_ho;
+std::atomic<bool> g_ho_open{false};   // a handout waits for its resolution at a submit (fast path for every submit)
+bool slot_pinned(uint32_t i) { std::lock_guard<std::mutex> l(g_handout_mu); return g_ho.pinned(int(i)); }
 uint32_t g_wait_misses = 0;   // consecutive timeouts: stop waiting after a few (no capture this frame)
 uint32_t g_scene_next = 0;
 uint64_t g_scene_skipped = 0, g_scene_skip_logged = 0;
 std::atomic<uint64_t> g_oldest_live{UINT64_MAX};
 
 bool slot_retired(const SceneSlot& s, uint64_t gpu_done, uint64_t now) {
+  if (g_ho_open.load(std::memory_order_acquire) && slot_pinned(uint32_t(&s - g_scene))) return false;   // handed out or its P
   if(!native_hit::slot_reusable(uint32_t(&s-g_scene),gpu_done))return false;
   if(native_hit::enabled() && s.material_record){
     const int state=bvh_rec_state(s.material_record);
@@ -1033,9 +1046,33 @@ VkBufferUsageFlags rt_xfb_usage() {
 
 bool rt_alloc_device_address() { return g_bda_core; }
 
+// rt_scene_handout=2 needs the update-after-bind set 1 and the dummy TLAS (rt_scene_handout_layout at startup),
+// the BVH split, and no native hit materials (their per-dispatch query reads commit-time rows on the CPU).
+bool handout_mode() {
+  return cfg_int("rt_scene_handout", 0) >= 2 && g_handout_on && g_dummy_ready && !native_hit::enabled() &&
+         !cfg_int("rt_hit_material", 0) && cfg_int("rt_scene_wait", 1) != 0;
+}
+
 void rt_before_capture(VkCommandBuffer cmd) {
   if (!g_rt) return;
   scene_phase(1);
+  if (handout_mode()) {   // reserve the slot this capture's build will write (common/scene_handout.h)
+    std::lock_guard<std::mutex> lock(g_mu);
+    bool open;
+    { std::lock_guard<std::mutex> h(g_handout_mu); open = g_ho.open(); }
+    if (!open) {
+      const uint64_t now = frame_index();
+      int current = g_scene_cur;
+      if (current >= 0) {
+        const SceneSlot& c = g_scene[current];
+        if (!c.used || !c.tlas || !c.set || !c.split || c.built + 1 < now || bvh_rec_state(c.rec) == 2) current = -1;
+      }
+      const int pick = current >= 0 ? pick_scene_slot() : -1;
+      std::lock_guard<std::mutex> h(g_handout_mu);
+      g_ho.reserve(now, pick, current);
+      g_ho_open.store(g_ho.open(), std::memory_order_release);
+    }
+  }
   // Last frame's BLAS build read the XFB buffer this pass is about to overwrite.
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.dstAccessMask = VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT;
@@ -1263,7 +1300,24 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   ensure_dummy_tlas(cmd);   // rt_scene_handout_layout only (once)
   // The scene slot this build writes (retired on the GPU); none free: no build
   // this frame, the previous scene stays current.
-  const int scene_slot = pick_scene_slot();
+  // rt_scene_handout: the reserved slot R (its set may already be bound by the lighting); else a pick as before.
+  // The guard reports the outcome on every exit (failed unless the split commit below sets ok).
+  struct HandoutCommit {
+    int slot = -1; bool ok = false; uint64_t rec = 0;
+    ~HandoutCommit() {
+      if (slot < 0) return;
+      std::lock_guard<std::mutex> h(g_handout_mu);
+      g_ho.commit_done(slot, ok, rec, frame_index());
+      g_ho_open.store(g_ho.open(), std::memory_order_release);
+    }
+  } handout_commit;
+  { std::lock_guard<std::mutex> h(g_handout_mu); handout_commit.slot = g_ho.commit_slot(); }
+  if (handout_commit.slot >= 0 && !cap.split) {   // the legacy single-BLAS build never fills a reservation
+    { std::lock_guard<std::mutex> h(g_handout_mu); g_ho.commit_done(handout_commit.slot, false, 0, frame_index());
+      g_ho_open.store(g_ho.open(), std::memory_order_release); }
+    handout_commit.slot = -1;
+  }
+  const int scene_slot = handout_commit.slot >= 0 ? handout_commit.slot : pick_scene_slot();
   if (scene_slot < 0) return;
   SceneSlot& scene = g_scene[scene_slot];
   if(native_hit::enabled()){
@@ -1371,8 +1425,14 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     }
     g_split_tlas = res.tlas;
     g_split_valid = res.tlas != VK_NULL_HANDLE;
-    const auto accelerated=set?bvh_omm_scene(uint32_t(scene_slot),res.tlas):VK_NULL_HANDLE;
+    const bool reserved = handout_commit.slot >= 0;
+    if (reserved && !set) return;   // a handed-out set without a valid build: the guard resolves it to P at the submit
+    // A reserved slot never takes the OMM accelerated TLAS: its micro-map tickets would have to be registered on every
+    // recording that binds the set, not known at the commit (docs/SCENE_HANDOUT_DESIGN.md 3.3, increment 4).
+    const auto accelerated=set && !reserved?bvh_omm_scene(uint32_t(scene_slot),res.tlas):VK_NULL_HANDLE;
     commit_scene_slot(scene_slot, accelerated?accelerated:res.tlas, set, true, res.rec);
+    if (reserved) { handout_commit.ok = true; handout_commit.rec = res.rec; }
+    else { std::lock_guard<std::mutex> h(g_handout_mu); g_ho.note_commit(frame_index()); }
     if(accelerated)scene.omm_reference=res.tlas;
     alpha_stamp_scene(uint32_t(scene_slot), tlas_address(res.tlas), tlas_address(accelerated ? accelerated : res.tlas));
     scene.camera = cap.ubo;
@@ -1521,6 +1581,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   g_legacy_rec = legacy_rec;
   g_split_valid = false;
   commit_scene_slot(scene_slot, g_tlas, legacy_set, false, legacy_rec);
+  { std::lock_guard<std::mutex> h(g_handout_mu); g_ho.note_commit(frame_index()); }
   alpha_stamp_scene(uint32_t(scene_slot), tlas_address(g_tlas), tlas_address(g_tlas));
   scene.camera = cap.ubo;
   scene.camera_offset = cap.ubo_offset;
@@ -1574,13 +1635,15 @@ VkBuffer rt_scene_pose() {
 }
 
 // Caller holds `lock` (g_mu). Waits (bounded) for this frame's scene commit; see g_scene_cv.
+void wait_log(int ms);
 void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
   const int ms = cfg_int("rt_scene_wait_ms", 12);
   const uint64_t now = frame_index();
   auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
   static int reset_token = 0;
-  if (stats_window::reset(cfg_int, reset_token)) g_wait = WaitStats{};
-  ++g_wait.calls;
+  { std::lock_guard<std::mutex> w(g_wait_mu);
+    if (stats_window::reset(cfg_int, reset_token)) g_wait = WaitStats{}, g_wait_handed = 0;
+    ++g_wait.calls; }
   if (!current()) {
     // Captures that resumed (a scene built in the last 2 frames) end the pause at once:
     // a pause of up to 64 frames after a short gap (8 frames without the scene pass)
@@ -1594,11 +1657,12 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
       // its scene commits 13-16 ms after the lighting starts (su1 23:48: both trace frames, the only
       // in-plan waits past 12 ms). It waits up to 4x the cap, so the traced image shows its own frame.
       const bool traced = trace_recording();
-      g_wait.traced += traced;
+      { std::lock_guard<std::mutex> w(g_wait_mu); g_wait.traced += traced; }
       const int cap = traced ? 4 * (ms > 0 ? ms : 1) : (ms > 0 ? ms : 1);
       const auto t0 = std::chrono::steady_clock::now();
       const bool ok = g_scene_cv.wait_for(lock, std::chrono::milliseconds(cap), current);
       const double dt = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      std::lock_guard<std::mutex> w(g_wait_mu);
       ++g_wait.waited;
       g_wait.ms += dt;
       g_wait.ms_max = (std::max)(g_wait.ms_max, dt);
@@ -1610,14 +1674,35 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
       }
     }
   }
+  wait_log(ms);
+}
+
+// The "[rt] scene wait" line (and the handout line) once per rt_scene_wait_log_frames first queries. Takes g_wait_mu.
+void wait_log(int ms) {
+  std::lock_guard<std::mutex> w(g_wait_mu);
   // rt_scene_wait_log_frames: lean jobs use 120 (complete lines in every cost window for the gate).
   if (g_wait.calls >= uint64_t(stats_period(unsigned((std::clamp)(cfg_int("rt_scene_wait_log_frames", 600), 60, 6000))))) {
     if (g_wait.timeouts || logging::stats_enabled(cfg_int))
     log("[rt] scene wait: %llu frames, %llu waited (%llu got this frame's scene, %llu timeouts, %llu skipped), "
-        "wait mean %.3f ms, max %.3f ms",
+        "wait mean %.3f ms, max %.3f ms%s",
         (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
         (unsigned long long)g_wait.timeouts, (unsigned long long)g_wait.skipped,
-        g_wait.waited ? g_wait.ms / double(g_wait.waited) : 0.0, g_wait.ms_max);
+        g_wait.waited ? g_wait.ms / double(g_wait.waited) : 0.0, g_wait.ms_max,
+        g_wait_handed ? (", handed out " + std::to_string(g_wait_handed) + " (0 ms)").c_str() : "");
+    {   // rt_scene_handout=2 (common/scene_handout.h): whenever a reservation was made in the window
+      scene_handout::Counters c;
+      { std::lock_guard<std::mutex> h(g_handout_mu); c = g_ho.n; g_ho.n = {}; }
+      if (c.reserved || c.handed || c.fallbacks())
+        log("[rt] scene handout: %llu frames, reserved %llu, handed out %llu, in order %llu, fallbacks %llu (not committed %llu, "
+            "build failed %llu, order %llu, dropped %llu), pairing mismatches %llu, committed first %llu, unused %llu, users refused %llu",
+            (unsigned long long)g_wait.calls, (unsigned long long)c.reserved, (unsigned long long)c.handed,
+            (unsigned long long)c.in_order, (unsigned long long)c.fallbacks(),
+            (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kNotCommitted)],
+            (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kBuildFailed)],
+            (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kOrder)],
+            (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kDropped)], (unsigned long long)c.mismatches(),
+            (unsigned long long)c.committed_first, (unsigned long long)c.unused, (unsigned long long)c.refused_busy);
+    }
     if (g_handout_downgrades) {   // rt_scene_handout: stamp traversal addresses set back to the reference TLAS
       log("[rt] scene handout: %llu stamp traversal downgrade(s) in the last %llu frames", (unsigned long long)g_handout_downgrades,
           (unsigned long long)g_wait.calls);
@@ -1631,6 +1716,7 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
       log("[rt] scene wait timeouts by the scene thread's phase: %s", at.c_str());
     }
     g_wait = WaitStats{};
+    g_wait_handed = 0;
   }
 }
 
@@ -1642,6 +1728,87 @@ VkAccelerationStructureKHR rt_scene_dummy_tlas() {
     bvh_rec_pin(g_dummy_rec, false);
   }
   return g_dummy_ready ? g_dummy_tlas : VK_NULL_HANDLE;
+}
+
+// rt_scene_handout=2: the reserved slot's set and the dummy TLAS for `cmd`, without waiting and without g_mu.
+// false: no handout (keys off, no reservation yet, or this frame's scene is already committed): the caller takes
+// rt_scene_set (which waits only when this frame's scene is not committed yet).
+bool rt_scene_handout(VkCommandBuffer cmd, VkDescriptorSet* set, VkAccelerationStructureKHR* dummy, uint64_t* frame) {
+  if (!g_rt || !set || !dummy || !cmd || !handout_mode()) return false;
+  const uint64_t now = frame_index(), user = cmd_recording(cmd);
+  if (!user) return false;
+  // *set on entry: a further command buffer registering for the set it already bound (only that handout).
+  int expect = -1;
+  if (*set) {
+    for (uint32_t i = 0; i < kSceneSlots; ++i) if (alpha_slot_set(i) == *set) expect = int(i);
+    if (expect < 0) return false;
+  }
+  int slot;
+  bool first;
+  {
+    std::lock_guard<std::mutex> h(g_handout_mu);
+    const uint64_t before = g_ho.n.handed;
+    slot = g_ho.hand_out(now, user, expect);
+    first = g_ho.n.handed != before;
+    g_ho_open.store(g_ho.open(), std::memory_order_release);
+  }
+  if (slot < 0) return false;
+  *set = alpha_slot_set(uint32_t(slot));
+  *dummy = g_dummy_tlas;
+  if (frame) *frame = now;
+  if (omm::available()) omm::mark_feedback_use(cmd);   // OMM variants may write the stamp's feedback word (144)
+  if (first) {   // this frame's first RT query: counted with the scene wait line as a 0 ms wait that got its scene
+    { std::lock_guard<std::mutex> w(g_wait_mu); ++g_wait.calls; ++g_wait.waited; ++g_wait.got; ++g_wait_handed; }
+    wait_log(cfg_int("rt_scene_wait_ms", 12));
+  }
+  if (order_trace_active())
+    log("[order] handout slot %d frame %llu cmd %p tid %lu", slot, (unsigned long long)now, (void*)cmd, GetCurrentThreadId());
+  return *set != VK_NULL_HANDLE;
+}
+
+// Every vkQueueSubmit, before the driver call (layer.cpp): resolve an open handout whose recording is in the batch
+// (common/scene_handout.h resolve). In order: R's build runs first. Otherwise set P is copied into set R now (all
+// bindings are update-after-bind, the batch is not submitted yet), P's traversal address downgraded to its reference.
+void rt_scene_handout_submit(const std::vector<VkCommandBuffer>& cmds) {
+  if (!g_rt || !g_ho_open.load(std::memory_order_acquire)) return;
+  std::vector<uint64_t> recs(cmds.size());
+  for (size_t i = 0; i < cmds.size(); ++i) recs[i] = cmd_recording(cmds[i]);
+  std::lock_guard<std::mutex> lock(g_mu);   // no scene build is half recorded while R's set may be rewritten
+  const uint64_t now = frame_index();
+  scene_handout::Resolution r;
+  {
+    std::lock_guard<std::mutex> h(g_handout_mu);
+    auto user_index = [&](uint64_t user) {
+      for (size_t i = 0; i < recs.size(); ++i) if (recs[i] && recs[i] == user) return int(i);
+      return -1;
+    };
+    auto record_before = [&](uint64_t rec, int at) {
+      for (size_t j = 0; j < cmds.size(); ++j)
+        if (bvh_rec_matches_command(rec, cmds[j])) return int(j) < at;   // in this batch: its position decides
+      return bvh_rec_state(rec) == 1;   // an earlier submit
+    };
+    r = g_ho.resolve(now, 8, user_index, record_before);
+    g_ho_open.store(g_ho.open(), std::memory_order_release);
+  }
+  if (!r.resolved) return;
+  SceneSlot& R = g_scene[r.slot];
+  R.last_use = (std::max)(R.last_use, now);
+  if (r.in_order) {
+    alpha_slot_in_use(uint32_t(r.slot), now);
+  } else {
+    SceneSlot& P = g_scene[r.prev];
+    P.last_use = (std::max)(P.last_use, now);
+    alpha_copy_set(uint32_t(r.prev), uint32_t(r.slot));
+    alpha_stamp_traversal_to_reference(uint32_t(r.prev));
+    alpha_slot_in_use(uint32_t(r.prev), now);
+    if (r.poison) {   // R was committed but its build runs after this batch: P stays the scene
+      if (g_scene_cur == r.slot) g_scene_cur = r.prev;
+      R.built = 0;
+    }
+    log_stats("[rt] scene handout fallback: frame %llu slot %d -> previous slot %d (%s)", (unsigned long long)r.frame, r.slot,
+              r.prev, scene_handout::fallback_name(r.reason));
+  }
+  update_oldest_live();
 }
 
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {

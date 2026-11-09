@@ -52,6 +52,9 @@ for key in ("gi_far", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
 # one builds in the background on first use. gi_rt_pipeline_reorder: specialization 1050 of the raygen request.
 for key in ("gi_rt_pipeline", "gi_rt_pipeline_reorder"):
     TABLE[key] = [QUIET]
+# rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md): specialization 1051 of every gi/ and water pipeline (core/gi.cpp
+# refresh, core/water.cpp) at 1 and 2; both values stay cached, so a toggle needs a quiet driver, not a build line.
+TABLE["rt_scene_handout"] = [QUIET]
 WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"
 for key in ("rt_water_compose_shift",
             "rt_water_shadows", "rt_water_ls_shadows",
