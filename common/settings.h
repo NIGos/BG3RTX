@@ -392,9 +392,9 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"}}, true, "Advanced", {"Measured", "RT -1.1-1.5 ms; GI -1.6-1.8 ms; refit +0.57 ms", "Unknown", "RTX 5090; Dialogue1 versus native cards. Reference only; qualification incomplete."}, "Uses strands in RT shadows/AO/GI/reflections. Inspect hair shadows on faces and necks in Dialogue1."},
 
   {"exp_hair_groom_primary", "RTX Hair",
-   "Beta: shows hair as individual ray-traced strands instead of flat cards. A style gets strands after the game has shown it once and the launcher has converted it (see Preparation).",
-   Kind::Choice, Apply::Restart, "Restart the game to turn on or off.", false,
-   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}, {"rt_hair_capture", "0"}}, {}, {}, false, false, false, Apply::Restart},
+   "Beta: shows hair as individual ray-traced strands instead of flat cards. A style gets strands after the game has shown it once and the launcher has converted it. Turns on and off while playing.",
+   Kind::Choice, Apply::Live, "Turns on and off while playing (also with its keyboard shortcut). If the game started with RTX Hair off, physical hair ray origins wait for a restart.", false,
+   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}, {"rt_hair_capture", "0"}}, {}, {}, false, false, false, Apply::Live},
     // Review 2026-11-08 (docs/RTX_HAIR_PRIMARY.md 5j): On is the one coherent strand path, the qualified bundle: header in
     // G-buffer order decided at submit (order, current), per-frame trace tags, LOD keep, coverage hold and the
     // world-space tangent. The individual keys stay as developer diagnostics in bg3rtx.ini only (order 0 and current 0
@@ -402,8 +402,11 @@ inline constexpr Knob kKnobs[] = {
     // RTX Hair single option (user approval 2026-11-08): On also writes every key of the user's tested set (strands in
     // RT, shadow/AO transmittance, no card shadows, physical fibre shading with GI/specular/mapped lights, RR hair
     // guides, physical hair ray origins). Tips, sub-pixel coverage, card normal and footprint bounds stay off.
-    // Restart keys of the bundle: rt_hair_groom_primary (startup latch), rt_hair_physical_origin (startup
-    // reservation), rt_hair_tangent_world (compiled into the strand pipelines at creation). All others are live.
+    // 5m (docs/RTX_HAIR_PRIMARY.md, common/hair_live.h): live. The startup parts are prepared on every capable device
+    // (strand header and pipeline variants with the world-space tangent compiled in, occlusionQueryPrecise, BC3
+    // transfer-source usage for the capture). Only rt_hair_physical_origin stays a startup reservation (43.7 MB at
+    // 2560 x 1067 and the GI's origin shader variants): 0 -> 1 needs a restart (the restart banner says so); its
+    // other transitions and every other key are live. rt_hair=0 (hotkey_rtx_hair) makes this whole list read 0.
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores,
      {{"rt_hair_groom_primary", "1"}, {"rt_hair_groom_primary_order", "1"}, {"rt_hair_groom_primary_current", "1"},
       {"rt_hair_primary_frame_tag", "1"}, {"rt_hair_groom_lod_keep", "1"}, {"rt_hair_primary_hold", "1"},
@@ -411,8 +414,8 @@ inline constexpr Knob kKnobs[] = {
       {"rt_hair_groom_ao_t", "1"}, {"rt_hair_groom_cascade_drop", "1"}, {"rt_hair_fibre", "1"},
       {"rt_hair_fibre_gi", "1"}, {"rt_hair_fibre_spec", "1"}, {"rt_hair_fibre_mapped", "1"},
       {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"}},
-     {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified; turning it on needs a game restart."},
+     {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified. It turns on and off while playing, also with its keyboard shortcut (Ctrl+Shift+F7 by default); if the game started with RTX Hair off, the physical hair ray origins need a game restart."},
 
   {"exp_hair_fibre", "Physical strand shading",
    "Experimental: gives on-screen hair brighter, warmer shading.",
@@ -632,6 +635,7 @@ inline constexpr KV kDefaults[] = {
     {"dlss5_nr_bypass", "0"},
     {"hotkey_rt_toggle", "Ctrl+Shift+F9"},
     {"hotkey_dlss5", "Ctrl+Shift+F8"},
+    {"hotkey_rtx_hair", "Ctrl+Shift+F7"},
     {"game_dlss_guard", "1"},
     {"core", "1"},
     {"dump_shaders", "1"},
@@ -806,6 +810,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom", "0"},
     {"rt_hair_capture", "0"},
     {"rt_hair_groom_primary", "0"},
+    {"rt_hair", "1"},
     {"rt_hair_groom_shadow_t", "0"},
     {"rt_hair_groom_ao_t", "0"},
     {"rt_hair_groom_primary_order", "0"},
@@ -1038,7 +1043,7 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "fg_present_metering") return true;
   // core/gi.cpp initialize_hair_origin persists the startup reservation across core reloads.
   if (key == "rt_hair_physical_origin") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
-  if (key == "rt_hair_groom_primary") return true; // Safety gate until hot activation is verified.
+  // rt_hair_groom_primary is live since 5m (docs/RTX_HAIR_PRIMARY.md): its startup parts are prepared on every capable device.
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
   // M5.3: the water FS variants exist only if the key was on when the pipelines were created.
   if (key == "rt_water_compose") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;

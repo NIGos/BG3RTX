@@ -6,11 +6,15 @@
 // matched draw (its index range is in the groom set of the latest build) is drawn with the variant. The strand
 // shader reads the frame record (common/hair_primary.h) through the header address baked as specialization
 // constants 1100/1101; bvhsplit publishes the header after the groom TLAS build (hair_primary_publish).
-// Variants exist only with linear swept spheres, shaderInt64 and fragmentStoresAndAtomics; activation is latched at device creation until hot activation is qualified.
+// Variants exist only with linear swept spheres, shaderInt64 and fragmentStoresAndAtomics. Since 5m (docs/RTX_HAIR_PRIMARY.md,
+// common/hair_live.h) the header and the variants are made on every such device whether or not the key is on (about
+// 0.1 s of pipeline creation at the first level load, logged as "strand variants"), and rt_hair_groom_primary /
+// rt_hair_groom (both gated by the live switch rt_hair) decide each frame whether matched draws swap.
 #include "host.h"
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <iterator>
@@ -21,6 +25,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "../common/hair_live.h"
 #include "../common/hair_primary.h"
 #include "../common/shader_variant.h"
 #include "hair_groom.h"
@@ -38,7 +43,13 @@ struct HpBuf {
 };
 
 DeviceData* g_dd = nullptr;
-bool g_startup_enabled = false;        // Restart safety gate; INI reload cannot enable strands.
+bool g_startup_enabled = false;        // a device was created: the header and variants are attempted (5m: always)
+hair_live::Toggle g_live;              // g_mu: the live switch (common/hair_live.h)
+std::atomic<bool> g_live_on{false};    // g_live.on, read without g_mu (strands_on)
+std::atomic<uint64_t> g_live_frame{~0ull};   // frame_index of the last live_tick
+std::atomic<bool> g_live_ever{false};  // strands were on at least once on this device (staged headers may exist)
+uint64_t g_off_restores = 0;           // native draws given back their card depth while strands were off (period line)
+uint64_t g_variant_us = 0, g_variant_pipes = 0;   // strand variant creation: CPU time and pipelines (startup cost)
 bool g_frag_stores = false;            // fragmentStoresAndAtomics enabled by the game
 std::mutex g_mu;
 HpBuf g_header, g_pixels, g_crumbs;              // header: fixed (its address is in every variant); pixels: render size
@@ -472,7 +483,8 @@ bool header_ready() {
                     "hair primary header"))
     why = "header buffer allocation failed";
   if (why) {
-    log("[hair primary] UNAVAILABLE (%s): matched hair keeps its cards", why);
+    if (cfg_int("rt_hair_groom_primary", 0) != 0) log("[hair primary] UNAVAILABLE (%s): matched hair keeps its cards", why);
+    else log("[hair primary] strand variants not prepared (%s): RTX Hair unavailable in this session", why);
     return false;
   }
   log("[hair primary] header at 0x%llx: static hair pipelines get strand variants", (unsigned long long)g_header.addr);
@@ -677,7 +689,12 @@ void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_dd) return;
   g_dd = dd;
-  g_startup_enabled = cfg_int("rt_hair_groom_primary", 0) != 0;
+  // 5m: no startup latch. The header and the strand variants are prepared on every capable device (header_ready), so
+  // RTX Hair turns on and off live; the cost of preparing them is logged with the first variants.
+  g_startup_enabled = true;
+  g_live = hair_live::Toggle{};
+  g_live_on = false; g_live_ever = false;
+  g_live_frame = ~0ull;
   bool stores = ci->pEnabledFeatures && ci->pEnabledFeatures->fragmentStoresAndAtomics;
   for (auto p = static_cast<const VkBaseInStructure*>(ci->pNext); p; p = p->pNext)
     if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
@@ -746,6 +763,8 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   }
   g_dd = nullptr;
   g_startup_enabled = false;
+  g_live = hair_live::Toggle{};
+  g_live_on = false; g_live_ever = false;
   g_header_tried = false;
 }
 
@@ -813,6 +832,7 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
   std::vector<Made> made;
   uint64_t refused = 0;
   std::vector<std::string> notes;   // logged under the lock (rate limits are shared)
+  const auto t_begin = std::chrono::steady_clock::now();   // 5m: the always-on startup cost of the strand variants
   for (const Plan& pl : plans) {
     const VkGraphicsPipelineCreateInfo& ci = cis[pl.i];
     const int fs = pl.fs;
@@ -884,10 +904,10 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     // M3.2 rt_hair_groom_coverage: the two-ray pair is compiled in when the key is on at pipeline creation (header flag
     // kFlagCoverage then switches it live); the velocity FS has no constant 1042, Vulkan ignores the entry there.
     const uint32_t coverage = cfg_int("rt_hair_groom_coverage", 0) != 0 ? 1u : 0u;
-    // 5g rt_hair_macro_normal / rt_hair_tangent_world: likewise compiled in when either key is on at pipeline creation;
-    // header flags kFlagMacroNormal / kFlagTangentWorld then switch each one live.
-    const uint32_t shading_space =
-        cfg_int("rt_hair_macro_normal", 0) != 0 || cfg_int("rt_hair_tangent_world", 0) != 0 ? 1u : 0u;
+    // 5g rt_hair_macro_normal / rt_hair_tangent_world: always compiled in since 5m (a header load and two uniform
+    // branches per strand fragment, shaders/rt/hair_primary_gbuffer.hlsl); header flags kFlagMacroNormal /
+    // kFlagTangentWorld switch each one live, and with both flags off the output is that of constant 0.
+    const uint32_t shading_space = 1u;
     const uint32_t spec_words[4] = {uint32_t(header_addr), uint32_t(header_addr >> 32), coverage, shading_space};
     const VkSpecializationMapEntry spec_map[4] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4},
                                                   {shader_variant::kSpecIdHairGroomCoverage, 8, 4},
@@ -976,10 +996,29 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     m.has_variant = m.has_draw = true;
     made.push_back(m);
   }
+  const uint64_t spent_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - t_begin).count());
+  uint64_t pipes = 0;
+  for (const Made& m : made) {
+    pipes += (m.cascade != VK_NULL_HANDLE) + (m.fallback != VK_NULL_HANDLE) + (m.variant != VK_NULL_HANDLE);
+    for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) pipes += (m.draw.strand[k] != VK_NULL_HANDLE) + (m.draw.probe[k] != VK_NULL_HANDLE);
+  }
   std::lock_guard<std::mutex> lock(g_mu);
   for (const std::string& t : notes) {
     const bool pipe = t.rfind("pipe:", 0) == 0;
     if (pipe ? g_logged_pipes++ < 6 : g_failures.refused < 8) log("%s", t.c_str() + (pipe ? 5 : 0));
+  }
+  {
+    // Powers of two of the running pipeline count: a few lines per session with the total CPU time so far.
+    const uint64_t before = g_variant_pipes;
+    g_variant_pipes += pipes;
+    g_variant_us += spent_us;
+    for (uint64_t mark = 64; mark <= (1ull << 20); mark <<= 1)
+      if (before < mark && g_variant_pipes >= mark) {
+        log("[hair primary] strand variants: %llu pipelines in %.1f ms of pipeline creation so far (prepared whether or not "
+            "RTX Hair is on)", (unsigned long long)g_variant_pipes, double(g_variant_us) / 1000.0);
+        break;
+      }
   }
   g_failures.refused += refused;
   auto replace = [](std::unordered_map<VkPipeline, VkPipeline>& map, VkPipeline game, VkPipeline v) {
@@ -1041,7 +1080,8 @@ uint32_t hair_primary_transmit(uint64_t key) {
 
 HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& cmds) {
   HairPrimarySubmit recordings{};
-  if (!g_startup_enabled) return recordings;
+  // Nothing was ever staged before strands first turned on (a session with RTX Hair off pays no submit work).
+  if (!g_startup_enabled || !g_live_ever.load(std::memory_order_acquire)) return recordings;
   std::lock_guard<std::mutex> lock(g_mu);
   for (VkCommandBuffer cmd : cmds) {
     const uint64_t recording = cmd_recording(cmd);
@@ -1122,7 +1162,7 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
 }
 
 void hair_primary_submit_end(const HairPrimarySubmit& recordings, bool success) {
-  if (!g_startup_enabled || !success) return;
+  if (!g_startup_enabled || !success || !g_live_ever.load(std::memory_order_acquire)) return;
   std::lock_guard<std::mutex> lock(g_mu);
   for (int i = 0; i < kStaged; ++i)
     if (recordings.headers[i] && g_staged[i].recording == recordings.headers[i]) g_staged[i].submitted = true;
@@ -1137,12 +1177,57 @@ namespace {
 // (DepthLatch: [p, p + 2]). While it runs the draw hook stays on even when rt_hair_groom was just turned off live, so
 // that G-buffer draw still gets its native depth back (the fallback pipeline) instead of drawing without card depth.
 std::atomic<uint64_t> g_depth_latch_until{0};
+
+// 5m live switch (common/hair_live.h), once per frame_index: the settings change at a present, so one decision holds
+// for every draw recorded under that frame_index. rt_hair_groom and rt_hair_groom_primary read 0 while rt_hair is 0
+// (layer/util.cpp hair_gated) or under the master RT A/B.
+void live_tick() {
+  if (!g_startup_enabled) return;
+  const uint64_t now = frame_index();
+  if (g_live_frame.load(std::memory_order_acquire) == now) return;
+  const bool requested = cfg_hot(CfgHot::rt_hair_groom) != 0 && cfg_hot(CfgHot::rt_hair_groom_primary) != 0;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (g_live_frame.load(std::memory_order_relaxed) == now || !g_dd) return;
+  const bool reserved = g_header.b != VK_NULL_HANDLE;
+  const hair_live::Edge edge = g_live.observe(requested, reserved || !g_header_tried, now);
+  if (edge == hair_live::Edge::On) {
+    // Publishes staged before the switch are never applied and the swap gate starts empty: the first swaps need two
+    // fresh publishes, as after a level load (no 300-frame pause: the G-buffer images are the same).
+    for (auto& st : g_staged) st.pick = {};
+    g_gate.clear();
+    g_live_keys.clear();
+    g_last_tag = 0;
+    for (CountSlot& c : g_cnt) c.valid = false;
+    g_live_ever.store(true, std::memory_order_release);
+    log("[hair primary] live: strands ON at frame %llu (switch %u): swaps resume after two fresh groom publishes",
+        (unsigned long long)now, g_live.ons);
+  } else if (edge == hair_live::Edge::Off) {
+    log("[hair primary] live: strands OFF at frame %llu (switch %u): cards from this frame; card depth restored "
+        "through frame %llu", (unsigned long long)now, g_live.offs, (unsigned long long)g_depth_latch_until.load());
+  } else if (edge == hair_live::Edge::Unavailable) {
+    log("[hair primary] live: RTX Hair requested, but this session has no strand variants (see 'strand variants not "
+        "prepared'): restart the game to enable");
+  }
+  g_live_on.store(g_live.on && reserved, std::memory_order_release);
+  if (!g_live.on && g_live_ever.load(std::memory_order_relaxed) && stats_due(now)) {
+    // The off windows' period line (the on windows have the 'grooms published' line of hair_primary_publish).
+    log_stats("[hair primary] frame %llu: RTX Hair off (live): 0 grooms published; last %u frames: 0 prepass, 0 G-buffer and "
+        "0 velocity strand draws; card depth restored by %llu native draws; switches on %u, off %u",
+        (unsigned long long)now, stats_period(300), (unsigned long long)g_off_restores, g_live.ons, g_live.offs);
+    g_off_restores = 0;
+  }
+  g_live_frame.store(now, std::memory_order_release);
+}
+
+// g_mu may be held: never ticks (the unlocked entry points hair_primary_wanted, hair_primary_before_pass and
+// hair_primary_publish tick first).
 bool strands_on() {
-  return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE;
+  return g_live_on.load(std::memory_order_acquire) && g_header.b != VK_NULL_HANDLE;
 }
 }  // namespace
 
 bool hair_primary_wanted() {
+  live_tick();
   return strands_on() || (g_startup_enabled && g_header.b != VK_NULL_HANDLE && frame_index() <= g_depth_latch_until.load());
 }
 
@@ -1184,6 +1269,7 @@ static void timing_before_gbuffer(VkCommandBuffer cmd, uint64_t now) {
 }
 
 void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  live_tick();
   if (!strands_on()) return;
   if (p.depth_image && uint64_t(p.depth_image) == geo_gbuffer_depth_image()) {
     const uint64_t identity = image_identity(uint64_t(p.depth_image));   // before g_mu (tracker lock order)
@@ -1219,6 +1305,8 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
   // This frame's or the previous frame's publish (the strand shaders rebase it to this camera, hp_rebase); an older one
   // may reference ranges freed by a LOD change (bvhsplit kGroomFreeLag covers 2 frames of age, not more).
   if (i >= 0 && g_staged[i].pick.tag + 1 < frame) i = -1;
+  // 5m: never a publish staged before strands last turned on (its TLAS may be refit or freed since).
+  if (i >= 0 && (g_staged[i].pick.tag == 0 || !g_live.publish_usable(g_staged[i].pick.tag - 1))) i = -1;
   if (i < 0) {
     g_live_keys.clear();   // no swap this frame; the prepass of the next one keeps its cards too
     if (g_order_none++ % 300 == 0)
@@ -1315,6 +1403,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     if (fb == g_fallback.end()) { depth_orphan(key, now, s->pipe[0], "no fallback (strands off)"); return false; }
     g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, fb->second);
     ++g_fallbacks;
+    ++g_off_restores;
     return true;
   }
   const auto hp = g_hair_pipes.find(s->pipe[0]);

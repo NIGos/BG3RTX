@@ -1,0 +1,30 @@
+{
+ "_rule": "Written and committed BEFORE any run. energy: float mean of the pre-post scene colour (dumps.json) per window's shot.",
+ "status": "READY_FOR_LIVE",
+ "rhl1-dialogue": {
+  "strands": {
+   "predicted": "on-a/on-b: G-buffer strand draws > 0 in every period line; off-a/off-b/base-b: 0",
+   "source": "layer/hair_primary.cpp live_tick + tests/hair_live_test.cpp",
+   "written": "2026-11-09"
+  },
+  "edges": {
+   "predicted": "ON/OFF switch 1 (warmup: the session's first activation), 2 and 3, each within one frame of its setting",
+   "source": "common/hair_live.h; settings change at a present (layer/util.cpp cfg_poll)",
+   "written": "2026-11-09"
+  },
+  "energy_off_vs_cards": {
+   "predicted": 0.0,
+   "tolerance": "within the base-a vs base-b difference (static camera, exposure held)",
+   "source": "rt_hair=0 makes every RTX Hair key read 0: the same settings as the cards-only windows",
+   "written": "2026-11-09"
+  },
+  "device_loss": {
+   "predicted": "none (no VK_ERROR_DEVICE_LOST, no [fault] line, no depth orphan)",
+   "written": "2026-11-09"
+  },
+  "startup_cost": {
+   "predicted": "'strand variants' line: a few hundred pipelines in about 100 ms (hcap3 2026-11-08: the first batch of 6+ G-buffer variants took 96 ms after the header)",
+   "written": "2026-11-09"
+  }
+ }
+}

@@ -54,6 +54,10 @@ assert(!ids.get('navigation').children.some(e=>e.id==='nav-Developer'));
  const hairSetting=fixture.settings.find(s=>s.id==='exp_hair_groom_primary');
  const badge=ids.get('home-hair').children[0].children[1].textContent;
  assert.strictEqual(badge,/restart/i.test(hairSetting.apply)?'Restart to apply':'Applies after saving','RTX Hair keeps its apply badge');
+ // 5m: RTX Hair is Apply::Live, so the bridge sends the live label and Home shows it; the hotkey comes from the bridge.
+ assert.strictEqual(hairSetting.apply,'Applies after saving','RTX Hair applies while playing');
+ assert.strictEqual(badge,'Applies after saving');
+ assert.strictEqual(fixture.shortcuts.hotkey_rtx_hair,'Ctrl+Shift+F7','the bridge sends the RTX Hair hotkey');
  // Status: game folder, GPU, mod files, unsaved changes (with Save), restart when needed.
  for(const id of ['game','gpu','mods','unsaved'])assert(ids.get('home-status-'+id),'status '+id);
  assert(all(ids.get('home-play-card')).includes(ids.get('home-attention')),'status is part of the Play card (first at every width)');
