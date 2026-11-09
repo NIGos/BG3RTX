@@ -839,7 +839,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom_coverage", "0"},
     {"rt_hair_primary_frame_tag", "0"},
     {"rt_hair_groom_lod_keep", "0"},
-    {"rt_hair_warmup", "0"},
+    {"rt_hair_warmup", "1"},
     {"rt_hair_macro_normal", "0"},
     {"rt_hair_tangent_world", "0"},
     {"rt_hair_groom_cascade_drop", "0"},
