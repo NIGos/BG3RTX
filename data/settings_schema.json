@@ -557,19 +557,6 @@
        {"id": "untag", "label": "Strands unresolved", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_strand_aa": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "coverage", "label": "Analytic coverage", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_strand_aa": "2"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
-    {"id": "exp_hair_warmup", "label": "RTX Hair fast start",
-     "description": "Experimental: after loading a save, strand hair appears as soon as every visible hair style is ready instead of after a fixed pause of about 5 seconds. Every safety check of the strands stays. Unqualified.",
-     "apply": "live", "apply_note": "live; needs RTX Hair", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: after loading a save, strand hair appears as soon as every visible hair style is ready instead of after a fixed pause of about 5 seconds. Every safety check of the strands stays. Unqualified.",
-     "details": "5o: load Test Dialogue1 and watch the hair of the party: strands should replace the cards within about 1-2 s of the scene appearing (was about 5-10 s).",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_warmup": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query", "linear_swept_spheres"], "keys": {"rt_hair_warmup": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
     {"id": "exp_hair_pool_trim", "label": "Retire unused hair snapshots",
      "description": "Reclaims unused hair capture memory.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": true,

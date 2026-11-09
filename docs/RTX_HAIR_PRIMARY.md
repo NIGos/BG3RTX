@@ -849,7 +849,7 @@ sh2 18:43 Water Queens House, rv3 18:37):
 - Key: a groom's draw key is published from the second update of its points range (+2 frames, also after a LOD switch).
 - Swap gates after the window: two publishes, the coverage probe (kFreshFrames 12), the G-buffer proof, the prepass
   card-depth drop: ~12-15 frames.
-Fix (rt_hair_warmup=1, live; knob exp_hair_warmup "RTX Hair fast start", developer, off in every preset):
+Fix (rt_hair_warmup, live, default 1 since 2026-11-09 after hw1: strands 309 -> 66-73 frames; the experimental knob exp_hair_warmup was removed):
 - The quiet window ends on a completion signal. bvhsplit reports per build whether the groom state is settled: grooms
   published and no hair draw with a join pending (UV readback in flight, or a full draw not yet joined), no LOD
   upload or LOD vote in progress, no first-LOD wait, no held soup, no full build, every groom keyed.
