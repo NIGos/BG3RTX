@@ -221,7 +221,7 @@ job3.update({
     "name": "rv3-s8-mesh-cache-budget",
     "set": SET3,
     "args": ["-RealPresent", "-Move", "-MovePlan", PLAN3],
-    "fail_fast": True,  # every gate below must hold key off as well (rv2 passed them key off)
+    "fail_fast": False,  # rv3 18:33: a 0.02 drop during an elastic regrowth in the key-off baseline stopped it; measure every window
     "estimated_phase_seconds": sum(p["seconds"] for p in plan3),
     "purpose": "rt_mesh_budget_own 0 / 1 / 0 in the rv1 S8 lowered view and turns (release defaults): with the key "
                "the mesh cache keeps the static meshes of the turn (about 300-550 meshes instead of 35-60), captured "
@@ -322,7 +322,7 @@ job4.update({
     "name": "sh2-s8-scene-handout",
     "set": SET4,
     "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", PLAN4],
-    "fail_fast": True,
+    "fail_fast": False,  # sh2 18:35: 1 timeout of 60 frames in the key-off baseline stopped it; measure every window
     "timeout": 900,
     "max_minutes": 15,
     "estimated_phase_seconds": sum(p["seconds"] for p in plan4),
