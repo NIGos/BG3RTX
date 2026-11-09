@@ -343,6 +343,11 @@ function Send-ShiftKey([bool]$down, [bool]$repeat = $false) {
   [void][BG3RTX.Win]::PostMessage($h, $(if ($down) { 0x0100 } else { 0x0101 }), [IntPtr]0x10, [IntPtr]$l)
 }
 
+# Every mouse message posted to the game carries this wParam bit (unused by MK_* flags):
+# in background runs the layer drops unmarked (real) mouse input while the user has another
+# window in front, and strips the mark before SDL sees it (layer/bg_input.h kPostedMark).
+$BgMouseMark = 0x0800
+
 Add-Type -Namespace BG3RTX -Name Win2 -MemberDefinition @"
 [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
 [DllImport("user32.dll")] public static extern bool GetClientRect(System.IntPtr h, out RECT r);
@@ -374,13 +379,13 @@ function Send-ModWarningClick([double]$uiScale) {
   $l = [IntPtr](([int64]$y -shl 16) -bor ($x -band 0xFFFF))
   Write-Host "mod warning: clicking Continue at client ($x, $y) of ${w}x$hh (UI ${uw}x$uh, scale $([Math]::Round($s, 4)))"
   # Only this run's window, by its handle: a move (hover), then the press and release.
-  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)   # WM_MOUSEMOVE
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]$BgMouseMark, $l)   # WM_MOUSEMOVE
   Start-Sleep -Milliseconds 150
-  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]$BgMouseMark, $l)
   Start-Sleep -Milliseconds 100
-  [void][BG3RTX.Win]::PostMessage($h, 0x0201, [IntPtr]1, $l)   # WM_LBUTTONDOWN, MK_LBUTTON
+  [void][BG3RTX.Win]::PostMessage($h, 0x0201, [IntPtr](1 -bor $BgMouseMark), $l)   # WM_LBUTTONDOWN, MK_LBUTTON
   Start-Sleep -Milliseconds 120
-  [void][BG3RTX.Win]::PostMessage($h, 0x0202, [IntPtr]0, $l)   # WM_LBUTTONUP
+  [void][BG3RTX.Win]::PostMessage($h, 0x0202, [IntPtr]$BgMouseMark, $l)   # WM_LBUTTONUP
   $true
 }
 
@@ -648,13 +653,13 @@ function Send-MenuContinueClick {
   $x = [int](765 * $s * $w / $uw); $y = [int](965 * $s * $hh / $uh)
   $l = [IntPtr](([int64]$y -shl 16) -bor ($x -band 0xFFFF))
   Write-Host "mod warning: clicking the main menu's Continue at client ($x, $y) of ${w}x$hh"
-  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]$BgMouseMark, $l)
   Start-Sleep -Milliseconds 150
-  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]0, $l)
+  [void][BG3RTX.Win]::PostMessage($h, 0x0200, [IntPtr]$BgMouseMark, $l)
   Start-Sleep -Milliseconds 100
-  [void][BG3RTX.Win]::PostMessage($h, 0x0201, [IntPtr]1, $l)
+  [void][BG3RTX.Win]::PostMessage($h, 0x0201, [IntPtr](1 -bor $BgMouseMark), $l)
   Start-Sleep -Milliseconds 120
-  [void][BG3RTX.Win]::PostMessage($h, 0x0202, [IntPtr]0, $l)
+  [void][BG3RTX.Win]::PostMessage($h, 0x0202, [IntPtr]$BgMouseMark, $l)
   $true
 }
 # A UI key (press and release) posted to this run's game window only, as the -Move key.
@@ -685,7 +690,7 @@ function Send-PlanMouse([int]$message, [int]$buttons, [int]$x, [int]$y) {
   $h = Get-GameWindow
   if ($h -eq [IntPtr]::Zero) { return }
   $packed = (($y -band 0xffff) -shl 16) -bor ($x -band 0xffff)
-  [void][BG3RTX.Win]::PostMessage($h, [uint32]$message, [IntPtr]$buttons, [IntPtr]$packed)
+  [void][BG3RTX.Win]::PostMessage($h, [uint32]$message, [IntPtr]($buttons -bor $BgMouseMark), [IntPtr]$packed)
 }
 function Release-Rotation {
   if ($script:rotateHeld) {
