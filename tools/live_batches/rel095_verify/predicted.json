@@ -48,7 +48,8 @@
    "gpu": "rt passes GPU cost and scene build GPU equal within noise (the handout changes no GPU work; OMM acceleration is off under the handout: a small RT GPU cost increase is possible, report it)",
    "unchanged": "0 opaque draws dropped, 0 timeouts, no device loss, no '[rt] scene handout layout off'",
    "omm_increment4": "with claude/scene-handout-4: the handout line reports 'OMM accelerated commits' > 0 and 'downgraded 0' in the steady ON windows (the lighting still records when the commit registers its tickets); RT GPU ms of the ON windows equal to OFF within noise (increment 3 alone: OMM off under the handout)",
-   "hit_materials": "still Off in this job: native hit materials refuse the handout until increment 4b (the real Ultra preset waits as before)"
+   "hit_materials": "On (real Ultra, increment 4b): the handout line reports 'hit material queries at the commit' about one per frame, 'failed' 0 and fallbacks query 0, camera 0 in the steady ON windows; the hit-material counters ('[hit material query]' with rt_stats in check-on) as in check-off; if the G-buffer command buffer is not a one-time recording every commit query fails: then fallbacks query = frames (a decisive failure of increment 4b, not of the handout)",
+   "written_4b": "2026-11-09, claude/scene-handout-4b, before any sh2 run: the job switched to the real Ultra preset"
   }
  }
 }

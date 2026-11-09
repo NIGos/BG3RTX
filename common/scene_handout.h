@@ -18,13 +18,15 @@
 
 namespace bg3::scene_handout {
 
-enum class Fallback : uint32_t { kNone = 0, kNotCommitted, kBuildFailed, kOrder, kDropped, kCount };
+enum class Fallback : uint32_t { kNone = 0, kNotCommitted, kBuildFailed, kOrder, kDropped, kQuery, kCamera, kCount };
 inline const char* fallback_name(Fallback f) {
   switch (f) {
     case Fallback::kNotCommitted: return "not committed";
     case Fallback::kBuildFailed: return "build failed";
     case Fallback::kOrder: return "order";
     case Fallback::kDropped: return "dropped";
+    case Fallback::kQuery: return "hit material query";
+    case Fallback::kCamera: return "hit material camera";
     default: return "none";
   }
 }
@@ -75,7 +77,7 @@ struct Machine {
     state = State::kReserved;
     slot = pick; prev = current;
     reserve_frame = frame; hand_frame = 0; rec = 0;
-    handed = committing = accelerated = false; user_count = 0;
+    handed = committing = accelerated = query_expected = query_ok = false; user_count = 0;
     ++n.reserved;
     return slot;
   }
@@ -138,11 +140,22 @@ struct Machine {
   // A commit of another slot (the reservation was not used for it) still tells later lighting the scene exists.
   void note_commit(uint64_t frame) { committed_frame = frame; }
 
+  // Increment 4b (native hit materials): the commit also built the slot's hit-material query (or failed to); its
+  // resolution then needs it (`accept`). A handed-out slot without a query, or whose users bound another camera than the
+  // query's, resolves to P like a scene that did not commit (the frame pairing checks of the query stay unchanged).
+  bool query_expected = false, query_ok = false;
+  void commit_query(int s, bool ok) { if (committing && s == slot) { query_expected = true; query_ok = ok; } }
+
   // Submit of a batch. `user_in_batch(user)` -> index of that recording in the batch or -1; `record_before(rec, index)`
   // -> the build record was submitted before or sits in the batch before index. `now` for expiry: a handout whose
   // users were never submitted within `expire` frames resolves as dropped (the recordings were reset unsubmitted).
   template <class UserIndex, class RecordBefore>
   Resolution resolve(uint64_t now, uint32_t expire, UserIndex user_in_batch, RecordBefore record_before) {
+    return resolve(now, expire, user_in_batch, record_before, [](int) { return Fallback::kNone; });
+  }
+  // `accept(slot)`: kNone, or why an in-order handout must still fall back (kCamera: a user's camera binding).
+  template <class UserIndex, class RecordBefore, class Accept>
+  Resolution resolve(uint64_t now, uint32_t expire, UserIndex user_in_batch, RecordBefore record_before, Accept accept) {
     Resolution r;
     if (!open() || !handed || committing) return r;   // committing: the caller holds g_mu, so never at a submit
     int first = -1;
@@ -154,7 +167,11 @@ struct Machine {
     if (first < 0 && !expired) return r;
     r.resolved = true; r.slot = slot; r.prev = prev; r.frame = hand_frame;
     if (expired) r.reason = Fallback::kDropped;
-    else if (state == State::kCommitted && record_before(rec, first)) r.in_order = true;
+    else if (state == State::kCommitted && record_before(rec, first)) {
+      if (query_expected && !query_ok) { r.reason = Fallback::kQuery; r.poison = true; }
+      else if (const Fallback f = accept(slot); f != Fallback::kNone) { r.reason = f; r.poison = true; }
+      else r.in_order = true;
+    }
     else if (state == State::kCommitted) { r.reason = Fallback::kOrder; r.poison = true; }
     else if (state == State::kFailed) r.reason = Fallback::kBuildFailed;
     else r.reason = Fallback::kNotCommitted;
@@ -164,7 +181,7 @@ struct Machine {
   }
 
   void close() {
-    state = State::kIdle; slot = prev = -1; handed = committing = accelerated = false; user_count = 0; rec = 0;
+    state = State::kIdle; slot = prev = -1; handed = committing = accelerated = query_expected = query_ok = false; user_count = 0; rec = 0;
   }
 };
 

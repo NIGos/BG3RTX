@@ -1166,7 +1166,51 @@ void pool_jobs_record(VkCommandBuffer cmd,CmdState* state){
 bool slot_reusable(uint32_t index,uint64_t gpuDone){if(!on || index>=kSceneSlots)return true;std::lock_guard lock(mutex);
  for(auto id:slots[index].owners){auto i=owners.find(id);if(i==owners.end() || !i->second.retired(current_recording(i->second.command),gpuDone))return false;}return true;
 }
-bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alpha){
+// rt_scene_handout=2 (increment 4b, docs/SCENE_HANDOUT_DESIGN.md): the per-slot query set a handout binds before the
+// scene is built. Allocated once per slot (update-after-bind pool, alpha_clone_hit_set), rewritten only by that slot's
+// commit-time query (the slot is retired then) or by the submit settle's fallback copy.
+VkDescriptorPool ho_pool[kSceneSlots]{};VkDescriptorSet ho_set[kSceneSlots]{};
+VkBuffer ho_camera[kSceneSlots]{};VkDeviceSize ho_camera_offset[kSceneSlots]{};bool ho_query[kSceneSlots]{};
+std::mutex ho_mutex;   // leaf: the lighting thread never takes `mutex` for a handout
+VkDescriptorSet handout_set(uint32_t index){
+ if(!on || index>=kSceneSlots)return {};
+ std::lock_guard l(ho_mutex);
+ if(!ho_set[index]){const auto source=alpha_slot_set(index);
+  if(!source || !alpha_clone_hit_set(source,&ho_pool[index],&ho_set[index],{},nullptr))return {};}
+ return ho_set[index];
+}
+// The capture end of a reserved slot: the query the lighting's hit-material dispatches would build, built now from the
+// G-buffer command buffer (its uploads and join/remap/gather run before the lighting in the same submit) into the
+// slot's handout set. The camera check moves to the submit (handout_camera_ok). false: no query (resolved to P).
+bool commit_query(VkCommandBuffer cmd,uint32_t index){
+ if(!on || index>=kSceneSlots || !handout_set(index))return false;
+ VkDescriptorSet out{};const bool ok=register_use(cmd,index,&out,true) && out==ho_set[index];
+ std::lock_guard l(mutex);std::lock_guard h(ho_mutex);
+ ho_query[index]=ok;ho_camera[index]=slots[index].camera;ho_camera_offset[index]=slots[index].camera_offset;
+ return ok;
+}
+bool handout_camera_ok(uint32_t index,VkBuffer camera,VkDeviceSize offset){
+ std::lock_guard h(ho_mutex);return index<kSceneSlots && ho_query[index] && ho_camera[index]==camera && ho_camera_offset[index]==offset;
+}
+// Submit settle: the users' recordings own the slot's commit-time query (in order), or the previous scene's query set
+// is copied into the handout set (fallback: P's live query of its own generation, else P's plain set, whose rows
+// header then rejects every row on the GPU) and P's query is owned by the users.
+void handout_settle(uint32_t index,uint32_t prev,bool in_order,const std::vector<VkCommandBuffer>& users){
+ if(!on || index>=kSceneSlots || prev>=kSceneSlots)return;
+ std::lock_guard lock(mutex);
+ auto own_users=[&](Query& q){for(auto cmd:users)if(own(cmd))q.users.add(cmd_state(cmd)->recording);};
+ Query* source=nullptr;
+ for(auto& [id,q]:queries)if(q->set && q->slot==(in_order?index:prev) && q->generation==slots[in_order?index:prev].generation &&
+   (!in_order || q->set==ho_set[index])){source=q.get();break;}
+ if(source)own_users(*source);
+ if(in_order)return;
+ VkDescriptorSet from=source?source->set:alpha_slot_set(prev);
+ std::lock_guard h(ho_mutex);
+ if(!from || !ho_set[index] || from==ho_set[index])return;
+ alpha_copy_set_handles(from,ho_set[index],true);
+ ho_query[index]=false;
+}
+bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alpha,bool commit){
  if(query_alpha)*query_alpha={};
  if(!on || !query_alpha || !cfg_hot(CfgHot::rt_hit_material) || index>=kSceneSlots)return false;
  auto* state=cmd_state(cmd);if(!one_time(state)){
@@ -1174,7 +1218,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
     (unsigned long long)frame_index(),state?unsigned(state->level):UINT32_MAX,state?unsigned(state->begin_flags):0u);return false;
  }
  CpuTimer timer(CpuQuery);std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);const bool lean=recycle_live();if(!lean)collect();auto& slot=slots[index];
- if(slot.prepared && slot.attached && slot.frame<frame_index()){
+ if(!commit && slot.prepared && slot.attached && slot.frame<frame_index()){
   // Reuse F-1's immutable rows and camera proof; never create a query with F's camera.
   for(auto& [id,query]:queries){auto& q=*query;
    if(q.set && borrow_query(slot.frame,frame_index(),q.slot,index,q.generation,slot.generation)){
@@ -1188,7 +1232,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   if(cfg_hot(CfgHot::rt_stats) && frame_index()%120==0)log("[hit material query reject] source epoch current %llu source %llu prepared %u attached %u",
    (unsigned long long)frame_index(),(unsigned long long)slot.frame,unsigned(slot.prepared),unsigned(slot.attached));return false;
  }
- Bg3Binding camera{};if(!query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,0,2,0,&camera,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) || camera.buffer!=slot.camera || camera.offset!=slot.camera_offset){
+ Bg3Binding camera{};if(!commit && (!query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,0,2,0,&camera,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) || camera.buffer!=slot.camera || camera.offset!=slot.camera_offset)){
   if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0)log("[hit material query reject] camera frame %llu source %p+%llu query %p+%llu",
    (unsigned long long)slot.frame,(void*)slot.camera,(unsigned long long)slot.camera_offset,(void*)camera.buffer,(unsigned long long)camera.offset);return false;
  }
@@ -1454,7 +1498,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  if(q.materials.empty() && q.pool_rows.empty())return false;
  uint32_t first_table=0;q.rows_bytes=q.pool_rows.empty()?row_bytes:row_bytes+pool_rows_bytes;
  if(!create(q.rows,q.rows_bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,true) ||
-    !create(q.data,std::max<VkDeviceSize>(cursor,256),VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) || !alpha_clone_hit_set(slot.set,&q.pool,&q.set,tables,&first_table) ||
+    !create(q.data,std::max<VkDeviceSize>(cursor,256),VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) || !(commit?[&]{std::lock_guard h(ho_mutex);q.set=ho_set[index];return q.set && alpha_clone_hit_set(slot.set,&ho_pool[index],&q.set,tables,&first_table);}():alpha_clone_hit_set(slot.set,&q.pool,&q.set,tables,&first_table)) ||
     (!q.pool_rows.empty() && !create(q.pool_ubo,VkDeviceSize(q.pool_rows.size())*512u,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,true))){
   destroy_query(q);return false;
  }

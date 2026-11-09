@@ -3276,11 +3276,11 @@ void hair_fibre_timing_collect() {
 VkAccelerationStructureKHR rt_tlas_ordinary(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity, bool* scene_current);
 
 // rt_scene_handout=2 (docs/SCENE_HANDOUT_DESIGN.md increment 3): the handed-out pair of this frame (no wait), else the
-// ordinary path. Not with native hit materials (their query reads the committed slot on the CPU) nor while a pipeline
+// ordinary path. Native hit materials take the slot's handout query set (layer, increment 4b). Not while a pipeline
 // without constant 1051 ran in the last two frames (toggle: its async rebuild is not ready yet).
 VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity, bool* scene_current) {
   const uint64_t now = host->frame_index();
-  if (host->rt_scene_handout && host->cfg_int("rt_scene_handout", 0) >= 2 && !host->cfg_int("rt_hit_material", 0) &&
+  if (host->rt_scene_handout && host->cfg_int("rt_scene_handout", 0) >= 2 &&
       g_handout_unready + 2 < now && host->rt_scene && host->cfg_int("rt_scene_wait", 1)) {
     VkDescriptorSet set{};
     VkAccelerationStructureKHR dummy{};

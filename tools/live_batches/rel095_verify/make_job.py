@@ -269,14 +269,12 @@ job3["expect_runner"] = [
 # sh2 (scene handout increment 3, claude/scene-handout-3, docs/SCENE_HANDOUT_DESIGN.md 6): Water Queens House, uncapped
 # and focused (frame time is the deliverable), rt_scene_handout 0 / 2 / 0 in turns and static windows of one launch.
 # rt_scene_handout_layout=1 from launch (startup key: the update-after-bind set 1 and the dummy TLAS; it changes no
-# frame by itself, increment 1). Native hit materials off (exp_hidden_surface Off): their per-dispatch query reads the
-# committed slot on the CPU, so the handout is refused with them (increment 4). Short rt_stats + rt_primary_check
+# frame by itself, increment 1). The real Ultra preset since increment 4b: native hit materials (their query is built
+# at the commit) and OMM (tickets on every handout user, increment 4) on. Short rt_stats + rt_primary_check
 # windows (about 80 ms/frame) only after the timed windows of each state.
 PLAN4 = "tools/live_batches/rel095_verify/plans/sh2_s8.json"
-NO_HIT = ("rt_hit_material=0,rt_hit_material_instanced=0,rt_hit_material_wind_rgb=0,gi_hit_direct=0,gi_hit_sun=0,"
-          "rf_hit_shade=0,rf_hit_gi=0,rt_hit_emission=0,rt_emissive=0,gi_far=0")
 SET4 = (SET.replace("fg=3", "fg=3,fps_cap=0").replace("rt_capture_rise_reserve=0", "rt_capture_rise_reserve=1") +
-        ",rt_capture_wide_split=1,rt_scene_handout_layout=1,rt_scene_handout=0,rt_stats_period_frames=60," + NO_HIT)
+        ",rt_capture_wide_split=1,rt_scene_handout_layout=1,rt_scene_handout=0,rt_stats_period_frames=60")
 
 
 QUIET4 = "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -328,7 +326,7 @@ job4.update({
     "timeout": 900,
     "max_minutes": 15,
     "estimated_phase_seconds": sum(p["seconds"] for p in plan4),
-    "purpose": "rt_scene_handout 0 / 2 / 0 at S8, uncapped and focused (Ultra without native hit materials): with the "
+    "purpose": "rt_scene_handout 0 / 2 / 0 at S8, uncapped and focused (the real Ultra preset: hit materials, OMM): with the "
                "handout the lighting's first RT query no longer waits for the scene build (wait mean 2-7 ms -> < 0.1 ms, "
                "got = waited, 0 timeouts), 0 fallbacks and 0 pairing mismatches in the steady ON windows, rt_primary_check "
                "match and the static energy equal to the OFF windows, rendered frame time lower by up to the OFF wait.",
