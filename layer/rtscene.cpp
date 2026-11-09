@@ -37,6 +37,7 @@
 #include "../common/cascade_casters.h"
 #include "../common/water_build_camera.h"
 #include "../common/hair_cost_epoch.h"
+#include "../common/scene_handout_layout.h"
 
 #include <intrin.h>
 
@@ -71,6 +72,11 @@ VkPhysicalDeviceFeatures g_f_core{};
 uint32_t g_sharc_bits = 0;   // Bg3DeviceInfo::features of the create info last built
 // Fields we set to VK_TRUE inside the game's own feature structs, to undo before a retry.
 std::vector<std::pair<VkBool32*, VkBool32>> g_feature_edits;
+// rt_scene_handout_layout (restart, docs/SCENE_HANDOUT_DESIGN.md 3.2): the descriptor-indexing UAB features for set 1.
+VkPhysicalDeviceDescriptorIndexingFeatures g_f_di{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES};
+bool g_handout_request = true;    // false after a device creation with them failed (retried without)
+bool g_handout_features = false;  // the create info last built asks for them
+bool g_handout_on = false;        // the device was created with them
 
 struct Buf {
   VkBuffer b = VK_NULL_HANDLE;
@@ -506,6 +512,76 @@ bool ensure_tlas() {
   return true;
 }
 
+// rt_scene_handout_layout: the empty dummy TLAS (docs/SCENE_HANDOUT_DESIGN.md 3; common/scene_handout_layout.h).
+// Its own instance input and scratch, so its build never shares the scene build's scratch in the same command buffer.
+VkAccelerationStructureKHR g_dummy_tlas = VK_NULL_HANDLE;
+Buf g_dummy_tlas_buf, g_dummy_inst, g_dummy_scratch;
+uint64_t g_dummy_rec = 0;   // build record of the command buffer it was recorded into (pinned until submitted)
+bool g_dummy_ready = false;
+
+// Caller holds g_mu. Creates the dummy once and records its (zero-instance) build into `cmd`, the scene build's
+// command buffer, outside any render pass; again only if that recording was dropped without a submit.
+void ensure_dummy_tlas(VkCommandBuffer cmd) {
+  if (!g_handout_on || g_dummy_ready) return;
+  if (g_dummy_rec) {
+    const int state = bvh_rec_state(g_dummy_rec);
+    if (state == 1) { g_dummy_ready = true; bvh_rec_pin(g_dummy_rec, false); return; }
+    if (state != 2) return;   // recorded, not submitted yet
+    bvh_rec_pin(g_dummy_rec, false);
+    g_dummy_rec = 0;          // dropped: record the build again
+  }
+  DeviceData* dd = g_dd;
+  if (!g_dummy_tlas) {
+    scene_handout::EmptyTlas probe;
+    uint32_t one = scene_handout::EmptyTlas::kMaxInstances;
+    VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+    dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &probe.build, &one, &sz);
+    if (!make_buf(g_dummy_inst, scene_handout::EmptyTlas::kInstanceBytes,
+                  VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, "scene handout dummy TLAS instance") ||
+        !make_buf(g_dummy_tlas_buf, sz.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+                  "scene handout dummy TLAS") ||
+        !make_buf(g_dummy_scratch, sz.buildScratchSize + g_scratch_align, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                  "scene handout dummy TLAS scratch")) {
+      for (Buf* b : {&g_dummy_inst, &g_dummy_tlas_buf, &g_dummy_scratch}) if (b->b) free_buf(*b);
+      log("[rt] scene handout: dummy TLAS allocation failed");
+      g_handout_on = false;
+      return;
+    }
+    VkAccelerationStructureCreateInfoKHR ci{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+    ci.buffer = g_dummy_tlas_buf.b;
+    ci.size = sz.accelerationStructureSize;
+    ci.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    if (dd->vk.CreateAccelerationStructureKHR(dd->device, &ci, nullptr, &g_dummy_tlas) != VK_SUCCESS) {
+      g_dummy_tlas = VK_NULL_HANDLE;
+      for (Buf* b : {&g_dummy_inst, &g_dummy_tlas_buf, &g_dummy_scratch}) free_buf(*b);
+      log("[rt] scene handout: dummy TLAS creation failed");
+      g_handout_on = false;
+      return;
+    }
+  }
+  scene_handout::EmptyTlas e(g_dummy_inst.addr);
+  e.build.dstAccelerationStructure = g_dummy_tlas;
+  e.build.scratchData.deviceAddress = (g_dummy_scratch.addr + g_scratch_align - 1) & ~(g_scratch_align - 1);
+  const VkAccelerationStructureBuildRangeInfoKHR* ranges = &e.range;
+  dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &e.build, &ranges);
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+  mb.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+  dd->vk.CmdPipelineBarrier(cmd, kAS, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  g_dummy_rec = bvh_rec_register(cmd);
+  bvh_rec_pin(g_dummy_rec, true);
+  log("[rt] scene handout: dummy TLAS (0 instances, %llu bytes) recorded", (unsigned long long)g_dummy_tlas_buf.size);
+}
+
+void release_dummy_tlas() {
+  if (g_dummy_tlas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_dummy_tlas));
+  g_dummy_tlas = VK_NULL_HANDLE;
+  for (Buf* b : {&g_dummy_inst, &g_dummy_tlas_buf, &g_dummy_scratch}) if (b->b) free_buf(*b);
+  if (g_dummy_rec) bvh_rec_pin(g_dummy_rec, false);
+  g_dummy_rec = 0;
+  g_dummy_ready = false;
+}
+
 void release_all() {
   if (g_blas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_blas));
   if (g_tlas) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_tlas));
@@ -624,6 +700,55 @@ static const void* sharc_features(InstanceData* id, VkPhysicalDevice phys, const
   return next;
 }
 
+// rt_scene_handout_layout: storage-buffer and sampled-image update-after-bind in the game's own struct when it chains
+// one (it chains VkPhysicalDeviceDescriptorIndexingFeatures; ...Vulkan12Features would forbid ours, VUID 04478),
+// otherwise in ours in front; the acceleration-structure one goes into g_f_as (*as_uab). Only when all three are
+// supported (scene_handout::uab_supported). Returns the new chain head.
+static const void* handout_features(InstanceData* id, VkPhysicalDevice phys, const void* next, bool* as_uab) {
+  *as_uab = false;
+  VkPhysicalDeviceDescriptorIndexingFeatures di{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES};
+  VkPhysicalDeviceAccelerationStructureFeaturesKHR as{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, &di};
+  VkPhysicalDeviceFeatures2 sup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &as};
+  id->GetPhysicalDeviceFeatures2(phys, &sup);
+  if (!scene_handout::uab_supported(di, as)) {
+    log("[rt] scene handout layout: update-after-bind not supported (storage buffer %d, sampled image %d, "
+        "acceleration structure %d); set 1 stays as it is", di.descriptorBindingStorageBufferUpdateAfterBind,
+        di.descriptorBindingSampledImageUpdateAfterBind, as.descriptorBindingAccelerationStructureUpdateAfterBind);
+    return next;
+  }
+  auto set = [](const VkBool32* field) {
+    auto* f = const_cast<VkBool32*>(field);
+    if (*f) return;
+    g_feature_edits.emplace_back(f, *f);
+    *f = VK_TRUE;
+  };
+  const char* where = "ours";
+  if (auto* v12 = reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES))) {
+    set(&v12->descriptorBindingStorageBufferUpdateAfterBind);
+    set(&v12->descriptorBindingSampledImageUpdateAfterBind);
+    where = "the game's VkPhysicalDeviceVulkan12Features";
+  } else if (auto* e = reinterpret_cast<const VkPhysicalDeviceDescriptorIndexingFeatures*>(
+                 find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES))) {
+    set(&e->descriptorBindingStorageBufferUpdateAfterBind);
+    set(&e->descriptorBindingSampledImageUpdateAfterBind);
+    where = "the game's VkPhysicalDeviceDescriptorIndexingFeatures";
+  } else {
+    g_f_di = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES};
+    g_f_di.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+    g_f_di.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+    g_f_di.pNext = const_cast<void*>(next);
+    next = &g_f_di;
+  }
+  *as_uab = true;
+  g_handout_features = true;
+  log("[rt] + scene handout layout: storage buffer, sampled image (in %s) and acceleration structure update-after-bind", where);
+  return next;
+}
+
+bool rt_scene_handout_requested() { return g_handout_features; }
+void rt_scene_handout_disable_request() { g_handout_request = false; }
+bool rt_scene_handout_layout() { return g_handout_on; }
+
 bool rt_device_features_added() { return g_sharc_bits != 0; }
 
 void rt_device_features_undo() {
@@ -631,6 +756,7 @@ void rt_device_features_undo() {
   if (!g_feature_edits.empty()) log("[rt] restored %zu feature fields of the game's create info", g_feature_edits.size());
   g_feature_edits.clear();
   g_sharc_bits = 0;
+  g_handout_features = false;
 }
 
 const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevice phys, const VkDeviceCreateInfo* ci,
@@ -769,11 +895,16 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   next = omm::device_features(id, phys, next, g_ext_names);
   next = hair_groom::device_features(id, phys, next, g_ext_names);
   next = rt_pipeline::device_features(id, phys, next, g_ext_names);   // gi_rt_pipeline (layer/rt_pipeline.cpp)
+  g_handout_features = false;
+  bool handout_as = false;
+  if (g_handout_request && cfg_int("rt_scene_handout_layout", 0) && id->GetPhysicalDeviceFeatures2)
+    next = handout_features(id, phys, next, &handout_as);
   g_f_rq = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
   g_f_rq.rayQuery = VK_TRUE;
   g_f_rq.pNext = const_cast<void*>(next);
   g_f_as = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
   g_f_as.accelerationStructure = VK_TRUE;
+  g_f_as.descriptorBindingAccelerationStructureUpdateAfterBind = handout_as ? VK_TRUE : VK_FALSE;
   g_f_as.pNext = &g_f_rq;
   *scratch = *ci;
   scratch->pNext = &g_f_as;
@@ -797,6 +928,9 @@ void rt_device_created(DeviceData* dd, bool enabled) {
     if (enabled && g_sharc_bits) log("[rt] SHaRC device features on the device: 0x%x", g_sharc_bits);
   }
   g_feature_edits.clear();   // the device exists: nothing to undo any more
+  g_handout_on = enabled && g_handout_features;
+  if (cfg_int("rt_scene_handout_layout", 0))
+    log("[rt] scene handout layout %s", g_handout_on ? "on (set 1 update-after-bind)" : "off (not on the device)");
   if (!enabled) {
     if (cfg_int("rt", 1)) log("[rt] ray tracing is NOT enabled on the device");
     return;
@@ -846,6 +980,7 @@ void rt_device_destroyed(DeviceData* dd) {
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();
+    release_dummy_tlas();
     if (auto* ring = static_cast<water::BuildCameraRing*>(persist(water::kBuildCameraKey, sizeof(water::BuildCameraRing)))) {
       water::BuildCameraLock lock(*ring);
       ring->buffer = 0;
@@ -1116,6 +1251,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     return;
   }
   if (!ensure_pipeline()) return;
+  ensure_dummy_tlas(cmd);   // rt_scene_handout_layout only (once)
   // The scene slot this build writes (retired on the GPU); none free: no build
   // this frame, the previous scene stays current.
   const int scene_slot = pick_scene_slot();
@@ -1480,6 +1616,16 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
     }
     g_wait = WaitStats{};
   }
+}
+
+VkAccelerationStructureKHR rt_scene_dummy_tlas() {
+  if (!g_rt) return VK_NULL_HANDLE;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_dummy_ready && g_dummy_rec && bvh_rec_state(g_dummy_rec) == 1) {
+    g_dummy_ready = true;
+    bvh_rec_pin(g_dummy_rec, false);
+  }
+  return g_dummy_ready ? g_dummy_tlas : VK_NULL_HANDLE;
 }
 
 bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64_t* built_frame) {

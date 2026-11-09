@@ -168,6 +168,9 @@ uint64_t* token)`. Core `rt_tlas` (gi.cpp:3208) calls it when `rt_scene_handout`
 | 2 | Stamp TLAS words written at commit; spec 1051 shader path; core binds with spec on but still waits | alphatest.cpp alpha_commit, shaders (11 sites), common/shader_variant.h, core pipelines spec slot | 1-1.5 d | spec identity (key off same program); frame_replay `--spec 1051=1` vs `=0` bit-equal on gi_hit_direct, D-LS and reflections packs (harness writes the replay TLAS address into the pack stamp) | folded into 3 |
 | 3 | Handout: `common/scene_handout.h` state machine, reservation under `g_handout_mu`, submit resolution and fallback, OMM tickets on the G-buffer recording, water stash, ABI 30 | layer/rtscene.cpp, layer.cpp (both submit hooks), bvhsplit.cpp (omm use only), core/gi.cpp rt_tlas, core/water.cpp, common/host_api.h | 2-3 d | CTest scene_handout_test: reserve/commit/resolve, late build after fallback, no capture, lighting submitted first, retirement counts R and P live, OMM ticket owner | sh2 below |
 
+Increment 1 done (2026-11-09, branch claude/scene-handout-1, off by default, not merged, no live): key
+`rt_scene_handout_layout`, common/scene_handout_layout.h, CTest scene_handout_gpu_fixture (5090, 0 validation errors).
+
 Total 4-5.5 days after a go from increment 0. Gate to start 1: sh1 frame time(on) - frame time(off) >= 1 ms
 (below 0.5 ms, inside the on-a/on-b spread: drop the handout, keep only S1/S2 if cheap).
 
