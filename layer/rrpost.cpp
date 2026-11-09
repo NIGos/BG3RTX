@@ -869,37 +869,125 @@ uint64_t g_strand_frames = 0, g_strand_missing = 0, g_strand_logged_at = 0, g_sn
 // under our g_mu must never call into ngx (ngx_gbuffer_camera takes ngx's g_mu). The camera is read by the caller before
 // it locks (cam_ok, vp, pos, jitter in pixels per unit render size).
 struct SnapCamera { bool ok = false; float vp[16] = {}, pos[3] = {}, jit_unit[2] = {}; };
-void record_strand_snapshot(DeviceData* dd, VkCommandBuffer cmd, const SnapCamera& cam, uint32_t w, uint32_t h) {
+// Snapshot sites (dev key rr_hair_strand_snap_site): 0 the scene G-buffer pass end (5 targets), 1 the decal pass end
+// (4 targets with the G-buffer formats, after it), 2 the standard tiled-lighting dispatch; 3 every site, each later one of
+// the frame merged over the earlier (it writes only the pixels where it finds a strand footprint: per pixel the latest
+// site that holds strand data). he1 03:38: the G-buffer-end snapshot (site 0) changed no hair pixel.
+const char* const kSnapSite[3] = {"G-buffer end", "decal end", "lighting"};
+uint64_t g_snap_site_frame[3] = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+// Per-site counters (footprint, strand, coverage pixels, dispatches), device-local, reduced per workgroup in the shader,
+// copied to a host buffer after each period (outside every timed dispatch) and logged one period later.
+constexpr uint32_t kSnapCounterWords = 12;
+VkBuffer g_snap_cnt = VK_NULL_HANDLE, g_snap_rb = VK_NULL_HANDLE;
+VkDeviceMemory g_snap_cnt_mem = VK_NULL_HANDLE, g_snap_rb_mem = VK_NULL_HANDLE;
+uint32_t* g_snap_rb_map = nullptr;
+uint64_t g_snap_copy_frame = 0, g_snap_period_start = 0;
+bool g_snap_copy_pending = false, g_snap_cnt_cleared = false;
+
+bool snap_counters(DeviceData* dd) {
+  if (g_snap_cnt) return true;
+  VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bci.size = kSnapCounterWords * 4;   // the strand snapshot counters (device-local)
+  bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  if (dd->vk.CreateBuffer(dd->device, &bci, nullptr, &g_snap_cnt) != VK_SUCCESS) return false;
+  VkMemoryRequirements mr{};
+  dd->vk.GetBufferMemoryRequirements(dd->device, g_snap_cnt, &mr);
+  VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  ai.allocationSize = mr.size;
+  ai.memoryTypeIndex = find_memory_type(dd, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  if (ai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &ai, nullptr, &g_snap_cnt_mem) != VK_SUCCESS ||
+      dd->vk.BindBufferMemory(dd->device, g_snap_cnt, g_snap_cnt_mem, 0) != VK_SUCCESS) {
+    dd->vk.DestroyBuffer(dd->device, g_snap_cnt, nullptr);
+    g_snap_cnt = VK_NULL_HANDLE;
+    return false;
+  }
+  if (!alloc_host_buffer(kSnapCounterWords * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &g_snap_rb, &g_snap_rb_mem,
+                         reinterpret_cast<void**>(&g_snap_rb_map)))
+    g_snap_rb_map = nullptr;
+  return true;
+}
+
+// Once per period (rt_stats_period_frames, 60 by default), before the frame's first snapshot: log the copy recorded a
+// period ago (its frames have completed long since), then copy this period's counters and clear them.
+void snap_counters_period(DeviceData* dd, VkCommandBuffer cmd) {
+  const uint64_t now = frame_index();
+  const uint64_t period = uint64_t(std::max(cfg_int("rt_stats_period_frames", 60), 60));
+  if (!g_snap_cnt_cleared) {
+    dd->vk.CmdFillBuffer(cmd, g_snap_cnt, 0, VK_WHOLE_SIZE, 0u);
+    barrier(dd, cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+    g_snap_cnt_cleared = true;
+    g_snap_period_start = now;
+    return;
+  }
+  if (now < g_snap_period_start + period) return;
+  if (g_snap_copy_pending && g_snap_rb_map) {
+    const uint32_t* c = g_snap_rb_map;
+    for (uint32_t s = 0; s < 3; ++s) {
+      const uint32_t n = c[s * 4 + 3];
+      if (!n) continue;
+      log("[rrpost] strand snapshot site %s (frames %llu-%llu): %u dispatches; per dispatch footprint %.0f px, strand %.0f px, "
+          "coverage %.0f px", kSnapSite[s], (unsigned long long)g_snap_copy_frame - period, (unsigned long long)g_snap_copy_frame,
+          n, double(c[s * 4]) / n, double(c[s * 4 + 1]) / n, double(c[s * 4 + 2]) / n);
+    }
+  }
+  barrier(dd, cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+          VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+  if (g_snap_rb) {
+    const VkBufferCopy region{0, 0, kSnapCounterWords * 4};
+    dd->vk.CmdCopyBuffer(cmd, g_snap_cnt, g_snap_rb, 1, &region);
+  }
+  barrier(dd, cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+          VK_ACCESS_TRANSFER_WRITE_BIT);
+  dd->vk.CmdFillBuffer(cmd, g_snap_cnt, 0, VK_WHOLE_SIZE, 0u);
+  barrier(dd, cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+          VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_HOST_READ_BIT);
+  g_snap_copy_pending = g_snap_rb != VK_NULL_HANDLE;
+  g_snap_copy_frame = now;
+  g_snap_period_start = now;
+}
+
+void record_strand_snapshot(DeviceData* dd, VkCommandBuffer cmd, const SnapCamera& cam, uint32_t w, uint32_t h,
+                            uint32_t site) {
   const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 3);
-  if (mode <= 0 || !w || !h) return;
+  if (mode <= 0 || !w || !h || site > 2) return;
+  const int pick = cfg_int("rr_hair_strand_snap_site", 0);
+  if (pick != 3 && uint32_t(pick) != site) return;
+  // At most one snapshot per site and frame (the decal pass can match more than once).
+  if (g_snap_site_frame[site] == frame_index()) return;
   Img& img = g_strand[frame_index() & 1];
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
   StrandPush sp{};
-  if (!hp || !hp->header || w > 32768u || h > 32768u || !cam.ok ||
-      !img_ensure(dd, img, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, frame_index() & 1 ? "strand snapshot B" : "strand snapshot A")) {
+  if (!hp || !hp->header || w > 32768u || h > 32768u || !cam.ok || !snap_counters(dd) ||
+      !img_ensure(dd, img, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, frame_index() & 1 ? "strand snapshot B" : "strand snapshot A") ||
+      img.w != w || img.h != h) {
     ++g_snap_missing;
     return;
   }
+  snap_counters_period(dd, cmd);
+  // The frame's first snapshot rewrites the whole image (UNDEFINED -> GENERAL); a later site merges over it.
+  const bool merge = g_strand_ring.usable(frame_index());
   memcpy(sp.vp, cam.vp, sizeof sp.vp);
   memcpy(sp.cam, cam.pos, sizeof sp.cam);
   sp.jitter = half_bits(cam.jit_unit[0] * float(w)) | (half_bits(cam.jit_unit[1] * float(h)) << 16);
-  sp.bmin = uint32_t(mode) << 30;
+  sp.bmin = site | (merge ? 4u : 0u) | (uint32_t(mode) << 30);
   sp.bmax = (w - 1) | ((h - 1) << 15);
   sp.header[0] = uint32_t(hp->header);
   sp.header[1] = uint32_t(hp->header >> 32);
   Push raw;
   memcpy(&raw, &sp, sizeof raw);
-  to_general(dd, cmd, {&img});
+  if (!merge) to_general(dd, cmd, {&img});
   Binds b;
   b.out16 = img.view;
+  b.probe_out = VkDescriptorBufferInfo{g_snap_cnt, 0, VK_WHOLE_SIZE};
   if (run(dd, cmd, P_SNAP, b, raw, (w + 7) / 8, (h + 7) / 8)) {
     g_strand_ring.wrote(frame_index());
+    g_snap_site_frame[site] = frame_index();
     ++g_snap_frames;
   } else {
     ++g_snap_missing;
   }
-}
-int g_strand_mode_logged = -1;
+}int g_strand_mode_logged = -1;
 bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const Push& pc, const uint32_t ext[2]) {
   const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 3);
   if (mode != g_strand_mode_logged) {
@@ -1182,7 +1270,7 @@ void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLay
       if (cam.ok)
         if (DeviceData* dd = device_of(cmd)) {
           std::lock_guard<std::mutex> lock(g_mu);
-          if (ensure_layout(dd)) record_strand_snapshot(dd, cmd, cam, p.width, p.height);
+          if (ensure_layout(dd)) record_strand_snapshot(dd, cmd, cam, p.width, p.height, p.color_count >= 5 ? 0u : 1u);
         }
     }
   }
@@ -1211,6 +1299,16 @@ void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLay
 void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs) {
   if (cs == kCsLighting && cfg_int("rr", 1)) {
     if (auto* dd = device_of(cmd)) rrpost_prewarm(dd);
+    const int site = cfg_int("rr_hair_strand_snap_site", 0);
+    if (cfg_int("rr_post", 1) && cfg_int("rr_hair_strand_aa", 0) > 0 && (site == 2 || site == 3))
+      if (auto* dd = device_of(cmd)) {
+        SnapCamera cam;   // read before our lock (lock order: ngx, then rrpost)
+        uint32_t gw = 0, gh = 0;
+        ngx_gbuffer_size(&gw, &gh);
+        cam.ok = gw && gh && ngx_gbuffer_camera(cam.vp, cam.pos, cam.jit_unit, 1u, 1u);
+        std::lock_guard<std::mutex> lock(g_mu);
+        if (cam.ok && ensure_layout(dd)) record_strand_snapshot(dd, cmd, cam, gw, gh, 2u);
+      }
   }
   if (!cfg_int("rr", 1) || !cfg_int("rr_post", 1)) return;
   if (cs != kCsResolve && cs != kCsLighting && cs != kCsAdapt) {

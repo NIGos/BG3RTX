@@ -661,6 +661,7 @@ inline constexpr KV kDefaults[] = {
     {"rr_nov", "0.5"},
     {"rr_hair_guides", "0"},
     {"rr_hair_strand_aa", "0"},
+    {"rr_hair_strand_snap_site", "0"},
     {"rr_guides_at", "1"},
     {"rr_dump_gbuffer", "0"},
     {"dump_raw", "0"},

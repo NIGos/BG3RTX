@@ -27,12 +27,16 @@ BUNDLE = dict(rt_hair_groom_primary="1", rt_hair_groom_primary_order="1", rt_hai
               rt_hair_groom_cascade_drop="1", rt_hair_fibre="1", rt_hair_fibre_gi="1", rt_hair_fibre_spec="1",
               rt_hair_fibre_mapped="1", rr_hair_guides="1", rt_hair_physical_origin="1", rt_hair_capture="1",
               rt_hair_groom_tips="0", rt_hair_groom_coverage="0", rt_hair_primary_passes="15")
-SERIALS = {"burst-off": 99100, "burst-aa": 99101}
+# Counterbalanced bursts (off / aa / off / aa): each aa burst is judged against the mean of its neighbouring off bursts
+# (tools/hair_groom/edge_burst.py); the 03:38 single pair differed by +130% over the whole frame (animated dialogue).
+SERIALS = {"burst-off-1": 99100, "burst-aa-1": 99101, "burst-off-2": 99102, "burst-aa-2": 99103}
 
 
 def step(label, aa, trace=False, frames=60):
-    p = hv.stage_phase(label, 7, dict(hv.hp.ON, **BUNDLE, rr_hair_strand_aa=str(aa), qa_exposure_hold="0",
-                                      pan_delay_ms="0"), trace=trace)
+    # rr_hair_strand_snap_site=3: every snapshot site, merged (per pixel the latest site with strand data); its per-site
+    # counter lines name the site that holds strand data.
+    p = hv.stage_phase(label, 7, dict(hv.hp.ON, **BUNDLE, rr_hair_strand_aa=str(aa), rr_hair_strand_snap_site="3",
+                                      qa_exposure_hold="0", pan_delay_ms="0"), trace=trace)
     if frames:
         p.update(frames=frames, settle_frames=0, stats_reset=True, motion_start=7, motion_end=7)
     p["set"] += ",pan_inputs=0"
@@ -57,13 +61,14 @@ def make_plan():
     plan = [warm, warm_inputs, timed(step("warm-untag", 1, frames=0), 1.1),
             timed(step("warm-base", 0, frames=0), 1.1),
             step("a-off", 0, True), step("b-aa", 2, True), step("c-off", 0, True), step("d-aa", 2, True),
-            step("e-untag", 1, True)]
+            # the snapshot counters of every site: two counter periods (logged one period late)
+            timed(step("sites", 2, frames=0), 6)]
     # K8 bursts on a still camera (edge flicker without registration), in timed windows that outlast the capture: the
     # 2026-11-09 he1 burst-off window closed with its 60-frame stats period (2 s at 30 fps) while the burst armed at
     # 01:41:57.998 was still recording, so its completion line fell outside (fail-fast 01:42:00.025). Like
     # edge_flicker's rendered bursts (5 s static windows, capture at 0.1 s), sized here for the K8 frames plus the
     # measured capture-stall p95 (2.7 s) and decode.
-    for label, aa in (("burst-off", 0), ("burst-aa", 2)):
+    for label, aa in (("burst-off-1", 0), ("burst-aa-1", 2), ("burst-off-2", 0), ("burst-aa-2", 2)):
         p = timed(step(label, aa, frames=0), 14)   # 16-frame burst with RR inputs completes in ~7.5 s (03:10 he1)
         serial = SERIALS[label]
         p.update(capture_at=.1, serial=serial)
@@ -88,7 +93,7 @@ def make_job(plan):
                     "pan bursts for strand edge flicker (tools/hair_groom/temporal_burst.py), energy and the "
                     "render-res chain GPU ms. READY_FOR_LIVE, not authorized.")
     labels = [p["label"] for p in plan]
-    windows = [l for l in labels if l in ("a-off", "b-aa", "c-off", "d-aa", "e-untag", "f-debug")]
+    windows = [l for l in labels if l in ("a-off", "b-aa", "c-off", "d-aa")]
     # Root cause of every early burst end (he1 03:03-03:17): the burst phases were in the windows of these periodic
     # gates, so live_flow.tighten turned them into 60-frame stats windows (frames=60, stats_reset), and auto-run ends a
     # frame window on its frame count, not on "seconds": the 03:17 burst-off window closed 0.15 s after motion-ready
@@ -114,7 +119,9 @@ def make_job(plan):
     j["expect"] = [e for e in j["expect"] if "shadow transmittance" not in e and "strand G-buffer draws GPU" not in e]
     j["expect"] += [r"\[hair primary\] (?:prepass|G-buffer) hair pipeline stencil: test \d, write mask 0x[0-9a-f]{2}",
                     r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built",
-                    r"\[rrpost\] rr_hair_strand_aa=0:", r"\[rrpost\] rr_hair_strand_aa=1:", r"\[rrpost\] rr_hair_strand_aa=2:",
+                    r"\[rrpost\] rr_hair_strand_aa=0:", r"\[rrpost\] rr_hair_strand_aa=2:",
+                    r"\[rrpost\] strand snapshot site G-buffer end \(frames \d+-\d+\): [1-9]\d* dispatches",
+                    r"\[rrpost\] strand snapshot site decal end \(frames \d+-\d+\): [1-9]\d* dispatches",
                     r"\[rrpost\] strand snapshots \(rr_hair_strand_aa=\d\): [1-9]\d* at the G-buffer end",
                     # steady state: every resolve frame had its snapshot (5n, the G-buffer-end hook)
                     r"\[rrpost\] strand resolve \(rr_hair_strand_aa=2\): [1-9]\d* frames, 0 fell back"]

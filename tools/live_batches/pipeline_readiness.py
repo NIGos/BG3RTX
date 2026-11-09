@@ -108,6 +108,8 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "gi_rr_rays gi_rays gi_ao gi_strength rf_max_rough ls_shadowed rr_cbt rr fg "
     "rt_shadows rt_alpha rt_hair_groom_primary_order rt_hair_primary_passes rt_scene_wait "
     "rt_hair_groom_crowd_ksegments rt_hair_groom_tips rt_water_geometry preset ab_off "
+    # rr_hair_strand_aa snapshot site (layer/rrpost.cpp): which hook dispatches the already-built snapshot pipeline.
+    "rr_hair_strand_snap_site "
     # RTX Hair host/header keys (layer/hair_primary.cpp, bvhsplit.cpp, hair_capture.cpp): header flags, submit-time
     # header choice, LOD and coverage policy, the existing cascade clone, the capture writer. No pipeline is selected.
     "rt_hair_groom_primary_current rt_hair_primary_frame_tag rt_hair_groom_lod_keep rt_hair_primary_hold "

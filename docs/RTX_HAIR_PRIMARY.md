@@ -779,7 +779,21 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   frame; a frame without its snapshot runs the game's resolve and is counted ('fell back'). common/strand_snapshot.h,
   CTest hair_groom_asset_test test_strand_snapshot_ring (600 of 600 frames usable; a skipped frame never reads the
   snapshot of two frames ago).
-
+- he1 03:38 (VALID; snapshots ~2 per frame, fallbacks 0-1 per period): NOT a pass. Xr changed on the hair ring in
+  neither aa trace (7 and 10 ring pixels, as off): the G-buffer-end snapshot holds no usable strand data, though it runs
+  every frame (the lighting-time snapshot applied in 3 of 8 aa traces). Bursts (16 frames, tools/hair_groom/edge_burst.py):
+  final edge band flicker +5%, mc +17%, hf -9%; core flicker +19%; whole frame flicker +130%: the two bursts, 17 s apart,
+  differ over the whole frame (animated dialogue), so this single pair cannot judge. RR input (rr_color) edge band mc -9%,
+  hf -9%. Energy Xr aa/off +0.31% (off spread 0.20%). Render-res chain about 0.28 ms in aa windows vs 0.165 ms off
+  (+0.11 ms, the resolve; the snapshot runs outside that line). Next: a per-period GPU count of the snapshot's footprint
+  and strand pixels (device-local, per-workgroup reduced) to see what the G-buffer-end record holds, and bursts
+  counterbalanced off/aa/off/aa.
+- Snapshot sites and counters (offline): dev key rr_hair_strand_snap_site 0 G-buffer end, 1 decal end, 2 lighting, 3 every
+  site merged (a later site writes only the pixels where it finds a strand footprint). The snapshot counts footprint,
+  strand and coverage pixels and dispatches per site in a device-local buffer (per-workgroup reduction, copied to the host
+  after each period: host_atomics_lint_test classifies it); line '[rrpost] strand snapshot site <site> (frames a-b): N
+  dispatches; per dispatch footprint F px, strand S px, coverage C px'. he1 now runs with site 3, a counter window and
+  counterbalanced bursts off/aa/off/aa (about 2.2 GB of bursts).
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

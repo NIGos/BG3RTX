@@ -42,6 +42,9 @@ def check(name, ok, info=""):
 H, D = "host", "device"
 # key "declaring shader:resource" -> [(C++ file, exact evidence substring, memory, note)]
 ATOMIC_TARGETS = {
+    "shaders/rr_strand_aa.hlsl:Counters": [
+        ("layer/rrpost.cpp", "bci.size = kSnapCounterWords * 4;   // the strand snapshot counters (device-local)", D,
+         "g_snap_cnt (DEVICE_LOCAL memory type; binding 12 of the strand snapshot only, group-reduced, copied to the host after the period)")],
     "shaders/rt/hit_material_instanced_remap.hlsl:remap": [
         ("layer/hit_material.cpp", "if(!remaps.empty() && remap_ready() && create(q.remap,perm,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,true)){",
          H, "q.remap counters + permutations (rt_hit_material_instanced only; one atomic per instance, not per pixel)")],
