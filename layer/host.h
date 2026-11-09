@@ -1013,6 +1013,7 @@ bool vram_guard_on();
 // Breakdown sources for the [mem] ours line (each module's own lock; never called with the guard lock held).
 struct BvhVram {
   uint64_t as_reserved = 0, as_live = 0, as_empty = 0, lru = 0, pool = 0;
+  uint64_t as_pending = 0;   // freed ranges awaiting GPU/scene-slot retirement (used - live)
   uint64_t pool_used = 0, pool_pending = 0, pool_repacks = 0, blas_relocated = 0;
   uint32_t chunks = 0;
 };

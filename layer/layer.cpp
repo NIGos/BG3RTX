@@ -781,6 +781,18 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
     log_vram_ours(used, avail, b, rtcap, alpha, cascade, recycled, em_vram_bytes(), water_vram_bytes(), low,
                   changed ? "guard state" : refused ? "refusal" : "window");
   }
+  // Freed BLAS ranges retire once the GPU and every scene slot that may reference them are done (bvhsplit
+  // as_chunks::retired, rt_scene_oldest_live): a few frames of rebuilds. More pending than the chunks' floor (the
+  // largest live AS of the qualified long session, 1408 MB) means retirement stalled (user log 2026-11-09:
+  // 8 GB pending, 15 MB live): the slots' states, once per session.
+  static bool s_stall_logged = false;
+  if (on && !s_stall_logged && b.as_pending > vram_guard::kCapRef[vram_guard::kAsChunks].floor) {
+    s_stall_logged = true;
+    log("[vram] BLAS ranges awaiting retirement: %.0f MB (live %.0f MB) exceed 1408 MB: retirement stalled",
+        double(b.as_pending) / 1048576.0, double(b.as_live) / 1048576.0);
+    rt_log_state("[vram] retirement stall:");
+    bvh_log_state("[vram] retirement stall:");
+  }
   if (window_end) {
     s_window_start = frame;
     std::lock_guard<std::mutex> lock(g_vg_mu);

@@ -277,7 +277,10 @@ bool as_handle(VkDeviceSize size, int ci, VkDeviceSize off, AsAlloc& out) {
   out.addr = g_dd->vk.GetAccelerationStructureDeviceAddressKHR(g_dd->device, &ai);
   out.chunk = ci;out.off = off;out.size = size;return true;
 }
-bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr, uint32_t arena = 0) {
+// capped_what (guard_what nullptr): a new chunk is still refused past the chunks' cap (as_chunks::unguarded_chunk_ok),
+// named in the guard's refusal line.
+bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr, uint32_t arena = 0,
+               const char* capped_what = "BLAS chunk for an unguarded build (over the chunks' cap)") {
   out = AsAlloc{};
   size = (size + kAsAlign - 1) / kAsAlign * kAsAlign;
   VkDeviceSize off = 0;
@@ -290,7 +293,7 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
     VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
     // Retained empty chunks (rt_as_chunk_reuse_frames) too small for this range must not count against
     // the chunks' share: free them before the cap check, as the sweep would have without retention.
-    if (guard_what && vram_guard_on() && as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX))
+    if (vram_guard_on() && as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX))
       for (AsChunk& c : g_chunks)
         if (c.buf.b && c.ra.reclaimable() && c.ra.empty_since) {
           ++g_chunks_freed;g_chunk_bytes_freed += c.buf.size;
@@ -300,6 +303,13 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
         !vram_allow(vram_guard::kAsChunks, cs, guard_what,
                     as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX)))   // over the budget's share
       return false;
+    // Unguarded callers (cascade BLAS, compaction copies) ignore Low but never pass the cap: refused, logged as
+    // over the cap (vram_allow with over_cap refuses without touching the guard's grants).
+    if (!guard_what && vram_guard_on() &&
+        !as_chunks::unguarded_chunk_ok(as_reserved(), cs, vram_cap(vram_guard::kAsChunks, UINT64_MAX))) {
+      vram_allow(vram_guard::kAsChunks, cs, capped_what, true);
+      return false;
+    }
     AsChunk c;
     if (!make_buf(c.buf, cs, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false, "BLAS chunk (mesh/per-draw BLAS)"))
       return false;
@@ -1956,6 +1966,7 @@ void bvh_vram(BvhVram* out) {
     if (!c.buf.b) continue;
     out->as_reserved += c.buf.size;
     out->as_live += c.ra.live;
+    out->as_pending += c.ra.used - (std::min)(c.ra.used, c.ra.live);
     out->as_empty += c.ra.reclaimable() ? c.buf.size : 0;
     ++out->chunks;
   }
@@ -2921,7 +2932,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         g_groom_free_queries.push_back(g.query);
         g.compact = 2;
         AsAlloc c;
-        if (size && size < g.as.size && as_create(size, c, nullptr, 1)) {
+        if (size && size < g.as.size && as_create(size, c, nullptr, 1, "BLAS chunk for a groom compaction copy (kept uncompacted)")) {
           w.compact_copy = true; w.old = g.as; g.as = c;
           ++g_groom_st.compacted;
         }
@@ -3124,7 +3135,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       if (g_casc_as.as) as_destroy(g_casc_as);
       const VkAccelerationStructureBuildSizesInfoKHR sz =
           blas_sizes(cap.cascade_tris, cap.cascade_stride, false, casc_flags);
-      ok = as_create(sz.accelerationStructureSize, g_casc_as, nullptr, 2);
+      ok = as_create(sz.accelerationStructureSize, g_casc_as, nullptr, 2,
+                     "BLAS chunk for the cascade casters (left out this frame)");
       casc_scratch = sz.buildScratchSize;
       g_casc_update_scratch = casc_refit_on ? sz.updateScratchSize : 0;
       g_casc_sig = cap.cascade_sig;
@@ -3436,7 +3448,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // data its extraction never wrote, and a compaction copy walks the BLAS's nodes.
       if (m.compacted || !m.compact_size || m.state != kReady || new_keys.count(key)) continue;
       AsAlloc c;
-      if (m.compact_size >= m.as.size || !as_create(m.compact_size, c)) {
+      if (m.compact_size >= m.as.size || !as_create(m.compact_size, c, nullptr, 0, "BLAS chunk for a mesh compaction copy (kept uncompacted)")) {
         m.compacted = true;   // nothing to gain, or no memory: keep the original
         continue;
       }
