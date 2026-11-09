@@ -1845,6 +1845,8 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_adjacent_total += g_adjacent_window;
     {
       const float* r = g_seen.ray;
+      // The evidence window (tag - ev): all accepted strand pixels over all card pixels of that G-buffer frame (-1: none).
+      const uint32_t ev = g_seen.evidence_tag ? g_seen.tag - g_seen.evidence_tag : hair_primary::kCountTags;
       // Traced/hit are the shared pixel entries: their trace covers only the slots that swapped (header slot mask). A
       // frame whose draws were all refused (watchdog, coverage) draws masked probes that trace privately, unstored: then
       // 0 entries hold a strand while the probes' accepted pixels below are near their card pixels (2026-11-09 rv3-s8).
@@ -1854,14 +1856,15 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
           "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f), header camera (%.3f %.3f %.3f); counted with tag %u, "
           "header tag now %u; card pixels "
           "with tag %u/%u/%u/%u: %u/%u/%u/%u; accepted pixels: %u/%u/%u/%u, evidence from tag %u (G-buffer frame %llu: "
-          "same-pass unique pixel counts)",
+          "same-pass unique pixel counts), evidence strand share %.3f",
           (unsigned long long)g_seen.frame, g_seen.traced,
           g_seen.hit, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14],
           r[12] - r[0], r[13] - r[1], r[14] - r[2],   // origin = camera - header camera (hp_rebase)
           g_seen.tag, g_last_tag, g_seen.tag, g_seen.tag - 1, g_seen.tag - 2, g_seen.tag - 3, g_seen.tag_totals[0],
           g_seen.tag_totals[1], g_seen.tag_totals[2], g_seen.tag_totals[3],
           g_seen.accepted_totals[0], g_seen.accepted_totals[1], g_seen.accepted_totals[2], g_seen.accepted_totals[3], g_seen.evidence_tag,
-          (unsigned long long)g_seen.evidence_frame);
+          (unsigned long long)g_seen.evidence_frame, ev < hair_primary::kCountTags && g_seen.tag_totals[ev] ?
+          double(g_seen.accepted_totals[ev]) / double(g_seen.tag_totals[ev]) : -1.0);
     }
     log_stats("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
         "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",
