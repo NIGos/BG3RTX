@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 1457,
+  "timeout": 1464,
   "max_minutes": 5,
   "repeat": 1,
   "live_batch": "hair-static",
@@ -120,6 +120,6 @@
       "maximum": 0.4969999999993888
     }
   },
-  "estimated_phase_seconds": 76.4,
+  "estimated_phase_seconds": 83.3,
   "purpose": "Static-camera RTX Hair flicker at S8 (user set, fg=3): 16-frame RR-input bursts of strands (rr_hair_strand_aa 0, then 2) and cards (rt_hair_groom_primary=0) in one run; temporal_burst.py decides whether the flicker is in the pre-RR strand image (class-5 toggles, rr_color) or only after RR (final). STAGED, not authorized."
 }

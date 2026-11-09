@@ -590,6 +590,35 @@ still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per per
     that swapped; when every draw is refused, the probes trace privately and store nothing (0 while accepted is 95%+).
   - Live job (staged, not queued): tools/live_batches_staged/hair_cam (S8 turns, off / cam / draw / both / off).
     The user checks it at S8 or Test Dialogue1 by turning the camera: with the GPU camera the hair stays strands.
+  - Live hc1 2026-11-09 (S8 turns): item 11 as written is DISPROVED. 120 publishes checked per period, 0 differ at
+    submit; `rt_hair_header_cam_gpu=1` (origin always 0) did not remove the trips; `rt_hair_watchdog_draw=1` was
+    worse. Static camera clean (0 trips, 0 dropouts).
+- Shared draw key (hc1 2026-11-09, branch claude/hair-shared-key). Of about 190 dropout entries, 86 were key 7a27, 41
+  5285 and 13 93ea: exactly the keys with two groom rows (two characters with one hairstyle, sometimes at different
+  LODs), typically `7a27:39907/0` for 1-4 frames about every 30 frames, each one a frame watchdog trip (every hair on
+  cards for 28 frames). Cause: the scene keys a groom per occurrence (layer/bvhsplit.cpp `fd.dyn_key = mix(dk,
+  g_dyn_seen[dk]++)`, one DynSlot and GroomSlot each), the G-buffer swap per index range (`fd.hp_key =
+  hair_primary_draw_key`, hair_primary_swap, `g_live_keys`, one draw slot per key). A key in the publish swaps every
+  draw with it, also the one whose own groom is out of this publish: `!groom_src` / `groom_keep` (held or refused
+  soup), `!ok` (LOD upload, pool room), `crowd_cards`, or its row without a primary key (`groom_primary_key`: a new
+  LOD's first update, which the other occurrence at another LOD does not share). That draw's fragments find no strand
+  on their card (hair_primary_gbuffer.hlsl miss or `hp_on_card` reject): 0 pixels.
+  - `rt_hair_shared_key` (live, off): before the groom instances, a key keeps its rows only when its keyed rows are
+    at least the capture's groom-matched hair draws with that key (hair_primary::shared_key_complete); otherwise all
+    its rows lose the key (mask 0x01, no draw slot) and all its draws keep their cards this frame. CPU only, no shader,
+    no ABI change. Period line: "[hair groom] ... shared-key rows withheld N".
+  - `rt_hair_watchdog_one_key` (live, off): a frame whose only draw under its own bound is one key, next to a swapped
+    draw above its bound, does not trip the frame watchdog; that key alone keeps its cards for kWatchdogFrames. Header
+    safety line: "frame watchdog spared to one key N".
+  - Why `rt_hair_watchdog_draw=1` was worse (code reading, likely): both occurrences of a shared key are one draw slot,
+    so their card pixels are summed and the bad occurrence trips the key for the good one too; and a key held on cards
+    by it keeps its groom rows in the publish (mask 0xFF), so other draws' strand rays can stop on its strands. With `rt_hair_shared_key` a key is judged only
+    when all its draws carry their grooms, so the per-draw watchdog then judges a complete key.
+  - Fixtures: hair_groom_asset_test test_watchdog (two draws share a key, one row: key withheld; complete keys and
+    single keys unchanged; one bad key spared, two bad keys or no passing draw trip; key off trips as before).
+  - The user checks it at S8 (two characters with the same hairstyle in view): turn the camera with
+    `exp_hair_shared_key` on; the hair stays strands (or both on cards for a frame) instead of flashing all hair to
+    cards; the dropouts line no longer lists 7a27/5285/93ea and "watchdog trips" falls near 0.
 - Fixtures: CTest hair_groom_asset_test test_upgrade_safe, test_frame_tags (two G-buffer frames on one publish: ambiguous and reused with
   publish tags, distinct with frame tags; the counter judges the previous frame), test_lod_keep.
 - Live check (Test Dialogue1 and the isometric view, one session, camera and characters moving, both keys on/off/on):

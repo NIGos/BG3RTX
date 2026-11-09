@@ -12,7 +12,7 @@
     "motion_end": 20.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=2,rt_hair_groom_primary=1,qa_exposure_hold=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=2,rt_hair_groom_primary=1,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",
@@ -33,7 +33,7 @@
     "motion_end": 3.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=0,qa_exposure_hold=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",
@@ -57,7 +57,7 @@
     "motion_end": 2.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
     "wheel": 10,
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -71,16 +71,16 @@
     "label": "warm-inputs",
     "kind": "static",
     "speed": "static",
-    "seconds": 1.1,
+    "seconds": 8.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 1.1,
-    "motion_end": 1.1,
+    "motion_start": 8.0,
+    "motion_end": 8.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=0,pan_inputs=1,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=0,pan_inputs=1,pan_prepare=1,pan_capture=0,pan_delay_ms=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation "
@@ -100,7 +100,7 @@
     "motion_end": 4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=1,pan_inputs=0,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=1,pan_inputs=0,pan_prepare=1,pan_capture=0,pan_delay_ms=0",
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -138,7 +138,7 @@
     "motion_end": 4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=2,rt_hair_groom_primary=1,qa_exposure_hold=1,pan_inputs=0,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=2,rt_hair_groom_primary=1,qa_exposure_hold=1,pan_inputs=0,pan_prepare=1,pan_capture=0,pan_delay_ms=0",
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -182,7 +182,7 @@
     "motion_end": 4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=0,qa_exposure_hold=1,pan_inputs=0,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=0,qa_exposure_hold=1,pan_inputs=0,pan_prepare=1,pan_capture=0,pan_delay_ms=0",
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -226,7 +226,7 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
