@@ -1,0 +1,147 @@
+{
+  "name": "rhl1-dialogue",
+  "save": "Test Dialogue1",
+  "session": false,
+  "traces": 0,
+  "repeat": 1,
+  "hold": 120,
+  "timeout": 1673,
+  "max_minutes": 10,
+  "window_mode": "visible_unfocused_fg",
+  "live_batch": "rtx-hair-live",
+  "tree": ".claude/worktrees/test-main",
+  "fail_fast": true,
+  "stop_on_dump": false,
+  "set": "preset=ultra,fg=2,headless=0,crash_dump=1,detailed_logging=1,rt_stats=0,rt_debug=0,gi_debug=0,ls_debug=0,rf_debug=0,ls_stats=0,rf_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_primary_check=0,replay_pack=0,qa_exposure_hold=0,rt_stats_period_frames=60,rt_timing_frames=60,rt_scene_wait_log_frames=60,rt_native_hair=1,rt_native_scalp=1,rt_bvh_split=1,sharc_device=1,rt_hair=1,rt_hair_groom_primary=0,rt_hair_groom_primary_order=0,rt_hair_groom_primary_current=0,rt_hair_primary_frame_tag=0,rt_hair_groom_lod_keep=0,rt_hair_primary_hold=0,rt_hair_tangent_world=0,rt_hair_groom=0,rt_hair_groom_shadow_t=0,rt_hair_groom_ao_t=0,rt_hair_groom_cascade_drop=0,rt_hair_fibre=0,rt_hair_fibre_gi=0,rt_hair_fibre_spec=0,rt_hair_fibre_mapped=0,rr_hair_guides=0,rt_hair_physical_origin=1,rt_hair_capture=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches/rtx_hair_live/plans/dialogue.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[watch\\]",
+    "\\[trace\\]",
+    "\\[crash\\]",
+    "\\[fault\\]",
+    "FAILED",
+    "\\[hair primary\\]",
+    "\\[hair groom\\]",
+    "\\[hair\\]",
+    "\\[hair origin\\]",
+    "\\[hair capture\\]",
+    "\\[rt\\] scene wait",
+    "\\[rrpost\\] exposure (held|hold|probe)",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "VK_ERROR",
+    "validation"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[hair groom\\] device with linear swept spheres",
+    "\\[rt\\] \\+ occlusionQueryPrecise \\(strand hair coverage gate\\)",
+    "\\[hair primary\\] header at 0x[0-9a-f]+: static hair pipelines get strand variants",
+    "\\[hair primary\\] strand variants: \\d+ pipelines in [0-9.]+ ms of pipeline creation so far",
+    "\\[core\\] \\[hair origin\\] startup auxiliary capability 1",
+    "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 1\\)",
+    "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 1\\)",
+    "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 2\\)",
+    "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 2\\)",
+    "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 3\\)",
+    "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 3\\)",
+    "\\[hair\\] rt_hair=0 from the settings: RTX Hair OFF",
+    "\\[hair primary\\] strand G-buffer draws GPU [0-9.]+ ms/frame",
+    "\\[trace\\] frame \\d+ written",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "\\[hair primary\\] UNAVAILABLE",
+    "\\[hair primary\\] strand variants not prepared",
+    "\\[hair primary\\] live: RTX Hair requested, but",
+    "\\[hair primary\\] .* [1-9]\\d* pipelines refused",
+    "\\[hair groom\\] device WITHOUT",
+    "\\[hair origin\\] enable rejected",
+    "\\[hair primary\\] depth orphans \\(last \\d+ frames, first 4; [^)]*\\): [0-9a-f]{4}:"
+  ],
+  "expect_every": [
+    {
+      "name": "strands present: every on window's period line has strand G-buffer draws",
+      "select": "\\[hair primary\\] frame \\d+: \\d+ grooms published;",
+      "match": ", [1-9]\\d* G-buffer and \\d+ velocity strand draws",
+      "windows": [
+        "on-a",
+        "on-b"
+      ],
+      "min": 1,
+      "period_frames": 60
+    },
+    {
+      "name": "strands absent: every off and cards-only window's period line has none",
+      "select": "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\):",
+      "match": ": 0 grooms published; last \\d+ frames: 0 prepass, 0 G-buffer",
+      "windows": [
+        "off-a",
+        "off-b",
+        "base-a",
+        "base-b"
+      ],
+      "min": 1,
+      "period_frames": 60
+    }
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "\\[motion-plan\\] complete phases=10\\b",
+    "^Run ended: done"
+  ],
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 3,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 21.505376344023208,
+        "windows": 20,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hair1-dialogue.1.191025.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap1-dialogue.1.203259.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-capture.1.224055.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-strands.1.224309.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3800000000046566,
+      "quantile": 0.95,
+      "samples": 16,
+      "maximum": 0.3800000000046566
+    },
+    "trace_capture_stall": {
+      "seconds": 3.1143,
+      "source": "grp1-camp.1.171557.log",
+      "quantile": 0.95,
+      "samples": 16,
+      "maximum": 3.1143,
+      "logs": 4
+    }
+  },
+  "purpose": "RTX Hair live switch (5m): Test Dialogue1 starts cards only, RTX Hair turned on live (first activation), then rt_hair 1/0/1/0 by setting and an explicit cards-only window. Observables: strand G-buffer draws > 0 in on windows and 0 in off windows ([hair primary] period lines), six switch edges (warmup on/off, then 1/0/1/0), no device loss or depth orphan, and the pre-post scene-colour energy of the off windows equal to the cards-only windows (dumps.json, analysed after the run).",
+  "estimated_phase_seconds": 110.9
+}

@@ -2,7 +2,7 @@
 
     py -3 tools/live_batches/hair_edge/make_job.py
 
-rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5m) in one Test Dialogue1 launch with the whole RTX Hair bundle on:
+rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5n) in one Test Dialogue1 launch with the whole RTX Hair bundle on:
 key 0 / 2 / 0 / 2 windows with a PNG trace each, a key-1 window, then a K8 pan burst with the key 0 and with it 2.
 predicted.json is committed before the job.
 """

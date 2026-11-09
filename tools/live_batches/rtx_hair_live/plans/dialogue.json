@@ -1,0 +1,283 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 20.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 20.0,
+    "motion_end": 20.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=0,rt_hair_groom_primary_order=0,rt_hair_groom_primary_current=0,rt_hair_primary_frame_tag=0,rt_hair_groom_lod_keep=0,rt_hair_primary_hold=0,rt_hair_tangent_world=0,rt_hair_groom=0,rt_hair_groom_shadow_t=0,rt_hair_groom_ao_t=0,rt_hair_groom_cascade_drop=0,rt_hair_fibre=0,rt_hair_fibre_gi=0,rt_hair_fibre_spec=0,rt_hair_fibre_mapped=0,rr_hair_guides=0,rt_hair_physical_origin=0,rt_hair_capture=0,rt_stats=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[auto\\] scene ready",
+      "\\[cfg\\] settings read",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 2.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "warmup-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 10.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 10.0,
+    "motion_end": 10.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_stats=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 1\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 1\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "warmup-off",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 6.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 6.0,
+    "motion_end": 6.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_stats=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 1\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 1\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "base-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 12.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 12,
+    "motion_end": 12,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=0,rt_hair_groom_primary_order=0,rt_hair_groom_primary_current=0,rt_hair_primary_frame_tag=0,rt_hair_groom_lod_keep=0,rt_hair_primary_hold=0,rt_hair_tangent_world=0,rt_hair_groom=0,rt_hair_groom_shadow_t=0,rt_hair_groom_ao_t=0,rt_hair_groom_cascade_drop=0,rt_hair_fibre=0,rt_hair_fibre_gi=0,rt_hair_fibre_spec=0,rt_hair_fibre_mapped=0,rr_hair_guides=0,rt_hair_physical_origin=0,rt_hair_capture=0,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      9
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_stats": [
+      "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\):"
+    ]
+  },
+  {
+    "label": "on-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 12.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 12,
+    "motion_end": 12,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      9
+    ],
+    "wait_log": [
+      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 2\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 2\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published;"
+    ]
+  },
+  {
+    "label": "off-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 12.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 12,
+    "motion_end": 12,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      9
+    ],
+    "wait_log": [
+      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 2\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 2\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\):"
+    ]
+  },
+  {
+    "label": "on-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 12.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 12,
+    "motion_end": 12,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      9
+    ],
+    "wait_log": [
+      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 3\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 3\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published;"
+    ]
+  },
+  {
+    "label": "off-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 12.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 12,
+    "motion_end": 12,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      9
+    ],
+    "wait_log": [
+      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 3\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 3\\)",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\):"
+    ]
+  },
+  {
+    "label": "base-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 12.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 12,
+    "motion_end": 12,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=0,rt_hair_groom_primary_order=0,rt_hair_groom_primary_current=0,rt_hair_primary_frame_tag=0,rt_hair_groom_lod_keep=0,rt_hair_primary_hold=0,rt_hair_tangent_world=0,rt_hair_groom=0,rt_hair_groom_shadow_t=0,rt_hair_groom_ao_t=0,rt_hair_groom_cascade_drop=0,rt_hair_fibre=0,rt_hair_fibre_gi=0,rt_hair_fibre_spec=0,rt_hair_fibre_mapped=0,rr_hair_guides=0,rt_hair_physical_origin=0,rt_hair_capture=0,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      9
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_stats": [
+      "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\):"
+    ]
+  },
+  {
+    "label": "restore",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 1.1,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=0,rt_hair_groom_primary_order=0,rt_hair_groom_primary_current=0,rt_hair_primary_frame_tag=0,rt_hair_groom_lod_keep=0,rt_hair_primary_hold=0,rt_hair_tangent_world=0,rt_hair_groom=0,rt_hair_groom_shadow_t=0,rt_hair_groom_ao_t=0,rt_hair_groom_cascade_drop=0,rt_hair_fibre=0,rt_hair_fibre_gi=0,rt_hair_fibre_spec=0,rt_hair_fibre_mapped=0,rr_hair_guides=0,rt_hair_physical_origin=0,rt_hair_capture=0,rt_stats=0,qa_exposure_hold=1"
+  }
+]

@@ -1,5 +1,5 @@
 ## Strand edge dithering: strand-aware dither resolve and analytic coverage (branch claude/hair-edge-quality, READY_FOR_LIVE, 2026-11-09)
-- Diagnosis (docs/RTX_HAIR_PRIMARY.md 5m): binary sub-pixel strand coverage on the shared jitter, and the game's
+- Diagnosis (docs/RTX_HAIR_PRIMARY.md 5n): binary sub-pixel strand coverage on the shared jitter, and the game's
   stencil dither resolve (7401d785, ported in rr_post.hlsl) mixing strands by the card dither tags the strand clones keep.
 - Key `rr_hair_strand_aa` (knob exp_hair_strand_aa, Advanced, live 0/1/2, off): new request rr_strand_aa.hlsl dispatched
   instead of the resolve (layer/rrpost.cpp). 1: strand footprint untagged; 2: plus analytic coverage (found strands

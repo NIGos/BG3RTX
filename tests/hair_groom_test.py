@@ -796,7 +796,7 @@ def test_shading_spaces(rng):
 
 
 def test_strand_edge():
-    """5m (rr_hair_strand_aa): the twins of rr_strand_aa.hlsl and the offline edge model (tools/hair_groom/edge_stability.py)."""
+    """5n (rr_hair_strand_aa): the twins of rr_strand_aa.hlsl and the offline edge model (tools/hair_groom/edge_stability.py)."""
     from tools.hair_groom import edge_stability as es
     rng = np.random.default_rng(7)
     u = rng.uniform(-0.5, 0.5, (400000, 2))

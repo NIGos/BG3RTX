@@ -1,6 +1,6 @@
 # Strand edge resolve (live_batch hair-edge), READY_FOR_LIVE, NOT authorized
 
-Question: with RTX Hair on, does `rr_hair_strand_aa` (docs/RTX_HAIR_PRIMARY.md 5m) remove the dithering the user saw
+Question: with RTX Hair on, does `rr_hair_strand_aa` (docs/RTX_HAIR_PRIMARY.md 5n) remove the dithering the user saw
 on strand edges, without an energy change, and what does it cost? Predictions: [predicted.json](predicted.json).
 
 Job (`py -3 tools/live_batches/hair_edge/make_job.py`): `he1-dialogue1-edge`, one Test Dialogue1 launch, the RTX Hair

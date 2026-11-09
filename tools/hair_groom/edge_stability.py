@@ -1,4 +1,4 @@
-"""Strand edge stability (docs/RTX_HAIR_PRIMARY.md 5m, key rr_hair_strand_aa): offline models of the dithering seen at
+"""Strand edge stability (docs/RTX_HAIR_PRIMARY.md 5n, key rr_hair_strand_aa): offline models of the dithering seen at
 the edges of on-screen strands.
 
   py -3 tools/hair_groom/edge_stability.py [--frames 72] [--seed 1] [--json out.json]

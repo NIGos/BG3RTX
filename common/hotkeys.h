@@ -4,8 +4,11 @@
 #include <cctype>
 namespace bg3::hotkeys {
 struct Key { unsigned key=0, mods=0; bool valid=false; };
-inline constexpr const char* defaults[2]={"Ctrl+Shift+F9","Ctrl+Shift+F8"};
-inline constexpr const char* ids[2]={"hotkey_rt_toggle","hotkey_dlss5"};
+// 0: master RT toggle, 1: DLSS 5, 2: RTX Hair (rt_hair, layer/util.cpp). Ctrl+Shift+F10 is the developer target toggle.
+inline constexpr int kCount=3;
+inline constexpr const char* defaults[kCount]={"Ctrl+Shift+F9","Ctrl+Shift+F8","Ctrl+Shift+F7"};
+inline constexpr const char* ids[kCount]={"hotkey_rt_toggle","hotkey_dlss5","hotkey_rtx_hair"};
+inline int index_of(const std::string& id){for(int i=0;i<kCount;++i)if(id==ids[i])return i;return -1;}
 inline Key parse(std::string text) {
   for(char& c:text)c=char(std::toupper(static_cast<unsigned char>(c)));
   if(text=="NONE")return {0,0,true};
@@ -26,13 +29,17 @@ inline std::string format(Key k){
   return std::string(k.mods&1?"Ctrl+":"")+(k.mods&2?"Shift+":"")+(k.mods&4?"Alt+":"")+
     (k.key>=0x70?"F"+std::to_string(k.key-0x70+1):std::string(1,char(k.key)));
 }
-inline std::string validate(const std::string& rt,const std::string& nr){
-  auto a=parse(rt),b=parse(nr),dev=parse("Ctrl+Shift+F10");
-  if(!a.valid||!b.valid)return "Use Ctrl, Shift or Alt with F1-F12, A-Z or 0-9, or None.";
-  if(conflict(a,b))return "Choose different keyboard shortcuts.";
-  if((a.key==dev.key&&(a.mods&3)==3)||(b.key==dev.key&&(b.mods&3)==3))return "Ctrl+Shift+F10 is reserved for the developer target toggle.";
+inline bool reserved(Key k){auto dev=parse("Ctrl+Shift+F10");return k.key==dev.key&&(k.mods&3)==3;}
+// Every binding of a complete set (kCount values): valid, none reserved, no two equal.
+inline std::string validate_all(const std::string* values,int n=kCount){
+  Key k[kCount];
+  for(int i=0;i<n&&i<kCount;++i){k[i]=parse(values[i]);if(!k[i].valid)return "Use Ctrl, Shift or Alt with F1-F12, A-Z or 0-9, or None.";}
+  for(int i=0;i<n&&i<kCount;++i)for(int j=i+1;j<n&&j<kCount;++j)if(conflict(k[i],k[j]))return "Choose different keyboard shortcuts.";
+  for(int i=0;i<n&&i<kCount;++i)if(reserved(k[i]))return "Ctrl+Shift+F10 is reserved for the developer target toggle.";
   return {};
 }
+inline std::string validate(const std::string& rt,const std::string& nr){const std::string v[2]={rt,nr};return validate_all(v,2);}
+inline std::string validate(const std::string& rt,const std::string& nr,const std::string& hair){const std::string v[3]={rt,nr,hair};return validate_all(v,3);}
 // Editing must allow recovery when the other saved binding is invalid.
 // Save still validates the complete pair.
 inline std::string validate_change(const std::string& value,const std::string& other){
@@ -40,5 +47,10 @@ inline std::string validate_change(const std::string& value,const std::string& o
   if(!error.empty())return error;
   if(conflict(parse(value),parse(other)))return "Choose different keyboard shortcuts.";
   return {};
+}
+// Binding `index` of `current` (kCount values) set to `value`: checked against every other binding.
+inline std::string validate_change_at(const std::string* current,int index,const std::string& value){
+  for(int i=0;i<kCount;++i){if(i==index)continue;auto error=validate_change(value,current[i]);if(!error.empty())return error;}
+  return validate_change(value,"None");
 }
 }

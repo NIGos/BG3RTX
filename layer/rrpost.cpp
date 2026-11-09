@@ -845,7 +845,7 @@ void on_dof(DeviceData* dd, VkCommandBuffer cmd, const Bg3PassInfo& p) {
   g_ch.stage = 2;
 }
 
-// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5m): with strands on screen, the dither resolve with the strand footprint
+// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5n): with strands on screen, the dither resolve with the strand footprint
 // untagged (1), plus the analytic strand coverage (2), rr_strand_aa.hlsl. Needs the hair primary header and this frame's
 // G-buffer camera; without them (or with the key off) the game's resolve runs as before. Live.
 uint32_t half_bits(float v) {

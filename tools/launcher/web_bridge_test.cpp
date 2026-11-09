@@ -80,6 +80,29 @@ int main(int argc,char** argv){
     kb.handle(R"({"type":"resetShortcut","id":"hotkey_dlss5"})");check(ks.shortcuts[1]=="Ctrl+Shift+F8");
     kb.handle(R"({"type":"discard"})");check(ks.shortcuts[1]=="Alt+N"&&kb.dirty()==0);
     kb.handle(R"({"type":"shortcut","id":"hotkey_rt_toggle","value":"None"})");check(ks.shortcuts[0]=="None");
+    // hotkey_rtx_hair (5m): the third binding, edited, validated against both others, reset and discarded alike.
+    check(ks.shortcuts[2]=="Ctrl+Shift+F7"&&kb.state_json().find("\"hotkey_rtx_hair\":\"Ctrl+Shift+F7\"")!=std::string::npos);
+    kb.handle(R"({"type":"discard"})");check(kb.dirty()==0);
+    kb.handle(R"({"type":"shortcut","id":"hotkey_rtx_hair","value":"Ctrl+Shift+F9"})");check(kb.dirty()==0&&ks.shortcuts[2]=="Ctrl+Shift+F7");
+    kb.handle(R"({"type":"shortcut","id":"hotkey_rtx_hair","value":"Alt+N"})");check(kb.dirty()==0);   // DLSS 5 holds Alt+N
+    kb.handle(R"({"type":"shortcut","id":"hotkey_rtx_hair","value":"Ctrl+Shift+F10"})");check(kb.dirty()==0);
+    kb.handle(R"({"type":"shortcut","id":"hotkey_rtx_hair","value":"Alt+H"})");check(kb.dirty()==1&&ks.shortcuts[2]=="Alt+H");
+    check(kb.state_json().find("\"hotkey_rtx_hair\":\"Alt+H\"")!=std::string::npos);
+    kb.handle(R"({"type":"shortcut","id":"hotkey_dlss5","value":"Alt+H"})");check(ks.shortcuts[1]=="Alt+N");   // taken by RTX Hair
+    kb.handle(R"({"type":"resetShortcut","id":"hotkey_rtx_hair"})");check(ks.shortcuts[2]=="Ctrl+Shift+F7"&&kb.dirty()==0);
+    kb.handle(R"({"type":"shortcut","id":"hotkey_rtx_hair","value":"None"})");check(ks.shortcuts[2]=="None"&&kb.dirty()==1);
+    kb.handle(R"({"type":"discard"})");check(ks.shortcuts[2]=="Ctrl+Shift+F7"&&kb.dirty()==0);
+  }
+  {
+    // Hotkeys page: every binding of common/hotkeys.h and its default; a change may not repeat any other binding.
+    launcher::State ws;ws.base={{"dev","0"}};ws.values=st::preset_values(st::kHigh);
+    launcher::web::Bridge wb(ws);const auto json=wb.state_json();
+    for(size_t i=0;i<launcher::kShortcutCount;++i){
+      check(json.find(std::string("\"")+bg3::hotkeys::ids[i]+"\":\""+ws.shortcuts[i]+"\"")!=std::string::npos);
+      check(json.find(std::string("\"")+bg3::hotkeys::ids[i]+"\":\""+bg3::hotkeys::defaults[i]+"\"",json.find("\"shortcutDefaults\""))!=std::string::npos);
+    }
+    wb.handle(R"({"type":"shortcut","id":"hotkey_rt_toggle","value":"Ctrl+Shift+F8"})");check(ws.shortcuts[0]=="Ctrl+Shift+F9"&&wb.dirty()==0);
+    check(wb.handle(R"({"type":"shortcut","id":"hotkey_unknown","value":"Alt+U"})").find("Unknown keyboard shortcut")!=std::string::npos);
   }
   // One option turns on what it needs: Strand hair on screen from all-off (Ray-tracing detail full) raises
   // Strand hair in RT lighting and Hair shadows; the saved file has the whole user-tested strand set.
@@ -170,6 +193,15 @@ int main(int argc,char** argv){
     const int rtx=st::knob_index("exp_hair_groom_primary");
     const std::string card=fb.state_json();
     check(card.find("\"id\":\"exp_hair_groom_primary\",\"title\":\"RTX Hair\"")!=std::string::npos&&card.find("\"category\":\"Lighting\"")!=std::string::npos);
+    {  // 5m: RTX Hair applies while playing (its choices too); the restart banner covers a session started without it
+      const auto at=card.find("\"id\":\"exp_hair_groom_primary\"");const auto rtx_card=card.substr(at,card.find("\"max\"",at)-at);
+      check(rtx_card.find("\"apply\":\"Applies after saving\"")!=std::string::npos&&rtx_card.find("Restart the game")==std::string::npos);
+      st::Map baseline=st::code_defaults(),after=baseline;
+      for(const auto& kv:st::kKnobs[rtx].choices[1].kv)if(kv.key)after[kv.key]=kv.value;
+      check(launcher::ui_state::restart_count(baseline,after)==1);   // rt_hair_physical_origin's startup reservation
+      st::Map started_on=after;check(launcher::ui_state::restart_count(started_on,baseline)==0);   // off live
+      check(launcher::ui_state::restart_count(baseline,started_on)==1&&launcher::ui_state::restart_count(started_on,after)==0);
+    }
     fb.handle("{\"type\":\"set\",\"id\":\"exp_hair_groom_primary\",\"value\":1}");
     check(fresh.values[rtx]==1);
     for(const auto& n:st::kKnobs[rtx].choices[1].need){if(!n.knob)continue;const int j=st::knob_index(n.knob);check(j>=0&&fresh.values[j]>=n.min_choice);}

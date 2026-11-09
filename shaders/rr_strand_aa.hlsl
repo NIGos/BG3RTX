@@ -1,4 +1,4 @@
-// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5m, layer/rrpost.cpp): the dither resolve step of the RR-before-post chain
+// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5n, layer/rrpost.cpp): the dither resolve step of the RR-before-post chain
 // (7401d785, rr_post.hlsl `resolve`) for frames with on-screen strands (rt_hair_groom_primary).
 //
 // 1 (strand footprint untagged): the game's resolve undoes the ordered alpha dither of its hair cards: per pixel it mixes
@@ -12,7 +12,7 @@
 //   parameter, depth), each strand weighted by 1 / P, P the probability that the frame's shared jitter puts one of those
 //   9 rays on it (the box coverage of the jitter square by the 9 shifted bands): an unbiased coverage estimate with no
 //   per-frame Bernoulli noise once a strand is found (GBAA/phone-wire AA with the geometry from the strand record,
-//   docs 5m). Lh: the mean colour of the strand pixels around; Lb: the pixel's own colour when it shows no strand, else
+//   docs 5n). Lh: the mean colour of the strand pixels around; Lb: the pixel's own colour when it shows no strand, else
 //   the mean of the non-strand pixels of its 5 x 5 window (none: unchanged). Depth, motion and guides stay the pixel's.
 //   Math twin: tools/hair_groom/edge_stability.py (box_strand_coverage, found probability), CTest hair_groom_test.
 // A separate request: rr_post.hlsl and every other request keep their preprocessed text.

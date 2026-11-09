@@ -700,8 +700,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
                                  VK_IMAGE_USAGE_STORAGE_BIT)))
     patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   // rt_hair_capture (layer/hair_capture.cpp): the CHAR_Hair masks (BC3, sampled) are read back by a transfer copy of
-  // mip 0. Decided once per process like force_transfer_src: the capture needs a game restart after enabling it.
-  static const bool hair_capture_src = cfg_int("rt_hair_capture", 0) != 0;
+  // mip 0. At creation a hair mask cannot be told from any other BC3 texture (no descriptor or draw yet), so since 5m
+  // every sampled BC3 image of an RT session gets the usage whether or not the key is on: the memory requirements
+  // (size, alignment, memory types) are identical with and without it on the RTX 5090 (docs/RTX_HAIR_PRIMARY.md 5m),
+  // and the capture itself (rt_hair_capture) is then live. Decided once per process like force_transfer_src.
+  static const bool hair_capture_src = cfg_int("rt", 1) != 0;
   if (hair_capture_src && (ci->usage & VK_IMAGE_USAGE_SAMPLED_BIT) &&
       (ci->format == VK_FORMAT_BC3_UNORM_BLOCK || ci->format == VK_FORMAT_BC3_SRGB_BLOCK))
     patched.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;

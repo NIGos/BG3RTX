@@ -41,6 +41,7 @@ class Bridge {
   bool dev = false, experimental = false;
  private:
   bool opt_in() const { return !dev && experimental; }
+  int changed_shortcuts() const;
   bool shown(const bg3::settings::Knob& k) const;
   bool saved_experimental_ = false;
   bg3::experimental_ab::Selection ab_selection_;

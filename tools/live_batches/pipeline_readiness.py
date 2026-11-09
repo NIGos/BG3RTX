@@ -35,7 +35,13 @@ GI_QUERY = [GI_TRACE, r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation ",
             r"gi: gi/rt_reflections\.hlsl[^ ]* generation "]
 # These variants may already be cached: TABLE consumers must not turn the
 # legacy family patterns into mandatory generation announcements.
-for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
+# rt_hair (5m live switch, layer/util.cpp hair_gated): every RTX Hair key reads 0 while it is 0, which selects the
+# groom-off GI variants, the RR guide pipeline and specialization 1026 as those keys do.
+# The RTX Hair bundle's pipeline keys (5m): rt_hair_groom_primary (strand passes in core/gi.cpp refresh), AO
+# transmittance (spec 1044), fibre GI/specular/mapped variants (spec 1030) and the RR guide pipeline (layer/ngx.cpp).
+for key in ("rt_hair", "rt_hair_groom_primary", "rt_hair_groom_ao_t", "rt_hair_fibre_gi", "rt_hair_fibre_spec",
+            "rt_hair_fibre_mapped", "rr_hair_guides",
+            "rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
             "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
             "rt_alpha_fine_lod", "rt_vt_alpha_masks", "rt_omm", "rt_omm_dyn"):
     TABLE[key] = [QUIET]
@@ -101,7 +107,11 @@ CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pa
 NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scene_compact_holds cpu_opt1 cpu_opt2 cpu_opt3 dlss5_nr_bypass rt_build fps_cap cpu_timing detailed_logging dev "
     "gi_rr_rays gi_rays gi_ao gi_strength rf_max_rough ls_shadowed rr_cbt rr fg "
     "rt_shadows rt_alpha rt_hair_groom_primary_order rt_hair_primary_passes rt_scene_wait "
-    "rt_hair_groom_crowd_ksegments rt_hair_groom_tips rt_water_geometry preset ab_off".split())
+    "rt_hair_groom_crowd_ksegments rt_hair_groom_tips rt_water_geometry preset ab_off "
+    # RTX Hair host/header keys (layer/hair_primary.cpp, bvhsplit.cpp, hair_capture.cpp): header flags, submit-time
+    # header choice, LOD and coverage policy, the existing cascade clone, the capture writer. No pipeline is selected.
+    "rt_hair_groom_primary_current rt_hair_primary_frame_tag rt_hair_groom_lod_keep rt_hair_primary_hold "
+    "rt_hair_tangent_world rt_hair_groom_cascade_drop rt_hair_capture".split())
 for key in NO_PIPELINE:
     TABLE[key] = []
 
