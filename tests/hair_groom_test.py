@@ -846,7 +846,8 @@ def test_strand_edge():
     layer = (ROOT / "layer/rrpost.cpp").read_text(encoding="utf-8")
     check("strand edge: the shader's estimator is sum of c / P over the 3 x 3 found strands, the layer dispatches it by key",
           "cov += hp_box_coverage(d, w, n2) * along / max(pf, 1e-3);" in src and 'cfg_int("rr_hair_strand_aa", 0)' in layer
-          and '"strand_resolve") == 0) return "rr_strand_aa.hlsl";' in layer)
+          and '"strand_snapshot") == 0) return "rr_strand_aa.hlsl";' in layer and 'strand_snapshot(dd, cmd);' in layer
+          and 'void strand_snapshot(uint3 id : SV_DispatchThreadID)' in src)
 
 def test_coverage():
     """M3.2 (rt_hair_groom_coverage): the pair's twins and its offline gate against the supersampled area coverage."""

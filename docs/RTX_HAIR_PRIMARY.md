@@ -741,7 +741,19 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   magenta with no usable header; he1 window f-debug traces it. Remaining cause candidate: binary sub-pixel coverage
   under RR (temporal). If f-debug shows the coverage path cannot see the strands at post time, the next step is to
   write each strand pixel's analytic coverage in the strand G-buffer pass itself (a per-pixel coverage word in the
-  pixel record, from the hit's own capsule and the pixel footprint) and resolve from that.## 6. Open items
+  pixel record, from the hit's own capsule and the pixel footprint) and resolve from that.
+- he1 #2 (02:04, VALID): f-debug grey everywhere, no magenta: the header is usable but no pixel reads as strand
+  footprint at the post chain (the record no longer holds this frame's seal there; the fibre passes read it at
+  lighting). b-aa / d-aa changed 650 / 610 hair pixels of Xr against the compose output (0 in a, c, e): the coverage
+  applied only in some frames. Edge-only K8 bursts (final image, 8 frames): flicker (temporal std / mean) off: hair
+  0.0409, edge band 0.0674, core 0.0324; aa 0.0465 / 0.0740 / 0.0344 (one animated sample each, mode 2 unreliable: no
+  claim). Strand edges flicker twice as much as the hair core.
+- Fix: strand_snapshot (rr_strand_aa.hlsl) runs at the lighting dispatch (layer/rrpost.cpp rrpost_dispatch_pre) and
+  writes (coverage, strand pixel, footprint) into a frame-parity RGBA16F image; strand_resolve reads only that image.
+  Line `[rrpost] strand snapshots (rr_hair_strand_aa=N): S at the lighting pass, R refused`. Bursts now full
+  (pan_inputs=1) so temporal_burst.py has the RR inputs.
+
+## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
    normal, is view space; 5g). Open: the root-to-tip sign of that frame.

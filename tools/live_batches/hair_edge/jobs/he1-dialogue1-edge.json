@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 2378,
+  "timeout": 1400.0,
   "repeat": 1,
   "live_batch": "hair-edge",
   "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_native_tileset=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_tips=0,rt_hair_primary_passes=15,rt_stats_period_frames=60,detailed_logging=1,rt_hair_groom_shadow_t=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_capture=1,rt_hair_groom_coverage=0,rr_hair_strand_aa=2",
@@ -23,29 +23,30 @@
           0,
           0
         ],
-        "fps": 21.505376344023208,
-        "windows": 20,
+        "fps": 23.885350318586458,
+        "windows": 33,
         "logs": [
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hair1-dialogue.1.191025.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap1-dialogue.1.203259.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-capture.1.224055.log",
-          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-strands.1.224309.log"
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-strands.1.224309.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.020405.log"
         ]
       }
     ],
     "trace_export": {
       "seconds": 0.3800000000046566,
       "quantile": 0.95,
-      "samples": 16,
-      "maximum": 0.3800000000046566
+      "samples": 22,
+      "maximum": 0.4969999999993888
     },
     "trace_capture_stall": {
-      "seconds": 3.1143,
-      "source": "grp1-camp.1.171557.log",
+      "seconds": 3.07654,
+      "source": "hair1-dialogue.1.191025.log",
       "quantile": 0.95,
-      "samples": 16,
+      "samples": 22,
       "maximum": 3.1143,
-      "logs": 4
+      "logs": 5
     }
   },
   "args": [
@@ -106,7 +107,8 @@
     "\\[rrpost\\] rr_hair_strand_aa=0:",
     "\\[rrpost\\] rr_hair_strand_aa=1:",
     "\\[rrpost\\] rr_hair_strand_aa=2:",
-    "\\[rrpost\\] rr_hair_strand_aa=3:"
+    "\\[rrpost\\] rr_hair_strand_aa=3:",
+    "\\[rrpost\\] strand snapshots \\(rr_hair_strand_aa=\\d\\): [1-9]\\d* at the lighting pass"
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -136,22 +138,24 @@
     "(?s)\\[hair primary\\] level load \\(first or new G-buffer images\\)(?:(?!\\[hair primary\\] frame).)*\\[hair primary\\] frame \\d+:[^\\n]*\\b[1-9]\\d* G-buffer",
     "\\[rrpost\\] strand resolve .*: 0 frames, [1-9]\\d* without",
     "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline creation failed",
-    "\\[shaders\\] rr_strand_aa\\.hlsl:strand_resolve compile call failed"
+    "\\[shaders\\] rr_strand_aa\\.hlsl:strand_resolve compile call failed",
+    "\\[rrpost\\] rr_post\\.hlsl:strand_snapshot pipeline creation failed",
+    "\\[rrpost\\] strand snapshots .*: 0 at the lighting pass, [1-9]\\d* refused"
   ],
   "expect_runner": [
     "window-mode.*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=14\\b",
-    "\\[motion-trace\\] phase=5 label=a-off repeat=0",
-    "\\[motion-trace\\] phase=6 label=b-aa repeat=0",
-    "\\[motion-trace\\] phase=7 label=c-off repeat=0",
-    "\\[motion-trace\\] phase=8 label=d-aa repeat=0",
-    "\\[motion-trace\\] phase=9 label=e-untag repeat=0",
-    "\\[motion-trace\\] phase=10 label=f-debug repeat=0"
+    "\\[motion-plan\\] complete phases=15\\b",
+    "\\[motion-trace\\] phase=6 label=a-off repeat=0",
+    "\\[motion-trace\\] phase=7 label=b-aa repeat=0",
+    "\\[motion-trace\\] phase=8 label=c-off repeat=0",
+    "\\[motion-trace\\] phase=9 label=d-aa repeat=0",
+    "\\[motion-trace\\] phase=10 label=e-untag repeat=0",
+    "\\[motion-trace\\] phase=11 label=f-debug repeat=0"
   ],
   "stop_on_dump": true,
   "purpose": "rr_hair_strand_aa 0/2/0/2 (+1) in one Test Dialogue1 run with RTX Hair on: PNG pairs and K8 pan bursts for strand edge flicker (tools/hair_groom/temporal_burst.py), energy and the render-res chain GPU ms. READY_FOR_LIVE, not authorized.",
-  "estimated_phase_seconds": 89.9,
+  "estimated_phase_seconds": 91.0,
   "expect_every": [
     {
       "name": "zero refused pipelines",
@@ -226,7 +230,7 @@
     {
       "name": "K8 burst-off",
       "select": "\\[pan\\] burst 99100 complete",
-      "match": "\\[pan\\] burst 99100 complete: 8 frames, 20 samples, transport ok",
+      "match": "\\[pan\\] burst 99100 complete: 8 frames, \\d+ samples, transport ok",
       "event": true,
       "min": 1,
       "windows": [
@@ -236,7 +240,7 @@
     {
       "name": "K8 burst-aa",
       "select": "\\[pan\\] burst 99101 complete",
-      "match": "\\[pan\\] burst 99101 complete: 8 frames, 20 samples, transport ok",
+      "match": "\\[pan\\] burst 99101 complete: 8 frames, \\d+ samples, transport ok",
       "event": true,
       "min": 1,
       "windows": [

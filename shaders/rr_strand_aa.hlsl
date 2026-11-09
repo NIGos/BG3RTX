@@ -15,6 +15,9 @@
 //   docs 5n). Lh: the mean colour of the strand pixels around; Lb: the pixel's own colour when it shows no strand, else
 //   the mean of the non-strand pixels of its 5 x 5 window (none: unchanged). Depth, motion and guides stay the pixel's.
 //   Math twin: tools/hair_groom/edge_stability.py (box_strand_coverage, found probability), CTest hair_groom_test.
+// The strand data come from strand_snapshot, dispatched at the lighting pass of the same frame (the fibre passes read the
+// pixel record there; at the post chain it no longer holds this frame's seal, he1 2026-11-09 f-debug), into a
+// frame-parity image; strand_resolve reads only that image, the colours and the stencil.
 // A separate request: rr_post.hlsl and every other request keep their preprocessed text.
 #include "rt/hair_primary_rebase.hlsli"
 
@@ -116,19 +119,18 @@ float2 to_raster(Frame f, float3 p_rel, out bool front) {   // camera-relative p
   return (ndc * 0.5 + 0.5) * f.view.zw + f.view.xy;
 }
 
-// The analytic coverage of pixel p by the strands found around it (sum of c / P, clamped), and the hair colour.
-float strand_coverage(Frame f, int2 p, float4x4 inv, float2 jit, out float3 lh, out uint hits) {
+// The analytic coverage of pixel p by the strands found around it (sum of c / P, clamped) and how many of the 3 x 3
+// neighbours show a strand.
+float strand_coverage(Frame f, int2 p, float4x4 inv, float2 jit, out uint hits) {
   uint keys[kMaxFound];
   uint nk = 0u;
   float cov = 0.0;
-  lh = 0.0.xxx;
   hits = 0u;
   const float2 centre = float2(p) + 0.5 + jit;   // the unjittered pixel centre, in raster coordinates
   [unroll] for (int i = 0; i < 9; ++i) {
     const int2 q = p + int2(i % 3 - 1, i / 3 - 1);
     uint4 e;
     if (!footprint(f, q, e) || !strand_at(f, q, e)) continue;
-    lh += In1.Load(int3(q, 0)).rgb;
     ++hits;
     bool seen = false;
     [unroll] for (uint s = 0u; s < kMaxFound; ++s) seen = seen || (s < nk && keys[s] == e.x);
@@ -160,9 +162,33 @@ float strand_coverage(Frame f, int2 p, float4x4 inv, float2 jit, out float3 lh, 
     const float pf = found_probability(d, w, n2);
     cov += hp_box_coverage(d, w, n2) * along / max(pf, 1e-3);
   }
-  if (hits > 0u) lh /= float(hits);
   return saturate(cov);
 }
+
+// ---- snapshot (he1 2026-11-09 02:04: at the post chain the pixel record no longer carried this frame's seal: the
+// f-debug Xr showed no strand footprint on any pixel, header usable). Dispatched at the lighting pass of the same frame
+// (layer/rrpost.cpp strand_snapshot), where the fibre passes read the same record: per pixel (c, strand pixel, strand
+// footprint, 0) into a frame-parity image that the resolve reads. bmax = the render size - 1; header and camera set.
+[[vk::binding(8, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> Out16;
+[numthreads(8, 8, 1)]
+void strand_snapshot(uint3 id : SV_DispatchThreadID) {
+  const uint2 size = unpack15(sp.bmax) + 1u;
+  if (any(id.xy >= size)) return;
+  const int2 p = int2(id.xy);
+  const Frame f = frame();
+  uint4 e;
+  float4 s = 0.0;
+  if (footprint(f, p, e)) {
+    uint hits;
+    const float c = strand_coverage(f, p, hp_inverse4(sp.vp), f16tof32(uint2(sp.jitter & 0xFFFFu, sp.jitter >> 16)), hits);
+    s = float4(hits > 0u ? c : 0.0, strand_at(f, p, e) ? 1.0 : 0.0, 1.0, 0.0);
+  }
+  Out16[id.xy] = s;
+}
+
+// ---- the resolve, at the post chain: the snapshot in In2 (x coverage, y strand pixel, z footprint) ----
+[[vk::binding(2, 0)]] Texture2D<float4> In2;
+float4 snap(int2 q, uint2 bmin, uint2 bmax) { return In2.Load(int3(clamp(q, int2(bmin), int2(bmax)), 0)); }
 
 [numthreads(16, 16, 1)]
 void strand_resolve(uint3 id : SV_DispatchThreadID) {
@@ -174,13 +200,12 @@ void strand_resolve(uint3 id : SV_DispatchThreadID) {
   const float4 u = In0.Load(int3(p, 0));
   const float4 ac = AC[p];
   AC[p] = float4(finite3(u.rgb - ac.a * xc), ac.a);
-  const Frame f = frame();
+  const float4 me = snap(int2(p), bmin, bmax);
 
   // ---- the game's resolve (rr_post.hlsl resolve, line for line) with the strand footprint untagged ----
   float3 xr = xc;
-  uint4 e_self;
   const uint sc = Stencil.Load(int3(p, 0)).y;
-  const bool self5 = ((sc >> 5u) & 1u) != 0u && !footprint(f, int2(p), e_self);
+  const bool self5 = ((sc >> 5u) & 1u) != 0u && me.z == 0.0;
   if (((sc >> 4u) & 1u) == 0u) {
     uint n0 = 0u, n5 = 0u;
     float4 acc0 = float4(1.0, 1.0, 1.0, 0.0), acc1 = float4(1.0, 1.0, 1.0, 0.0);
@@ -192,8 +217,7 @@ void strand_resolve(uint3 id : SV_DispatchThreadID) {
         q = clamp(q, bmin, bmax);
         const uint s = Stencil.Load(int3(q, 0)).y;
         n0 += 1u - ((s >> 4u) & 1u);
-        uint4 eq;
-        const uint b5 = ((s >> 5u) & 1u) != 0u && !footprint(f, int2(q), eq) ? 1u : 0u;
+        const uint b5 = ((s >> 5u) & 1u) != 0u && In2.Load(int3(q, 0)).z == 0.0 ? 1u : 0u;
         n5 += b5;
         if ((i != 3 && j != 3) || acc1.w == 0.0 || acc0.w == 0.0) {
           const float3 col = In1.Load(int3(q, 0)).rgb;
@@ -217,32 +241,28 @@ void strand_resolve(uint3 id : SV_DispatchThreadID) {
   }
 
   // ---- mode 2: the analytic strand coverage on the strand footprint ----
-  uint4 e;
-  if (mode >= 2u && footprint(f, int2(p), e)) {
-    const float4x4 inv = hp_inverse4(sp.vp);
-    const float2 jit = f16tof32(uint2(sp.jitter & 0xFFFFu, sp.jitter >> 16));
-    float3 lh;
-    uint hits;
-    const float c = strand_coverage(f, int2(p), inv, jit, lh, hits);
-    const bool own = strand_at(f, int2(p), e);
-    float3 lb = xc;
-    uint nb = own ? 0u : 1u;
-    if (own) {
-      lb = 0.0.xxx;
-      [unroll] for (int k = 0; k < 25; ++k) {
-        const int2 q = int2(p) + int2(k % 5 - 2, k / 5 - 2);
-        uint4 eq;
-        if (!inside(f, q) || (footprint(f, q, eq) && strand_at(f, q, eq))) continue;
-        lb += In1.Load(int3(q, 0)).rgb;
-        ++nb;
+  if (mode >= 2u && me.z != 0.0) {
+    float3 lh = 0.0.xxx, lb = 0.0.xxx;
+    uint hits = 0u, nb = 0u;
+    [unroll] for (int k = 0; k < 25; ++k) {
+      const int2 q = int2(p) + int2(k % 5 - 2, k / 5 - 2);
+      if (any(q < int2(bmin)) || any(q > int2(bmax))) continue;
+      const float4 sq = In2.Load(int3(q, 0));
+      const float3 col = In1.Load(int3(q, 0)).rgb;
+      if (sq.y != 0.0) {
+        if (abs(k % 5 - 2) <= 1 && abs(k / 5 - 2) <= 1) { lh += col; ++hits; }   // strand colours of the 3 x 3
+      } else {
+        lb += col; ++nb;                                                         // background colours of the 5 x 5
       }
-      lb /= max(float(nb), 1.0);
     }
-    if (hits > 0u && nb > 0u) xr = c * lh + (1.0 - c) * lb;
-    if (mode == 3u)   // debug view (he1 live 2026-11-09: mode 2 left every hair pixel of Xr unchanged): which test passed
-      xr = float3(1.0, own ? 1.0 : 0.0, hits > 0u && nb > 0u ? saturate(c) : 0.0) * max(dot(xc, 0.333), 0.05) * 4.0;
+    lh /= max(float(hits), 1.0);
+    lb = me.y == 0.0 ? xc : lb / max(float(nb), 1.0);
+    if (me.y == 0.0) nb = 1u;
+    if (hits > 0u && nb > 0u) xr = me.x * lh + (1.0 - me.x) * lb;
+    if (mode == 3u)   // debug view: red footprint, green strand pixel, blue the applied coverage
+      xr = float3(1.0, me.y, hits > 0u && nb > 0u ? me.x : 0.0) * max(dot(xc, 0.333), 0.05) * 4.0;
   } else if (mode == 3u) {
-    xr = f.ok ? xc * 0.25 : float3(1.0, 0.0, 1.0);   // magenta: no usable header (tag, size, camera rebase)
+    xr = xc * 0.25;
   }
   OutR11[p] = finite3(xr);
 }

@@ -12,3 +12,5 @@
 - he1 #1 live: strands write no stencil; the game's resolve never touches hair (Xr = compose on every hair pixel), so
   mode 1 is moot; mode 2 changed no hair pixel (coverage path inactive on the GPU). Debug mode 3 and window f-debug
   added; bursts now static 6 s timed windows (the 60-frame window closed before the K8 burst completed).
+- he1 #2: the record has no current seal at the post chain (f-debug); the strand data are now snapshotted at the lighting
+  pass into a frame-parity image. Baseline burst flicker: edge band 0.067 vs hair core 0.032 (final image).

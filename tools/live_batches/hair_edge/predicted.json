@@ -1,24 +1,27 @@
 {
- "_rule": "Prepared BEFORE the run (AGENTS.md); revised 2026-11-09 after he1 #1 (01:39-01:42). One Test Dialogue1 launch, RTX Hair bundle on throughout, rr_post=1. Windows a-off/c-off: rr_hair_strand_aa=0; b-aa/d-aa: 2; e-untag: 1; f-debug: 3 (debug view in Xr); static K8 bursts burst-off (0) and burst-aa (2). Flicker = py -3 tools/hair_groom/temporal_burst.py <burst-off dir> <burst-aa dir> --labels off,aa. Edge evidence = Xr (rrpost image 'Xr (RR colour: dither-resolved X)', i1120 in he1 #1) against the compose output (5c3fdabc) on the class-5 mask (RT2 alpha) and its 1-px ring. Energy = float means of dumps.json (5c3fdabc). Cost = '[rrpost] gpu: render-res chain' of the aa windows minus the off windows (the resolve is one of its dispatches; the strand resolve replaces the game's resolve, so the delta is its extra cost).",
- "he1 #1 findings (2026-11-09)": {
-  "stencil": "every G-buffer hair pipeline: stencil test 0, so strands write no stencil; Xr equals the compose output on every hair pixel in every mode (0 hair pixels > 2 codes in the 960 px previews): the game's dither resolve never touches the hair. The card-tag hypothesis is refuted; mode 1 is a no-op on this scene.",
-  "mode 2": "also 0 hair pixels changed, though the strand resolve ran 600 frames per period with the header and camera: the coverage path did not apply on the GPU (a failed footprint, strand or neighbour test). f-debug names which.",
-  "energy": "off 0.38364 / 0.38467, aa 0.38481 / 0.38263, untag 0.38204: within the animated scene's noise"
+ "_rule": "Prepared BEFORE the run (AGENTS.md); revised 2026-11-09 after he1 #2 (02:04, VALID). One Test Dialogue1 launch, RTX Hair bundle on, rr_post=1. Windows a-off/c-off: rr_hair_strand_aa=0; b-aa/d-aa: 2; e-untag: 1; f-debug: 3; static K8 bursts burst-off (0) and burst-aa (2), now full bursts with the RR inputs (pan_edge=0, pan_inputs=1). Flicker = py -3 tools/hair_groom/temporal_burst.py <burst-off> <burst-aa> --labels off,aa, plus the edge band (1-2 px ring of the class-5 mask) vs the hair core on the final image. Edge evidence = Xr ('Xr (RR colour: dither-resolved X)', its id in the log) against CBT (the compose output) on the class-5 mask. Cost = '[rrpost] gpu: render-res chain' aa minus off (the snapshot runs at the lighting pass, outside that line: its cost shows in the frame time only).",
+ "he1 #2 findings (02:04)": {
+  "f-debug": "header usable (no magenta) but no pixel reads as strand footprint at the post chain: the pixel record no longer carries this frame's seal there, though the fibre passes read it at lighting. b-aa / d-aa still changed 650 / 610 hair pixels (0 in a, c, e): the coverage applied only in some frames",
+  "burst baseline (edge-only bursts, final image, 8 frames)": "off: flicker (temporal std / mean) hair 0.0409, edge band 0.0674, core 0.0324; aa: 0.0465 / 0.0740 / 0.0344 (mode 2 not reliably active, one animated sample each: no effect claimed). Strand edges flicker twice as much as the hair core: the user's report quantified"
  },
- "f-debug (rr_hair_strand_aa=3, Xr trace)": {
-  "predicted": "red over the hair cards' strand footprint, green on the strand pixels, blue where the coverage applies (edge pixels next to a background pixel); magenta over the whole frame means no usable header (tag, size or camera rebase). The colour that is missing on the hair names the failing test",
-  "invalid_if": "no Xr dump in the f-debug trace"
+ "design change": "strand_snapshot at the lighting pass writes (coverage, strand pixel, footprint) per pixel into a frame-parity image; strand_resolve reads only that image. Log line '[rrpost] strand snapshots (rr_hair_strand_aa=N): S at the lighting pass, R refused'.",
+ "f-debug (rr_hair_strand_aa=3)": {
+  "predicted": "red on the strand footprint (the hair cards' strand pixels and the background between them), yellow (red + green) on strand pixels, white/blue tint where the coverage applies along the silhouette; grey (x 0.25) elsewhere",
+  "invalid_if": "no snapshot line with S > 0, or no Xr dump in the f-debug trace"
  },
- "flicker (burst-aa vs burst-off), only if f-debug shows blue on the hair edges": {
-  "predicted": "motion-compensated frame difference 'mc' of the final image on the hair region 10-30% lower with the key (offline edge model: accumulated edge flicker 0.0178 -> 0.0086 on edge pixels, a minority of the hair region); Xr on the hair ring differs from the compose output with the key",
-  "kept_if": "mc final lower with aa than off and the user sees no dithering on strand silhouettes in the d-aa PNG vs c-off"
+ "flicker (burst-aa vs burst-off)": {
+  "predicted": "edge-band flicker of the final image 10-30% lower with the key (offline 0.0178 -> 0.0086 on edge pixels); temporal_burst mc final on the hair region lower; core unchanged within the off/aa spread",
+  "kept_if": "edge flicker lower with aa than off and the user sees no dithering on strand silhouettes in the d-aa PNG vs c-off"
+ },
+ "static (b/d vs a/c)": {
+  "predicted": "Xr differs from CBT on the hair ring in every aa window (several thousand pixels at render size, hundreds in the previews), 0 in the off windows"
  },
  "energy (a/c vs b/d character ROI)": {
-  "predicted": "within +-1% (offline coverage-model bias +0.9% whole image); the off pair spread sets the noise",
+  "predicted": "within +-1% (offline coverage-model bias +0.9% whole image)",
   "rejected_if": "|mean(b, d) - mean(a, c)| > 2% of the ROI mean"
  },
  "cost": {
-  "predicted": "render-res chain +0.05 to +0.3 ms in the aa windows",
-  "note": "report only; quality before frame rate (AGENTS.md)"
+  "predicted": "render-res chain +0.05 to +0.2 ms (the resolve's 25 snapshot and colour taps on footprint pixels); snapshot 0.05-0.2 ms at lighting",
+  "note": "report only"
  }
 }

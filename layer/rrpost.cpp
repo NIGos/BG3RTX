@@ -130,6 +130,8 @@ struct Chain {
 std::mutex g_mu;
 Chain g_ch;
 Img g_xs, g_xr, g_ac, g_eb, g_check, g_cbt, g_z, g_sss_before, g_sss;
+Img g_strand[2];               // rr_hair_strand_aa: the strand snapshot per frame parity (rr_strand_aa.hlsl strand_snapshot)
+uint64_t g_strand_frame[2] = {UINT64_MAX, UINT64_MAX};
 // Fillers for every binding a step does not use: a reused ring set must never
 // keep a stale descriptor of a game image or buffer (see run()).
 Img g_dummy2d, g_dummy3d;
@@ -170,8 +172,8 @@ struct Pipe {
   VkPipeline pipe = VK_NULL_HANDLE;
   uint64_t gen = 0;
 };
-Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"temporal"}, {"temporal_final"}, {"strand_resolve"}};
-enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_TEMPORAL, P_TEMPORAL_FINAL, P_STRAND };
+Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"temporal"}, {"temporal_final"}, {"strand_resolve"}, {"strand_snapshot"}};
+enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_TEMPORAL, P_TEMPORAL_FINAL, P_STRAND, P_SNAP };
 std::string g_last_logged_why;
 uint64_t g_completed = 0, g_broken_frames = 0;
 
@@ -378,7 +380,7 @@ bool ensure_layout(DeviceData* dd) {
 // asking rr_post.hlsl for a temporal entry fails to compile ("missing entry point definition").
 const char* entry_source(const char* entry) {
   if (strcmp(entry, "temporal") == 0 || strcmp(entry, "temporal_final") == 0) return "rr_post_temporal.hlsl";
-  if (strcmp(entry, "strand_resolve") == 0) return "rr_strand_aa.hlsl";
+  if (strcmp(entry, "strand_resolve") == 0 || strcmp(entry, "strand_snapshot") == 0) return "rr_strand_aa.hlsl";
   return "rr_post.hlsl";
 }
 
@@ -856,7 +858,41 @@ uint32_t half_bits(float v) {
   if (e >= 31) return sign | 0x7BFFu;
   return sign | (uint32_t(e) << 10) | ((f >> 13) & 0x3FFu);
 }
-uint64_t g_strand_frames = 0, g_strand_missing = 0, g_strand_logged_at = 0;
+uint64_t g_strand_frames = 0, g_strand_missing = 0, g_strand_logged_at = 0, g_snap_frames = 0, g_snap_missing = 0;
+
+// rr_hair_strand_aa: at the lighting pass (the fibre passes read the pixel record there), the strand snapshot of this
+// frame (coverage, strand pixel, footprint) into the frame-parity image the resolve reads. Size: the post chain's Xs
+// (the render size of the last chain); none yet: no snapshot, the resolve stays the game's.
+void strand_snapshot(DeviceData* dd, VkCommandBuffer cmd) {
+  const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 3);
+  if (mode <= 0 || !g_xs.image) return;
+  const uint32_t w = g_xs.w, h = g_xs.h;
+  Img& img = g_strand[frame_index() & 1];
+  const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
+  StrandPush sp{};
+  float jit[2] = {};
+  if (!hp || !hp->header || w > 32768u || h > 32768u || !ngx_gbuffer_camera(sp.vp, sp.cam, jit, w, h) ||
+      !img_ensure(dd, img, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, frame_index() & 1 ? "strand snapshot B" : "strand snapshot A")) {
+    ++g_snap_missing;
+    return;
+  }
+  sp.jitter = half_bits(jit[0]) | (half_bits(jit[1]) << 16);
+  sp.bmin = uint32_t(mode) << 30;
+  sp.bmax = (w - 1) | ((h - 1) << 15);
+  sp.header[0] = uint32_t(hp->header);
+  sp.header[1] = uint32_t(hp->header >> 32);
+  Push raw;
+  memcpy(&raw, &sp, sizeof raw);
+  to_general(dd, cmd, {&img});
+  Binds b;
+  b.out16 = img.view;
+  if (run(dd, cmd, P_SNAP, b, raw, (w + 7) / 8, (h + 7) / 8)) {
+    g_strand_frame[frame_index() & 1] = frame_index();
+    ++g_snap_frames;
+  } else {
+    ++g_snap_missing;
+  }
+}
 int g_strand_mode_logged = -1;
 bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const Push& pc, const uint32_t ext[2]) {
   const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 3);
@@ -870,7 +906,11 @@ bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const P
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
   StrandPush sp{};
   float jit[2] = {};
-  const bool ok = hp && hp->header && pc.bmax[0] < 32768u && pc.bmax[1] < 32768u &&
+  // The snapshot of this frame (written at its lighting pass): the pixel record no longer holds this frame's seal at the
+  // post chain (he1 2026-11-09 02:04, f-debug).
+  const Img& snap = g_strand[frame_index() & 1];
+  const bool ok = hp && hp->header && pc.bmax[0] < 32768u && pc.bmax[1] < 32768u && snap.image &&
+                  g_strand_frame[frame_index() & 1] == frame_index() && pc.bmax[0] < snap.w && pc.bmax[1] < snap.h &&
                   ngx_gbuffer_camera(sp.vp, sp.cam, jit, g_ch.w, g_ch.h);
   if (ok) {
     sp.jitter = half_bits(jit[0]) | (half_bits(jit[1]) << 16);
@@ -880,7 +920,10 @@ bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const P
     sp.header[1] = uint32_t(hp->header >> 32);
     Push raw;
     memcpy(&raw, &sp, sizeof raw);
-    if (!run(dd, cmd, P_STRAND, b, raw, (ext[0] + 15) / 16, (ext[1] + 15) / 16)) return false;   // not built yet: the game's
+    Binds bs = b;
+    bs.in[2] = snap.view;
+    bs.in_l[2] = VK_IMAGE_LAYOUT_GENERAL;
+    if (!run(dd, cmd, P_STRAND, bs, raw, (ext[0] + 15) / 16, (ext[1] + 15) / 16)) return false;   // not built yet: the game's
     ++g_strand_frames;
   } else {
     ++g_strand_missing;
@@ -889,6 +932,9 @@ bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const P
     g_strand_logged_at = frame_index();
     log("[rrpost] strand resolve (rr_hair_strand_aa=%d): %llu frames, %llu without the hair header or the G-buffer camera",
         mode, (unsigned long long)g_strand_frames, (unsigned long long)g_strand_missing);
+    log("[rrpost] strand snapshots (rr_hair_strand_aa=%d): %llu at the lighting pass, %llu refused", mode,
+        (unsigned long long)g_snap_frames, (unsigned long long)g_snap_missing);
+    g_snap_frames = g_snap_missing = 0;
     g_strand_frames = g_strand_missing = 0;
   }
   return ok;
@@ -1144,6 +1190,11 @@ void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLay
 void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs) {
   if (cs == kCsLighting && cfg_int("rr", 1)) {
     if (auto* dd = device_of(cmd)) rrpost_prewarm(dd);
+    if (cfg_int("rr_post", 1) && cfg_int("rr_hair_strand_aa", 0) > 0)
+      if (auto* dd = device_of(cmd)) {
+        std::lock_guard<std::mutex> lock(g_mu);
+        if (ensure_layout(dd)) strand_snapshot(dd, cmd);
+      }
   }
   if (!cfg_int("rr", 1) || !cfg_int("rr_post", 1)) return;
   if (cs != kCsResolve && cs != kCsLighting && cs != kCsAdapt) {
@@ -1215,7 +1266,7 @@ void rrpost_prewarm(DeviceData* dd) {
   g_prewarmed = true;
   unsigned count = 0;
   for (const auto& p : g_pipes)
-    if (strcmp(p.entry, "strand_resolve") != 0 || cfg_int("rr_hair_strand_aa", 0) != 0)
+    if (strncmp(p.entry, "strand_", 7) != 0 || cfg_int("rr_hair_strand_aa", 0) != 0)
       count += g_builds.prewarm(p.entry, uint64_t(g_pl), [dd, entry=p.entry] {
         return compile_background(dd, entry);
       }) ? 1u : 0u;
