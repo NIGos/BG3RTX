@@ -693,7 +693,11 @@ def tighten(job, plan):
     budget = duration_budget(job, plan)
     for phase, window in zip(plan, budget["windows"]):
         old = float(phase["seconds"])
-        new = max(old, window["minimum_seconds"]) if phase.get("frames") is not None else window["minimum_seconds"]
+        # A burst window (serial) keeps its declared length when that is longer: the model (17 frames + one trace stall)
+        # is a lower bound, and a pan_inputs burst (16 frames, 368 samples) completed 7.5 s after arming (he1 03:03 and
+        # 03:13) against a 5.1 s model; a window that ends first restores pan_capture and aborts the burst.
+        keep = phase.get("frames") is not None or phase.get("serial")
+        new = max(old, window["minimum_seconds"]) if keep else window["minimum_seconds"]
         phase["seconds"] = new
         for key in ("motion_start", "motion_end"):
             if phase.get(key) == old:

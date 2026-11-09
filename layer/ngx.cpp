@@ -798,6 +798,12 @@ static bool finite_all(const float* f, int n) {
 
 // This frame's G-buffer camera (set 0 binding 2 read at the pass end): the camera-relative jittered view-projection
 // (_m2, row-major, v * M), the camera position and the jitter in render pixels (x = P20 W / 2, y = -P21 H / 2).
+// The scene G-buffer's size (the largest pass with its formats, ngx_note_pass); 0 x 0 before the first.
+void ngx_gbuffer_size(uint32_t* w, uint32_t* h) {
+  std::lock_guard<std::mutex> lock(g_gbuf_mu);
+  *w = g_gbuf.w;
+  *h = g_gbuf.h;
+}
 bool ngx_gbuffer_camera(float vp[16], float pos[3], float jitter_px[2], uint32_t w, uint32_t h) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_gcam.ok || g_gcam.frame != frame_index()) return false;
