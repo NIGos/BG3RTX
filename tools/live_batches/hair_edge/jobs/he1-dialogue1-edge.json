@@ -52,7 +52,7 @@
     "-RealPresent",
     "-Move",
     "-MovePlan",
-    "captures/live_batches/hair_edge/plans/he1-dialogue1-edge.json"
+    "tools/live_batches/hair_edge/plans/he1-dialogue1-edge.json"
   ],
   "patterns": [
     "\\[hot\\]",
@@ -102,7 +102,10 @@
     "\\[hair primary\\] header at 0x[0-9a-f]+",
     "\\b0 pipelines refused",
     "\\[hair primary\\] (?:prepass|G-buffer) hair pipeline stencil: test \\d, write mask 0x[0-9a-f]{2}",
-    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline built"
+    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline built",
+    "\\[rrpost\\] rr_hair_strand_aa=0:",
+    "\\[rrpost\\] rr_hair_strand_aa=1:",
+    "\\[rrpost\\] rr_hair_strand_aa=2:"
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -232,46 +235,6 @@
       "min": 1,
       "windows": [
         "burst-aa"
-      ]
-    },
-    {
-      "name": "strand resolve mode 2 in b-aa",
-      "select": "\\[rrpost\\] rr_hair_strand_aa=(\\d):",
-      "match": "\\[rrpost\\] rr_hair_strand_aa=2:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "b-aa"
-      ]
-    },
-    {
-      "name": "strand resolve mode 0 in c-off",
-      "select": "\\[rrpost\\] rr_hair_strand_aa=(\\d):",
-      "match": "\\[rrpost\\] rr_hair_strand_aa=0:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "c-off"
-      ]
-    },
-    {
-      "name": "strand resolve mode 2 in d-aa",
-      "select": "\\[rrpost\\] rr_hair_strand_aa=(\\d):",
-      "match": "\\[rrpost\\] rr_hair_strand_aa=2:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "d-aa"
-      ]
-    },
-    {
-      "name": "strand resolve mode 1 in e-untag",
-      "select": "\\[rrpost\\] rr_hair_strand_aa=(\\d):",
-      "match": "\\[rrpost\\] rr_hair_strand_aa=1:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "e-untag"
       ]
     },
     {

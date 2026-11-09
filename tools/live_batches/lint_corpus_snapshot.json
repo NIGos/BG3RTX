@@ -77800,6 +77800,18 @@
     "\\[hair groom\\] [1-9]\\d* groom files loaded in \\d+ ms, \\d+ ignored": [
       0,
       null
+    ],
+    "\\[rrpost\\] rr_hair_strand_aa=0:": [
+      0,
+      null
+    ],
+    "\\[rrpost\\] rr_hair_strand_aa=1:": [
+      0,
+      null
+    ],
+    "\\[rrpost\\] rr_hair_strand_aa=2:": [
+      0,
+      null
     ]
   }
 }
