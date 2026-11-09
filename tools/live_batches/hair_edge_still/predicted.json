@@ -1,0 +1,38 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md), 2026-11-09, branch claude/hair-edge-still. Question: does rr_hair_strand_aa=2 lower the temporal flicker of strand edges after RR, once animation is excluded? One Test Dialogue1 launch (the only save the hair jobs use with strands large on screen; no idle out-of-dialogue save exists among the job generators), RTX Hair bundle on, rr_post=1, rr_hair_strand_snap_site=3, exposure held (qa_exposure_hold=1) for every burst. Eight 16-frame bursts with the RR inputs in ABBA ABBA order (off aa aa off off aa aa off: a linear drift of the dialogue cancels in mean(aa) - mean(off)), each after a 90-frame settle window in its own mode.",
+  "analysis": "py -3 tools/hair_groom/edge_burst.py <8 burst dirs in plan order> --modes off,aa,aa,off,off,aa,aa,off; judged on final (what the user sees), rr_color reported",
+  "he1 audit (why this job)": {
+    "animation counted as flicker": "edge_burst.py flicker = per-pixel temporal std / mean without motion exclusion; the band is the silhouette, so sub-pixel animation becomes variance there (the off bursts alone differed 30-80%). mc warps bilinearly and counts disocclusions at the same silhouette",
+    "no settle": "he1 burst windows switched the mode and armed the burst 0.1 s after motion-ready: 0.31 s (burst-off-1, about 9 frames after a mode-2 window) to 2.3 s between the switch line and the arm (he1 04:02 log)",
+    "exposure free": "he1 step() set qa_exposure_hold=0 in every window: bursts 15 s apart at different eye adaptation",
+    "mean of ratios": "flicker averaged std / mean per pixel: dark background pixels of the band dominate"
+  },
+  "still pixels": {
+    "definition": "summed |rr_mvec| over burst frames 1-15 <= 0.25 px (edge_burst.STILL_PX: motion then adds <= 3% of a binary-coverage edge's variance)",
+    "predicted": "at least 256 still px in the band and the core of every burst at render resolution (the dialogue idles: head and hair sway, the body, background and parts of the hair edge hold still)",
+    "invalid_if": "a burst has < 256 still band or core px (edge_burst.MIN_STILL_PX): Dialogue1 cannot answer it, a still scene is needed"
+  },
+  "positive control (mode 2 applied in the bursts)": {
+    "predicted": "rr_color edge band hf of every aa burst below the off bursts' mean (he1 04:02: -13 to -15%)",
+    "invalid_if": "an aa burst's rr_color band hf is not below the off mean: the resolve did not act in that burst (as in he1 d-aa)"
+  },
+  "settle": {
+    "predicted": "band_still drift (|first half - second half| / mean) of every burst within the off bursts' drift range: the RR history has converged after 90 frames",
+    "invalid_if": "the first burst after a switch drifts more than twice the largest drift of a burst that follows a same-mode burst"
+  },
+  "flicker (decision)": {
+    "metric": "final band_still `still` = sqrt(mean temporal variance) / mean over the still band pixels",
+    "predicted": "aa/off -10% to -50% (offline accumulated edge flicker raw 0.0178 -> analytic 0.0086, -52%, with an ideal accumulator; RR rejects part of the history, so less)",
+    "threshold": "derived from the key-off repeats: sigma = sd(off) / mean(off) * sqrt(1/4 + 1/4); pass if delta < -2 sigma",
+    "kept_if": "PASS: band delta < -2 sigma, core_still delta within +-2 sigma (edge-specific), band_still mean within +-2 sigma (energy)",
+    "rejected_if": "FAIL with a VALID run: the band does not fall by 2 sigma, or the core falls with it, or the band mean moves by > 2 sigma"
+  },
+  "energy": {
+    "predicted": "band_still and frame_still mean aa/off within +-2 sigma of the off repeats (offline coverage-model bias +1.3% on the edge band)"
+  },
+  "cost": {
+    "predicted": "render-res chain about +0.18 ms in aa settle windows (he1 04:02)",
+    "note": "report only"
+  },
+  "disk": "8 bursts x ~0.55 GB = ~4.4 GB, a one-off pack: deleted after edge_burst.py has written its summary"
+}

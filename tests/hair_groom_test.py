@@ -795,6 +795,45 @@ def test_shading_spaces(rng):
           and "kFlagMacroNormal = 1u << 4, kFlagTangentWorld = 1u << 5" in header)
 
 
+def test_edge_burst_still():
+    """5n audit: edge_burst.py's still-pixel metric excludes animation and judge() derives its bound from the off repeats."""
+    from tools.hair_groom import edge_burst as eb
+    rng = np.random.default_rng(3)
+    T, h, w = 16, 32, 32
+    mvs = [np.zeros((h, w, 2), np.float32) for _ in range(T)]
+    for m in mvs[1:]:
+        m[:, 16:, 0] = 0.5                     # the right half moves half a pixel per frame (animation)
+    still = eb.still_mask(mvs)
+    check("still mask: summed motion <= 1/4 px kept, the animated half dropped", still[:, :16].all() and not still[:, 16:].any())
+    # The first frame's MV points before the burst and is ignored.
+    first = [m.copy() for m in mvs]
+    first[0][:] = 5.0
+    check("still mask ignores frame 0's MV", np.array_equal(eb.still_mask(first), still))
+    L = np.ones((T, h, w), np.float32)
+    L[:, :, 16:] += np.linspace(0, 1, T)[:, None, None]   # the moving edge: a sweep, large raw temporal std
+    L[:, :, :16] += 0.1 * rng.standard_normal((T, h, 16))
+    s = eb.still_stats(L, still)
+    check(f"still stats: std {s['still']:.3f} of the still half only (0.1 noise / mean 1)", abs(s["still"] - 0.1) < 0.02, s)
+    check("still stats: empty mask gives nan, 0 px", eb.still_stats(L, np.zeros((h, w), bool))["px"] == 0)
+    drift = eb.still_stats(np.concatenate([np.ones((8, 2, 2)), 1.1 * np.ones((8, 2, 2))]), np.ones((2, 2), bool))["drift"]
+    check(f"still stats: half-burst drift {drift:.3f} of a 10% step", abs(drift - 0.1 / 1.05) < 1e-6)
+
+    def burst(band, core, px=1000, mean=1.0):
+        return {"band_still": {"still": band, "mean": mean, "px": px}, "core_still": {"still": core, "mean": mean, "px": px},
+                "frame_still": {"still": core, "mean": mean, "px": px}}
+    modes = ["off", "aa", "aa", "off", "off", "aa", "aa", "off"]
+    off_band = [0.100, 0.104, 0.097, 0.101]
+    vals = lambda aa_band, aa_core=0.05, px=1000: [
+        burst(off_band[i // 2] if m == "off" else aa_band, 0.05 + 0.001 * (i % 3) if m == "off" else aa_core, px)
+        for i, m in enumerate(modes)]
+    j = eb.judge(vals(0.08), modes)
+    check(f"judge: band -20% against a {j['band_still.still']['sigma']:.1%} off spread passes", j["verdict"] == "PASS", j)
+    check("judge: band unchanged fails", eb.judge(vals(0.1005), modes)["verdict"] == "FAIL")
+    check("judge: band and core both -20% (not edge-specific) fails", eb.judge(vals(0.08, 0.04), modes)["verdict"] == "FAIL")
+    check("judge: too few still pixels is INVALID", eb.judge(vals(0.08, px=100), modes)["verdict"] == "INVALID")
+    check("judge: one off burst is INVALID", eb.judge(vals(0.08)[:2], modes[:2])["verdict"] == "INVALID")
+
+
 def test_strand_edge():
     """5n (rr_hair_strand_aa): the twins of rr_strand_aa.hlsl and the offline edge model (tools/hair_groom/edge_stability.py)."""
     from tools.hair_groom import edge_stability as es
@@ -1527,7 +1566,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_strand_edge, test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_edge_burst_still, test_strand_edge, test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
