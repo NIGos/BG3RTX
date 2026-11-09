@@ -25,6 +25,20 @@ struct RecordPins {
   bool contains(uint64_t rec) const { return counts.count(rec) != 0; }
   void clear() { counts.clear(); }
 };
+// The build-record registry (bvhsplit g_rec_state): past `limit` entries, records more than `keep` ids old are
+// forgotten (an unknown record is never trusted), except pinned ones: pending compaction copies, and the
+// scene slots' material records (rtscene slot_retired reads them until the slot is built again). User log
+// 2026-11-09: builds failed for 30 s (08:01:07-39), the current slot was never re-picked meanwhile, its
+// record was pruned, and once builds resumed that slot never retired: it pinned rt_scene_oldest_live and
+// every freed BLAS range (8 GB pending by 08:02:05).
+template<class States, class Forget>
+void prune_records(States& states, uint64_t next, const RecordPins& pins, Forget forget, size_t limit = 8192,
+                   uint64_t keep = 4096) {
+  if (states.size() <= limit) return;
+  for (auto it = states.begin(); it != states.end();)
+    if (it->first + keep < next && !pins.contains(it->first)) { forget(it->first); it = states.erase(it); }
+    else ++it;
+}
 // Timed-out pool users are not proof of completion. A reset of their exact
 // command recording removes the possibility of a late pool access.
 struct UncertainCommands {

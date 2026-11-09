@@ -3990,13 +3990,13 @@ uint64_t bvh_rec_register(VkCommandBuffer cmd) {
   g_rec_cmd[cmd].push_back(id);
   g_rec_state[id] = kRecPending;
   g_rec_owners.record(id,reinterpret_cast<uint64_t>(cmd));
-  if (g_rec_state.size() > 8192)   // forget old records (an unknown one is never trusted)
-    for (auto it = g_rec_state.begin(); it != g_rec_state.end();)
-      if(it->first + 4096 < g_rec_next && !g_compact_records.contains(it->first)) {g_rec_owners.forget(it->first);it=g_rec_state.erase(it);} else ++it;
+  // Forget old records (an unknown one is never trusted), except pinned ones (vram_compact::prune_records).
+  vram_compact::prune_records(g_rec_state, g_rec_next, g_compact_records, [](uint64_t old) { g_rec_owners.forget(old); });
   return id;
 }
 
 int bvh_rec_state(uint64_t id) { return rec_state(id); }
+void bvh_rec_pin(uint64_t id, bool pin) { if (id) compact_record_pin(id, pin); }
 
 bool bvh_rec_matches_command(uint64_t id,VkCommandBuffer command) {
   if(!id || !command) return false;
