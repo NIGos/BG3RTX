@@ -224,6 +224,20 @@ must prove actual rotation; there is no raw-input spoof/focus fallback. FG-on
 tests need focus and must not use this mode. Optional fixtures:
 `p1_rotation_unfocused_preflight_job.json` and `p1_rotation_unfocused_job.json`.
 
+Real input filter (BG3RTX_BACKGROUND=1, `layer/background.cpp`, `layer/bg_input.h`): BG3 reads the
+mouse only through SDL2 2.30.6 (window messages; no raw input or relative mode). Before the filter,
+each posted WM_MOUSEMOVE re-armed TrackMouseEvent, Windows answered with WM_MOUSELEAVE because the
+user's cursor was elsewhere, and SDL moved the game's pointer to the real cursor (GetCursorPos) and
+cleared its mouse focus; the user's hover and inactive-window wheel also reached the game. Now every
+mouse message the runner posts carries wParam bit 0x0800 (`$BgMouseMark`, stripped before SDL sees
+it). While the real foreground window belongs to another process, SDL's PeekMessageW/GetMessageW
+drop unmarked mouse messages and WM_MOUSELEAVE/WM_MOUSEHOVER, and `SDL_GetGlobalMouseState` returns
+the runner's last posted pointer and buttons. Keys are untouched (real keys only reach the focused
+window). When the game is foreground, everything passes. The layer log shows `[bg] input filter on`,
+`[bg] input filter active/idle` transitions and every 10 s `[bg] dropped real input: mouse N leave N;
+runner mouse passed N; global polls answered N`. New posted mouse messages in `auto-run.ps1` must
+carry `$BgMouseMark` (CTest `bg_input_test` checks it).
+
 Only one process starts the game: `scripts/test-queue.ps1`, run by the coordinating
 session. Agents and sessions never launch the game themselves. They add a job, a JSON
 file in `captures/queue/pending/`, and the runner executes the jobs oldest first, one game
