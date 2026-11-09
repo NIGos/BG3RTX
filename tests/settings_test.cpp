@@ -1197,10 +1197,10 @@ static void test_consolidation_policy() {
   CHECK(!ab::flip(m, indicator)); // A stale Fresnel target must not bypass restart safety.
   m["experimental_options"] = "0"; CHECK(!ab::flip(m, indicator));
   CHECK(!ab::eligible(*find_knob("exp_omm"), 1, true));
-  // Only the live FG pacing candidate can be selected as an opt-in A/B target.
+  // Only the live FG pacing candidate and the strand edge resolve (5n) can be selected as opt-in A/B targets.
   for (const char* id : kOptInKnobs)
     for (int c = 1; c < choice_count(*find_knob(id)); ++c)
-      CHECK(ab::eligible(*find_knob(id), c, true) == (std::string(id)=="fg_destroy_wait_exact"));
+      CHECK(ab::eligible(*find_knob(id), c, true) == (std::string(id)=="fg_destroy_wait_exact" || std::string(id)=="exp_hair_strand_aa"));
   const auto& live = *find_knob("exp_hair_groom");
   selection.touch(live, 1, true); CHECK(!selection.pending);
   CHECK(!opt_in_knob(live) && !knob_visible(live, false, true));
