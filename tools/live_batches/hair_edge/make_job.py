@@ -64,7 +64,7 @@ def make_plan():
     # edge_flicker's rendered bursts (5 s static windows, capture at 0.1 s), sized here for the K8 frames plus the
     # measured capture-stall p95 (2.7 s) and decode.
     for label, aa in (("burst-off", 0), ("burst-aa", 2)):
-        p = timed(step(label, aa, frames=0), 6)
+        p = timed(step(label, aa, frames=0), 14)   # 16-frame burst with RR inputs completes in ~7.5 s (03:10 he1)
         serial = SERIALS[label]
         p.update(capture_at=.1, serial=serial)
         # Full bursts with the RR inputs (rr_color, rr_mvec, material every frame): temporal_burst.py needs them; the
