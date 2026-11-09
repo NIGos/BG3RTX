@@ -154,6 +154,7 @@ HOST_STORAGE = {
     ("layer/hit_material.cpp", "q.rows"): ("plain", ["shaders/rt/native_hit_material.hlsli:gHitRecords", "shaders/rt/hit_material_gather.hlsl:rows"]),
     ("layer/rrpost.cpp", "&g_dummy_buf"): ("plain", ["shaders/rr_post.hlsl:BufA", "shaders/rr_post.hlsl:Probe"]),
     ("layer/rrpost.cpp", "&g_probe_buf"): ("plain", ["shaders/rr_post.hlsl:Probe"]),
+    ("layer/rrpost.cpp", "&g_strand_flags"): ("plain", ["shaders/rr_strand_aa.hlsl:PairFlags"]),   # rr_hair_strand_aa pairing flags, read only
     ("layer/rtscene.cpp", "&scene.pose"): ("plain", ["shaders/geo_ubo_copy.hlsl:Out"]),
 }
 # Files that request host-visible memory types themselves (reviewed for step 2's blind spots).

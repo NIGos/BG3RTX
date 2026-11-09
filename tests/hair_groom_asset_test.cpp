@@ -4,6 +4,7 @@
 #include "../common/hair_groom_budget.h"
 #include "../common/hair_primary.h"
 #include "../common/strand_snapshot.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -568,67 +569,127 @@ static void test_round3() {
   CHECK(!bg3::hair_groom::parse_lod(b.data(), b.size(), at, 1, lod));   // triangle 1 out of range for 1 triangle
 }
 
-// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5n): a resolve reads the snapshot its own frame recorded, whatever
-// frame_index() (presents) did in between; a frame without one falls back, never to an older frame's snapshot.
-static void test_strand_snapshot_ring() {
+// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5n): a resolve reads the snapshot of its own frame whatever order the game's
+// threads record them in; at vkQueueSubmit a resolve whose frame's snapshot was not the one submitted last is refused
+// (the game's resolve), never pointed at another frame's. GPU model: the one snapshot image holds the frame of the
+// written snapshot submitted last; a resolve whose flag holds its token reads it and must find its own frame there.
+namespace pair_sim {
+namespace ss = bg3::strand_snapshot;
+struct Ev { bool snap = false; int frame = 0; uint64_t rec = 0; ss::Pairing::Take take{}; bool written = false; };
+struct Sim {
+  ss::Pairing p;
+  uint32_t flags[ss::Pairing::kSlots] = {};
+  uint64_t next_rec = 1;
+  int image = -1, own = 0, refused = 0, wrong = 0;
+  Ev snap(int frame, bool ok = true) {
+    Ev e;
+    e.snap = true, e.frame = frame, e.rec = next_rec++, e.written = ok;
+    const uint64_t o = p.snapshot(e.rec);
+    if (ok) p.wrote(o);
+    return e;
+  }
+  Ev resolve(int frame) {
+    Ev e;
+    e.frame = frame, e.rec = next_rec++, e.take = p.resolve(e.rec);
+    flags[e.take.slot] = 0;   // rrpost.cpp strand_resolve at recording
+    p.ran(e.take.raw);
+    return e;
+  }
+  void submit(const Ev& e) {
+    p.submit(e.rec, [&](uint32_t s, uint32_t v) { flags[s] = v; });
+    if (e.snap) { if (e.written) image = e.frame; return; }
+    if (flags[e.take.slot] == e.take.token) { ++own; wrong += image != e.frame; } else { ++refused; }
+  }
+};
+}  // namespace pair_sim
+
+static void test_strand_snapshot_pairing() {
   namespace ss = bg3::strand_snapshot;
+  using pair_sim::Ev;
   const int32_t gbuf[5] = {83, 37, 37, 37, 37}, decal[4] = {83, 37, 37, 37}, other[4] = {97, 37, 37, 37};
   CHECK(ss::gbuffer_pass(5, gbuf, 129) && ss::gbuffer_pass(4, decal, 129));
   CHECK(!ss::gbuffer_pass(4, other, 129) && !ss::gbuffer_pass(4, decal, 130) && !ss::gbuffer_pass(3, decal, 129));
-  uint32_t slot = 9;
-  ss::Ring r;
-  CHECK(!r.take(&slot));   // a resolve before any snapshot
-  // One G-buffer end per frame: every resolve has its frame's snapshot, in alternating images. The user session
-  // (fps cap 58, fg=3) moved the present between the two in 145-395 of 600 frames; nothing here reads frame_index().
-  uint64_t fallbacks = 0;
-  uint32_t last = 2;
-  for (int f = 1; f <= 600; ++f) {
-    const ss::Ring::Begin b = r.begin(0);
-    CHECK(!b.skip && !b.merge);
-    r.wrote();
-    fallbacks += r.take(&slot) ? 0 : 1;
-    CHECK(slot == b.slot && slot != last);
-    last = slot;
+  {   // In order: every resolve with its own frame.
+    pair_sim::Sim s;
+    for (int f = 1; f <= 600; ++f) { const Ev a = s.snap(f), b = s.resolve(f); s.submit(a); s.submit(b); }
+    CHECK(s.own == 600 && s.refused == 0 && s.wrong == 0 && s.p.resyncs == 0 && s.p.own == 600 && s.p.ahead_max == 0);
   }
-  CHECK(fallbacks == 0);
-  // Every site (rr_hair_strand_snap_site=3): the decal end merges over the G-buffer end, a second decal match is
-  // skipped, the lighting site merges; the resolve reads that image.
-  ss::Ring m;
-  const ss::Ring::Begin g = m.begin(0);
-  m.wrote();
-  const ss::Ring::Begin d = m.begin(1);
-  CHECK(!d.skip && d.merge && d.slot == g.slot);
-  m.wrote();
-  CHECK(m.begin(1).skip);
-  const ss::Ring::Begin l = m.begin(2);
-  CHECK(!l.skip && l.merge && l.slot == g.slot);
-  m.wrote();
-  CHECK(m.take(&slot) && slot == g.slot);
-  // A frame whose snapshot was refused (begun, never written) falls back once, and never reads the older image; a
-  // second resolve with no new snapshot falls back too. The next frame recovers in the other image.
-  CHECK(m.begin(0).slot != g.slot);
-  CHECK(!m.take(&slot));
-  CHECK(!m.take(&slot));
-  const ss::Ring::Begin n = m.begin(0);
-  CHECK(!n.merge && n.slot == g.slot);
-  m.wrote();
-  CHECK(m.take(&slot) && slot == g.slot);
-  // A frame whose post chain broke before the resolve: the next G-buffer end starts a new frame (never merges into
-  // the unresolved one), and the next resolve reads that newest snapshot.
-  const ss::Ring::Begin u = m.begin(0);
-  m.wrote();
-  const ss::Ring::Begin v = m.begin(0);
-  CHECK(!v.skip && !v.merge && v.slot != u.slot);
-  m.wrote();
-  CHECK(m.take(&slot) && slot == v.slot);
-  // A snapshot in only every third frame: the other two fall back, consistently (400 of 600).
-  ss::Ring sparse;
-  fallbacks = 0;
-  for (int f = 1; f <= 600; ++f) {
-    if (f % 3 == 0) { sparse.begin(0); sparse.wrote(); }
-    fallbacks += sparse.take(&slot) ? 0 : 1;
+  {   // rv1-s8 (FG 3, Water Queens House): snap N + 1 recorded before resolve N. The Ring gave resolve N the image of
+      // N + 1 (still frame N - 1 on the GPU) and resolve N + 1 fell back. Now both read their own frame.
+    pair_sim::Sim s;
+    const Ev a = s.snap(1), b = s.snap(2), c = s.resolve(1), d = s.resolve(2);
+    s.submit(a); s.submit(c); s.submit(b); s.submit(d);
+    CHECK(s.own == 2 && s.refused == 0 && s.wrong == 0 && s.p.ahead_max == 1);
   }
-  CHECK(fallbacks == 400);
+  {   // Mixed recording orders over 600 frames (deterministic): about one frame in five records the next frame's G-buffer
+      // end before its resolve, one in ten its resolve before its own G-buffer end; the batches go down in frame order.
+    pair_sim::Sim s;
+    std::vector<Ev> snaps(601), res(601);
+    std::vector<std::pair<double, std::pair<bool, int>>> order;
+    uint32_t lcg = 12345;
+    for (int f = 1; f <= 600; ++f) {
+      lcg = lcg * 1664525u + 1013904223u;
+      const uint32_t r = (lcg >> 8) % 10;
+      double ts = 2.0 * f, tr = 2.0 * f + 1.0;
+      if (r < 2) ts = 2.0 * f - 1.5;        // before the previous frame's resolve
+      else if (r == 2) tr = 2.0 * f - 0.25; // before its own snapshot
+      order.push_back({ts, {true, f}});
+      order.push_back({tr, {false, f}});
+    }
+    std::sort(order.begin(), order.end());
+    int submitted = 0;   // frame f goes down once all its work is recorded (its latest event is at 2f + 1)
+    for (const auto& o : order) {
+      for (; submitted < 600 && 2.0 * (submitted + 1) + 1.0 < o.first - 1.0; ++submitted) {
+        s.submit(snaps[submitted + 1]); s.submit(res[submitted + 1]);
+      }
+      const int f = o.second.second;
+      if (o.second.first) snaps[f] = s.snap(f); else res[f] = s.resolve(f);
+    }
+    for (int f = submitted + 1; f <= 600; ++f) { s.submit(snaps[f]); s.submit(res[f]); }
+    CHECK(s.own == 600 && s.refused == 0 && s.wrong == 0 && s.p.ahead_max >= 1);
+  }
+  {   // A refused snapshot (no camera, no header): its resolve is refused, never given the older image; the next recovers.
+    pair_sim::Sim s;
+    for (int f = 1; f <= 6; ++f) { const Ev a = s.snap(f, f != 3), b = s.resolve(f); s.submit(a); s.submit(b); }
+    CHECK(s.own == 5 && s.refused == 1 && s.wrong == 0 && s.p.resyncs == 0);
+  }
+  {   // A frame with no snapshot at all: the image still holds the previous frame, so that resolve is refused; the pairing
+      // resynchronises and the next frame reads its own.
+    pair_sim::Sim s;
+    for (int f = 1; f <= 6; ++f) {
+      Ev a;
+      if (f != 3) a = s.snap(f);
+      const Ev b = s.resolve(f);
+      if (f != 3) s.submit(a);
+      s.submit(b);
+    }
+    CHECK(s.own == 5 && s.refused == 1 && s.wrong == 0 && s.p.resyncs == 1);
+  }
+  {   // A frame with no resolve (its hook did not fire): the next resolve finds a newer snapshot than its ordinal, is
+      // refused and resynchronises.
+    pair_sim::Sim s;
+    for (int f = 1; f <= 6; ++f) {
+      const Ev a = s.snap(f);
+      s.submit(a);
+      if (f != 3) s.submit(s.resolve(f));
+    }
+    CHECK(s.own == 4 && s.refused == 1 && s.wrong == 0 && s.p.resyncs == 1);
+  }
+  {   // Batches out of frame order (G-buffer N + 1 submitted before post N): refused, never a wrong frame; then recovers.
+    pair_sim::Sim s;
+    const Ev a = s.snap(1), b = s.resolve(1), c = s.snap(2), d = s.resolve(2);
+    s.submit(a); s.submit(c); s.submit(b); s.submit(d);
+    for (int f = 3; f <= 8; ++f) { const Ev x = s.snap(f), y = s.resolve(f); s.submit(x); s.submit(y); }
+    CHECK(s.wrong == 0 && s.refused >= 1 && s.refused <= 3 && s.own >= 5);
+  }
+  {   // A resolve's command buffer submitted again: refused the second time (its snapshot may be overwritten since).
+    pair_sim::Sim s;
+    const Ev a = s.snap(1), b = s.resolve(1);
+    s.submit(a); s.submit(b);
+    const Ev c = s.snap(2);
+    s.submit(c); s.submit(b);
+    CHECK(s.own == 1 && s.refused == 1 && s.wrong == 0 && s.p.own == 1 && s.p.refused == 0);
+  }
 }
 
 int main() {  test_round3();
@@ -638,7 +699,7 @@ int main() {  test_round3();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
-  test_current_pick(); test_coverage_footprint(); test_strand_snapshot_ring();
+  test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

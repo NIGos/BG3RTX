@@ -813,6 +813,20 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   recorded since the resolve before it; a frame without one falls back once, never reading an older snapshot. CTest
   hair_groom_asset_test test_strand_snapshot_ring. Live check: in normal play the period line reads 'N frames, 0 fell
   back' with N equal to the snapshot count.
+- Still 113-140 of 600 fell back in rv1-s8 (Water Queens House, fg=3, Reflex; 2026-11-09 12:11) with 600 snapshots and
+  600 resolves per period (Dialogue1, fg=2: 0). Cause (code read): the G-buffer end and the post chain are recorded on
+  different game threads into different command buffers, so snap N + 1 can be recorded before resolve N; the Ring then
+  gave resolve N the image of N + 1 (on the GPU still frame N - 1: a wrong frame, silently) and resolve N + 1 fell back.
+  No per-frame identity is visible at both sites (frame_index, the ngx camera and the hair tag are all present- or
+  latest-based). Fixed by submission order (branch claude/strand-pair): one snapshot image, which at the resolve's GPU
+  time holds the snapshot submitted last (a frame's G-buffer goes down before its post chain, frames in order). The k-th
+  snapshot and the k-th resolve share an ordinal; rrpost_submit_begin (before vkQueueSubmit, both submit paths) writes
+  a resolve's host-visible flag word with its token only when the snapshot submitted last carries its ordinal and was
+  written; rr_strand_aa.hlsl strand_resolve otherwise reads no snapshot (the game's resolve). A mismatch resyncs the
+  ordinal offset. CTest test_strand_snapshot_pairing (overlapped, inverted and mixed recording orders: 600 of 600 own
+  frame; missing or refused snapshot, missing resolve, out-of-order batches, resubmission: refused, never a wrong frame).
+  Period line: '... N frames, M fell back ... (no snapshot of the frame: a at recording, b at submit); pairing: r
+  resyncs, snapshots recorded up to k ahead of their resolve'. Snapshot memory 2 -> 1 image (-22 MB at 2560x1067).
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is

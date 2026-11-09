@@ -535,6 +535,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
     signal.append(work.legacy,submits,count);submits=work.legacy.data();++count;
   }
   const auto hairSubmit = hair_primary_submit_begin(cmds);
+  rrpost_submit_begin(cmds);   // rr_hair_strand_aa: which resolves read their own frame's strand snapshot
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   hair_primary_submit_end(hairSubmit, r == VK_SUCCESS);
   dlss5_note_submit(queue,cmds,r==VK_SUCCESS);
@@ -601,6 +602,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
     signal.append(work.modern,submits,count);submits=work.modern.data();++count;
   }
   const auto hairSubmit = hair_primary_submit_begin(cmds);
+  rrpost_submit_begin(cmds);   // rr_hair_strand_aa: which resolves read their own frame's strand snapshot
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   hair_primary_submit_end(hairSubmit, r == VK_SUCCESS);
   dlss5_note_submit(queue,cmds,r==VK_SUCCESS);
