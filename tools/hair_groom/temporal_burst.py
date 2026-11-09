@@ -9,6 +9,9 @@ of the frames), per burst:
   mc       = rms of (I_t - I_{t-1} warped by the RR motion vectors) / mean (motion-compensated frame difference;
              bilinear fetch at p - mv, mv = rr_mvec in pixels, current minus previous);
   hf       = spatial rms(x - box3(x)) / mean per frame, averaged.
+Coverage split (hair-static-flicker, docs/RTX_HAIR_PRIMARY.md 5p): class-5 toggle rate (share of consecutive frame
+pairs whose class-5 membership flips, mean over the region); flicker of the stable pixels (class 5 in every frame) and of
+the toggling ones; flicker of the first and second burst halves (the within-burst noise of the flicker itself).
 For rr_color (pre-RR, render size, B10G11R11) and final (RR output after the native tonemap, display size,
 A2B10G10R10; mask and MVs scaled by the display/render ratio).
 """
@@ -77,13 +80,33 @@ def frames(d):
     return j, [by[k] for k in sorted(by)]
 
 
+def coverage_split(cls):
+    """Hair region (class 5 in at least half of the frames), its stable part (class 5 in every frame), its toggling
+    part, and the toggle rate: the share of consecutive frame pairs whose class-5 membership flips, over the region."""
+    on = np.stack([c == 5 for c in cls])
+    share = on.mean(0)
+    region = share >= 0.5
+    stable = on.all(0)
+    flips = (on[1:] != on[:-1]).mean(0) if len(cls) > 1 else np.zeros(region.shape)
+    rate = float(flips[region].mean()) if region.any() else 0.0
+    return region, stable, region & ~stable, share, rate
+
+
+def flicker(L, M):
+    """Mean over mask M of the temporal std / mean of the luminance stack L (frames first)."""
+    if not M.any():
+        return float("nan")
+    mean = L.mean(0)
+    return float((L.std(0) / np.maximum(mean, 1e-4))[M].mean())
+
+
 def analyse(d: Path):
     j, F = frames(d)
     cls = [load(d, f["material"])[..., 3] & 7 for f in F]
-    share = np.mean([c == 5 for c in cls], 0)
-    region = share >= 0.5
+    region, stable, toggling, share, rate = coverage_split(cls)
     res = {"frames": len(F), "valid_transport": j.get("valid_transport"), "hair_px": int(region.sum()),
-           "class5_share_in_region": float(share[region].mean())}
+           "class5_share_in_region": float(share[region].mean()), "class5_toggle_rate": rate,
+           "stable_px": int(stable.sum()), "toggling_px": int(toggling.sum())}
     mvs = [load(d, f["rr_mvec"]) for f in F]
     for name in ("rr_color", "final"):
         L = np.stack([lum(load(d, f[name])) for f in F])
@@ -98,8 +121,13 @@ def analyse(d: Path):
             dlt = (L[t] - warp(L[t - 1], mv))[M]
             mc.append(np.sqrt((dlt ** 2).mean()) / L[t][M].mean())
         hf = [np.sqrt(((x - box3(x))[M] ** 2).mean()) / x[M].mean() for x in L]
+        S = stable if (h, w) == stable.shape else scale_mask(stable, (h, w))
+        T = toggling if (h, w) == toggling.shape else scale_mask(toggling, (h, w))
+        half = len(F) // 2
         res[name] = {"flicker": float(flick.mean()), "flicker_p90": float(np.percentile(flick, 90)),
-                     "mc": float(np.mean(mc)), "hf": float(np.mean(hf)), "mean": float(L[:, M].mean())}
+                     "mc": float(np.mean(mc)), "hf": float(np.mean(hf)), "mean": float(L[:, M].mean()),
+                     "flicker_stable": flicker(L, S), "flicker_toggling": flicker(L, T),
+                     "flicker_halves": [flicker(L[:half], M), flicker(L[half:], M)]}
         if name == "final":
             res["_final0"] = load(d, F[len(F) // 2]["final"])
             res["_box"] = np.argwhere(M)
@@ -122,10 +150,15 @@ def main(argv):
         R.append(r)
         print(f"{l}: frames {r['frames']} valid_transport {r['valid_transport']} hair px {r['hair_px']} "
               f"class-5 share {r['class5_share_in_region']:.3f} |mv| median {r['mv_px_median']:.2f} px", flush=True)
+        print(f"  coverage: class-5 toggle rate {r['class5_toggle_rate']:.4f}, stable px {r['stable_px']}, "
+              f"toggling px {r['toggling_px']}", flush=True)
         for n in ("rr_color", "final"):
             s = r[n]
-            print(f"  {n:9s} flicker {s['flicker']:.4f} (p90 {s['flicker_p90']:.4f})  mc-diff {s['mc']:.4f}  "
-                  f"HF {s['hf']:.4f}  mean {s['mean']:.4f}", flush=True)
+            print(f"  {n:9s} flicker {s['flicker']:.4f} (p90 {s['flicker_p90']:.4f}; halves {s['flicker_halves'][0]:.4f} / "
+                  f"{s['flicker_halves'][1]:.4f}; stable {s['flicker_stable']:.4f}, toggling {s['flicker_toggling']:.4f})  "
+                  f"mc-diff {s['mc']:.4f}  HF {s['hf']:.4f}  mean {s['mean']:.4f}", flush=True)
+        print(f"  RR attenuation (final / rr_color flicker) {r['final']['flicker'] / max(r['rr_color']['flicker'], 1e-9):.3f}",
+              flush=True)
     if crop and len(R) >= 2:
         from PIL import Image
         tiles = []

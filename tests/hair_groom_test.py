@@ -1527,7 +1527,23 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_strand_edge, test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+def test_burst_coverage_split():
+    """temporal_burst.coverage_split / flicker (hair-static-flicker): a pixel toggling class 5 every frame is region
+    (share 0.5), toggling, rate 1; a pixel always class 5 is stable, rate 0; flicker is std / mean over the mask."""
+    from tools.hair_groom import temporal_burst as tb
+    cls = [np.array([[5, 5 if t % 2 == 0 else 0, 0]]) for t in range(4)]
+    region, stable, toggling, share, rate = tb.coverage_split(cls)
+    check("burst split: region = share >= 0.5", region.tolist() == [[True, True, False]], share)
+    check("burst split: stable = class 5 in every frame", stable.tolist() == [[True, False, False]])
+    check("burst split: toggling = region minus stable", toggling.tolist() == [[False, True, False]])
+    check("burst split: toggle rate over the region (0 and 1)", abs(rate - 0.5) < 1e-12, rate)
+    L = np.array([[[1.0, 1.0]], [[1.0, 3.0]]])
+    f = tb.flicker(L, np.array([[False, True]]))
+    check("burst flicker: std / mean on the mask (1 / 2)", abs(f - 0.5) < 1e-6, f)
+    check("burst flicker: empty mask is nan", np.isnan(tb.flicker(L, np.zeros((1, 2), bool))))
+
+
+for t in (test_burst_coverage_split, test_strand_edge, test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

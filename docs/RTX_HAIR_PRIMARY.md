@@ -882,6 +882,34 @@ Fix (rt_hair_warmup, live, default 1 since 2026-11-09 after hw1: strands 309 -> 
   In game: load Test Dialogue1 with the knob on and watch the party's hair; strands should replace the cards within
   1-2 s of the scene appearing.
 
+## 5p. Static-camera strand flicker (offline 2026-11-09, branch claude/hair-static-flicker: no key)
+User: with a still camera the strands appear and disappear very fast. Not swapping: rv3 220145 static windows show
+rebase 0, strand draws 720/720, coverage 94-96%, no refusals. Code read (no defect found in the jitter chain):
+- Ray, depth and motion agree with the raster sample. The ray goes through `pos.xy` with the inverse of the jittered
+  `gCam.vp` (hair_primary_gbuffer.hlsl:238-245); the depth is the hit projected with the same matrix (:125-126, :374);
+  the strand motion vector removes both jitters with the native card formula (hair_primary_velocity.hlsl:141-142 =
+  :85-86) from the previous publish's points (:131-137). The groom soup is unprojected with the same frame's jittered
+  `_m2` (xfb_to_world.hlsl), so the jitter cancels in the geometry.
+- Most likely cause (a+b, structural): one jittered ray per pixel picks a binary strand/no-strand (or a different
+  strand) each frame. The 4-6% card pixels with no strand and every pixel near a card edge flip with the jitter: the
+  candidate region is the card raster at the jittered sample (:219, hp_on_card :348), so strands that leave the card
+  are lost and the card edge moves +-0.5 px per frame. Unbiased, but the RR input carries the Bernoulli variance
+  c (1 - c) per pixel (5d, 5n model).
+- Amplifiers (c): with rr_hair_guides=1 the RR normal guide is the per-strand fibre normal (5g), so a pixel's guides
+  change whenever the jitter picks another strand, which may cut RR's history; fg=3 interpolates two of three presented
+  frames between uncorrelated strand pixels. FG is Apply::Restart (no in-run A/B). (d) The one-frame trail
+  (hair_groom_update.hlsl:28) copies the points once per update: correct for one update per frame; low likelihood.
+- he1 never measured strands against cards in one run, so it could not separate (a) from (c).
+- Tool: tools/hair_groom/temporal_burst.py now prints the class-5 toggle rate, the flicker of stable vs toggling pixels,
+  the flicker of each burst half (its noise) and the RR attenuation (final / rr_color). CTest hair_groom_test
+  test_burst_coverage_split.
+- Live (STAGED, not queued): tools/live_batches_staged/hair_static (hs1-s8-static-hair, S8, ~85 s of phases, 3 bursts
+  ~1.7 GB): strands aa 0 / strands aa 2 / cards, static camera. Coverage if rr_color flicker strands/cards >= 1.5 with
+  the same RR attenuation; reconstruction if rr_color is close to the cards and only final differs (predicted.json).
+- Fix by outcome (owner of layer/hair_primary.cpp): coverage: a per-pixel analytic coverage word written by the strand
+  G-buffer pass (5n next step) and/or a conservative-raster candidate region in the strand G-buffer clone;
+  reconstruction: a stable RR normal guide on strand pixels (macro normal for the guide only, rr_guides.hlsl).
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
