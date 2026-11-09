@@ -1,7 +1,9 @@
-// bg3rtx_hairconv: native strand groom converter (docs/RTX_HAIR_ROADMAP.md 2d). No Python, LSLib or granny2.
+// bg3rtx_hairconv: native strand groom converter (docs/RTX_HAIR_ROADMAP.md 2d, 2f). No Python, LSLib or PowerShell.
 //
 //   bg3rtx_hairconv <file.hcap | dir>... --out <groom dir> [--threads N] [--jobs J] [--check full|cheap]
 //                   [--accept-review] [--report-dir <dir>] [--json <file>]
+//   bg3rtx_hairconv --all --game "<BG3 install or its Data folder>" --granny "<granny2.dll>" --out <groom dir>
+//                   [--report-dir <dir>] ...   (every catalogue style from the game's paks: all.cpp, roadmap 2f)
 //
 // Per style, the reference pipeline (tools/hair_groom/hcap.py reference = batch.process): grid, root check, trace,
 // dedupe, head (the file's or fitted to the roots), orientation / reorient, check, v3 write. --check full adds the
@@ -10,6 +12,7 @@
 // <dir>\preparation.json (the launcher's Preparation card) every 30 s and at the end; progress lines every 30 s.
 // Inputs are processed in modification order (the order the game saw the styles). BelowNormal priority.
 #include "hairconv.h"
+#include "pipeline.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -24,6 +27,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <map>
 #include <mutex>
@@ -35,180 +39,23 @@ namespace fs = std::filesystem;
 using namespace hairconv;
 
 namespace {
-constexpr const char* kVersion = "hairconv-1";
-// batch.py verdict thresholds.
-constexpr double kIouPass = 0.85, kIouReject = 0.70, kRootReject = 0.3, kCoverReview = 0.08, kRadianceReview = 0.15,
-                 kReversedReview = 0.25, kMixedReview = kCoverReview;
-
-std::string esc(const std::string& s) {
-  std::string o;
-  for (char c : s) {
-    if (c == '"' || c == '\\') { o += '\\'; o += c; }
-    else if (static_cast<unsigned char>(c) < 0x20) o += ' ';
-    else o += c;
-  }
-  return o;
-}
-std::string num(double v, int digits = 6) {
-  if (!std::isfinite(v)) return "null";
-  char b[64];
-  snprintf(b, sizeof b, "%.*g", digits, v);
-  return b;
-}
-std::string fmt(const char* f, double v) { char b[64]; snprintf(b, sizeof b, f, v); return b; }
-double round3(double v) { return std::nearbyint(v * 1000) / 1000; }
-double median(std::vector<double> v) {
-  std::sort(v.begin(), v.end());
-  const size_t n = v.size();
-  return n % 2 ? v[n / 2] : (v[n / 2 - 1] + v[n / 2]) / 2;
-}
 using Clock = std::chrono::steady_clock;
 double secs(Clock::time_point a) { return std::chrono::duration<double>(Clock::now() - a).count(); }
 
-struct Rec {
-  std::string name, verdict, asset, json;
-  std::vector<std::string> reasons;
-  int strands = 0;
-  uint64_t bytes = 0;
-  double seconds = 0;
-};
-
-Rec process(const std::string& path, const std::string& out_dir, int threads, bool full, bool accept_review) {
-  Rec rec;
-  rec.name = fs::path(path).stem().string();
-  std::map<std::string, double> t;
-  auto t0 = Clock::now(), all = t0;
-  auto lap = [&](const char* k) { t[k] += secs(t0); t0 = Clock::now(); };
+Rec process_file(const std::string& path, const Options& o) {
+  const std::string name = fs::path(path).stem().string();
+  const auto t0 = Clock::now();
   Input in;
   std::string error;
-  if (!read_hcap(path, in, &error)) {
-    rec.verdict = "reject";
-    rec.reasons.push_back(error);
-  } else {
-    lap("read");
-    int grid[2];
-    double fit = 0;
-    detect_tile_grid(in.mesh, grid, &fit);
-    if (in.has_grid) { grid[0] = in.grid[0]; grid[1] = in.grid[1]; }
-    std::vector<double> root_corr = root_channel_check(in.mask, grid);
-    lap("grid");
-    Report rep;
-    Groom g = convert(in.mesh, in.mask, grid, rep, threads);
-    if (rep.tracer == "2d") root_corr = rep.strand_root_corr;
-    lap("trace");
-    int dropped = 0;
-    g = dedupe(g, &dropped, threads);
-    lap("dedupe");
-    Head head = in.has_head ? in.head : head_from_roots(g);
-    std::vector<double> finite;
-    for (double c : root_corr) finite.push_back(c);
-    const double corr_med = finite.empty() ? NAN : median(finite);
-    const bool bad_root = !finite.empty() && corr_med < kRootReject;
-    const bool geometry_root = bad_root && head.valid();
-    int decided = 0, reversed = 0;
-    if (geometry_root) {
-      decided = orientation(g, head.centre).strands_decided;
-      g = reorient(g, head.centre, &reversed);
-    }
-    Orientation orient;
-    const bool have_orient = head.valid();
-    if (have_orient) orient = orientation(g, head.centre);
-    lap("orientation");
-    std::vector<std::string> reasons, review;
-    if (!g.strands()) reasons.push_back("no strands");
-    if (bad_root && !geometry_root) reasons.push_back(fmt("root channel does not run along the rows (median corr %.2f)", corr_med));
-    if (geometry_root && decided < g.strands() / 2.0)
-      review.push_back(fmt("root from geometry (mask root channel does not run along the rows, median corr %.2f)", corr_med));
-    Validation val;
-    if (full && g.strands()) {
-      val = validate_full(in.mesh, in.mask, g, head, threads);
-      lap("validation");
-      const double iou_min = *std::min_element(val.iou.begin(), val.iou.end());
-      double cov = 0, light = 0;
-      for (double c : val.coverage) if (std::fabs(c) > std::fabs(cov)) cov = c;
-      for (double l : val.radiance) if (std::fabs(l) > std::fabs(light)) light = l;
-      if (iou_min < kIouReject) reasons.push_back(fmt("silhouette IoU %.2f", iou_min));
-      if (std::fabs(cov) > kCoverReview) review.push_back(fmt("coverage differs by %+.2f", cov));
-      if (std::fabs(light) > kRadianceReview) review.push_back(fmt("mean radiance differs by %+.0f%%", light * 100));
-      if (rep.mixed_winding_cards > kMixedReview * std::max(rep.cards, 1))
-        review.push_back(std::to_string(rep.mixed_winding_cards) + " cards with mirrored UV triangles");
-      if (iou_min < kIouPass) review.push_back(fmt("silhouette IoU %.2f", iou_min));
-      if (have_orient && orient.cards_decided && orient.cards_mostly_reversed > kReversedReview * orient.cards_decided)
-        review.push_back(std::to_string(orient.cards_mostly_reversed) + " cards with the root away from the head");
-    } else if (!full) {
-      // Cheap check: the structural rules only (the launcher's full check adds the renders).
-      if (rep.samples && double(rep.unmapped_samples) / rep.samples > 0.95) reasons.push_back("almost no strand sample lands on a card");
-    }
-    rec.verdict = !reasons.empty() ? "reject" : !review.empty() ? "needs-review" : "pass";
-    rec.reasons = reasons;
-    rec.reasons.insert(rec.reasons.end(), review.begin(), review.end());
-    rec.strands = int(g.strands());
-    int bits = 0;
-    if (rec.verdict == "pass" || (rec.verdict == "needs-review" && accept_review)) {
-      char name[32];
-      snprintf(name, sizeof name, "%016llx.hgrm", (unsigned long long)index_id(in.mesh));
-      fs::create_directories(out_dir);
-      const std::string dst = (fs::path(out_dir) / name).string();
-      bits = write_v3(dst, in.mesh, g, &error);
-      if (bits) { rec.asset = name; std::error_code ec; rec.bytes = fs::file_size(dst, ec); }
-      else { rec.verdict = "reject"; rec.reasons.push_back(error); }
-    }
-    lap("write");
-    rec.seconds = secs(all);
-    // The record, in hcap.reference's field names.
-    std::string j = "{\"name\": \"" + esc(rec.name) + "\", \"verdict\": \"" + rec.verdict + "\", \"reasons\": [";
-    for (size_t i = 0; i < rec.reasons.size(); ++i) j += (i ? ", \"" : "\"") + esc(rec.reasons[i]) + "\"";
-    j += "], \"tile_grid\": [" + std::to_string(grid[0]) + ", " + std::to_string(grid[1]) + "], \"cards\": " + std::to_string(rep.cards) +
-         ", \"triangles\": " + std::to_string(rep.triangles) + ", \"cards_in_one_tile\": " + num(std::nearbyint(fit * 1e4) / 1e4) +
-         ", \"mixed_winding_cards\": " + std::to_string(rep.mixed_winding_cards) + ", \"uv_overlap_samples\": " +
-         std::to_string(rep.uv_overlap_samples) + ", \"unmapped_share\": " +
-         num(std::nearbyint(double(rep.unmapped_samples) / std::max(rep.samples, 1LL) * 1e5) / 1e5) +
-         ", \"root_row_corr_median\": " + (finite.empty() ? std::string("null") : num(round3(corr_med))) +
-         ", \"strands\": " + std::to_string(g.strands()) + ", \"segments\": " + std::to_string(g.points_count() - g.strands()) +
-         ", \"dedupe_dropped\": " + std::to_string(dropped) + ", \"tracer\": \"" + rep.tracer + "\"";
-    if (have_orient) j += ", \"reversed_cards\": " + std::to_string(orient.cards_mostly_reversed);
-    if (geometry_root) j += ", \"root_source\": \"geometry\", \"root_reversed_strands\": " + std::to_string(reversed) +
-                            ", \"root_decided_strands\": " + std::to_string(decided);
-    auto arr = [&](const char* k, const std::vector<double>& v) {
-      j += std::string(", \"") + k + "\": [";
-      for (size_t i = 0; i < v.size(); ++i) j += (i ? ", " : "") + num(round3(v[i]));
-      j += "]";
-    };
-    if (full) { arr("iou", val.iou); arr("coverage_delta", val.coverage); arr("radiance_delta", val.radiance); }
-    if (!rec.asset.empty()) j += ", \"asset\": \"" + rec.asset + "\", \"asset_bits\": " + std::to_string(bits);
-    j += ", \"seconds\": {";
-    bool first = true;
-    for (auto& [k, v] : t) { j += (first ? "\"" : ", \"") + k + "\": " + num(v, 4); first = false; }
-    j += "}}";
-    rec.json = j;
-    return rec;
-  }
-  rec.seconds = secs(all);
-  rec.json = "{\"name\": \"" + esc(rec.name) + "\", \"verdict\": \"reject\", \"reasons\": [\"" + esc(error) + "\"]}";
-  return rec;
-}
-
-bool write_text(const fs::path& p, const std::string& text) {
-  const fs::path tmp = p.string() + "." + std::to_string(GetCurrentProcessId()) + ".tmp";
-  FILE* f = nullptr;
-  if (_wfopen_s(&f, tmp.c_str(), L"wb") != 0 || !f) return false;
-  const bool ok = fwrite(text.data(), 1, text.size(), f) == text.size();
-  fclose(f);
-  return ok && MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING);
-}
-std::string read_text(const fs::path& p) {
-  FILE* f = nullptr;
-  if (_wfopen_s(&f, p.c_str(), L"rb") != 0 || !f) return {};
-  std::string s;
-  char buf[65536];
-  size_t n;
-  while ((n = fread(buf, 1, sizeof buf, f)) > 0) s.append(buf, n);
-  fclose(f);
-  return s;
+  if (!read_hcap(path, in, &error)) return reject(name, error);
+  Rec r = process(name, in, nullptr, o, ", \"read_s\": " + std::to_string(secs(t0)));
+  return r;
 }
 }  // namespace
 
 int main(int argc, char** argv) {
+  for (int i = 1; i < argc; ++i)
+    if (!std::strcmp(argv[i], "--all") || !std::strcmp(argv[i], "--dump-gr2")) return run_all(argc - 1, argv + 1);
   std::vector<std::string> inputs;
   std::string out_dir, report_dir, json_path;
   int threads = 4, jobs = 1;
@@ -225,7 +72,8 @@ int main(int argc, char** argv) {
     else if (a == "--json") json_path = next();
     else if (a == "--help" || a == "-h") {
       printf("bg3rtx_hairconv <file.hcap|dir>... --out <dir> [--threads N] [--jobs J] [--check full|cheap] [--accept-review]\n"
-             "                [--report-dir <dir>] [--json <file>]\n");
+             "                [--report-dir <dir>] [--json <file>]\n"
+             "bg3rtx_hairconv --all --game <dir> --granny <granny2.dll> --out <dir> [--report-dir <dir>] ... (--all --help)\n");
       return 0;
     } else inputs.push_back(a);
   }
@@ -310,7 +158,7 @@ int main(int argc, char** argv) {
   for (int w = 0; w < std::min<int>(jobs, int(todo.size())); ++w)
     pool.emplace_back([&] {
       for (int i = next++; i < int(todo.size()); i = next++) {
-        Rec r = process(todo[i].path, out_dir, threads, full, accept_review);
+        Rec r = process_file(todo[i].path, Options{out_dir, threads, full, accept_review});
         std::lock_guard<std::mutex> lock(mu);
         const auto old = state.find(r.name);
         if (old != state.end() && old->second.second.find("\"verdict\": \"pass\"") != std::string::npos) --ready;
