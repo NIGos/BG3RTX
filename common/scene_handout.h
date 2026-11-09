@@ -55,7 +55,11 @@ struct Machine {
   uint64_t reserve_frame = 0, hand_frame = 0, rec = 0;
   bool handed = false, committing = false;
   uint64_t users[kMaxUsers] = {};
+  uint64_t handles[kMaxUsers] = {};   // the users' command buffers (opaque: OMM tickets are registered on them)
   uint32_t user_count = 0;
+  // Increment 4: the commit chose R's OMM accelerated TLAS (stamp byte 24). Every user recording must hold R's micro-map
+  // tickets (registered while it records); a user that cannot get them downgrades byte 24 to the reference TLAS.
+  bool accelerated = false;
   uint64_t committed_frame = 0;   // frame of the last scene commit (any slot): later lighting needs no handout
   Counters n;
 
@@ -71,7 +75,7 @@ struct Machine {
     state = State::kReserved;
     slot = pick; prev = current;
     reserve_frame = frame; hand_frame = 0; rec = 0;
-    handed = committing = false; user_count = 0;
+    handed = committing = accelerated = false; user_count = 0;
     ++n.reserved;
     return slot;
   }
@@ -81,10 +85,10 @@ struct Machine {
   // `expect` >= 0: a further command buffer of the same frame registers for the slot it already bound (it joins only
   // that handout, never a newer reservation). A handout of an older frame that is still unresolved is never joined
   // by a later frame's lighting (that frame takes the ordinary path).
-  int hand_out(uint64_t frame, uint64_t user, int expect = -1) {
+  int hand_out(uint64_t frame, uint64_t user, int expect = -1, uint64_t handle = 0) {
     if (expect >= 0) {
       if (!open() || !handed || slot != expect || hand_frame != frame) return -1;
-      return use(user) ? slot : -1;
+      return use(user, handle) ? slot : -1;
     }
     if (handed && hand_frame != frame) return -1;
     if (committed_frame >= frame && !handed) { ++n.committed_first; return -1; }
@@ -94,17 +98,26 @@ struct Machine {
     if (state != State::kReserved && state != State::kCommitted && state != State::kFailed) return -1;
     if (state == State::kCommitted && !handed) return -1;   // committed before any handout: the ordinary path
     if (!handed) { handed = true; hand_frame = frame; ++n.handed; }
-    use(user);
+    use(user, handle);
     return slot;
   }
 
   // Another recording binds the handed-out set (core passes in other command buffers of the frame).
-  bool use(uint64_t user) {
+  bool use(uint64_t user, uint64_t handle = 0) {
     if (!handed || !open()) return false;
     for (uint32_t i = 0; i < user_count; ++i) if (users[i] == user) return true;
     if (user_count == kMaxUsers) { ++n.refused_busy; return false; }
+    handles[user_count] = handle;
     users[user_count++] = user;
     return true;
+  }
+  // Commit with the OMM accelerated TLAS: the users so far (their command buffers get the tickets now; later users get
+  // them in hand_out's caller, which sees `accelerated`). Only for the slot being committed.
+  uint32_t accelerate(int s, uint64_t* user_out, uint64_t* handle_out) {
+    if (!committing || s != slot) return 0;
+    accelerated = true;
+    for (uint32_t i = 0; i < user_count; ++i) { user_out[i] = users[i]; handle_out[i] = handles[i]; }
+    return user_count;
   }
 
   // Capture end: the slot this build must write (R while reserved and unresolved), or -1 (pick as before).
@@ -151,7 +164,7 @@ struct Machine {
   }
 
   void close() {
-    state = State::kIdle; slot = prev = -1; handed = committing = false; user_count = 0; rec = 0;
+    state = State::kIdle; slot = prev = -1; handed = committing = accelerated = false; user_count = 0; rec = 0;
   }
 };
 

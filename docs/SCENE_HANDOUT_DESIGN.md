@@ -181,6 +181,27 @@ Increment 3 done (2026-11-09, branch claude/scene-handout-3, off by default, REA
 common/scene_handout.h + scene_handout_test (every interleaving, mutation control), ABI 30, live job sh2-s8-scene-handout.
 Not covered (increment 4): OMM acceleration on reserved slots, native hit materials (Ultra's Far bounce refuses the handout).
 
+Increment 4 (2026-11-09, branch claude/scene-handout-4, off by default, no live):
+- Done: OMM on reserved slots. The commit keeps the accelerated TLAS in stamp byte 24 when `bvh_omm_tickets` (bvhsplit.cpp)
+  gives its micro-map tickets; they are registered on every recording that bound the handed-out set (the commit's users,
+  `Machine::accelerate`, and later joiners in `rt_scene_handout`) while it records, so its submit keeps the data alive
+  (omm_submit.cpp). A user that already ended cannot hold them: byte 24 goes back to the reference (monotonic, counted:
+  `OMM accelerated commits A, downgraded D` on the handout line).
+- Legacy single-BLAS builds: still the waiting path (they share one TLAS, never fill a reservation). Unchanged on purpose.
+- Not done: native hit materials. Why they refuse (layer/hit_material.cpp `register_use`, :1169-1560): the query runs
+  on the lighting thread at record time and needs, all on the CPU: this frame's prepared and attached slot (slot.frame ==
+  frame_index(), scene_prepare at the capture end and native_hit::attach in alpha_commit), the finalized deferred packet
+  of the G-buffer hooks (packet_for), the CPU pairing of prepass rows with deferred rows (q.materials, instanced pair
+  checks), the lighting dispatch's camera binding equal to slot.camera, a set clone with appended texture tables
+  (alpha_clone_hit_set copies set R's descriptors at that moment), and GPU work recorded into the lighting command buffer
+  (row uploads, join/remap/gather dispatches, header {slot.frame, generation} at row byte 0). A handout binds R before
+  any of this exists. Plan (increment 4b, about 2 days): build the query at the commit instead (G-buffer thread, after
+  attach), record its uploads and join/remap into the G-buffer command buffer, write a per-slot query set (update-after-
+  bind pool, clone of set R plus tables) whose handle the handout returns with set R; keep the frame checks as they are
+  (row header frame + generation on the GPU; slot frame and generation at the commit); move the camera-binding check
+  to the submit settle (the lighting's binding recorded at the handout; mismatch -> fallback to P's query set, the
+  existing "reuse F-1 rows" rule, borrow_query); the fallback copies P's query set into R's like set 1.
+
 Total 4-5.5 days after a go from increment 0. Gate to start 1: sh1 frame time(on) - frame time(off) >= 1 ms
 (below 0.5 ms, inside the on-a/on-b spread: drop the handout, keep only S1/S2 if cheap).
 

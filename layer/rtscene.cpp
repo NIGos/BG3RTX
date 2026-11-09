@@ -190,7 +190,18 @@ uint64_t g_wait_handed = 0;   // frames whose first RT query took a handout (cou
 // holds g_mu) never blocks the lighting's first RT query.
 std::mutex g_handout_mu;
 scene_handout::Machine g_ho;
-std::atomic<bool> g_ho_open{false};   // a handout waits for its resolution at a submit (fast path for every submit)
+std::atomic<bool> g_ho_open{false};
+// Increment 4: the OMM tickets of the reserved slot's accelerated TLAS (set at its commit, under g_handout_mu), and the
+// window's counts: commits that kept byte 24 on the accelerated TLAS, and downgrades (a user could not hold the tickets).
+std::vector<uint64_t> g_ho_tickets;
+uint64_t g_ho_omm_accelerated = 0, g_ho_omm_downgraded = 0;
+// Registers `tickets` on `cmd` while it still records `user` (omm_submit.cpp: the submit of that recording then keeps
+// the micro-map data alive until its GPU work is done). false: it ended or was reset, or a ticket was refused.
+bool handout_tickets(VkCommandBuffer cmd, uint64_t user, const std::vector<uint64_t>& tickets) {
+  if (!cmd || cmd_recording(cmd) != user) return false;
+  for (const uint64_t t : tickets) if (!omm::register_ticket_use(cmd, t)) return false;
+  return true;
+}   // a handout waits for its resolution at a submit (fast path for every submit)
 bool slot_pinned(uint32_t i) { std::lock_guard<std::mutex> l(g_handout_mu); return g_ho.pinned(int(i)); }
 uint32_t g_wait_misses = 0;   // consecutive timeouts: stop waiting after a few (no capture this frame)
 uint32_t g_scene_next = 0;
@@ -1427,14 +1438,26 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     g_split_valid = res.tlas != VK_NULL_HANDLE;
     const bool reserved = handout_commit.slot >= 0;
     if (reserved && !set) return;   // a handed-out set without a valid build: the guard resolves it to P at the submit
-    // A reserved slot never takes the OMM accelerated TLAS: its micro-map tickets would have to be registered on every
-    // recording that binds the set, not known at the commit (docs/SCENE_HANDOUT_DESIGN.md 3.3, increment 4).
-    const auto accelerated=set && !reserved?bvh_omm_scene(uint32_t(scene_slot),res.tlas):VK_NULL_HANDLE;
+    // A reserved slot takes the OMM accelerated TLAS only with its tickets (increment 4): they are registered below on
+    // every recording that bound the handed-out set so far, and on later ones when they register (rt_scene_handout).
+    std::vector<uint64_t> omm_tickets;
+    const bool omm_ok = set && (!reserved || bvh_omm_tickets(uint32_t(scene_slot), &omm_tickets));
+    const auto accelerated=omm_ok?bvh_omm_scene(uint32_t(scene_slot),res.tlas):VK_NULL_HANDLE;
     commit_scene_slot(scene_slot, accelerated?accelerated:res.tlas, set, true, res.rec);
     if (reserved) { handout_commit.ok = true; handout_commit.rec = res.rec; }
     else { std::lock_guard<std::mutex> h(g_handout_mu); g_ho.note_commit(frame_index()); }
     if(accelerated)scene.omm_reference=res.tlas;
     alpha_stamp_scene(uint32_t(scene_slot), tlas_address(res.tlas), tlas_address(accelerated ? accelerated : res.tlas));
+    if (reserved && accelerated) {
+      uint64_t users[scene_handout::Machine::kMaxUsers], handles[scene_handout::Machine::kMaxUsers];
+      uint32_t count;
+      { std::lock_guard<std::mutex> h(g_handout_mu); count = g_ho.accelerate(scene_slot, users, handles); g_ho_tickets = omm_tickets; }
+      bool all = true;
+      for (uint32_t i = 0; i < count; ++i) all = handout_tickets(reinterpret_cast<VkCommandBuffer>(handles[i]), users[i], omm_tickets) && all;
+      if (!all) alpha_stamp_traversal_to_reference(uint32_t(scene_slot));   // monotonic: the reference never needs tickets
+      std::lock_guard<std::mutex> h(g_handout_mu);
+      ++(all ? g_ho_omm_accelerated : g_ho_omm_downgraded);
+    }
     scene.camera = cap.ubo;
     scene.camera_offset = cap.ubo_offset;
     std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
@@ -1691,17 +1714,21 @@ void wait_log(int ms) {
         g_wait_handed ? (", handed out " + std::to_string(g_wait_handed) + " (0 ms)").c_str() : "");
     {   // rt_scene_handout=2 (common/scene_handout.h): whenever a reservation was made in the window
       scene_handout::Counters c;
-      { std::lock_guard<std::mutex> h(g_handout_mu); c = g_ho.n; g_ho.n = {}; }
+      uint64_t omm_accelerated, omm_downgraded;
+      { std::lock_guard<std::mutex> h(g_handout_mu); c = g_ho.n; g_ho.n = {};
+        omm_accelerated = g_ho_omm_accelerated; omm_downgraded = g_ho_omm_downgraded; g_ho_omm_accelerated = g_ho_omm_downgraded = 0; }
       if (c.reserved || c.handed || c.fallbacks())
         log("[rt] scene handout: %llu frames, reserved %llu, handed out %llu, in order %llu, fallbacks %llu (not committed %llu, "
-            "build failed %llu, order %llu, dropped %llu), pairing mismatches %llu, committed first %llu, unused %llu, users refused %llu",
+            "build failed %llu, order %llu, dropped %llu), pairing mismatches %llu, committed first %llu, unused %llu, users refused %llu; "
+            "OMM accelerated commits %llu, downgraded %llu",
             (unsigned long long)g_wait.calls, (unsigned long long)c.reserved, (unsigned long long)c.handed,
             (unsigned long long)c.in_order, (unsigned long long)c.fallbacks(),
             (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kNotCommitted)],
             (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kBuildFailed)],
             (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kOrder)],
             (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kDropped)], (unsigned long long)c.mismatches(),
-            (unsigned long long)c.committed_first, (unsigned long long)c.unused, (unsigned long long)c.refused_busy);
+            (unsigned long long)c.committed_first, (unsigned long long)c.unused, (unsigned long long)c.refused_busy,
+            (unsigned long long)omm_accelerated, (unsigned long long)omm_downgraded);
     }
     if (g_handout_downgrades) {   // rt_scene_handout: stamp traversal addresses set back to the reference TLAS
       log("[rt] scene handout: %llu stamp traversal downgrade(s) in the last %llu frames", (unsigned long long)g_handout_downgrades,
@@ -1748,11 +1775,21 @@ bool rt_scene_handout(VkCommandBuffer cmd, VkDescriptorSet* set, VkAccelerationS
   {
     std::lock_guard<std::mutex> h(g_handout_mu);
     const uint64_t before = g_ho.n.handed;
-    slot = g_ho.hand_out(now, user, expect);
+    slot = g_ho.hand_out(now, user, expect, uint64_t(cmd));
     first = g_ho.n.handed != before;
     g_ho_open.store(g_ho.open(), std::memory_order_release);
   }
   if (slot < 0) return false;
+  {   // a recording joining after an accelerated commit holds the slot's OMM tickets too, or byte 24 goes back
+    std::vector<uint64_t> tickets;
+    bool accelerated;
+    { std::lock_guard<std::mutex> h(g_handout_mu); accelerated = g_ho.accelerated && g_ho.slot == slot; if (accelerated) tickets = g_ho_tickets; }
+    if (accelerated && !handout_tickets(cmd, user, tickets)) {
+      alpha_stamp_traversal_to_reference(uint32_t(slot));
+      std::lock_guard<std::mutex> h(g_handout_mu);
+      ++g_ho_omm_downgraded;
+    }
+  }
   *set = alpha_slot_set(uint32_t(slot));
   *dummy = g_dummy_tlas;
   if (frame) *frame = now;
