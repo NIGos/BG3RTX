@@ -42,12 +42,20 @@ Item hair_item(const HairInput& in, const Settings& s);
 // The RTX Hair panel's numbers. Every field is optional: -1 / empty when the converter's status does not have it
 // (older converters write no total or source). docs/RTX_HAIR_ROADMAP.md 2f: "total" counts every style of the
 // game paks once a "Convert all styles" run has listed them; "source" is "seen" (captures) or "all" (paks).
+// bg3rtx_hairconv --all (2f) writes source "game", "all" (catalogue rows), "tiers" and, without a usable granny2.dll,
+// state "unavailable" with "error"; these map onto the same facts (source "all", total = all).
+struct HairTier { std::string tier; int total = 0, finished = 0; };
 struct HairFacts {
   int ready = -1, captured = -1, total = -1, finished = -1, needed = -1;
   double bytes = -1, eta_s = -1;
   std::string source, error;
+  std::vector<HairTier> tiers;   // conversion order: companion, player, named, hat, other, unused
 };
 HairFacts hair_facts(const HairInput& in, const Settings& s);
+// The one-line panel error for a converter exit code (2 arguments, 3 granny2.dll, 4 game files); else the log line.
+std::string hair_exit_error(int code, const std::string& last_log_line);
+// The player-facing explanation of granny2.dll (docs/RTX_HAIR_ROADMAP.md 2f).
+extern const char* const kGrannyLine;
 
 // Why "Convert all styles" cannot run, in one line ("" when it can).
 std::string convert_all_reason(const std::string& granny, bool granny_ok, bool game_ok);

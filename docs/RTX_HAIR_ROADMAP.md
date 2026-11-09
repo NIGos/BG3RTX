@@ -479,9 +479,12 @@ decompressed by a granny2.dll the player supplies. Without that DLL the mode is 
   patch overriding an entry, a part file skipped), catalogue and category, catalogue cache, Pillow-exact DXT5, a
   synthetic uncompressed GR2 (relocations, Real16 UVs, Indices16, bones) read without granny2.dll, a BitKnit section
   refused without it, and --all without / with a missing / with a non-Granny DLL: exit 3 and "unavailable".
-- Left: the launcher UI (another agent: a path picker and the line above; run this CLI instead of the capture command
-  when the player opts in); the seen list (hair_seen.txt) is not used in this mode (it orders by tier only); LSLib's
-  exact MIT text before distribution.
+- Launcher (2026-11-09, after the launcher UX rework): Home's RTX Hair panel runs this CLI with `hair_granny` when
+  "All styles" is on; tools/launcher/preparation.cpp maps `source` "game" to "all", `all` to the total, `tiers` to a
+  per-tier line (`prep-hair-tiers`), `state` "unavailable" to a stopped run with its reason (the picker stays), and
+  exit 2 / 3 / 4 to one-line errors (hair_exit_error); the granny2.dll help is the line above (`grannyHelp`).
+  LSLib's MIT text ships as licences/LSLib-MIT.txt (required notice: package.ps1 and verify_rc check it).
+- Left: the seen list (hair_seen.txt) is not used in this mode (it orders by tier only).
 
 ## 3. Converter quality and validation (OFFLINE-NOW)
 On screen: fewer fake tips (strands are 14 mm median pieces: crossings in the painted mask), no doubled

@@ -91,7 +91,11 @@ assert(!ids.get('navigation').children.some(e=>e.id==='nav-Developer'));
  assert(!ids.get('prep-source-reason').hidden&&ids.get('prep-source-reason').children[1].textContent===prep.convertAllReason);
  assert.strictEqual(ids.get('prep-source-0').attributes['aria-pressed'],'true');
  ids.get('prep-granny-browse').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'browseGranny',value:0});
- assert(/LSLib ExportTool/.test(ids.get('prep-granny-help').textContent)&&/does not include it/.test(ids.get('prep-granny-help').textContent));
+ assert.strictEqual(ids.get('prep-granny-help').textContent,"Convert all styles needs granny2.dll, which BG3RTX cannot include. If you have LSLib's ExportTool (github.com/Norbyte/lslib, Releases), point to the granny2.dll in its folder.");
+ // The host's line wins; --all progress per tier is listed in conversion order.
+ render({...fixture,preparation:{...prep,grannyHelp:'Host line.',hair:{...prep.hair,source:'all',total:1217,tiers:[{tier:'companion',total:6,finished:6},{tier:'player',total:432,finished:400}]}}});
+ assert.strictEqual(ids.get('prep-granny-help').textContent,'Host line.');
+ assert.strictEqual(ids.get('prep-hair-tiers').textContent,'Companions 6/6 · Character creation 400/432');
  render({...fixture,preparation:{...prep,granny:{path:'C:\\Tools\\granny2.dll',ok:true},convertAllReason:''}});
  assert(!ids.get('prep-source-1').disabled&&ids.get('prep-source-reason').hidden);
  ids.get('prep-source-1').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'convertAll',value:1});
