@@ -5,7 +5,7 @@ Faster
 - Fixed a slowdown that grew over a session in busy scenes: the foliage micro-map builder retried refused work every frame. Measured: the scene wait no longer climbs from 2 to 18 ms.
 - Ray-tracing memory: freed acceleration-structure blocks are reused after a short delay instead of growing the pool.
 - Fixed video memory running out after a stretch where scenes could not be built (seen as a long stutter, then a crash in DLSS Frame Generation): freed ray-tracing memory was never reused again, and some ray-tracing memory could grow past its limit. It now stays within its limit and is reused once building resumes.
-- Less video memory for sun shadows in ray tracing: the shadow-caster capture keeps a reserve sized from how fast the scene really changes. Measured at Water Queens House zoomed out: about 1.5 to 2 GB less, with no caster left out.
+- Less video memory for sun shadows in ray tracing: the shadow-caster capture keeps a reserve sized from how fast the scene really changes. Measured at Water Queens House zoomed out: about 1 to 2 GB less, with no caster left out.
 
 RTX Hair (beta, off by default)
 - One option turns it on: Lighting > RTX Hair, or the launcher's Home page. It switches live in game: Ctrl+Shift+F7 by default (change it on the Hotkeys page). Strands appear in about 2 s and go away at once. It needs only a supported RTX GPU; no files to download.
