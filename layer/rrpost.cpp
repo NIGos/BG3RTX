@@ -131,8 +131,8 @@ struct Chain {
 std::mutex g_mu;
 Chain g_ch;
 Img g_xs, g_xr, g_ac, g_eb, g_check, g_cbt, g_z, g_sss_before, g_sss;
-Img g_strand[2];               // rr_hair_strand_aa: the strand snapshot per frame parity (rr_strand_aa.hlsl strand_snapshot)
-strand_snapshot::Ring g_strand_ring;   // which frame each parity image holds
+Img g_strand[2];               // rr_hair_strand_aa: the strand snapshot per recorded-frame parity (rr_strand_aa.hlsl strand_snapshot)
+strand_snapshot::Ring g_strand_ring;   // which recorded frame each image holds (recording order, not frame_index)
 // Fillers for every binding a step does not use: a reused ring set must never
 // keep a stale descriptor of a game image or buffer (see run()).
 Img g_dummy2d, g_dummy3d;
@@ -874,7 +874,6 @@ struct SnapCamera { bool ok = false; float vp[16] = {}, pos[3] = {}, jit_unit[2]
 // the frame merged over the earlier (it writes only the pixels where it finds a strand footprint: per pixel the latest
 // site that holds strand data). he1 03:38: the G-buffer-end snapshot (site 0) changed no hair pixel.
 const char* const kSnapSite[3] = {"G-buffer end", "decal end", "lighting"};
-uint64_t g_snap_site_frame[3] = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
 // Per-site counters (footprint, strand, coverage pixels, dispatches), device-local, reduced per workgroup in the shader,
 // copied to a host buffer after each period (outside every timed dispatch) and logged one period later.
 constexpr uint32_t kSnapCounterWords = 12;
@@ -953,20 +952,22 @@ void record_strand_snapshot(DeviceData* dd, VkCommandBuffer cmd, const SnapCamer
   if (mode <= 0 || !w || !h || site > 2) return;
   const int pick = cfg_int("rr_hair_strand_snap_site", 0);
   if (pick != 3 && uint32_t(pick) != site) return;
-  // At most one snapshot per site and frame (the decal pass can match more than once).
-  if (g_snap_site_frame[site] == frame_index()) return;
-  Img& img = g_strand[frame_index() & 1];
+  // At most one snapshot per site and frame (the decal pass can match more than once); the frame is the recorded one
+  // the next resolve reads (common/strand_snapshot.h), not frame_index().
+  const strand_snapshot::Ring::Begin at = g_strand_ring.begin(site);
+  if (at.skip) return;
+  Img& img = g_strand[at.slot];
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
   StrandPush sp{};
   if (!hp || !hp->header || w > 32768u || h > 32768u || !cam.ok || !snap_counters(dd) ||
-      !img_ensure(dd, img, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, frame_index() & 1 ? "strand snapshot B" : "strand snapshot A") ||
+      !img_ensure(dd, img, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, at.slot ? "strand snapshot B" : "strand snapshot A") ||
       img.w != w || img.h != h) {
     ++g_snap_missing;
     return;
   }
   snap_counters_period(dd, cmd);
   // The frame's first snapshot rewrites the whole image (UNDEFINED -> GENERAL); a later site merges over it.
-  const bool merge = g_strand_ring.usable(frame_index());
+  const bool merge = at.merge;
   memcpy(sp.vp, cam.vp, sizeof sp.vp);
   memcpy(sp.cam, cam.pos, sizeof sp.cam);
   sp.jitter = half_bits(cam.jit_unit[0] * float(w)) | (half_bits(cam.jit_unit[1] * float(h)) << 16);
@@ -981,8 +982,7 @@ void record_strand_snapshot(DeviceData* dd, VkCommandBuffer cmd, const SnapCamer
   b.out16 = img.view;
   b.probe_out = VkDescriptorBufferInfo{g_snap_cnt, 0, VK_WHOLE_SIZE};
   if (run(dd, cmd, P_SNAP, b, raw, (w + 7) / 8, (h + 7) / 8)) {
-    g_strand_ring.wrote(frame_index());
-    g_snap_site_frame[site] = frame_index();
+    g_strand_ring.wrote();
     ++g_snap_frames;
   } else {
     ++g_snap_missing;
@@ -999,11 +999,14 @@ bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const P
   if (mode <= 0) return false;
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
   StrandPush sp{};   // the resolve reads only the bounds, the mode and the snapshot (no camera: no ngx call under g_mu)
-  // The snapshot of this frame (written at its lighting pass): the pixel record no longer holds this frame's seal at the
-  // post chain (he1 2026-11-09 02:04, f-debug).
-  const Img& snap = g_strand[frame_index() & 1];
-  const bool ok = hp && hp->header && pc.bmax[0] < 32768u && pc.bmax[1] < 32768u && snap.image &&
-                  g_strand_ring.usable(frame_index()) && pc.bmax[0] < snap.w && pc.bmax[1] < snap.h;
+  // The snapshot of this frame (written at its G-buffer end): the pixel record no longer holds this frame's seal at the
+  // post chain (he1 2026-11-09 02:04, f-debug). The one recorded since the last resolve, never by frame_index(): a
+  // present between the G-buffer end and this resolve moved it and made 145-395 of 600 frames fall back (2026-11-09).
+  uint32_t slot = 0;
+  const bool have = g_strand_ring.take(&slot);
+  const Img& snap = g_strand[slot];
+  const bool ok = hp && hp->header && pc.bmax[0] < 32768u && pc.bmax[1] < 32768u && snap.image && have &&
+                  pc.bmax[0] < snap.w && pc.bmax[1] < snap.h;
   if (ok) {
     sp.bmin = pc.bmin[0] | (pc.bmin[1] << 15) | (uint32_t(mode) << 30);
     sp.bmax = pc.bmax[0] | (pc.bmax[1] << 15);
