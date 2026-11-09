@@ -31,6 +31,7 @@
 #include <vector>
 #include "../common/replay_pack.h"
 #include "../common/replay_codec.h"
+#include "../common/scene_handout_layout.h"
 #include "replay_ab.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_gi_bindings.h"
@@ -97,6 +98,10 @@ bool g_seed_sweep = false;
 bool g_require_live_equal = false;
 uint32_t g_ab_warmup = 0; // untimed GPU dispatches immediately before each A/B sample
 bool g_ab_blas = false, g_blas_control = false;
+// --handout N (docs/SCENE_HANDOUT_DESIGN.md 3.4, constant 1051): write a TLAS address into the scene stamp's handout
+// words (set 1 binding 9, bytes 16 and 24) as the layer does at a scene commit. 1: the replay's TLAS (spec 1051 = 1 must
+// equal 0); 2: an empty TLAS (control: spec 1051 = 1 must differ, so the address path is not blind).
+int g_handout = 0;
 // Explicit class policies: legacy preserves the historical replay; layer matches Ultra.
 std::string g_blas_policy = "legacy";
 uint32_t blas_class(uint32_t meta, bool cascade) {
@@ -1293,6 +1298,40 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       class_count[0], (unsigned long long)class_tris[0], class_count[1], (unsigned long long)class_tris[1],
       class_count[2], (unsigned long long)class_tris[2], class_held);
     std::fflush(stdout);
+  }
+
+  if (g_handout) {
+    check(!g_ab_blas, "--handout with --ab-blas: the two sides trace different TLASes");
+    check(rp::find_slot(pass, 1, 9) != nullptr, "--handout: the pass has no scene stamp (set 1 binding 9)");
+    VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+    ai.accelerationStructure = tlas;
+    if (g_handout == 2) {   // the layer's empty dummy (common/scene_handout_layout.h), built here
+      bg3::scene_handout::EmptyTlas probe;
+      uint32_t one = bg3::scene_handout::EmptyTlas::kMaxInstances;
+      VkAccelerationStructureBuildSizesInfoKHR es{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+      g.sizesAS(g.dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &probe.build, &one, &es);
+      Buf einst = make_buffer(bg3::scene_handout::EmptyTlas::kInstanceBytes, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, false);
+      Buf estore = make_buffer(es.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false);
+      Buf escratch = make_buffer(es.buildScratchSize + align, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
+      VkAccelerationStructureCreateInfoKHR ec{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+      ec.buffer = estore.b; ec.size = es.accelerationStructureSize; ec.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+      VkAccelerationStructureKHR empty_tlas; vkcheck(g.createAS(g.dev, &ec, nullptr, &empty_tlas), "empty TLAS");
+      bg3::scene_handout::EmptyTlas e(einst.address);
+      e.build.dstAccelerationStructure = empty_tlas;
+      e.build.scratchData.deviceAddress = (escratch.address + align - 1) / align * align;
+      const VkAccelerationStructureBuildRangeInfoKHR* rp_ = &e.range;
+      submit([&](VkCommandBuffer c) {
+        g.buildAS(c, 1, &e.build, &rp_);
+        barrier(c, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
+      });
+      ai.accelerationStructure = empty_tlas;
+    }
+    const uint64_t address = g.addressAS(g.dev, &ai), words[2] = {address, address};
+    if (!buffers.count(key(1, 9))) { Buf st = make_buffer(512, ssbo, false); st.size = 512; buffers[key(1, 9)] = st; }
+    upload(buffers[key(1, 9)], 16, words, sizeof words);
+    std::printf("[replay] scene handout: stamp bytes 16/24 = %s TLAS address 0x%llx\n", g_handout == 2 ? "an empty" : "the replay's",
+                (unsigned long long)address);
   }
 
   // ---- descriptor sets: every slot of the pass contract, pack resources or dummies ----
@@ -3081,6 +3120,26 @@ int self_test(const fs::path& dir) {
     line("4a paired pipelines: all measured dispatches bit-identical", !g_reference_mismatch, "outputs and raw counter bins");
     g_ab_specs.clear(); g_ab_require_equal = false; g_reference_mismatch = old_mismatch;
   }
+  { // 4c scene handout (docs/SCENE_HANDOUT_DESIGN.md 3.4): spec 1051 traces the stamp's TLAS address. The replay's
+    // address: bit-equal to the bound handle; an empty TLAS's address: must differ (the path is not blind).
+    bool declares = false;   // OpDecorate <id> SpecId 1051 in the production module
+    for (size_t i = 5; i + 3 < code.size();) {
+      const uint32_t n = code[i] >> 16;
+      if ((code[i] & 0xffffu) == 71u && n == 4 && code[i + 2] == 1u && code[i + 3] == 1051u) declares = true;
+      i += n ? n : 1;
+    }
+    const bool old_mismatch = g_reference_mismatch;
+    g_ab_specs[1051u] = {0, 1}; g_ab_require_equal = true; g_handout = 1; g_reference_mismatch = false;
+    replay(dir / "lit", &code, {}, {}, dir / "handout-out", 2, true);
+    const bool equal = !g_reference_mismatch;
+    g_handout = 2; g_reference_mismatch = false;
+    replay(dir / "lit", &code, {}, {}, dir / "handout-empty-out", 2, true);
+    const bool control = g_reference_mismatch;
+    g_ab_specs.clear(); g_ab_require_equal = false; g_handout = 0; g_reference_mismatch = old_mismatch;
+    line("4c scene handout: stamp address == bound TLAS (1051)", declares && equal && control,
+         std::string(declares ? "SpecId 1051 declared" : "SpecId 1051 MISSING") + ", replay TLAS " + (equal ? "bit-equal" : "DIFFERS") +
+         ", empty-TLAS control " + (control ? "differs" : "EQUAL (blind)"));
+  }
   bool finite = a.outputs[0].nonfinite == 0 && a.outputs[1].nonfinite == 0;
   { // Reference-output gate uses the same disk files and helper as --reference-out, no extra dispatch.
     const auto ref = dir / "lit-out";
@@ -3284,6 +3343,7 @@ int main(int argc, char** argv) {
             "--spec requires uint32 ID=UINT");
       g_specs[uint32_t(id)] = uint32_t(value);
     }
+    else if (args[i] == "--handout") { g_handout = std::stoi(next()); check(g_handout == 1 || g_handout == 2, "--handout 1|2"); }
     else if (args[i] == "--synthesize") synth = next();
     else if (args[i] == "--dark") dark = true;
     else if (args[i] == "--box") synth_box = true;            // --synthesize: the closed box (PT furnace)

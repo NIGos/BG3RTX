@@ -14,6 +14,7 @@ frame_replay --pack <dir> [--out <dir>] [--hlsl <file> | --spv <file>] [--define
 frame_replay --compile-only [--compile-pass gi|origin|reflections|local-shadows] (--hlsl <file> | --spv <file>) [--define N=V]... [--spec ID=UINT]... [--pipeline-stats] [--out <dir>]
 frame_replay --synthesize <dir> [--dark] [--box] [--lighting] [--casters]
 frame_replay --self-test <dir>          (CTest frame_replay_test)
+frame_replay --pack <dir> --handout 1|2 --ab-spec 1051=0,1   (scene handout: stamp TLAS address; 2 = empty-TLAS control)
 frame_replay --load-test                (manual: the 2 GB S8 hit cache shape through the staged upload)
 frame_replay --pack <dir> --native-ambient [--pt-iters N] [--out <dir>]   (default out <pack>/native-ambient)
 ```

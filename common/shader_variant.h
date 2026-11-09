@@ -68,6 +68,9 @@ enum SpecId : unsigned {
   // 1 kind + instance, 2 kind; offline tools/gi_trace_rgen*.hlsl too).
   // 1047-1049 left to the hair streams.
   kSpecIdGiSer = 1050,
+  // rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md 3.4): the scene TLAS by address from the scene stamp
+  // (rt/rt_common.hlsli RT_TRACE_SCENE); added only when on, so key-off pipelines keep their specialization.
+  kSpecIdSceneHandout = 1051,
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;

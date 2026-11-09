@@ -234,8 +234,10 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
                             cascade_value,
                             shift_spec && host->cfg_int("rt_water_compose_shift", 0) != 0 ? 1u : 0u,
                             edge_spec && host->cfg_int("rt_water_surface_fresnel",0) != 0 ? 1u : 0u,
-                            native_spec && host->cfg_int("rt_hair_groom_shadow_t",0) != 0 ? 1u : 0u};
-  VkSpecializationMapEntry entries[7]{};
+                            native_spec && host->cfg_int("rt_hair_groom_shadow_t",0) != 0 ? 1u : 0u,
+                            1u};   // rt_scene_handout (constant 1051, only listed when on)
+  const bool handout = host->cfg_int("rt_scene_handout", 0) != 0;
+  VkSpecializationMapEntry entries[8]{};
   uint32_t count = 0;
   if (native_spec) {
     entries[count++] = {bg3::shader_variant::kSpecIdTileset, 0, sizeof(uint32_t)};
@@ -246,10 +248,11 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   if (cascade_spec) entries[count++] = {bg3::shader_variant::kSpecIdCascade, 3 * sizeof(uint32_t), sizeof(uint32_t)};
   if (shift_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterComposeShift, 4 * sizeof(uint32_t), sizeof(uint32_t)};
   if(edge_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterSurfaceFresnel,5*sizeof(uint32_t),sizeof(uint32_t)};
-  const VkSpecializationInfo info{count, entries, sizeof(values), values};
+  if (handout) entries[count++] = {bg3::shader_variant::kSpecIdSceneHandout, 7 * sizeof(uint32_t), sizeof(uint32_t)};
+  const VkSpecializationInfo info{count, entries, handout ? sizeof(values) : 7 * sizeof(uint32_t), values};
   const std::string pipe_key = req + "#groomshadow=" + std::to_string(values[6]) + "#tileset=" + std::to_string(values[0]) + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
       + "#cascade=" + std::to_string(values[3]) + "#shift=" + std::to_string(values[4])
-      + "#surface=" + std::to_string(values[5]);
+      + "#surface=" + std::to_string(values[5]) + (handout ? "#handout=1" : "");
   // Specialization toggles retain their pipelines until the owning layout is retired.
   if (p.req != pipe_key) {
     for (auto& v : p.cached) if (v.req == pipe_key) {

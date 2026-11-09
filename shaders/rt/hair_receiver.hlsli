@@ -16,7 +16,7 @@ bool hpo_competing_receiver(float3 origin,float3 direction,float t0,float t1){
   // Receiver identification must not depend on micromap shortcuts.
   query.TraceRayInline(gOmmReferenceScene,0,RT_HIT_MASK,ray);
 #else
-  query.TraceRayInline(gScene,0,RT_HIT_MASK,ray);
+  RT_TRACE_SCENE(query,0,RT_HIT_MASK,ray);
 #endif
   uint visited=0,cap=rt_max_candidates();
   while(query.Proceed()){

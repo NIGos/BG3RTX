@@ -1289,6 +1289,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   }
   // gi_rt_pipeline_reorder (default 1, hit kind): 0 when the driver reports no reordering (common/rt_pipeline.h).
   if (raygen) specs.add(sv::kSpecIdGiSer, bg3::rt_pipeline::reorder_spec(host->cfg_int("gi_rt_pipeline_reorder", 1), host->rt_pipeline.reorder_hint != 0));
+  // rt_scene_handout (live, docs/SCENE_HANDOUT_DESIGN.md increment 2): every scene trace by the stamp's TLAS address.
+  // gScene (binding 18) stays the TLAS the pass would trace, so either value traces the same scene.
+  if (host->cfg_int("rt_scene_handout", 0) != 0) specs.add(sv::kSpecIdSceneHandout, 1u);
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
     specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {

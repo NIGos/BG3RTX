@@ -77,6 +77,7 @@ VkPhysicalDeviceDescriptorIndexingFeatures g_f_di{VK_STRUCTURE_TYPE_PHYSICAL_DEV
 bool g_handout_request = true;    // false after a device creation with them failed (retried without)
 bool g_handout_features = false;  // the create info last built asks for them
 bool g_handout_on = false;        // the device was created with them
+uint64_t g_handout_downgrades = 0;  // stamp traversal addresses set back to the reference (rt_omm_scene_reference)
 
 struct Buf {
   VkBuffer b = VK_NULL_HANDLE;
@@ -222,6 +223,14 @@ int pick_scene_slot() {
         (unsigned long long)now, (unsigned long long)gpu_done, (unsigned long long)g_scene_skipped);
   }
   return -1;
+}
+
+// rt_scene_handout: a TLAS's device address for the scene stamp (0 for none).
+uint64_t tlas_address(VkAccelerationStructureKHR as) {
+  if (!as || !g_dd->vk.GetAccelerationStructureDeviceAddressKHR) return 0;
+  VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+  ai.accelerationStructure = as;
+  return g_dd->vk.GetAccelerationStructureDeviceAddressKHR(g_dd->device, &ai);
 }
 
 void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSet set, bool split, uint64_t rec) {
@@ -1365,6 +1374,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     const auto accelerated=set?bvh_omm_scene(uint32_t(scene_slot),res.tlas):VK_NULL_HANDLE;
     commit_scene_slot(scene_slot, accelerated?accelerated:res.tlas, set, true, res.rec);
     if(accelerated)scene.omm_reference=res.tlas;
+    alpha_stamp_scene(uint32_t(scene_slot), tlas_address(res.tlas), tlas_address(accelerated ? accelerated : res.tlas));
     scene.camera = cap.ubo;
     scene.camera_offset = cap.ubo_offset;
     std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
@@ -1511,6 +1521,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   g_legacy_rec = legacy_rec;
   g_split_valid = false;
   commit_scene_slot(scene_slot, g_tlas, legacy_set, false, legacy_rec);
+  alpha_stamp_scene(uint32_t(scene_slot), tlas_address(g_tlas), tlas_address(g_tlas));
   scene.camera = cap.ubo;
   scene.camera_offset = cap.ubo_offset;
   std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
@@ -1607,6 +1618,11 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
         (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
         (unsigned long long)g_wait.timeouts, (unsigned long long)g_wait.skipped,
         g_wait.waited ? g_wait.ms / double(g_wait.waited) : 0.0, g_wait.ms_max);
+    if (g_handout_downgrades) {   // rt_scene_handout: stamp traversal addresses set back to the reference TLAS
+      log("[rt] scene handout: %llu stamp traversal downgrade(s) in the last %llu frames", (unsigned long long)g_handout_downgrades,
+          (unsigned long long)g_wait.calls);
+      g_handout_downgrades = 0;
+    }
     if (g_wait.traced) log("[rt] scene wait: %llu traced frame(s) in the last %llu waited up to %d ms (4x rt_scene_wait_ms)",
                            (unsigned long long)g_wait.traced, (unsigned long long)g_wait.calls, 4 * ms);
     if (g_wait.timeouts) {
@@ -1653,9 +1669,15 @@ bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selec
     *reference=s.omm_reference?s.omm_reference:s.tlas;*identity=s.rec;
     s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(i,s.last_use);update_oldest_live();
     // Even reference-only dispatches can write stale-proof feedback at byte144.
-    if(!omm::mark_feedback_use(cmd) && omm::available()){*reference=VK_NULL_HANDLE;*identity=0;return false;}
+    if(!omm::mark_feedback_use(cmd) && omm::available()){
+      if(s.omm_reference && alpha_stamp_traversal_to_reference(i))++g_handout_downgrades;
+      *reference=VK_NULL_HANDLE;*identity=0;return false;}
     uint64_t accelerated_identity{};
-    return s.omm_reference && bvh_omm_use(cmd,i,selected,&accelerated_identity) && accelerated_identity==s.rec;
+    const bool fast=s.omm_reference && bvh_omm_use(cmd,i,selected,&accelerated_identity) && accelerated_identity==s.rec;
+    // rt_scene_handout: a recording that may not trace the accelerated TLAS binds the reference one; the stamp's
+    // traversal address (read by spec-1051 shaders) follows, never back up (docs/SCENE_HANDOUT_DESIGN.md 3.3).
+    if(!fast && s.omm_reference && alpha_stamp_traversal_to_reference(i))++g_handout_downgrades;
+    return fast;
   }
   return false;
 }
