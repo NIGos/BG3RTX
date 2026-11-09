@@ -1225,6 +1225,24 @@ and dropped 1-8 opaque draws per frame.
   the shares, M meshes evicted for them; K hair draws left out`. rv3 gates now also need `[rt] last 120 frames: 120
   split builds` and `0 skipped` in every window and 0 hair draws left out in the ON windows.
 
+### BLAS chunk cap by occupancy for oversized BLAS (2026-11-09, claude/blas-frag, READY_FOR_LIVE)
+
+`rt_as_cap_occupied` (live, default 0; common/as_chunk_alloc.h `chunk_within_cap`, layer/bvhsplit.cpp `as_create`).
+- Why reserved stays 3-4x live (rv3 191231 key off, 19:15:01-14: 4189 MB reserved in 50 chunks, 1237 MB live,
+  little pending, 0 empty): about 48 base chunks of 64 MB stay sparse (about 26 MB live each: per-draw and cached
+  BLAS of different lifetimes; only cached meshes can be relocated). Not the cause: empty chunks (freed, also at
+  the cap), retirement (pending 56-500 MB). The guard caps the reserve (about 4013-4189 MB), and a range larger
+  than a base chunk needs a chunk of its own: the free space inside base chunks never helps it. All sampled
+  refusals (290-575 per window) were such ranges: the cascade casters' BLAS 64-111 MB (casters left out of the
+  sun's RT that frame), grooms 72-136 MB, a groom compaction copy 113 MB.
+- With the key, such a chunk may pass the reserved cap while the occupied bytes (live + pending) plus it stay within
+  the cap, the reserve within cap + 25%; an unguarded caller doing so also passes the guard's Low check. Base chunks
+  and key off: the old check exactly. Rejected: rounding oversized chunks to 64 MB multiples (replay: creations
+  72 -> 18 but refusals 60 -> 104, the waste fills the cap).
+- Replay (as_chunk_alloc_test, rv3 sizes): refused 60 -> 0 in 480 frames, peak reserve 4013 -> 4233 MB.
+- The mesh cache line appends `N BLAS requests of the other users refused (rt_as_cap_occupied=K, reserved, occupied,
+  cap)`. Live (prepared): rel095_verify rv5, the rv3 plan with the key 0 / 1 / 0, 0 refusals in the ON windows.
+
 ### CPU hit-material lists (historical implementation, 2026-11-02)
 
 `perf_hitmat_lists` retired 2026-11-04: no saving (G-buffer hooks 1.16 ms both); hidden developer INI only, default 0; shared material snapshot/list paths retained.

@@ -78850,6 +78850,10 @@
     "\\[bvh\\] mesh cache: .*; headroom: pool share ": [
       0,
       null
+    ],
+    "\\[bvh\\] mesh cache: .*rt_as_cap_occupied=1, reserved ": [
+      0,
+      null
     ]
   }
 }

@@ -380,10 +380,47 @@ job4["expect_runner"] = [
 job4["live_flow"] = {"expected_fps": 60, "settings_latency_s": 1, "trace_stall_s": 3,
                      "startup_only": ["rt_scene_handout_layout"]}
 
+# rv5 (rt_as_cap_occupied, claude/blas-frag, 2026-11-09): the rv3 view and turns with the release defaults
+# (rt_mesh_budget_own 0), the live key 0 / 1 / 0. rv3 191231 key off: 4189 MB BLAS chunks reserved, 1237 MB live,
+# 290-575 refusals per window of BLAS larger than a 64 MB chunk (the cascade casters' BLAS, grooms). Gate: 0 such
+# refusals in every ON window; capacity and scene gates in every window. The OFF windows record the baseline.
+PLAN5 = "tools/live_batches/rel095_verify/plans/rv5_s8.json"
+SET5 = SET3.replace("rt_mesh_budget_own=0", "rt_mesh_budget_own=0,rt_as_cap_occupied=0")
+
+
+def phase5(label, seconds, occ, kind="static", direction=0, wheel=None, hold=1, trace=None):
+    p = phase3(label, seconds, 0, kind, direction, wheel, hold, trace)
+    p["set"] = f"rt_as_cap_occupied={occ},qa_exposure_hold={hold}"
+    return p
+
+
+plan5 = [phase5(p["label"], p["seconds"], 1 if p["label"] in ON3 + ["warm-on"] else 0, p["kind"], p["direction"],
+                p.get("wheel"), int(p["set"].endswith("qa_exposure_hold=1")), (p.get("trace_at") or [None])[0])
+         for p in plan3]
+job5 = copy.deepcopy(job3)
+job5.update({
+    "name": "rv5-s8-blas-cap-occupied",
+    "set": SET5,
+    "args": ["-RealPresent", "-Move", "-MovePlan", PLAN5],
+    "estimated_phase_seconds": sum(p["seconds"] for p in plan5),
+    "purpose": "rt_as_cap_occupied 0 / 1 / 0 in the rv3 S8 lowered view and turns (release defaults): with the key "
+               "0 BLAS requests of the cascade casters, grooms and per-draw draws refused (OFF: 290-575 per window), "
+               "BLAS chunks reserved at most the guard cap + 25%; capacity and scene gates in every window.",
+})
+job5["expect"] = job["expect"] + [STRIDE_LINE, "\\[bvh\\] last \\d+ builds, per build:",
+                                  "\\[bvh\\] mesh cache: .*rt_as_cap_occupied=1, reserved "]
+job5["expect_every"] = [
+    every("key state: rt_as_cap_occupied=1 in the ON windows", CACHE_LINE, "rt_as_cap_occupied=1, reserved", ON3),
+    every("key state: rt_as_cap_occupied=0 in the OFF windows", CACHE_LINE, "rt_as_cap_occupied=0, reserved", OFF3),
+    every("fragmentation: no BLAS request of the frame's other users refused in the ON windows", CACHE_LINE,
+          "; 0 BLAS requests of the other users refused ", ON3),
+] + [e for e in job3["expect_every"] if not e["name"].startswith(("key state", "headroom"))]
+
 (HERE / "plans" / "rv1_s8.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
 (HERE / "plans" / "rv2_s8.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
 (HERE / "plans" / "rv3_s8.json").write_text(json.dumps(plan3, indent=1) + "\n", encoding="utf-8")
 (HERE / "plans" / "sh2_s8.json").write_text(json.dumps(plan4, indent=1) + "\n", encoding="utf-8")
-for j, pl in ((job, plan), (job2, plan), (job3, plan3), (job4, plan4)):
+(HERE / "plans" / "rv5_s8.json").write_text(json.dumps(plan5, indent=1) + "\n", encoding="utf-8")
+for j, pl in ((job, plan), (job2, plan), (job3, plan3), (job4, plan4), (job5, plan5)):
     (HERE / "jobs" / f"{j['name']}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
     print(f"{j['name']}: {len(pl)} phases, {j['estimated_phase_seconds']} s")

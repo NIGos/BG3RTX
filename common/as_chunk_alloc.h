@@ -100,6 +100,23 @@ inline bool unguarded_chunk_ok(uint64_t reserved, uint64_t chunk_bytes, uint64_t
   return chunk_bytes <= cap && reserved <= cap - chunk_bytes;
 }
 
+// rt_as_cap_occupied (claude/blas-frag, 2026-11-09, default 0). rv3 191231 key off (S8 zoomed-out turns, 19:15:01-14):
+// 4189 MB reserved in 50 chunks, 1237 MB live, little pending, 0 empty, at the guard's cap (about 4013-4189 MB);
+// 290-575 requests refused per window, all larger than a 64 MB base chunk: the cascade casters' BLAS (64-136 MB,
+// rebuilt into a new range almost every frame) and grooms (72-136 MB). A range larger than `base` needs a chunk of
+// its own and can never use the free space inside base chunks (sparse after the turns: about 26 MB live in each),
+// so the free reserve did not help it. With the key such a chunk may pass the reserved cap while the occupied
+// bytes (live + pending, every chunk) plus it stay within the cap, up to the cap + 25% reserved (the elastic
+// captures' reserve). Without the key, or for base-sized chunks: reserved + chunk within the cap, as before
+// (exactly unguarded_chunk_ok).
+inline bool chunk_within_cap(uint64_t reserved, uint64_t occupied, uint64_t chunk, uint64_t base, uint64_t cap,
+                             bool by_occupied) {
+  if (chunk <= cap && reserved <= cap - chunk) return true;
+  if (!by_occupied || chunk <= base || chunk > cap || cap > UINT64_MAX / 2) return false;
+  const uint64_t ceiling = cap + cap / 4;
+  return occupied <= cap - chunk && reserved <= ceiling - chunk;
+}
+
 // Pending ranges cannot be reused based on elapsed presents alone. The fence
 // AND the oldest potentially referenced scene slot must have retired.
 inline bool retired(uint64_t frame, uint64_t now, uint64_t gpu_done, uint64_t oldest_live) {
