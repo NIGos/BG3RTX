@@ -117,7 +117,7 @@ def tooling_checks(root, paths):
             with tempfile.TemporaryDirectory() as tmp:
                 wrapper = Path(tmp) / 'parse.ps1'
                 wrapper.write_text(code, encoding='utf-8')
-                subprocess.run(['powershell', '-NoProfile', '-File', str(wrapper),
+                subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(wrapper),
                                 str(source)], check=True, cwd=root)
     changed = {root / p for p in paths}
     jobs = {p for p in changed if p.is_file() and p.suffix == '.json' and p.parent.name == 'jobs'}
