@@ -9,3 +9,6 @@
 - Rejected: decorrelated per-pixel ray positions (flicker 0.034 -> 0.056, card-edge loss).
 - Layer edits: hair_primary.cpp logs each hair pipeline's stencil state (one block, 12 lines); ngx.cpp ngx_gbuffer_camera.
 - Live: tools/live_batches/hair_edge he1-dialogue1-edge (Test Dialogue1, 0/2/0/2 + 1, PNG + K8 bursts), not queued.
+- he1 #1 live: strands write no stencil; the game's resolve never touches hair (Xr = compose on every hair pixel), so
+  mode 1 is moot; mode 2 changed no hair pixel (coverage path inactive on the GPU). Debug mode 3 and window f-debug
+  added; bursts now static 6 s timed windows (the 60-frame window closed before the K8 burst completed).

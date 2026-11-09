@@ -723,7 +723,18 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
 - Live: tools/live_batches/hair_edge (he1-dialogue1-edge, lint 0 failing, not queued): key 0/2/0/2 PNG traces, a key-1
   window, K8 pan bursts off/aa for temporal_burst.py. Predicted in its predicted.json (mc final -10 to -30% on hair,
   energy within 1%, the stencil lines name the tagging pass).
-## 6. Open items
+- he1 #1 (live 2026-11-09 01:39-01:42, mode switches 2/1/0/2/0 worked, strand resolve 600 frames per period): every
+  G-buffer hair pipeline has stencil test 0 (strands write no stencil), and Xr ('Xr (RR colour: dither-resolved X)',
+  i1120) equals the compose output on every hair pixel in every window (0 class-5 pixels > 2 codes in the 960 px
+  previews; the ~50 differing pixels are off the hair). So the game's dither resolve never touches the hair: the
+  card-tag mechanism is refuted and mode 1 is a no-op here. Mode 2 changed no hair pixel either: its coverage path did
+  not apply on the GPU. Energy within noise (off 0.38364 / 0.38467, aa 0.38481 / 0.38263, untag 0.38204). The burst
+  windows closed with their 60-frame period before the K8 burst completed (fail-fast): now static 6 s timed windows.
+- Mode 3 (debug, ini only): Xr shows red on the strand footprint, green on strand pixels, blue the applied coverage,
+  magenta with no usable header; he1 window f-debug traces it. Remaining cause candidate: binary sub-pixel coverage
+  under RR (temporal). If f-debug shows the coverage path cannot see the strands at post time, the next step is to
+  write each strand pixel's analytic coverage in the strand G-buffer pass itself (a per-pixel coverage word in the
+  pixel record, from the hit's own capsule and the pixel footprint) and resolve from that.## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
    normal, is view space; 5g). Open: the root-to-tip sign of that frame.
