@@ -8,15 +8,25 @@
 #endif
 #include <windows.h>
 
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "../../common/hotkeys.h"
 #include "../../common/settings.h"
 #include "compatibility.h"
 #include "diagnostics.h"
 
 namespace launcher {
+
+// In-game keyboard shortcuts: every binding of common/hotkeys.h, so a new id there reaches the launcher unchanged.
+inline constexpr size_t kShortcutCount = std::size(bg3::hotkeys::ids);
+inline std::array<std::string, kShortcutCount> default_shortcuts() {
+  std::array<std::string, kShortcutCount> out;
+  for (size_t i = 0; i < kShortcutCount; ++i) out[i] = bg3::hotkeys::defaults[i];
+  return out;
+}
 
 // ---- text helpers ----
 std::wstring widen(const std::string& s);
@@ -76,8 +86,9 @@ struct State {
   unsigned caps = ~0u;
   int suggested = bg3::settings::kHigh;
   std::string dlss5_runtime_path, loaded_dlss5_runtime_path, dlss5_runtime_status;
-  std::string shortcuts[2]={"Ctrl+Shift+F9","Ctrl+Shift+F8"};
-  std::string loaded_shortcuts[2]={"Ctrl+Shift+F9","Ctrl+Shift+F8"};
+  // One entry per bg3::hotkeys::ids (all ray tracing, DLSS 5, and any binding added there), in that order.
+  std::array<std::string, kShortcutCount> shortcuts = default_shortcuts();
+  std::array<std::string, kShortcutCount> loaded_shortcuts = default_shortcuts();
 };
 void load_state(State& s);
 bg3::settings::KVList forced_keys(const State& s);

@@ -74192,6 +74192,528 @@
         "samples": 1,
         "source": "VALID same-save/key median"
       }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[cfg\\] settings read",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "rr_hair_guides",
+          "0"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
+          "rt_hair",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "0"
+        ],
+        [
+          "rt_hair_fibre",
+          "0"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "0"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "0"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "0"
+        ],
+        [
+          "rt_hair_groom",
+          "0"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "0"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "0"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "0"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "0"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "0"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "0"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "0"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "0"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "0"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "0"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "0"
+        ],
+        [
+          "rt_native_hair",
+          "1"
+        ],
+        [
+          "rt_native_scalp",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "60"
+        ],
+        [
+          "rt_timing_frames",
+          "60"
+        ],
+        [
+          "sharc_device",
+          "1"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 1\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 1\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rr_hair_guides",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "1"
+        ],
+        [
+          "rt_hair_fibre",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "1"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "1"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "1"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "1"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "1"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "1"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 1\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 1\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rr_hair_guides",
+          "0"
+        ],
+        [
+          "rt_hair",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "0"
+        ],
+        [
+          "rt_hair_fibre",
+          "0"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "0"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "0"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "0"
+        ],
+        [
+          "rt_hair_groom",
+          "0"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "0"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "0"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "0"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "0"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "0"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "0"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "0"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "0"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "0"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "0"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 2\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 2\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rr_hair_guides",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "1"
+        ],
+        [
+          "rt_hair_fibre",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "1"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "1"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "1"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "1"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "1"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "1"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 2\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 2\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 3\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 3\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 3\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 3\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -76558,6 +77080,64 @@
         "hcap1-dialogue.1.203259.log",
         "frozen VALID match"
       ]
+    ],
+    "\\[hair primary\\] strand variants not prepared": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] live: RTX Hair requested, but": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] depth orphans \\(last \\d+ frames, first 4; [^)]*\\): [0-9a-f]{4}:": [
+      0,
+      null
+    ],
+    "\\[rt\\] \\+ occlusionQueryPrecise \\(strand hair coverage gate\\)": [
+      3,
+      [
+        "hcap3-strands.1.224309.log",
+        "frozen VALID match"
+      ]
+    ],
+    "\\[hair primary\\] strand variants: \\d+ pipelines in [0-9.]+ ms of pipeline creation so far": [
+      0,
+      null
+    ],
+    "\\[core\\] \\[hair origin\\] startup auxiliary capability 1": [
+      3,
+      [
+        "hcap3-strands.1.224309.log",
+        "frozen VALID match"
+      ]
+    ],
+    "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 1\\)": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 1\\)": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 2\\)": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 2\\)": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 3\\)": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 3\\)": [
+      0,
+      null
+    ],
+    "\\[hair\\] rt_hair=0 from the settings: RTX Hair OFF": [
+      0,
+      null
     ]
   }
 }

@@ -210,7 +210,28 @@ static void cfg_log_effective(const settings::Map& raw, bool derived) {
 static std::atomic<bool> g_ab_off{false};
 static std::atomic<int> g_nr_bypass{-1}; // -1: use the file value; 0/1: live override
 static bool g_nr_startup=false;
-static hotkeys::Key g_shortcuts[2]={hotkeys::parse(hotkeys::defaults[0]),hotkeys::parse(hotkeys::defaults[1])};
+static hotkeys::Key g_shortcuts[hotkeys::kCount]={hotkeys::parse(hotkeys::defaults[0]),hotkeys::parse(hotkeys::defaults[1]),
+                                                  hotkeys::parse(hotkeys::defaults[2])};
+// RTX Hair live switch (rt_hair, common/hair_live.h): the hotkey's override of the file value (-1: the file's), and
+// whether the effective value is 0. While it is, every key the RTX Hair On choice writes reads 0 (cards only).
+static std::atomic<int> g_hair_override{-1};
+static std::atomic<bool> g_hair_off{false};
+// g_cfg_mu held: rt_hair as the files set it.
+static bool hair_file_on() { return settings::map_int(g_cfg, "rt_hair", 1) != 0; }
+static bool hair_gated(const char* key) {
+  static const std::vector<std::string> keys = [] {
+    std::vector<std::string> r;
+    if (const settings::Knob* k = settings::find_knob("exp_hair_groom_primary"))
+      for (const settings::Choice& c : k->choices)
+        if (c.id && std::strcmp(c.id, "on") == 0)
+          for (const settings::KV& kv : c.kv)
+            if (kv.key) r.push_back(kv.key);
+    return r;
+  }();
+  for (const std::string& k : keys)
+    if (k == key) return true;
+  return false;
+}
 // rt is a startup capability, not a live dispatch gate. Water has a separate forward-pass
 // route; geometry also gates its native shader/Fresnel replacement. Groom gates primary
 // strand swaps even when their startup capability remains enabled.
@@ -264,8 +285,8 @@ static bool ab_poll_hotkey() {
         (unsigned long long)toggle_frame, (unsigned long long)frame_index(), g_ab_off.load() ? "OFF" : "ON");
   }
   const bool modifiers = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
-  hotkeys::Key bindings[2]; bool nr_started;
-  { std::lock_guard<std::mutex> lock(g_cfg_mu); bindings[0]=g_shortcuts[0]; bindings[1]=g_shortcuts[1]; nr_started=g_nr_startup; }
+  hotkeys::Key bindings[hotkeys::kCount]; bool nr_started, hair_file;
+  { std::lock_guard<std::mutex> lock(g_cfg_mu); for(int i=0;i<hotkeys::kCount;++i)bindings[i]=g_shortcuts[i]; nr_started=g_nr_startup; hair_file=hair_file_on(); }
   const unsigned mods=((GetAsyncKeyState(VK_CONTROL)&0x8000)?1:0)|((GetAsyncKeyState(VK_SHIFT)&0x8000)?2:0)|((GetAsyncKeyState(VK_MENU)&0x8000)?4:0);
   auto down=[&](hotkeys::Key k){return k.valid && k.key && mods==k.mods && (GetAsyncKeyState(k.key)&0x8000);};
   const bool master_down = down(bindings[0]);
@@ -277,6 +298,19 @@ static bool ab_poll_hotkey() {
     log("[dlss5] hotkey: NR %s",bypass?"off":"on");
   }
   was_nr_down=nr_down;
+  // hotkey_rtx_hair: flips the live key rt_hair in memory (a later change of rt_hair in the files wins again).
+  static bool was_hair_down = false;
+  const bool hair_down = down(bindings[2]);
+  if(hair_down && !was_hair_down && cfg_int("ab_hotkey",1)) {
+    const int o=g_hair_override.load();
+    const bool on=!(o>=0?o!=0:hair_file);
+    g_hair_override.store(on?1:0);
+    g_hair_off.store(!on);
+    changed=true;
+    log("[hair] hotkey %s: RTX Hair %s (rt_hair=%d live; strands, strand lighting and capture %s)",
+        hotkeys::format(bindings[2]).c_str(), on?"ON":"OFF", on?1:0, on?"follow the RTX Hair setting":"off, cards only");
+  }
+  was_hair_down=hair_down;
   const bool target_down = modifiers && (GetAsyncKeyState(VK_F10) & 0x8000);
   // ab_off (ini, default 0): the same toggle from the settings, for the queue (it cannot press the hotkey): a
   // change of the key toggles A/B to its value.
@@ -371,10 +405,22 @@ static bool cfg_read_files() {
   {
     std::lock_guard<std::mutex> lock(g_cfg_mu);
     g_nr_startup = settings::map_int(startup,"dlss5_nr",0)!=0;
-    auto rt=settings::lookup(next,"hotkey_rt_toggle"), nr=settings::lookup(next,"hotkey_dlss5");
-    auto error=hotkeys::validate(rt,nr);
-    if(!error.empty()){log("[cfg] keyboard shortcuts disabled: %s",error.c_str());rt=nr="None";}
-    g_shortcuts[0]=hotkeys::parse(rt);g_shortcuts[1]=hotkeys::parse(nr);
+    auto rt=settings::lookup(next,"hotkey_rt_toggle"), nr=settings::lookup(next,"hotkey_dlss5"), hair=settings::lookup(next,"hotkey_rtx_hair");
+    auto error=hotkeys::validate(rt,nr,hair);
+    if(!error.empty()){log("[cfg] keyboard shortcuts disabled: %s",error.c_str());rt=nr=hair="None";}
+    g_shortcuts[0]=hotkeys::parse(rt);g_shortcuts[1]=hotkeys::parse(nr);g_shortcuts[2]=hotkeys::parse(hair);
+    // rt_hair: a change of it, or of the RTX Hair setting, in the files ends the hotkey's override (as dlss5_nr_bypass
+    // does), so saving RTX Hair in the launcher always applies what was saved.
+    const int hair_now=settings::map_int(next,"rt_hair",1);
+    std::string hair_sig=std::to_string(hair_now);
+    if(const settings::Knob* k=settings::find_knob("exp_hair_groom_primary"))
+      for(const settings::Choice& c:k->choices)if(c.id&&std::strcmp(c.id,"on")==0)
+        for(const settings::KV& kv:c.kv)if(kv.key)hair_sig+=" "+settings::lookup(next,kv.key);
+    static std::string last_hair_sig=hair_sig;
+    if(hair_sig!=last_hair_sig&&g_hair_override.exchange(-1)>=0)log("[hair] settings changed: the RTX Hair hotkey override ends (rt_hair=%d)",hair_now);
+    else if(hair_sig.substr(0,1)!=last_hair_sig.substr(0,1))log("[hair] rt_hair=%d from the settings: RTX Hair %s",hair_now,hair_now?"ON":"OFF");
+    last_hair_sig=hair_sig;
+    {const int o=g_hair_override.load();g_hair_off.store(o>=0?o==0:hair_now==0);}
     static int last_bypass=settings::map_int(next,"dlss5_nr_bypass",0);
     const int bypass=settings::map_int(next,"dlss5_nr_bypass",0);
     if(bypass!=last_bypass)g_nr_bypass.store(-1);
@@ -436,6 +482,15 @@ static bool cfg_raw(const char* key, std::string& out, const CfgDefault** def) {
     if(bypass>=0){*def=nullptr;out=bypass?"1":"0";return true;}
   }
   if (ab_overridden(key)) {   // the A/B hotkey: every ray-traced effect off
+    *def = nullptr;
+    out = "0";
+    return true;
+  }
+  if (std::strcmp(key, "rt_hair") == 0) {   // hotkey_rtx_hair's live override
+    const int o = g_hair_override.load(std::memory_order_relaxed);
+    if (o >= 0) { *def = nullptr; out = o ? "1" : "0"; return true; }
+  }
+  if (g_hair_off.load(std::memory_order_relaxed) && hair_gated(key)) {   // rt_hair 0: the RTX Hair bundle reads 0
     *def = nullptr;
     out = "0";
     return true;

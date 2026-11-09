@@ -972,9 +972,14 @@ static void test_product_policy() {
 
 static void test_gui_review_safety() {
   const auto& primary=*find_knob("exp_hair_groom_primary");
-  CHECK(!primary.experimental && !primary.dev_only && primary.apply==Apply::Restart);   // RTX Hair: a release control since 0.9.5
-  CHECK(key_change_needs_restart("rt_hair_groom_primary","0","1"));
-  CHECK(key_change_needs_restart("rt_hair_groom_primary","1","0"));
+  CHECK(!primary.experimental && !primary.dev_only && primary.apply==Apply::Live);   // RTX Hair: a release control since 0.9.5
+  // 5m (docs/RTX_HAIR_PRIMARY.md): live both ways; its startup parts are prepared on every capable device.
+  CHECK(!key_change_needs_restart("rt_hair_groom_primary","0","1"));
+  CHECK(!key_change_needs_restart("rt_hair_groom_primary","1","0"));
+  CHECK(!key_change_needs_restart("rt_hair_capture","0","1"));
+  CHECK(!key_change_needs_restart("rt_hair_tangent_world","0","1"));
+  CHECK(!key_change_needs_restart("rt_hair","1","0") && !key_change_needs_restart("rt_hair","0","1"));
+  CHECK(transition_apply(primary,0,1)==Apply::Live && transition_apply(primary,1,0)==Apply::Live);
   CHECK(unmet_key_need(primary,1,parse_ini("rt=1\nsharc_device=0\n")).find("64-bit")!=std::string::npos);
   const unsigned hair=kCapRayQuery|kCapLinearSweptSpheres|kCapShaderInt64|kCapFragmentStores;
   // Capture model (2026-11-08): no local groom files needed; styles get strands once captured and converted.
@@ -995,11 +1000,11 @@ static void test_gui_review_safety() {
   CHECK_EQ(find_knob("exp_hair_groom_crowd")->choices[1].label,"3.5 million segments");
   CHECK_EQ(find_knob("exp_hair_groom_crowd")->choices[2].label,"1.8 million segments");
   CHECK(std::string(find_knob("exp_hair_groom")->cost.gpu).find("ms")!=std::string::npos);
-  // Device-startup latch, not a hot INI poll: a saved On cannot activate the current device.
+  // 5m: no startup latch any more; one live decision per frame (common/hair_live.h) from both hot keys.
   const auto source=read_file(BG3RTX_SOURCE_DIR "/layer/hair_primary.cpp");
-  CHECK(source.find("g_startup_enabled = cfg_int(\"rt_hair_groom_primary\", 0) != 0")!=std::string::npos);
-  CHECK(source.find("return g_startup_enabled &&")!=std::string::npos);
-  CHECK(source.find("cfg_hot(CfgHot::rt_hair_groom_primary)")==std::string::npos);
+  CHECK(source.find("g_startup_enabled = cfg_int(\"rt_hair_groom_primary\", 0) != 0")==std::string::npos);
+  CHECK(source.find("cfg_hot(CfgHot::rt_hair_groom) != 0 && cfg_hot(CfgHot::rt_hair_groom_primary) != 0")!=std::string::npos);
+  CHECK(source.find("g_live.observe(")!=std::string::npos);
 }
 
 static void test_apply_modes() {
@@ -1077,7 +1082,9 @@ static void test_master_ab_coverage() {
   const auto host_water = read_file(BG3RTX_SOURCE_DIR "/layer/water.cpp");
   CHECK(host_water.find("bool water_wanted() { return g_dd && rt_enabled() && cfg_hot(CfgHot::rt_water_geometry) != 0;") != std::string::npos);
   const auto hair = read_file(BG3RTX_SOURCE_DIR "/layer/hair_primary.cpp");
-  CHECK(hair.find("return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0") != std::string::npos);
+  // 5m: strands_on reads the per-frame live decision, which takes rt_hair_groom from cfg_hot (A/B and rt_hair gate it).
+  CHECK(hair.find("return g_live_on.load(std::memory_order_acquire) && g_header.b != VK_NULL_HANDLE;") != std::string::npos);
+  CHECK(hair.find("const bool requested = cfg_hot(CfgHot::rt_hair_groom) != 0") != std::string::npos);
 }
 
 static void test_retired_rejected_controls() {
@@ -1413,6 +1420,8 @@ static void test_dlss5_native_setting() {
   CHECK(k && !opt_in_knob(*k) && knob_visible(*k, false, true) && knob_visible(*k, false));
   CHECK_EQ(code_default("hotkey_rt_toggle"), "Ctrl+Shift+F9");
   CHECK_EQ(code_default("hotkey_dlss5"), "Ctrl+Shift+F8");
+  CHECK_EQ(code_default("hotkey_rtx_hair"), "Ctrl+Shift+F7");
+  CHECK_EQ(code_default("rt_hair"), "1");   // the RTX Hair live switch: on unless the hotkey or a file turns it off
   CHECK_EQ(code_default("dlss5_nr"), "0");
   CHECK_EQ(code_default("dlss5_nr_runtime"), "");
   CHECK_EQ(code_default("dlss5_nr_bypass"), "0");
@@ -1456,13 +1465,29 @@ static void test_strand_bundle() {
   // Untested strand options stay out of the bundle.
   for (const char* key : {"rt_hair_groom_tips", "rt_hair_groom_coverage", "rt_hair_macro_normal", "rt_hair_coverage_footprint"})
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=<missing>");
-  // The bundle's restart keys are what makes the knob a restart knob.
+  // 5m: the one startup reservation left in the bundle. A game started with RTX Hair off shows the restart banner for
+  // it (launcher ui_state::restart_count against the session baseline); the rest of the bundle applies live.
   CHECK(key_change_needs_restart("rt_hair_physical_origin", "0", "1"));
-  {  // the visible note says plainly that a restart is needed (any case: "Restart the game to turn on or off.")
+  CHECK(!key_change_needs_restart("rt_hair_physical_origin", "1", "0"));
+  {
+    int restart_keys = 0;
+    for (const KV& kv : p->choices[1].kv)
+      if (kv.key && key_change_needs_restart(kv.key, "0", kv.value)) {
+        ++restart_keys;
+        CHECK_EQ(std::string(kv.key), "rt_hair_physical_origin");
+      }
+    CHECK(restart_keys == 1);
+    for (const KV& kv : p->choices[0].kv) CHECK(!kv.key || !key_change_needs_restart(kv.key, "1", kv.value));
+  }
+  {  // the visible note says it is live, and when a restart is still needed
     std::string note = p->apply_note;
     for (char& ch : note) ch = char(tolower(static_cast<unsigned char>(ch)));
-    CHECK(note.find("restart") != std::string::npos);
+    CHECK(note.find("while playing") != std::string::npos && note.find("restart") != std::string::npos);
   }
+  // The live switch rt_hair gates exactly this bundle (layer/util.cpp hair_gated): it is not part of it, and the bundle
+  // holds every strand, strand-lighting and capture key.
+  for (const KV& kv : p->choices[1].kv) CHECK(!kv.key || std::string(kv.key) != "rt_hair");
+  CHECK_EQ(get(on, "rt_hair_capture"), "1");
   // A file with the full user-tested set reads as On (not custom), and saving it reproduces every key.
   {
     Map m = code_defaults();
@@ -1471,7 +1496,7 @@ static void test_strand_bundle() {
     apply_layer(m, parse_ini(ini));
     CHECK(knob_value(*p, m) == 1);
   }
-  CHECK(!p->experimental && !p->dev_only && p->choices[1].apply == Apply::Restart);   // RTX Hair: release-visible since 0.9.5
+  CHECK(!p->experimental && !p->dev_only && p->choices[1].apply == Apply::Live);   // RTX Hair: release-visible since 0.9.5
   for (int pr = 0; pr < kPresetCount; ++pr) CHECK(p->preset[pr] == 0);   // strands stay off in every preset
   for (int pr = 0; pr < kPresetCount; ++pr) {
     Map preset;

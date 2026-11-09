@@ -749,8 +749,9 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   if (sharc && cfg_int("sharc_device", 1)) next = sharc_features(id, phys, ci, next, &core_features);
   else log("[rt] SHaRC device features not requested (%s)", sharc ? "sharc_device=0" : "retry without them");
   // rt_hair_groom_primary's coverage gate (layer/hair_primary.cpp): precise occlusion queries count the card and strand
-  // probe samples per draw; without the feature no draw is ever swapped. Core 1.0 feature, no cost when unused.
-  if (cfg_int("rt_hair_groom_primary", 0) != 0 && id->GetPhysicalDeviceFeatures2) {
+  // probe samples per draw; without the feature no draw is ever swapped. Core 1.0 feature, no cost when unused, so it
+  // is requested whenever supported (5m: RTX Hair turns on live, docs/RTX_HAIR_PRIMARY.md).
+  if (id->GetPhysicalDeviceFeatures2) {
     VkPhysicalDeviceFeatures2 sup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
     id->GetPhysicalDeviceFeatures2(phys, &sup);
     if (sup.features.occlusionQueryPrecise) {

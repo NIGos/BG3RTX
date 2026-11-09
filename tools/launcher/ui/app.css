@@ -98,7 +98,8 @@ main { grid-area: main; min-width: 0; overflow: auto; padding: 24px 28px 32px; s
 .card h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; }
 .badge { flex: none; margin-top: 1px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-3); font-size: 12px; line-height: 1.3; white-space: nowrap; }
 .badge.restart { color: var(--warn); border-color: #6e5833; }
-.badge.pause { color: var(--text-2); }
+.badge.now { color: var(--teal); border-color: #3d5c66; }
+.badge.ok { color: var(--ok); border-color: #4a6650; }
 .description { margin: 0; color: var(--text-2); }
 .description.pre, .detail-copy { white-space: pre-wrap; overflow-wrap: anywhere; }
 .description.path { overflow-wrap: anywhere; }
@@ -112,18 +113,53 @@ main { grid-area: main; min-width: 0; overflow: auto; padding: 24px 28px 32px; s
 .prep-title { font-weight: 600; }
 .prep-option { display: flex; align-items: center; gap: 8px; color: var(--text-2); }
 .prep-item progress { inline-size: 100%; block-size: 6px; accent-color: var(--gold); }
-/* Home: Play spans the row; RTX Hair, Shaders and Performance follow in the usual card grid. */
-.home { grid-auto-flow: row dense; align-items: start; }
+/* Home dashboard: Play spans the row; RTX Hair on the left (two rows), Status and Shaders on the right.
+   One column when the content is narrow (150% DPI, small windows). DOM order = reading and focus order. */
+.home { grid-template-columns: minmax(0,1.35fr) minmax(0,1fr); align-items: start; }
 .home .home-play { grid-column: 1 / -1; background: var(--panel-hi); border-color: var(--line); }
-.home #home-hair { grid-row: span 2; }
-.prep-when { justify-self: start; }
+.home-side { display: grid; gap: 16px; min-width: 0; }
 .home-play-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
 .home-play-row .btn.play { min-height: 44px; padding: 8px 32px; font-size: 15px; }
 .home-facts { overflow-wrap: anywhere; }
-.home-row { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
-.home-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.home .card > .control { min-height: 36px; }
+.home-hair-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; }
+.hair-convert { display: grid; gap: 10px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.sub-title { margin: 0; font-size: 14px; font-weight: 600; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.stat { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--bg-2); min-width: 0; }
+.stat-value { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat-label { color: var(--text-3); font-size: 12px; }
+.progress-row { display: flex; align-items: center; gap: 12px; }
+.progress-row progress { flex: 1 1 auto; min-width: 0; block-size: 8px; accent-color: var(--gold); }
+.progress-text { flex: none; color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.hair-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 14px 20px; align-items: start; }
+.hair-options > .row { grid-column: 1 / -1; }
+.option-group { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.option-label { color: var(--text-3); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.granny { display: grid; gap: 6px; width: 100%; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 6px; }
+.warn-text { color: var(--warn); }
+.status-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 0 24px; margin: 0; padding: 0; list-style: none; }
+.status-list li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 0; border-top: 1px solid var(--line-soft); }
+.key-list { display: grid; gap: 6px; margin: 0; }
+.key-list div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
+.key-list dt { color: var(--text-2); }
+.key-list dd { margin: 0; }
+.status-list .icon { width: 18px; height: 18px; }
+.status-list li.ok .icon { color: var(--ok); }
+.status-list li.warn .icon { color: var(--warn); }
+.status-list li.warn .status-text { color: var(--warn); }
+.status-text { flex: 1 1 auto; min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.btn.small { min-height: 32px; padding: 4px 12px; }
 .btn.link-btn { justify-self: start; align-self: flex-start; margin-top: 4px; }
+.btn.link-btn.inline { min-height: 32px; margin: 0; padding: 4px 10px; border-color: transparent; background: none; color: var(--teal); }
+.hotkey-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; color: var(--text-2); font-size: 13px; }
+kbd { padding: 2px 7px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--bg-2); color: var(--text); font: 600 12.5px/1.4 "Lato", "Segoe UI", sans-serif; white-space: nowrap; }
+.notice.compact { margin: 0; padding: 8px 12px; }
+.grid.one { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
+.hotkey-row { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.hotkey-row .row input { flex: 0 1 220px; }
+@media (max-width: 1000px) {
+  .home { grid-template-columns: minmax(0,1fr); }
+}
 .help-copy { margin: 0; color: var(--text-2); line-height: 1.6; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
@@ -250,7 +286,6 @@ textarea { width: 100%; min-height: 90px; padding: 10px; border: 1px solid var(-
 }
 .card-foot > .btn { justify-self: start; }
 
-.shortcuts { margin-top: 24px; }
 .shortcut-label { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.shortcut-label input { min-width: 0; max-width: 100%; box-sizing: border-box; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--text-3); border-radius: 6px; cursor: pointer; }
-.shortcut-label input::placeholder { color: var(--text-3); opacity: 1; }
+.hotkey-row input { min-width: 0; max-width: 100%; box-sizing: border-box; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--text-3); border-radius: 6px; cursor: pointer; }
+.hotkey-row input::placeholder { color: var(--text-3); opacity: 1; }

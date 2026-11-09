@@ -23,46 +23,98 @@ const render=s=>receive({data:{...s,type:'state'}});
 const all=e=>[e,...e.children.flatMap(c=>typeof c==='object'?all(c):[])];
 render(fixture);
 assert(!ids.get('navigation').children.some(e=>e.id==='nav-Developer'));
-// Home: first in the navigation and the page the launcher opens on. Shortcuts only: the same control ids and the same
-// 'set' / 'prep' / 'preset' / 'play' messages as the controls on their own pages.
+// Home: first in the navigation and the page the launcher opens on. A dashboard: Play (preset, Play, version and GPU),
+// RTX Hair (its Lighting control, hotkey and conversion), Status and Shaders. No performance shortcuts.
 {
  const msg=()=>JSON.parse(JSON.stringify(sent.at(-1)));
  const home=()=>all(ids.get('section-content'));
  assert.strictEqual(ids.get('navigation').children[0].id,'nav-Home','Home is first');
  assert.strictEqual(ids.get('nav-Home').attributes['aria-current'],'page','Home is the default page');
  assert(ids.get('header').hidden,'Home carries the preset and GPU line itself');
- for(const id of ['home-play-card','home-hair','home-shaders','home-performance'])assert(home().includes(ids.get(id)),id+' missing on Home');
+ assert(ids.get('play').hidden,'one Play button on Home');
+ for(const id of ['home-play-card','home-hair','home-attention','home-shaders'])assert(home().includes(ids.get(id)),id+' missing on Home');
+ assert(!ids.get('home-performance')||!home().includes(ids.get('home-performance')),'no performance shortcuts on Home');
  assert(home().includes(ids.get('preset-3'))&&home().includes(ids.get('home-play')));
  assert(ids.get('home-status').textContent.includes(fixture.version),'version on the Play card');
  for(let p=0;p<4;p++){ids.get('preset-'+p).onclick();assert.deepStrictEqual(msg(),{type:'preset',value:p});}
  assert.strictEqual(ids.get('home-play').disabled,!fixture.canPlay,'Home Play follows canPlay like the footer');
  ids.get('home-play').onclick();assert.deepStrictEqual(msg(),{type:'play'});
+ // RTX Hair: the same control and message as its Lighting card.
  const act=id=>{const e=ids.get(id);assert(e,id+' missing');if(e.type==='checkbox'){e.checked=!e.checked;e.onchange();}else e.onclick();return msg();};
- const shortcuts=[['exp_hair_groom_primary',0,'home-hair','Lighting'],['exp_gi_rt_pipeline',0,'home-performance','Performance'],
-  ['exp_gi_rt_pipeline_reorder',2,'home-performance','Performance'],['frame_generation',3,'home-performance','Performance']];
- for(const [id,index,box,page] of shortcuts){
-  render(fixture);const control='control-'+id+'-'+index;
-  assert(all(ids.get(box)).includes(ids.get(control)),control+' not on Home');
+ {
+  render(fixture);const id='exp_hair_groom_primary',control='control-'+id+'-0';
+  assert(all(ids.get('home-hair')).includes(ids.get(control)),control+' not on Home');
   assert(ids.get(control).attributes['aria-describedby']==='needs-'+id);
   const fromHome=act(control);assert.strictEqual(fromHome.type,'set');assert.strictEqual(fromHome.id,id);
-  ids.get('nav-'+page).onclick();assert(!ids.get('header').hidden);
-  assert(all(ids.get('card-'+id)).includes(ids.get(control)),control+' not on '+page);
-  assert.deepStrictEqual(act(control),fromHome,id+' sends the same message from Home and '+page);
+  ids.get('nav-Lighting').onclick();assert(!ids.get('header').hidden&&!ids.get('play').hidden);
+  assert(all(ids.get('card-'+id)).includes(ids.get(control)),control+' not on Lighting');
+  assert.deepStrictEqual(act(control),fromHome,id+' sends the same message from Home and Lighting');
   ids.get('nav-Home').onclick();
  }
- assert.strictEqual(ids.get('home-hair').children[0].children[1].textContent,'Restart to apply','RTX Hair keeps its restart note');
- // Preparation on Home: hair row with Pause and When to convert in the RTX Hair card, shaders row in the Shaders card.
+ const hairSetting=fixture.settings.find(s=>s.id==='exp_hair_groom_primary');
+ const badge=ids.get('home-hair').children[0].children[1].textContent;
+ assert.strictEqual(badge,/restart/i.test(hairSetting.apply)?'Restart to apply':'Applies after saving','RTX Hair keeps its apply badge');
+ // 5m: RTX Hair is Apply::Live, so the bridge sends the live label and Home shows it; the hotkey comes from the bridge.
+ assert.strictEqual(hairSetting.apply,'Applies after saving','RTX Hair applies while playing');
+ assert.strictEqual(badge,'Applies after saving');
+ assert.strictEqual(fixture.shortcuts.hotkey_rtx_hair,'Ctrl+Shift+F7','the bridge sends the RTX Hair hotkey');
+ // Status: game folder, GPU, mod files, unsaved changes (with Save), restart when needed.
+ for(const id of ['game','gpu','mods','unsaved'])assert(ids.get('home-status-'+id),'status '+id);
+ assert(all(ids.get('home-play-card')).includes(ids.get('home-attention')),'status is part of the Play card (first at every width)');
+ // In-game keys at a glance, changed on Hotkeys.
+ for(const [id,v] of Object.entries(fixture.shortcuts))assert(all(ids.get('home-keys')).some(e=>e.tagName==='kbd'&&e.textContent===v),id+' on Home');
+ ids.get('home-keys-change').onclick();assert.strictEqual(ids.get('nav-Hotkeys').attributes['aria-current'],'page');ids.get('nav-Home').onclick();
+ render({...fixture,unsavedCount:2,dirty:2,restartNeeded:true,restartBanner:'Restart the game to apply 2 changes',gamePath:''});
+ assert(/2 unsaved changes/.test(ids.get('home-status-unsaved').children[1].textContent));
+ ids.get('home-save').onclick();assert.deepStrictEqual(msg(),{type:'save',policy:'enable'});
+ assert(ids.get('home-status-restart').children[1].textContent.startsWith('Restart the game to apply 2 changes'));
+ ids.get('home-browse').onclick();assert.deepStrictEqual(msg(),{type:'browseGame'});
+ // Preparation: RTX Hair numbers, progress with ETA, Start/Pause, source with granny2.dll, When to convert; Shaders.
  assert(!ids.get('prep-pause')||!home().includes(ids.get('prep-pause')),'no hair actions without preparation data');
- const prep={items:[{id:'hair',title:'Strand hair',line:'3 of 5 styles ready, 0.1 GB on disk.',detail:'Converting companions, about 2 min left.',progress:0.6,state:'running'},
-  {id:'shaders',title:'Shaders',line:'Preparing shaders: 4 of 9.',detail:'Your graphics driver still builds the first ray tracing pipeline in game, about a minute.',progress:0.4,state:'running'}],whilePlaying:false,paused:false,pausable:true};
+ const prep={items:[{id:'hair',title:'RTX Hair',line:'3 of 5 styles ready, 0.1 GB on disk.',detail:'Converting styles seen in game, about 2 min left.',progress:0.6,state:'running'},
+  {id:'shaders',title:'Shaders',line:'Preparing shaders: 4 of 9.',detail:'Your graphics driver still builds the first ray tracing pipeline in game, about a minute.',progress:0.4,state:'running'}],
+  whilePlaying:false,paused:false,pausable:true,convertAll:false,hair:{ready:3,captured:4,needed:5,finished:3,bytes:5e7,etaSeconds:120,source:'seen'},
+  granny:{path:'',ok:false},convertAllReason:'Needs granny2.dll: choose it below.'};
  render({...fixture,preparation:prep});
  assert(all(ids.get('home-hair')).includes(ids.get('prep-hair'))&&all(ids.get('home-shaders')).includes(ids.get('prep-shaders')));
+ assert.strictEqual(ids.get('hair-stat-ready').children[0].textContent,'3');assert.strictEqual(ids.get('hair-stat-captured').children[0].textContent,'4');
+ assert.strictEqual(ids.get('hair-stat-total').children[0].textContent,'–','unknown total shown as a dash');
+ assert.strictEqual(ids.get('hair-stat-disk').children[0].textContent,'50 MB');
+ assert(all(ids.get('prep-hair')).some(e=>e.textContent==='60% · about 2 min left'),'progress with ETA');
  assert(all(ids.get('home-shaders')).some(e=>e.textContent==='Preparing shaders: 4 of 9.')&&all(ids.get('home-shaders')).some(e=>/first ray tracing pipeline/.test(e.textContent)));
+ assert(ids.get('prep-progress-shaders'),'shader progress bar');
  ids.get('prep-pause').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'pause',value:0});
  ids.get('prep-when-1').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'whilePlaying',value:1});
  ids.get('prep-when-0').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'whilePlaying',value:0});
+ // Convert all styles: disabled with its one-line reason until granny2.dll is set; the picker is always there.
+ assert(ids.get('prep-source-1').disabled&&ids.get('prep-source-1').title===prep.convertAllReason);
+ assert(!ids.get('prep-source-reason').hidden&&ids.get('prep-source-reason').children[1].textContent===prep.convertAllReason);
+ assert.strictEqual(ids.get('prep-source-0').attributes['aria-pressed'],'true');
+ ids.get('prep-granny-browse').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'browseGranny',value:0});
+ assert(/LSLib ExportTool/.test(ids.get('prep-granny-help').textContent)&&/does not include it/.test(ids.get('prep-granny-help').textContent));
+ render({...fixture,preparation:{...prep,granny:{path:'C:\\Tools\\granny2.dll',ok:true},convertAllReason:''}});
+ assert(!ids.get('prep-source-1').disabled&&ids.get('prep-source-reason').hidden);
+ ids.get('prep-source-1').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'convertAll',value:1});
+ ids.get('prep-granny-clear').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'clearGranny',value:0});
  render({...fixture,preparation:{...prep,paused:true}});ids.get('prep-pause').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'resume',value:0});
- ids.get('home-more-performance').onclick();assert.strictEqual(ids.get('nav-Performance').attributes['aria-current'],'page');
+ // A stopped run: Try again sends start; the last error is shown.
+ render({...fixture,preparation:{...prep,items:[{...prep.items[0],state:'failed'},prep.items[1]],hair:{...prep.hair,error:'granny2.dll could not be loaded.'}}});
+ assert.strictEqual(ids.get('prep-pause').textContent,'Try again');ids.get('prep-pause').onclick();assert.deepStrictEqual(msg(),{type:'prep',action:'start',value:0});
+ assert.strictEqual(ids.get('prep-hair-error').textContent,'Last error: granny2.dll could not be loaded.');
+ // Tolerant of an older host: no hair facts, no granny, no reason.
+ render({...fixture,preparation:{items:prep.items,whilePlaying:false,paused:false,pausable:true}});
+ assert(all(ids.get('prep-hair')).some(e=>e.textContent==='3 of 5 styles ready, 0.1 GB on disk.'),'host line without numbers');
+ assert(!ids.get('prep-source-1').disabled,'no reason, no block');
+ // Unavailable converter: the line, no actions.
+ render({...fixture,preparation:{...prep,items:[{id:'hair',title:'RTX Hair',line:'Not available: the hair converter is not installed.',state:'unavailable'}]}});
+ assert(!all(ids.get('home-hair')).some(e=>e.id&&/^prep-(pause|source|when|granny)/.test(e.id)),'no actions without a converter');
+ // The RTX Hair hotkey (when the bridge has the binding) links to Hotkeys.
+ render({...fixture,shortcuts:{...fixture.shortcuts,hotkey_rtx_hair:'Ctrl+Shift+H'}});
+ const hk=ids.get('home-hotkey-exp_hair_groom_primary');assert(hk&&all(hk).some(e=>e.tagName==='kbd'&&e.textContent==='Ctrl+Shift+H'));
+ ids.get('home-hotkey-change-exp_hair_groom_primary').onclick();assert.strictEqual(ids.get('nav-Hotkeys').attributes['aria-current'],'page');
+ assert(ids.get('hotkey_rtx_hair'),'RTX Hair hotkey on the Hotkeys page');
+ render(fixture);ids.get('nav-Home').onclick();
+ assert(!ids.get('home-hotkey-exp_hair_groom_primary')||!home().includes(ids.get('home-hotkey-exp_hair_groom_primary'))||fixture.shortcuts?.hotkey_rtx_hair!==undefined,'no hotkey line without a binding');
 }
 for(const category of new Set(fixture.settings.map(s=>s.category))){
  assert(ids.has('nav-'+category),category+' has no page');ids.get('nav-'+category).onclick();
@@ -82,7 +134,11 @@ for(const category of new Set(fixture.settings.map(s=>s.category))){
  }
 }
 ids.get('nav-DLSS 5').onclick();
-assert(ids.get('dlss5-runtime-browse')&&ids.get('hotkey_dlss5'));
+assert(ids.get('dlss5-runtime-browse'));
+assert(all(ids.get('card-dlss5_nr')).includes(ids.get('card-hotkey-dlss5_nr')),'the DLSS 5 card shows its hotkey');
+ids.get('card-hotkey-change-dlss5_nr').onclick();assert.strictEqual(ids.get('nav-Hotkeys').attributes['aria-current'],'page');
+// Hotkeys: every binding the bridge sends, in one place.
+for(const id of Object.keys(fixture.shortcuts))assert(all(ids.get('section-content')).includes(ids.get('hotkey-row-'+id)),id+' not on Hotkeys');
 const nrKey=ids.get('hotkey_dlss5');
 const event=key=>({key,ctrlKey:true,shiftKey:true,preventDefault(){},stopPropagation(){}});
 let tabPrevented=false;
@@ -97,8 +153,8 @@ let count=sent.length;nrKey.onkeydown(event('F9'));assert.strictEqual(sent.lengt
 nrKey.onkeydown(event('F10'));assert.strictEqual(sent.length,count,'reserved F10 reached bridge');
 nrKey.onkeydown({...event('N'),ctrlKey:false,shiftKey:false,altKey:true});
 assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'shortcut',id:'hotkey_dlss5',value:'Alt+N'});
-ids.get('nav-Advanced').onclick();assert(ids.get('hotkey_rt_toggle'));
-const reset=all(ids.get('section-content')).find(e=>e.textContent==='Reset to default');reset.onclick();
+assert(ids.get('hotkey_rt_toggle'));
+const reset=ids.get('hotkey-reset-hotkey_rt_toggle');assert.strictEqual(reset.textContent,'Reset to '+fixture.shortcutDefaults.hotkey_rt_toggle);reset.onclick();
 assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'resetShortcut',id:'hotkey_rt_toggle'});
 ids.get('hotkey_rt_toggle').onkeydown(event('Delete'));assert.strictEqual(sent.at(-1).value,'None');
 ids.get('nav-Lighting').onclick();
@@ -110,11 +166,12 @@ const rr=ids.get('control-rr-0');assert(rr.type==='checkbox'&&rr.attributes['ari
 rr.focus();render(fixture);assert.strictEqual(document.activeElement,ids.get(rr.id),'focus lost on bridge update');
 const checkbox=ids.get(rr.id);let clicked=false;checkbox.click=()=>clicked=true;checkbox.onkeydown({key:'Enter',preventDefault(){}});assert(clicked);
 for(let p=0;p<4;p++){ids.get('preset-'+p).onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'preset',value:p});}
-assert(ids.get('navigation').children.some(e=>e.id==='nav-Advanced'));
+assert(!ids.get('navigation').children.some(e=>e.id==='nav-Advanced'),'release has no Advanced controls, so no Advanced page');
+assert(ids.get('navigation').children.some(e=>e.id==='nav-Hotkeys'));
 assert(!ids.get('navigation').children.some(e=>e.id==='nav-Memory'));
 assert(!all(ids.get('section-content')).some(e=>e.id==='experimental-summary'));
 ids.get('nav-Support').onclick();
-assert(all(ids.get('section-content')).some(e=>e.textContent.includes("Ctrl+Shift+F9 in game switches all ray-traced lighting off and on")));
+assert(all(ids.get('section-content')).some(e=>e.textContent.includes("In game, Ctrl+Shift+F9 switches all ray-traced lighting off and on")&&e.textContent.includes('Change it on Hotkeys')));
 assert(all(ids.get('section-content')).some(e=>e.textContent==='Video memory'));
 assert(all(ids.get('section-content')).some(e=>e.textContent==='Compatibility'));
 assert(ids.get('support-report')&&ids.get('support-browse')&&ids.get('support-recheck'));
@@ -173,18 +230,15 @@ assert(all(ids.get('card-water_surface_fresnel')).some(e=>e.textContent==='Adjus
 assert.strictEqual(ids.get('control-water_surface_fresnel-0').type,'checkbox','unqualified marker hidden; Off/On is a switch');
 ids.get('experimental-switch').checked=false;ids.get('experimental-switch').onchange();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'experimental',value:false});
 render(fixture);assert(!all(ids.get('section-content')).some(e=>e.id==='card-water_surface_fresnel'));
-// Preparation (docs/RTX_HAIR_ROADMAP.md 2b): only when the host sends it; first card on Help & support; one row per
-// item; Pause/Resume, Convert all and When to convert send 'prep' actions (launcher-only, never 'set').
-render(fixture);ids.get('nav-Support').onclick();assert(!ids.get('preparation')||!all(ids.get('section-content')).includes(ids.get('preparation')));
-const prepState={items:[{id:'hair',title:'Strand hair',line:'3 of 5 styles ready, 0.1 GB on disk.',detail:'Converting companions, about 2 min left.',progress:0.6,state:'running'},{id:'shaders',title:'Shaders',line:'Ready.',state:'done'}],convertAll:false,whilePlaying:false,paused:false,pausable:true};
-render({...fixture,preparation:prepState});ids.get('nav-Support').onclick();
-{const prep=all(ids.get('preparation'));assert(prep.some(e=>e.id==='prep-hair')&&prep.some(e=>e.id==='prep-shaders'));assert.strictEqual(prep.filter(e=>e.tagName==='progress').length,1);
- const grid=ids.get('section-content').children.find(e=>e.className==='grid support');assert.strictEqual(grid.children[0].id,'preparation','Preparation is the first card');
- ids.get('prep-pause').onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'prep',action:'pause',value:0});
- assert(!ids.get('prep-convert-all')||!all(ids.get('preparation')).includes(ids.get('prep-convert-all')),'no Convert all with runtime capture');
- ids.get('prep-when-1').onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'prep',action:'whilePlaying',value:1});}
-render({...fixture,preparation:{...prepState,paused:true}});ids.get('nav-Support').onclick();assert.strictEqual(ids.get('prep-pause').textContent,'Resume');
-render({...fixture,preparation:{...prepState,items:[{id:'hair',title:'Strand hair',line:'Not available: Python 3 was not found.',state:'unavailable'}]}});ids.get('nav-Support').onclick();
-assert(!all(ids.get('preparation')).some(e=>e.tagName==='button'||e.tagName==='input'),'no actions without a converter');
+// Preparation (docs/RTX_HAIR_ROADMAP.md 2b): one place, Home. Help & support has no second copy of its rows or actions.
+{const prepState={items:[{id:'hair',title:'RTX Hair',line:'3 of 5 styles ready, 0.1 GB on disk.',state:'running',progress:0.6},{id:'shaders',title:'Shaders',line:'Ready.',state:'done'}],whilePlaying:false,paused:false,pausable:true};
+ render({...fixture,preparation:prepState});ids.get('nav-Support').onclick();
+ assert(!all(ids.get('section-content')).some(e=>e.id&&/^prep-/.test(e.id)),'no preparation on Help & support');
+ const grid=ids.get('section-content').children.find(e=>e.className==='grid support');assert.strictEqual(grid.children[0].id,'support-setup','game and graphics first');}
+// No user text says "Strand hair": the feature is RTX Hair everywhere.
+for(const page of ['Home','Lighting','Hotkeys','Support']){render(fixture);ids.get('nav-'+page).onclick();assert(!all(ids.get('section-content')).some(e=>typeof e.textContent==='string'&&/strand hair/i.test(e.textContent)),'Strand hair on '+page);}
+// Apply badges: three kinds only.
+for(const page of ['Lighting','Surfaces','Performance','DLSS 5','Support']){render(fixture);ids.get('nav-'+page).onclick();
+ for(const b of all(ids.get('section-content')).filter(e=>/^badge/.test(e.className||'')))assert(['Applies now','Applies after saving','Restart to apply','May need a restart'].includes(b.textContent),page+' badge '+b.textContent);}
 render({...fixture,developer:true});assert(!ids.get('navigation').children.some(e=>e.className==='nav-foot'&&e.children.some(c=>c.className==='switch-row')),'developer mode keeps its own disclosure');
-console.log('Renderer: Home shortcuts, category reachability, requirements, costs, focus, native controls, presets and developer authorization pass.');
+console.log('Renderer: Home dashboard, RTX Hair conversion, Hotkeys, category reachability, requirements, costs, focus, native controls, presets and developer authorization pass.');

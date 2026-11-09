@@ -641,6 +641,45 @@ Independent review of the layer path; each finding verified in code before the f
 - Restart keys in the bundle: rt_hair_groom_primary, rt_hair_physical_origin (0 -> 1), rt_hair_tangent_world
   (compiled at pipeline creation). The knob's note says so. Choice `kv` grew from 12 to 18 entries.
 
+## 5m. RTX Hair live switch and hotkey (offline 2026-11-09, branch claude/rtx-hair-live)
+- RTX Hair (exp_hair_groom_primary) applies while playing. The restart keys of 5l became:
+  - rt_hair_groom_primary (startup latch): gone. The strand header (3.5 KB) and the strand pipeline variants (per static
+    hair G-buffer pipeline 32 + fallback, 5k M5; one per prepass/velocity pipeline; the cascade clones) are made on
+    every device with linear swept spheres, shaderInt64 and fragment stores, whether or not the key is on.
+    occlusionQueryPrecise is requested whenever supported (core feature, nothing runs while unused). Cost from the
+    logs: hcap3-strands 2026-11-08 created the first batch (6+ G-buffer pipelines) 96 ms after the header, inside the
+    game's 8.7-9.2 s pipeline burst (31118 pipelines; runs with and without the header within that spread); first
+    launch with an empty shader cache +134 ms + 35 ms DXC (hair_primary_gbuffer/velocity). VRAM: the header; the 62.5 MB
+    pixel record (2560 x 1067) is allocated at the first strand publish only and kept while off. New line
+    `[hair primary] strand variants: N pipelines in X ms` measures the total in every session.
+  - rt_hair_tangent_world (compiled at creation): specialization 1045 is always 1; header flags kFlagMacroNormal /
+    kFlagTangentWorld switch it live (a header load and two uniform branches per strand fragment; with both flags off
+    the output is that of constant 0). No SPIR-V change (a specialization value only).
+  - rt_hair_capture (BC3 copyable at creation): a hair mask cannot be told from another BC3 texture at vkCreateImage,
+    so every sampled BC3 image of an RT session gets TRANSFER_SRC. Measured on the RTX 5090 with
+    vkGetDeviceImageMemoryRequirements: size, alignment and memory types identical with and without it (BC3 UNORM/SRGB,
+    64 x 64 to 4096 x 4096, full mip chains). The capture itself was always live (hair_capture begin_capture).
+  - sharc_device: unchanged; it already defaults to 1 (a requirement of the knob, not written by it).
+  - rt_hair_physical_origin stays a startup reservation (43.7 MB R32G32B32A32 at 2560 x 1067, `[hair origin]
+    auxiliary image`, and the GI's origin shader variants): 0 -> 1 needs a restart. A game started with RTX Hair off
+    gets the strands live and the launcher's restart banner for that one key.
+- Live key `rt_hair` (default 1): 0 makes every key of the RTX Hair On choice read 0 (layer/util.cpp hair_gated):
+  strands on screen and in RT (rt_hair_groom, rt_hair_groom_primary), strand lighting passes, RR guides, cascade drop,
+  physical origin and capture: cards only. `hotkey_rtx_hair` (Ctrl+Shift+F7, launcher Lighting page) flips it in memory
+  and logs `[hair] hotkey ...: RTX Hair ON|OFF`; a later change of rt_hair or of the RTX Hair keys in the files ends the
+  override. The settings change at a present (cfg_poll).
+- State machine `common/hair_live.h` (tests/hair_live_test.cpp), ticked once per frame_index in layer/hair_primary.cpp:
+  - Off: no swap from the first draw recorded after the switch; a G-buffer draw whose prepass already dropped its card
+    depth (DepthLatch, prepass frame + 2) restores it with the fallback pipeline, so the cards are whole in the same
+    frame or the next. The next scene build leaves the grooms out of BLAS/TLAS; a recorded frame keeps its TLAS.
+  - On: staged publishes from before the switch are dropped and never applied (their TLAS may be refit or freed), the
+    swap gate restarts empty; swaps resume after two fresh publishes, as after a level load (no 300-frame pause).
+  - Lines: `[hair primary] live: strands ON|OFF at frame N (switch k)`; while off, the period line `[hair primary]
+    frame N: RTX Hair off (live): 0 grooms published; ... 0 G-buffer ...`. A session that never turned strands on
+    skips the submit-time header work entirely.
+- Live job (READY_FOR_LIVE, not queued): tools/live_batches/rtx_hair_live (rhl1-dialogue, Test Dialogue1): starts cards
+  only, first activation in warmup, then rt_hair 1/0/1/0 and a cards-only window; gates in predicted.json.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
