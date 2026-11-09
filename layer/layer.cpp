@@ -253,6 +253,17 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     sl_scratch = sl_device_pre(id, phys, use_ci, patched);
     r = create(phys, &patched, alloc, out);
   }
+  if (r != VK_SUCCESS && rt_on && rt_scene_handout_requested()) {
+    log("[layer] optional scene handout update-after-bind request failed (%d); retrying without (set 1 as before)", r);
+    sl_device_post(sl_scratch, nullptr, r);
+    rt_device_features_undo();
+    rt_scene_handout_disable_request();
+    rt_use = rt_device_create_info(id, phys, geo_use, &rt_ci);
+    rt_on = rt_use != geo_use;
+    use_ci = rt_use;
+    sl_scratch = sl_device_pre(id, phys, use_ci, patched);
+    r = create(phys, &patched, alloc, out);
+  }
   if (r != VK_SUCCESS && rt_on && hair_groom::device_requested()) {
     log("[layer] optional linear swept spheres device request failed (%d); retrying without (card hair path)", r);
     sl_device_post(sl_scratch, nullptr, r);

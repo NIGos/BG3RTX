@@ -592,6 +592,15 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
 bool rt_device_features_added();           // the last create info has SHaRC features of ours
 void rt_device_features_undo();            // restores the game's feature structs we edited
 void rt_device_created(DeviceData* dd, bool enabled);
+// rt_scene_handout_layout (restart, docs/SCENE_HANDOUT_DESIGN.md 3.2): the last create info asks for the set 1
+// update-after-bind features; after a failed creation the layer retries without them. layout(): the device has them,
+// so set 1 is update-after-bind (layer/alphatest.cpp) and the dummy TLAS exists (rt_scene_dummy_tlas).
+bool rt_scene_handout_requested();
+void rt_scene_handout_disable_request();
+bool rt_scene_handout_layout();
+// The empty dummy TLAS (scene handout): VK_NULL_HANDLE until its build was recorded into a command buffer that was
+// submitted. Recorded once into the first scene build's command buffer (rt_after_capture) when the layout is on.
+VkAccelerationStructureKHR rt_scene_dummy_tlas();
 void rt_device_destroyed(DeviceData* dd);
 bool rt_enabled();                         // AS + ray query are on the device
 // Build the scene this frame: rt_build (after the settings layer resolves

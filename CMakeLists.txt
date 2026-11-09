@@ -584,6 +584,22 @@ add_dependencies(native_hit_gpu_fixture native_hit_gpu_fixture_spv)
 add_test(NAME native_hit_gpu_fixture COMMAND native_hit_gpu_fixture ${NATIVE_HIT_FIXTURE_SPV})
 set_tests_properties(native_hit_gpu_fixture PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
 
+# Scene handout increment 1 (docs/SCENE_HANDOUT_DESIGN.md 3.2): the layer's set 1 update-after-bind policy and empty
+# dummy TLAS (common/scene_handout_layout.h) under validation: update after bind, fallback copy before the submit.
+set(SCENE_HANDOUT_FIXTURE_SPV ${CMAKE_BINARY_DIR}/scene_handout_gpu_fixture.spv)
+add_custom_command(OUTPUT ${SCENE_HANDOUT_FIXTURE_SPV}
+  COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/scene_handout_gpu_fixture.hlsl -spirv -fspv-target-env=vulkan1.3
+          -HV 2021 -T cs_6_6 -E main -O3 -Fo ${SCENE_HANDOUT_FIXTURE_SPV}
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/scene_handout_gpu_fixture.hlsl VERBATIM)
+add_custom_target(scene_handout_gpu_fixture_spv ALL DEPENDS ${SCENE_HANDOUT_FIXTURE_SPV})
+add_executable(scene_handout_gpu_fixture tools/scene_handout_gpu_fixture.cpp)
+target_include_directories(scene_handout_gpu_fixture PRIVATE ${VULKAN_SDK}/Include)
+target_link_directories(scene_handout_gpu_fixture PRIVATE ${VULKAN_SDK}/Lib)
+target_link_libraries(scene_handout_gpu_fixture PRIVATE vulkan-1)
+add_dependencies(scene_handout_gpu_fixture scene_handout_gpu_fixture_spv)
+add_test(NAME scene_handout_gpu_fixture COMMAND scene_handout_gpu_fixture ${SCENE_HANDOUT_FIXTURE_SPV})
+set_tests_properties(scene_handout_gpu_fixture PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
 # Primary strand hair GPU check (docs/RTX_HAIR_PRIMARY.md 1b): LSS camera rays and the G-buffer variant's helpers
 # against the CPU reference (tests/hair_primary_gpu_test.py); skips (77) without linear swept spheres.
 set(HAIR_PRIMARY_CHECK_SPV ${CMAKE_BINARY_DIR}/hair_primary_gpu_check.spv)

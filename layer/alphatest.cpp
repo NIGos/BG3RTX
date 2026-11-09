@@ -22,6 +22,7 @@
 // textures, one for tile caches, the captured UV soup, and two samplers.
 // Every view in a set was bound by the game in the frame the set was written.
 #include "host.h"
+#include "../common/scene_handout_layout.h"
 #include "perf_submit.h"
 #include "recording_init.h"
 #include <optional>
@@ -128,6 +129,7 @@ struct FadeCount { uint64_t seen = 0, seen_tris = 0, enabled = 0, enabled_tris =
 FadeCount g_fade_now, g_fade_window;   // this capture; the log window (300 captures)
 
 VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
+bool g_uab = false;   // g_dsl is update-after-bind (rt_scene_handout_layout); its pools need the matching flag
 VkDescriptorPool g_pool = VK_NULL_HANDLE;
 VkDescriptorSet g_sets[kRing] = {};
 VkSampler g_wrap = VK_NULL_HANDLE, g_clamp = VK_NULL_HANDLE;
@@ -628,6 +630,19 @@ void alpha_device_created(DeviceData* dd) {
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   dci.bindingCount = uint32_t(bindings.size());
   dci.pBindings = bindings.data();
+  // rt_scene_handout_layout (restart, docs/SCENE_HANDOUT_DESIGN.md 3.2): every written binding update-after-bind, so a
+  // later increment can write a set after the lighting command buffer bound it (before the submit). Off: as before.
+  g_uab = rt_scene_handout_layout();
+  std::vector<VkDescriptorBindingFlags> binding_flags(bindings.size());
+  VkDescriptorSetLayoutBindingFlagsCreateInfo bfci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+  if (g_uab) {
+    scene_handout::uab_binding_flags(bindings.data(), uint32_t(bindings.size()), binding_flags.data());
+    bfci.bindingCount = uint32_t(binding_flags.size());
+    bfci.pBindingFlags = binding_flags.data();
+    dci.pNext = &bfci;
+    dci.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    log("[alpha] set 1 layout update-after-bind (%zu bindings, scene handout layout)", bindings.size());
+  }
   ok = ok && vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) == VK_SUCCESS;
   if (ok) replay_note_alpha_layout(g_dsl, g_wrap, g_clamp);   // replay packs record this layout's sets
   VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, ((g_omm_layout?7u:6u)+(native_hit::enabled()?2u:0u)) * kRing},
@@ -638,6 +653,7 @@ void alpha_device_created(DeviceData* dd) {
   pci.maxSets = kRing;
   pci.poolSizeCount = g_omm_layout?4u:3u;
   pci.pPoolSizes = ps;
+  if (g_uab) pci.flags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
   ok = ok && vk.CreateDescriptorPool(dd->device, &pci, nullptr, &g_pool) == VK_SUCCESS;
   VkDescriptorSetLayout layouts[kRing];
   for (auto& l : layouts) l = g_dsl;
@@ -1508,6 +1524,7 @@ bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescrip
       {VK_DESCRIPTOR_TYPE_SAMPLER,2+native_hit::sampler_slots+(g_tileset_binding?kNativeSamplers:0u)},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
     VkDescriptorPoolCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};info.maxSets=1;
     info.poolSizeCount=g_omm_layout?4u:3u;info.pPoolSizes=sizes;
+    if(g_uab)info.flags|=VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;   // sets of a UAB layout (rt_scene_handout_layout)
     if(vk.CreateDescriptorPool(g_dd->device,&info,nullptr,pool)!=VK_SUCCESS)return false;
   }
   if(!*set){VkDescriptorSetAllocateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
