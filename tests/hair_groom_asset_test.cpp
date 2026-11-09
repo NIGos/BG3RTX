@@ -484,6 +484,31 @@ static void test_watchdog() {
   CHECK(!n.judge(10));
   n.begin(); n.draw(0, 0, 30);   // too little evidence
   CHECK(!n.judge(10));
+  // rt_hair_watchdog_draw: per draw key, kWatchdogDrawBad bad judged frames in a row; only that key holds its cards.
+  static_assert(kWatchdogDrawBad == 2, "one header per G-buffer frame: a one-publish fault makes one bad frame");
+  DrawWatchdog dw;
+  dw.begin(); dw.draw(1, 5000, 300, 5000); dw.draw(2, 5000, 4800, 5000);   // the frame watchdog trips on this frame
+  CHECK(dw.judge(100) == 0 && !dw.active(1, 101) && !dw.active(2, 101));   // one bad frame of draw 1: no trip
+  dw.begin(); dw.draw(1, 5000, 4700, 5000); dw.draw(2, 5000, 4800, 5000);   // draw 1 recovered: its run restarts
+  CHECK(dw.judge(101) == 0);
+  dw.begin(); dw.draw(1, 5000, 300, 5000);
+  CHECK(dw.judge(102) == 0);
+  dw.begin(); dw.draw(1, 5000, 300, 5000);
+  CHECK(dw.judge(102) == 0);   // the same G-buffer frame judged again: not a second frame
+  dw.begin(); dw.draw(1, 5000, 300, 5000); dw.draw(2, 5000, 4800, 5000);
+  CHECK(dw.judge(103) == 1 && dw.active(1, 103) && dw.active(1, 103 + kWatchdogFrames - 1) &&
+        !dw.active(1, 103 + kWatchdogFrames) && !dw.active(2, 104) && dw.trips == 1);
+  dw.begin(); dw.draw(3, 430, 360, 430);   // 0.837: inside its own footprint bound
+  dw.judge(104); dw.begin(); dw.draw(3, 430, 360, 430);
+  CHECK(dw.judge(105) == 0 && !dw.active(3, 106));
+  DrawWatchdog du;   // markers missing: counted only when no swapped draw of the frame left one (as the frame watchdog)
+  du.begin(); du.draw(4, 0, 0, 5000); du.draw(5, 4000, 3900, 4000);
+  du.judge(10); du.begin(); du.draw(4, 0, 0, 5000); du.draw(5, 4000, 3900, 4000);
+  CHECK(du.judge(11) == 0 && !du.active(4, 12));
+  du.begin(); du.draw(4, 0, 0, 5000); du.judge(12); du.begin(); du.draw(4, 0, 0, 5000);
+  CHECK(du.judge(13) == 1 && du.active(4, 14));
+  du.begin(); du.draw(6, 0, 0, 30); du.judge(20); du.begin(); du.draw(6, 0, 0, 30);   // too little evidence
+  CHECK(du.judge(21) == 0 && !du.active(6, 22));
   // The no-fallback orphan blocks this key's prepass drop for 300 frames.
   DepthLatch d;
   d.prepass(7, 50);

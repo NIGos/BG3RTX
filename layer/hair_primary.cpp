@@ -146,7 +146,21 @@ struct StagedHeader {
   float cam[8] = {};   // the build camera (kCameraOffset; kFlagCamera), the previous publish's (kFlagPrevCamera)
   uint64_t keys[hair_primary::kMaxGrooms] = {};
   uint8_t lods[hair_primary::kMaxGrooms] = {};
+  // Item 11 proof: the build's camera UBO, re-read once at the vkQueueSubmit that carries the publish's recording.
+  VkBuffer ubo = VK_NULL_HANDLE;
+  VkDeviceSize ubo_offset = 0;
+  bool cam_checked = false;
+  bool cam_gpu = false;   // rt_hair_header_cam_gpu: the build wrote both header cameras on the GPU (apply_header skips them)
 };
+// rt_hair_header_cam_gpu: the build's camera UBO copied on the GPU (geo_copy_camera, 256 bytes; position at byte 208).
+// Each publish first moves the previous publish's position from here to kPrevCameraOffset, then writes its own.
+HpBuf g_cam_gpu;
+uint64_t g_cam_gpu_pub = 0;   // publish frame + 1 of the last GPU camera copy (0: the slot holds none)
+// Item 11 (period line "header safety"): publishes whose camera UBO was re-read at the submit of their build, those whose
+// re-read differs from the record-time read st.cam (the GPU's xfb_to_world reads the UBO after the submit), and the
+// largest distance between the two.
+// gpu: publishes whose header cameras the build wrote on the GPU (rt_hair_header_cam_gpu).
+struct CamCheck { uint64_t checked = 0, differ = 0, gpu = 0; double max_m = 0.0; } g_cam_check;
 constexpr int kStaged = 3;
 StagedHeader g_staged[kStaged];
 int g_staged_next = 0;
@@ -183,6 +197,11 @@ std::unordered_map<uint64_t, uint32_t> g_last_card;   // per draw key: its card 
 uint64_t g_mask_holes = 0, g_colour_samples = 0, g_header_mismatch = 0, g_card_upgrades = 0, g_card_slots = 0;
 hair_primary::Watchdog g_watchdog;
 uint64_t g_watchdog_logged = 0, g_watchdog_period = 0;
+// rt_hair_watchdog_draw (read once per publish): the per-draw watchdog decides instead of the frame one. Both judge
+// every counted frame (the period line reports both); trips of the per-draw one since the last line.
+hair_primary::DrawWatchdog g_draw_watchdog;
+bool g_cfg_watchdog_draw = false;
+uint64_t g_draw_watchdog_period = 0;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
 float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
 uint64_t g_last_pub_camera_frame = 0;
@@ -369,6 +388,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
       // 5h dropouts and the frame watchdog (item 19): the swapped draws of the judged frame against their card pixels
       // (same pass, same tag). The trace counts are of that frame's window too: always attributed (item 4).
       g_watchdog.begin();
+      g_draw_watchdog.begin();
       for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) {
         const uint64_t key = gf->draw_keys[k];
         if (!key) continue;
@@ -382,12 +402,20 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
             if (g_drop.firsts < 4) g_drop.first[g_drop.firsts++] = {gf->frame, key, card, acc, why};
           }
           g_watchdog.draw(card, acc, last_card);
+          g_draw_watchdog.draw(key, card, acc, last_card);
         }
         if (card) g_last_card[key] = card;
       }
+      if (const uint32_t tripped = g_draw_watchdog.judge(gf->frame)) {
+        g_draw_watchdog_period += tripped;
+        if (g_cfg_watchdog_draw && g_watchdog_logged++ < 8)
+          log("[hair primary] per-draw watchdog: G-buffer frame %llu: %u draws under their bound for %u judged frames in a "
+              "row: their cards for %llu frames", (unsigned long long)gf->frame, tripped, hair_primary::kWatchdogDrawBad,
+              (unsigned long long)hair_primary::kWatchdogFrames);
+      }
       if (g_watchdog.judge(gf->frame)) {
         ++g_watchdog_period;
-        if (g_watchdog_logged++ < 8)
+        if (!g_cfg_watchdog_draw && g_watchdog_logged++ < 8)
           log("[hair primary] watchdog: G-buffer frame %llu swapped draws wrote %llu strand pixels of %llu card pixels "
               "(bound %.4f): cards for %llu frames", (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
               (unsigned long long)g_watchdog.card, g_watchdog.bound(), (unsigned long long)hair_primary::kWatchdogFrames);
@@ -524,6 +552,41 @@ void header_image(const StagedHeader& st, uint8_t* out) {
   std::memcpy(out + hair_primary::kSlotMaskOffset, &masks, 4);
 }
 
+// rt_hair_header_cam_gpu (item 11), g_mu held, in the build's command buffer outside a render pass: the header's build
+// camera becomes the position of the camera UBO the build's xfb_to_world converts with on the GPU, by construction
+// (the CPU read at record time may predate the game's last UBO write before the submit). prev: the GPU slot holds the
+// previous publish's camera, moved to kPrevCameraOffset first. The builds rewrite the groom points in place, so the
+// header camera is the last executed build's, like the points every G-buffer pass traces. False: nothing usable was
+// recorded (the caller keeps the CPU cameras).
+bool header_cam_gpu(VkCommandBuffer cmd, bool prev) {
+  DeviceData* dd = g_dd;
+  if (!g_cam_gpu.b && !make(g_cam_gpu, 256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            "hair primary build camera"))
+    return false;
+  // Earlier readers of the header cameras (strand passes, the core's hair readers) and of the slot before the writes.
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                            VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  if (prev) {
+    const VkBufferCopy c{208, hair_primary::kPrevCameraOffset, 12};
+    dd->vk.CmdCopyBuffer(cmd, g_cam_gpu.b, g_header.b, 1, &c);
+    mb.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    mb.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr,
+                              0, nullptr);
+  }
+  if (!rt_copy_build_camera(cmd, g_cam_gpu.b)) return false;   // ends with compute write -> transfer read
+  const VkBufferCopy c{208, hair_primary::kCameraOffset, 12};
+  dd->vk.CmdCopyBuffer(cmd, g_cam_gpu.b, g_header.b, 1, &c);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb, 0, nullptr, 0,
+                            nullptr);
+  return true;
+}
+
 // slot >= 0 (rt_hair_groom_primary_current): the header comes from host slot `slot` of g_hdr_slots, written now with
 // `st` and possibly upgraded at vkQueueSubmit (hair_primary_submit_begin) to this frame's publish.
 void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot, uint32_t tag) {
@@ -540,18 +603,20 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot, uint32_
     const VkDeviceSize base = VkDeviceSize(slot) * hair_primary::kHeaderAllocAll;
     header_image(st, static_cast<uint8_t*>(g_hdr_slots.map) + base);
     std::memcpy(static_cast<uint8_t*>(g_hdr_slots.map) + base, &tag, 4);
-    const VkBufferCopy regions[5] = {{base, 0, hair_primary::kHeaderBytes},   // full size: a submit upgrade may add grooms
-                                     {base + hair_primary::kCameraOffset, hair_primary::kCameraOffset, sizeof st.cam},
-                                     {base + hair_primary::kCrumbAddrOffset, hair_primary::kCrumbAddrOffset, 16},
-                                     {base + hair_primary::kKeyMapOffset, hair_primary::kKeyMapOffset, sizeof st.key_map},
-                                     {base + hair_primary::kSlotMaskOffset, hair_primary::kSlotMaskOffset, 4}};
-    dd->vk.CmdCopyBuffer(cmd, g_hdr_slots.b, g_header.b, 5, regions);
+    VkBufferCopy regions[5] = {{base, 0, hair_primary::kHeaderBytes},   // full size: a submit upgrade may add grooms
+                               {base + hair_primary::kCameraOffset, hair_primary::kCameraOffset, sizeof st.cam},
+                               {base + hair_primary::kCrumbAddrOffset, hair_primary::kCrumbAddrOffset, 16},
+                               {base + hair_primary::kKeyMapOffset, hair_primary::kKeyMapOffset, sizeof st.key_map},
+                               {base + hair_primary::kSlotMaskOffset, hair_primary::kSlotMaskOffset, 4}};
+    if (st.cam_gpu) regions[1] = regions[4];   // rt_hair_header_cam_gpu: the builds wrote both cameras on the GPU
+    dd->vk.CmdCopyBuffer(cmd, g_hdr_slots.b, g_header.b, st.cam_gpu ? 4 : 5, regions);
   } else {
     uint8_t bytes[hair_primary::kHeaderBytes];
     std::memcpy(bytes, st.bytes, st.n);
     std::memcpy(bytes, &tag, 4);
     dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, st.n, bytes);
-    dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);   // both cameras
+    if (!st.cam_gpu)   // rt_hair_header_cam_gpu: the build wrote both cameras on the GPU
+      dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);   // both cameras
     const uint64_t a[2] = {g_crumbs.map ? uint64_t(g_crumbs.addr) : 0u, 0u};
     dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCrumbAddrOffset, sizeof a, a);
     dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kKeyMapOffset, sizeof st.key_map, st.key_map);
@@ -592,6 +657,7 @@ uint64_t image_identity(uint64_t image) {
 void observe_depth(uint64_t image, uint64_t now, uint64_t identity) {
   if (!g_load.observe(image, now, identity)) return;
   g_watchdog = hair_primary::Watchdog{};
+  g_draw_watchdog = hair_primary::DrawWatchdog{};
   g_gate.clear();
   g_coverage.clear(); g_last_swap_frame.clear();
   g_depth_safe_keys.clear();
@@ -762,11 +828,12 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_last_tag = 0;
   if (g_qp) dd->vk.DestroyQueryPool(dd->device, g_qp, nullptr);
   g_qp = VK_NULL_HANDLE;
-  for (HpBuf* b : {&g_header, &g_pixels, &g_crumbs, &g_hdr_slots}) {
+  for (HpBuf* b : {&g_header, &g_pixels, &g_crumbs, &g_hdr_slots, &g_cam_gpu}) {
     if (b->b) dd->vk.DestroyBuffer(dd->device, b->b, nullptr);
     if (b->m) dd->vk.FreeMemory(dd->device, b->m, nullptr);
     *b = HpBuf{};
   }
+  g_cam_gpu_pub = 0;
   g_dd = nullptr;
   g_startup_enabled = false;
   g_live = hair_live::Toggle{};
@@ -1103,8 +1170,22 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
   for (VkCommandBuffer cmd : cmds) {
     const uint64_t recording = cmd_recording(cmd);
     for (int i = 0; i < kStaged; ++i) {
-      const auto& st = g_staged[i];
-      if (st.pick.tag && st.pick.cmd == uint64_t(cmd) && st.recording == recording) recordings.headers[i] = recording;
+      auto& st = g_staged[i];
+      if (st.pick.tag && st.pick.cmd == uint64_t(cmd) && st.recording == recording) {
+        recordings.headers[i] = recording;
+        // Item 11 proof: the camera the build's xfb_to_world will read on the GPU (the UBO as it is now, after every host
+        // write before this submit) against the record-time read the header carries.
+        float now_cam[3];
+        if (!st.cam_checked && st.ubo && read_mapped(st.ubo, st.ubo_offset + 208, now_cam, sizeof now_cam)) {
+          st.cam_checked = true;
+          ++g_cam_check.checked;
+          const double dx = double(now_cam[0]) - st.cam[0], dy = double(now_cam[1]) - st.cam[1], dz = double(now_cam[2]) - st.cam[2];
+          if (std::memcmp(now_cam, st.cam, sizeof now_cam) != 0) {
+            ++g_cam_check.differ;
+            g_cam_check.max_m = (std::max)(g_cam_check.max_m, std::sqrt(dx * dx + dy * dy + dz * dz));
+          }
+        }
+      }
     }
   }
   // rt_hair_groom_primary_current: a G-buffer recording of this submit with a header slot. Its slot holds the
@@ -1472,7 +1553,8 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   const auto cover = g_coverage.why(key, now + 1);
   if (g_published + 2 < now + 1) refuse(Refusal::Publish);
   else if (g_load.quiet(now)) refuse(Refusal::Quiet);
-  else if (g_watchdog.active(now + 1)) refuse(Refusal::Watchdog);   // item 19: a counted frame lost its strands
+  else if (g_cfg_watchdog_draw ? g_draw_watchdog.active(key, now + 1) : g_watchdog.active(now + 1))
+    refuse(Refusal::Watchdog);   // item 19: a counted frame lost its strands (rt_hair_watchdog_draw: this draw did)
   else if (cover != hair_primary::CoverageGate::Why::Ok) refuse(hair_primary::coverage_refusal(cover));
   else if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
                                                                                          : g_gate.allow_prepass(key)))
@@ -1628,7 +1710,8 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (!dd) return;
   g_cfg_passes = cfg_int("rt_hair_primary_passes", 15);                   // the draw hook's keys (round 3 L5)
   g_cfg_cascade_drop = cfg_int("rt_hair_groom_cascade_drop", 0) != 0;
-  count = (std::min)(count, hair_primary::kMaxGrooms);
+  g_cfg_watchdog_draw = cfg_int("rt_hair_watchdog_draw", 0) != 0;
+  count =(std::min)(count, hair_primary::kMaxGrooms);
   const uint64_t now = frame_index();
   observe_depth(depth_image, now, identity);
   if (!count || !tlas || !width || !height || !viewport || viewport[2] == 0.0f || viewport[3] == 0.0f) {
@@ -1675,6 +1758,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   const bool cam_ok = rt_current_build_camera(st.cam, &build_frame);
   if (!cam_ok) ++g_drop.no_camera;
   else if (build_frame != now) ++g_drop.recovered;
+  if (cam_ok && !rt_current_build_ubo(&st.ubo, &st.ubo_offset)) st.ubo = VK_NULL_HANDLE;
   const uint64_t pub = cam_ok ? build_frame : now;
   h.tag = uint32_t(pub + 1);
   h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
@@ -1693,7 +1777,14 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (cam_ok && std::isfinite(st.cam[0]) && std::isfinite(st.cam[1]) && std::isfinite(st.cam[2]))
     h.flags |= hair_primary::kFlagCamera;
   // The rows' previous points are the last update's: the publish of the previous frame, with its build camera.
-  if (g_last_pub_camera_frame && g_last_pub_camera_frame + 1 == pub) {
+  const bool prev_cpu = g_last_pub_camera_frame && g_last_pub_camera_frame + 1 == pub;
+  // rt_hair_header_cam_gpu (item 11): both header cameras written on the GPU from the build's UBO; the previous one only
+  // when the previous publish's copy is in the GPU slot (that publish ran the copy, one frame back).
+  const bool prev_gpu = prev_cpu && g_cam_gpu_pub == pub;
+  st.cam_gpu = (h.flags & hair_primary::kFlagCamera) && cfg_int("rt_hair_header_cam_gpu", 0) != 0 && header_cam_gpu(cmd, prev_gpu);
+  g_cam_gpu_pub = st.cam_gpu ? pub + 1 : 0;
+  g_cam_check.gpu += st.cam_gpu;
+  if (prev_cpu && (!st.cam_gpu || prev_gpu)) {
     std::memcpy(st.cam + 4, g_last_pub_camera, sizeof g_last_pub_camera);
     h.flags |= hair_primary::kFlagPrevCamera;
   }
@@ -1730,7 +1821,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       return it == g_key_seen.end() || it->second + kKeyForgetFrames < now;
     };
     auto prune = [&](auto& map) { for (auto it = map.begin(); it != map.end();) it = unseen(it->first) ? map.erase(it) : std::next(it); };
-    prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame); prune(g_first_pub);
+    prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame); prune(g_first_pub); prune(g_draw_watchdog.keys);
     prune(g_coverage.latest); prune(g_coverage.incomplete); prune(g_coverage.swapping);
     for (auto it = g_key_seen.begin(); it != g_key_seen.end();) it = it->second + kKeyForgetFrames < now ? g_key_seen.erase(it) : std::next(it);
   }
@@ -1754,17 +1845,26 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_adjacent_total += g_adjacent_window;
     {
       const float* r = g_seen.ray;
-      log_stats("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
+      // The evidence window (tag - ev): all accepted strand pixels over all card pixels of that G-buffer frame (-1: none).
+      const uint32_t ev = g_seen.evidence_tag ? g_seen.tag - g_seen.evidence_tag : hair_primary::kCountTags;
+      // Traced/hit are the shared pixel entries: their trace covers only the slots that swapped (header slot mask). A
+      // frame whose draws were all refused (watchdog, coverage) draws masked probes that trace privately, unstored: then
+      // 0 entries hold a strand while the probes' accepted pixels below are near their card pixels (2026-11-09 rv3-s8).
+      log_stats("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a swapped draw's "
+          "strand (shared trace; probe draws trace privately: see accepted pixels); sampled ray: "
           "origin (%.4f %.4f %.4f), card distance %.3f, direction (%.4f %.4f %.4f), committed %.0f, hit distance %.3f, "
-          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f); counted with tag %u, header tag now %u; card pixels "
+          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f), header camera (%.3f %.3f %.3f); counted with tag %u, "
+          "header tag now %u; card pixels "
           "with tag %u/%u/%u/%u: %u/%u/%u/%u; accepted pixels: %u/%u/%u/%u, evidence from tag %u (G-buffer frame %llu: "
-          "same-pass unique pixel counts)",
+          "same-pass unique pixel counts), evidence strand share %.3f",
           (unsigned long long)g_seen.frame, g_seen.traced,
           g_seen.hit, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14],
+          r[12] - r[0], r[13] - r[1], r[14] - r[2],   // origin = camera - header camera (hp_rebase)
           g_seen.tag, g_last_tag, g_seen.tag, g_seen.tag - 1, g_seen.tag - 2, g_seen.tag - 3, g_seen.tag_totals[0],
           g_seen.tag_totals[1], g_seen.tag_totals[2], g_seen.tag_totals[3],
           g_seen.accepted_totals[0], g_seen.accepted_totals[1], g_seen.accepted_totals[2], g_seen.accepted_totals[3], g_seen.evidence_tag,
-          (unsigned long long)g_seen.evidence_frame);
+          (unsigned long long)g_seen.evidence_frame, ev < hair_primary::kCountTags && g_seen.tag_totals[ev] ?
+          double(g_seen.accepted_totals[ev]) / double(g_seen.tag_totals[ev]) : -1.0);
     }
     log_stats("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
         "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",
@@ -1824,11 +1924,18 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     }
     log_stats("[hair primary] header safety (last %u frames): header/BLAS mismatch frames %llu (record-time header older "
         "than a build ordered before its G-buffer), submit headers with card draws %llu (draw slots %llu), mask-hole pixels "
-        "%llu (strand traces that skipped a card-kept groom), watchdog trips %llu, C2 colour samples %llu",
+        "%llu (strand traces that skipped a card-kept groom), watchdog trips %llu, per-draw watchdog trips %llu (deciding: %s), "
+        "C2 colour samples %llu; build camera "
+        "re-read at submit (item 11): %llu publishes checked, %llu differ from the record-time read (max %.4f m), %llu "
+        "header cameras copied on the GPU",
         stats_period(300), (unsigned long long)g_header_mismatch, (unsigned long long)g_card_upgrades,
         (unsigned long long)g_card_slots, (unsigned long long)g_mask_holes, (unsigned long long)g_watchdog_period,
-        (unsigned long long)g_colour_samples);
+        (unsigned long long)g_draw_watchdog_period, g_cfg_watchdog_draw ? "per draw" : "frame",
+        (unsigned long long)g_colour_samples, (unsigned long long)g_cam_check.checked,
+        (unsigned long long)g_cam_check.differ, g_cam_check.max_m, (unsigned long long)g_cam_check.gpu);
     g_header_mismatch = g_card_upgrades = g_card_slots = g_mask_holes = g_watchdog_period = g_colour_samples = 0;
+    g_cam_check = CamCheck{};
+    g_draw_watchdog_period = 0;
     g_depth_orphan_count = 0;
   }
   if (stats_due(now) && (cfg_int("rt_hair_groom_shadow_t", 0) != 0 || cfg_int("rt_hair_groom_ao_t", 0) != 0)) {

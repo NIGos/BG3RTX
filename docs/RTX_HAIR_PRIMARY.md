@@ -565,8 +565,31 @@ still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per per
   7 rejected: the compacted copy leaves the previous TLAS on the old, unmodified BLAS (destroyed after kGroomFreeLag):
     consistent. 8 confirmed, low (one frame of motion vectors after a skipped update), not changed. 9 confirmed, low
     (rt_groom_links reads one word past a groom's start table for its last segment, inside the pool), not changed.
-    10 rejected for the main view (one header per frame, applied in the first G-buffer command buffer). 11 not changed
-    (CPU-read UBO camera vs GPU soup; no evidence of a mismatch).
+    10 rejected for the main view (one header per frame, applied in the first G-buffer command buffer). 11 reopened
+    2026-11-09 (branch claude/hair-header-cam), below.
+- Item 11, header camera vs groom points (2026-11-09, claude/hair-header-cam, READY_FOR_LIVE). Evidence (rv3-s8 220145,
+  turns): sampled strand origin 0 -> 94-98.5% accepted/card (8 of 8 counted frames); origin 2.6-15.5 cm -> 18-80% (7 of
+  7), although "this frame's publish" was applied in 291-299 of 300 frames (origin should be 0). The header camera is
+  a CPU read of the game's mapped camera UBO at record time (rtscene g_this_build_cam), the points the GPU's read of
+  the same UBO at execute time (xfb_to_world, Cam binding 0): a game write in between makes them disagree. The frame
+  watchdog (item 19) then held every hair draw on cards for 28 frames (0-23 trips and up to 2045 watchdog refusals
+  per 300 frames).
+  - Proof (always on): the header safety line counts publishes whose UBO, re-read at the vkQueueSubmit carrying the
+    build, differs from the record-time read, with the max distance; the sampled-ray line prints the header camera
+    (camera - origin) and the evidence strand share (accepted/card pixels of the judged frame).
+  - `rt_hair_header_cam_gpu` (live, off): the build's command buffer copies the UBO (geo_copy_camera) into a 256-byte
+    device slot, moves the slot's previous position to kPrevCameraOffset (only when the previous publish, one frame
+    back, ran the copy; else kFlagPrevCamera is off), then copies the new position to kCameraOffset; apply_header skips
+    the camera region. The builds rewrite the points in place, so the header camera is the last executed build's, as
+    the points are. No shader change. Cost: one 16-thread dispatch, two 12-byte copies, three barriers per publish.
+  - `rt_hair_watchdog_draw` (live, off): the watchdog judges each swapped draw against its own bound (the frame
+    watchdog's per-draw term; markerless draws by the same rule) and holds only that key, for kWatchdogFrames, after
+    kWatchdogDrawBad = 2 bad judged frames in a row (one header per G-buffer frame: one bad publish makes one bad
+    frame). CTest hair_groom_asset_test test_watchdog.
+  - The "with a strand" trace counter was right but misnamed: it counts shared pixel entries, traced only for the slots
+    that swapped; when every draw is refused, the probes trace privately and store nothing (0 while accepted is 95%+).
+  - Live job (staged, not queued): tools/live_batches_staged/hair_cam (S8 turns, off / cam / draw / both / off).
+    The user checks it at S8 or Test Dialogue1 by turning the camera: with the GPU camera the hair stays strands.
 - Fixtures: CTest hair_groom_asset_test test_upgrade_safe, test_frame_tags (two G-buffer frames on one publish: ambiguous and reused with
   publish tags, distinct with frame tags; the counter judges the previous frame), test_lod_keep.
 - Live check (Test Dialogue1 and the isometric view, one session, camera and characters moving, both keys on/off/on):
@@ -881,6 +904,34 @@ Fix (rt_hair_warmup, live, default 1 since 2026-11-09 after hw1: strands 309 -> 
   first load key on, F8 reload key off, F8 reload key on (A/B between the reloads of one run); gates in predicted.json.
   In game: load Test Dialogue1 with the knob on and watch the party's hair; strands should replace the cards within
   1-2 s of the scene appearing.
+
+## 5p. Static-camera strand flicker (offline 2026-11-09, branch claude/hair-static-flicker: no key)
+User: with a still camera the strands appear and disappear very fast. Not swapping: rv3 220145 static windows show
+rebase 0, strand draws 720/720, coverage 94-96%, no refusals. Code read (no defect found in the jitter chain):
+- Ray, depth and motion agree with the raster sample. The ray goes through `pos.xy` with the inverse of the jittered
+  `gCam.vp` (hair_primary_gbuffer.hlsl:238-245); the depth is the hit projected with the same matrix (:125-126, :374);
+  the strand motion vector removes both jitters with the native card formula (hair_primary_velocity.hlsl:141-142 =
+  :85-86) from the previous publish's points (:131-137). The groom soup is unprojected with the same frame's jittered
+  `_m2` (xfb_to_world.hlsl), so the jitter cancels in the geometry.
+- Most likely cause (a+b, structural): one jittered ray per pixel picks a binary strand/no-strand (or a different
+  strand) each frame. The 4-6% card pixels with no strand and every pixel near a card edge flip with the jitter: the
+  candidate region is the card raster at the jittered sample (:219, hp_on_card :348), so strands that leave the card
+  are lost and the card edge moves +-0.5 px per frame. Unbiased, but the RR input carries the Bernoulli variance
+  c (1 - c) per pixel (5d, 5n model).
+- Amplifiers (c): with rr_hair_guides=1 the RR normal guide is the per-strand fibre normal (5g), so a pixel's guides
+  change whenever the jitter picks another strand, which may cut RR's history; fg=3 interpolates two of three presented
+  frames between uncorrelated strand pixels. FG is Apply::Restart (no in-run A/B). (d) The one-frame trail
+  (hair_groom_update.hlsl:28) copies the points once per update: correct for one update per frame; low likelihood.
+- he1 never measured strands against cards in one run, so it could not separate (a) from (c).
+- Tool: tools/hair_groom/temporal_burst.py now prints the class-5 toggle rate, the flicker of stable vs toggling pixels,
+  the flicker of each burst half (its noise) and the RR attenuation (final / rr_color). CTest hair_groom_test
+  test_burst_coverage_split.
+- Live (STAGED, not queued): tools/live_batches_staged/hair_static (hs1-s8-static-hair, S8, ~85 s of phases, 3 bursts
+  ~1.7 GB): strands aa 0 / strands aa 2 / cards, static camera. Coverage if rr_color flicker strands/cards >= 1.5 with
+  the same RR attenuation; reconstruction if rr_color is close to the cards and only final differs (predicted.json).
+- Fix by outcome (owner of layer/hair_primary.cpp): coverage: a per-pixel analytic coverage word written by the strand
+  G-buffer pass (5n next step) and/or a conservative-raster candidate region in the strand G-buffer clone;
+  reconstruction: a stable RR normal guide on strand pixels (macro normal for the guide only, rr_guides.hlsl).
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is

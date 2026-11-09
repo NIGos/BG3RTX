@@ -1,0 +1,29 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch, release Ultra with fg=3 and the RTX Hair bundle (the user's set), camera lowered 10 notches and then static. Three 16-frame bursts with the RR inputs (pan_inputs=1): strands with rr_hair_strand_aa=0, strands with rr_hair_strand_aa=2, cards (rt_hair_groom_primary=0, live). Analysis: py -3 tools/hair_groom/temporal_burst.py <pan strands> <pan aa> <pan cards> --labels strands,aa,cards. rr_color = RR input (pre-RR, render size), final = RR output after the native tonemap (pre-FG: bursts are rendered frames). Noise of a flicker number = the spread of its two burst halves (flicker_halves); a ratio counts only outside that spread.",
+  "observable": "Is the static-camera strand flicker already in the pre-RR strand image (coverage) or only after reconstruction?",
+  "coverage (pre-RR)": {
+    "predicted": "strands: class-5 toggle rate 0.03-0.10 in the hair region (4-6% card pixels without a strand, moving with the jitter, plus card-edge pixels), rr_color flicker strands / cards >= 1.5, the toggling pixels' rr_color flicker >= 2x the stable pixels'",
+    "decides_coverage_if": "rr_color flicker strands / cards outside the half-burst spread and >= 1.5, and RR attenuation (final / rr_color) of strands within 0.8-1.25x that of cards: the reconstruction treats both alike, the strand input itself flickers",
+    "next_if_coverage": "stabilise the strand coverage before RR: a per-pixel analytic coverage word written in the strand G-buffer pass (5n next step) or the card candidate region widened (conservative raster of the strand clone, layer/hair_primary.cpp)"
+  },
+  "reconstruction": {
+    "decides_reconstruction_if": "rr_color flicker strands / cards < 1.5 (or within the half spread) while final flicker strands / cards >= 1.5: RR keeps less history on strands (per-frame guide changes: fibre normal, tangent, depth of a different strand under each jitter)",
+    "next_if_reconstruction": "stable RR guides on strands (rt_hair_macro_normal for the RR normal guide only), then the burst again"
+  },
+  "strand aa (rr_hair_strand_aa=2)": {
+    "predicted": "rr_color flicker within the half spread of strands (the resolve acts after the RR input dump only if the snapshot paired), final flicker 0-15% lower; no claim if the strand resolve line shows fallbacks",
+    "note": "secondary: judged not a pass twice (he1 03:38, 04:02)"
+  },
+  "energy": {
+    "predicted": "final mean in the hair region: aa within 1% of strands (rr_hair_strand_aa reconstruction rule); cards vs strands is a shading-model difference, reported only"
+  },
+  "invalid_if": [
+    "any burst without '[pan] burst <serial> complete: ... transport ok'",
+    "hair region < 2000 render px in any burst (no close-up: the lowered S8 view holds too little hair; rerun with more wheel notches, not a new tool)",
+    "the strand bursts' class-5 region differs from the cards burst's by > 30% (the view or the party moved)",
+    "no '[hair primary] frame N: RTX Hair off (live)' line after the cards switch"
+  ],
+  "fg": "frame_generation is Apply::Restart (common/settings.h): no in-run FG A/B. Bursts are rendered frames, so FG is outside every number here; if neither rr_color nor final flickers more on strands than on cards, the next run is fg=0 vs fg=3 on two launches (user decision).",
+  "cost": "report only: '[rrpost] gpu: render-res chain' ms in the strands, aa and cards settle windows",
+  "disk": "3 bursts x ~0.55 GB = ~1.7 GB (he1 burst size); deleted after temporal_burst.py, summaries kept"
+}

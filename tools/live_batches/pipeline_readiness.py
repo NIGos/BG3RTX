@@ -117,6 +117,9 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     # header choice, LOD and coverage policy, the existing cascade clone, the capture writer. No pipeline is selected.
     "rt_hair_groom_primary_current rt_hair_primary_frame_tag rt_hair_groom_lod_keep rt_hair_primary_hold "
     "rt_hair_tangent_world rt_hair_groom_cascade_drop rt_hair_capture rt_hair_warmup "
+    # 5i item 11: the per-draw watchdog policy, and the header camera copy with the layer's existing camera UBO copy
+    # (geocapture geo_ubo_copy, built once at its first use: a job exercises the key in a warm phase). No core pipeline.
+    "rt_hair_watchdog_draw rt_hair_header_cam_gpu "
     # Elastic capture reserve policy (common/rt_capture_budget.h CaptureHeadroom, read per frame in layer/geocapture.cpp).
     "rt_capture_rise_reserve rt_alpha_floor_yield "
     # Mesh cache budget accounting (common/rt_capture_budget.h mesh_cache_charged_as, read per build/present in
