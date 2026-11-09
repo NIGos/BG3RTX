@@ -505,6 +505,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_cascade_drop", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "M2.2: removes ribbon and double shadows under roofs. Compare the neck and shoulders under hair in Test Dialogue1, then the ground in Campsite."},
 
+  {"exp_hair_header_cam_gpu", "Strand hair: GPU build camera",
+   "Experimental: the strands' camera origin is copied on the GPU from the same camera data the strand points were built with, instead of a CPU read taken earlier. Removes strands flickering to cards while the camera turns. Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_header_cam_gpu", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_header_cam_gpu", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5i item 11: turn the camera in Test Dialogue1 or S8 while watching the hair: with On the strands should stay strands instead of flashing to cards."},
+
   {"exp_rr_hair_guides", "RR hair guides",
    "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -832,6 +839,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom_tips", "0"},
     {"rt_hair_groom_coverage", "0"},
     {"rt_hair_primary_frame_tag", "0"},
+    {"rt_hair_header_cam_gpu", "0"},
     {"rt_hair_groom_lod_keep", "0"},
     {"rt_hair_warmup", "1"},
     {"rt_hair_macro_normal", "0"},

@@ -1208,6 +1208,11 @@ bool rt_current_build_ubo(VkBuffer* ubo, VkDeviceSize* offset) {
   return true;
 }
 
+bool rt_copy_build_camera(VkCommandBuffer cmd, VkBuffer destination) {
+  if (!g_this_build_frame || !g_this_build_ubo) return false;
+  return geo_copy_camera(cmd, g_this_build_ubo, g_this_build_ubo_offset, destination, 0);
+}
+
 bool rt_build_camera(uint64_t frame, float pos[3]) {
   std::lock_guard<std::mutex> lock(g_mu);
   for (const CamHist& h : g_cam_hist)

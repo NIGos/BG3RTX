@@ -530,6 +530,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_cascade_drop": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_cascade_drop": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_header_cam_gpu", "label": "Strand hair: GPU build camera",
+     "description": "Experimental: the strands' camera origin is copied on the GPU from the same camera data the strand points were built with, instead of a CPU read taken earlier. Removes strands flickering to cards while the camera turns. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: the strands' camera origin is copied on the GPU from the same camera data the strand points were built with, instead of a CPU read taken earlier. Removes strands flickering to cards while the camera turns. Unqualified.",
+     "details": "5i item 11: turn the camera in Test Dialogue1 or S8 while watching the hair: with On the strands should stay strands instead of flashing to cards.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_header_cam_gpu": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_header_cam_gpu": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_rr_hair_guides", "label": "RR hair guides",
      "description": "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
