@@ -1006,6 +1006,10 @@ struct AlphaBindings {
 // returns that set (VK_NULL_HANDLE when alpha testing is off).
 VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& b, uint32_t slot);
 bool alpha_omm_commit(VkCommandBuffer cmd,uint32_t slot);
+// rt_scene_handout: the slot's scene TLAS addresses in its stamp (bytes 16 reference, 24 traversal); the downgrade
+// sets the traversal address to the reference one (true when it changed).
+void alpha_stamp_scene(uint32_t slot, uint64_t reference, uint64_t traversal);
+bool alpha_stamp_traversal_to_reference(uint32_t slot);
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).
 bool alpha_legacy_info(VkCommandBuffer cmd, uint32_t stride, VkBuffer* buf, VkDeviceSize* size);
 bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set);

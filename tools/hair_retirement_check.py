@@ -38,8 +38,9 @@ def retired_off(tool, src, dst):
 
 
 def shadow_off(tool, src, dst):
-    # Only C2 (1026), M4.3 (1030) and M2.3 (1044) are fixed; every other surviving specialization remains variable.
-    return defaults_off(tool, src, dst, (1026, 1030, 1044))
+    # Only C2 (1026), M4.3 (1030), M2.3 (1044) and the scene handout (1051, key off) are fixed; every other surviving
+    # specialization remains variable.
+    return defaults_off(tool, src, dst, (1026, 1030, 1044, 1051))
 
 
 def compare_retired(tool, baseline, current, tmp):
@@ -83,7 +84,7 @@ def retirement_fallback(rows, base, new, tool, cache, label):
                 with tempfile.TemporaryDirectory(prefix='b3-feature-retire-') as tmp:
                     log = compare_retired(tool, compiled[0][request], compiled[1][request], Path(tmp))
                 if not log:
-                    path = 'retirement/default equivalence (1001/1002/1005/1006/1016-1019/1021-1024=0 baseline; 1026/1030/1044=0 both)'
+                    path = 'retirement/default equivalence (1001/1002/1005/1006/1016-1019/1021-1024=0 baseline; 1026/1030/1044/1051=0 both)'
             print(f'{label}: {path}: {request}' + (f' ({state}: {log})' if path == 'failed' else ''), flush=True)
             proofs.append({'request': request, 'path': path, 'raw_state': state, 'error': log})
             progress.step(failed=path == 'failed')

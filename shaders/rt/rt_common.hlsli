@@ -135,6 +135,24 @@ static const float kOriginNoHit = 1000.0;
 #else
 [[vk::binding(9, 1)]] ByteAddressBuffer gSceneStamp;
 #endif
+// rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md 3.4, constant 1051): the scene TLAS by device address from this set's
+// stamp (layer/rtscene.cpp writes it at every scene commit): bytes 16 the reference TLAS, 24 the traversal TLAS (the OMM
+// accelerated one when the commit chose it, else the reference; downgraded by the host when a recording refuses it).
+// OMM variants trace the traversal word where they traced gScene, the others the reference word, as the core binds
+// gScene today. Address 0 (never written): gScene. Key off folds all of it away (the gScene trace only).
+[[vk::constant_id(1051)]] const uint kSceneHandout = 0u;
+[[vk::ext_instruction(/*OpConvertUToAccelerationStructureKHR*/ 4447)]]
+RaytracingAccelerationStructure rt_handout_scene(uint2 address);
+#ifdef RT_OMM_SCENE
+#define RT_HANDOUT_WORD 24u
+#else
+#define RT_HANDOUT_WORD 16u
+#endif
+// One scene trace: a statement (if/else), so a call site wraps it in braces when it is itself an if arm.
+#define RT_TRACE_SCENE(q, flags, mask, ray) \
+  if (kSceneHandout != 0u && any(gSceneStamp.Load2(RT_HANDOUT_WORD) != 0u)) \
+    q.TraceRayInline(rt_handout_scene(gSceneStamp.Load2(RT_HANDOUT_WORD)), flags, mask, ray); \
+  else q.TraceRayInline(gScene, flags, mask, ray)
 #ifdef RT_OMM_SCENE
 #include "omm_scene_guard.hlsli"
 // The traced bodies of rt_visibility / rt_closest_hit; in OMM variants a wrapper of the
@@ -1160,11 +1178,10 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
-  if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_VIS_QUERY_FLAGS, RT_VIS_MASK, r);
+  if (rt_omm_use_accelerated()) { RT_TRACE_SCENE(q, RT_VIS_QUERY_FLAGS, RT_VIS_MASK, r); }
   else q.TraceRayInline(gOmmReferenceScene, RT_VIS_QUERY_FLAGS, RT_VIS_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_VIS_QUERY_FLAGS, RT_VIS_MASK, r);
+  RT_TRACE_SCENE(q, RT_VIS_QUERY_FLAGS, RT_VIS_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
@@ -1336,11 +1353,10 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
-  if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  if (rt_omm_use_accelerated()) { RT_TRACE_SCENE(q, RT_QUERY_FLAGS, RT_HIT_MASK, r); }
   else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  RT_TRACE_SCENE(q, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   float near_t = 1e30;
   const uint cap = rt_max_candidates();
@@ -1506,11 +1522,10 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   r.TMin = 0.0;
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
-  if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  if (rt_omm_use_accelerated()) { RT_TRACE_SCENE(q, RT_QUERY_FLAGS, RT_HIT_MASK, r); }
   else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  RT_TRACE_SCENE(q, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
@@ -1897,11 +1912,10 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   r.TMin = 0.0;
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
-  if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  if (rt_omm_use_accelerated()) { RT_TRACE_SCENE(q, RT_QUERY_FLAGS, RT_HIT_MASK, r); }
   else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  RT_TRACE_SCENE(q, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;

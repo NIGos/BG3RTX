@@ -1582,6 +1582,26 @@ bool rt_alpha_set(VkDescriptorSetLayout* layout, VkDescriptorSet* set) {
 
 // Called after alpha_commit releases its mutex: BVH capture uses the opposite
 // BVH -> alpha lock order. The retired SceneSlot gives exclusive stamp ownership.
+// rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md 3, shaders/rt/rt_common.hlsli RT_TRACE_SCENE): the scene TLAS
+// addresses in the slot's stamp, bytes 16 (reference) and 24 (traversal). Host writes into the mapped, coherent stamp:
+// at the commit the slot is retired (no pass reads it); a later downgrade only ever replaces the traversal address by
+// the reference one, which every reader may trace (no micro-map tickets needed).
+void alpha_stamp_scene(uint32_t slot, uint64_t reference, uint64_t traversal) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_stamp_map || slot >= kRing) return;
+  uint32_t* w = g_stamp_map + VkDeviceSize(slot) * kStampStride / 4;
+  w[4] = uint32_t(reference); w[5] = uint32_t(reference >> 32);
+  w[6] = uint32_t(traversal); w[7] = uint32_t(traversal >> 32);
+}
+bool alpha_stamp_traversal_to_reference(uint32_t slot) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_stamp_map || slot >= kRing) return false;
+  uint32_t* w = g_stamp_map + VkDeviceSize(slot) * kStampStride / 4;
+  if (w[6] == w[4] && w[7] == w[5]) return false;
+  w[6] = w[4]; w[7] = w[5];
+  return true;
+}
+
 bool alpha_omm_commit(VkCommandBuffer cmd,uint32_t slot){
   VkBuffer stamp{};const uint32_t* mapped{};uint32_t generation{};
   {

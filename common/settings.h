@@ -940,6 +940,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_order_trace", "0"},
     {"rt_scene_wait", "1"},
     {"rt_scene_handout_layout", "0"},
+    {"rt_scene_handout", "0"},
     {"cpu_timing", "0"},
     {"perf_submit_batch", "0"},
     {"rt_alpha_stream", "1"},
