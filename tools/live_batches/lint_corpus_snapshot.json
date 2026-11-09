@@ -79297,6 +79297,14 @@
     "\\[pan\\] burst 99302 complete: \\d+ frames, \\d+ samples, transport ok": [
       0,
       null
+    ],
+    "\\[hair primary\\] header safety \\(last \\d+ frames\\).*frame watchdog spared to one key \\d+ \\(rt_hair_watchdog_one_key [01]\\)": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] frame \\d+: \\d+ groom instances; last \\d+ frames.*shared-key rows withheld \\d+ \\(rt_hair_shared_key\\)": [
+      0,
+      null
     ]
   }
 }
