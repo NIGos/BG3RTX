@@ -752,7 +752,16 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   writes (coverage, strand pixel, footprint) into a frame-parity RGBA16F image; strand_resolve reads only that image.
   Line `[rrpost] strand snapshots (rr_hair_strand_aa=N): S at the lighting pass, R refused`. Bursts now full
   (pan_inputs=1) so temporal_burst.py has the RR inputs.
-
+- he1 #3 (02:30, ad849740) froze the game in warm-all at frame 1095: GPU presents done to 1094, one present fence
+  pending, no device fault (vkGetDeviceFaultInfoEXT -13), no TDR event in Windows over 941 s: the GPU waited, it was
+  not hung. Cause (code): a lock-order inversion. ngx.cpp Detour_Eval holds ngx's g_mu and calls rrpost_take, which
+  locks rrpost's g_mu; the snapshot (at the lighting dispatch, recorded on another game thread) held rrpost's g_mu and
+  called ngx_gbuffer_camera, which locks ngx's g_mu. Two recording threads deadlocked, the evaluate's command buffer was
+  never submitted, the present waited on it. The resolve path had the same call, but it records on the evaluate's
+  thread (no hang in he1 #1/#2). Fixed: the camera is read before rrpost's lock; the resolve no longer reads it (the
+  snapshot holds everything); CTest test_strand_edge checks that no ngx call sits under rrpost's lock. Shader review:
+  every loop has a constant bound, the groom count is clamped to kMaxGrooms (key map and table reads inside the header),
+  record and pool reads stay behind the existing bound checks. No synchronization-validation fixture was run.
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

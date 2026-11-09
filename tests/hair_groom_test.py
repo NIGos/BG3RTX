@@ -846,8 +846,15 @@ def test_strand_edge():
     layer = (ROOT / "layer/rrpost.cpp").read_text(encoding="utf-8")
     check("strand edge: the shader's estimator is sum of c / P over the 3 x 3 found strands, the layer dispatches it by key",
           "cov += hp_box_coverage(d, w, n2) * along / max(pf, 1e-3);" in src and 'cfg_int("rr_hair_strand_aa", 0)' in layer
-          and '"strand_snapshot") == 0) return "rr_strand_aa.hlsl";' in layer and 'strand_snapshot(dd, cmd);' in layer
+          and '"strand_snapshot") == 0) return "rr_strand_aa.hlsl";' in layer and 'strand_snapshot(dd, cmd, cam);' in layer
           and 'void strand_snapshot(uint3 id : SV_DispatchThreadID)' in src)
+    # he1 2026-11-09 02:31 hang: lock-order inversion. ngx Detour_Eval holds ngx's g_mu and calls rrpost_take (rrpost's
+    # g_mu); rrpost code under its g_mu must not call ngx (ngx_gbuffer_camera locks ngx's g_mu).
+    body = lambda name: layer[layer.index(name):layer.index("\n}\n", layer.index(name))]
+    pre = body("void rrpost_dispatch_pre(")
+    check("strand edge: no ngx call under rrpost's lock (snapshot and resolve), the camera is read before the lock",
+          "ngx_" not in body("void strand_snapshot(") and "ngx_" not in body("bool strand_resolve(")
+          and pre.index("ngx_gbuffer_camera(") < pre.index("std::lock_guard<std::mutex> lock(g_mu);"))
 
 def test_coverage():
     """M3.2 (rt_hair_groom_coverage): the pair's twins and its offline gate against the supersampled area coverage."""
