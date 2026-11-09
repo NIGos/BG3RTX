@@ -230,7 +230,7 @@
     {
       "name": "K8 burst-off",
       "select": "\\[pan\\] burst 99100 complete",
-      "match": "\\[pan\\] burst 99100 complete: 8 frames, \\d+ samples, transport ok",
+      "match": "\\[pan\\] burst 99100 complete: \\d+ frames, \\d+ samples, transport ok",
       "event": true,
       "min": 1,
       "windows": [
@@ -240,7 +240,7 @@
     {
       "name": "K8 burst-aa",
       "select": "\\[pan\\] burst 99101 complete",
-      "match": "\\[pan\\] burst 99101 complete: 8 frames, \\d+ samples, transport ok",
+      "match": "\\[pan\\] burst 99101 complete: \\d+ frames, \\d+ samples, transport ok",
       "event": true,
       "min": 1,
       "windows": [

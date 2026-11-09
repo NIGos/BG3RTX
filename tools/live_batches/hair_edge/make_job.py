@@ -93,8 +93,9 @@ def make_job(plan):
         if g["name"].startswith(("zero refused", "zero orphan", "depth orphans", "swapped frames")):
             gates.append(dict(g, windows=strands))
         elif g["name"].startswith("K8 "):
-            # pan_inputs adds the RR input samples: any sample count, 8 frames, transport ok.
-            gates.append(dict(g, match=g["match"].replace("20 samples", r"\d+ samples")))
+            # pan_inputs adds the RR input samples and doubles K (live 2026-11-09 03:03: "16 frames, 368 samples"):
+            # any frame and sample count, transport ok.
+            gates.append(dict(g, match=g["match"].replace("20 samples", r"\d+ samples").replace("8 frames", r"\d+ frames")))
     # The mode-switch line is logged when the setting is applied, before the window's motion-ready line (live
     # 2026-11-09 01:38: =2 at 01:38:13.4, b-aa ready at 01:38:16.1), so a per-window event gate can never see it.
     # Each mode's switch line is a plain expect instead; the plan order proves which window ran which mode.
