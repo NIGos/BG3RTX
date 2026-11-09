@@ -457,6 +457,7 @@ struct Mesh {
 uint64_t g_mesh_gen = 0;
 std::unordered_map<uint64_t, Mesh> g_meshes;
 std::unordered_map<VkBuffer, std::vector<uint64_t>> g_buf_meshes;
+bool g_budget_declined = false;   // a build declined a new mesh for rt_mesh_budget_mb since the last LRU pass
 // Static instance ranges retain baseline order and InstInfo. The accelerated
 // scene replaces only these ranges' BLAS addresses after copying late matrices.
 struct OmmInstanceRange {
@@ -764,6 +765,7 @@ struct Stats {
   uint64_t lost_magic = 0, lost_timeout = 0, lost_logged = 0;
   uint64_t evict_destroy = 0, evict_write = 0, evict_lru = 0, compactions = 0, compact_saved = 0;
   uint64_t dyn_refit = 0, dyn_rebuild = 0, dyn_new = 0, budget_deferred = 0, tlas_refit = 0;
+  uint64_t budget_declined = 0;   // of budget_deferred: refused by mesh_cache_admit (rt_mesh_budget_mb), per draw and build
   uint64_t hold_pack_jobs = 0, hold_pack_bytes = 0, hold_copy_jobs = 0, hold_copy_bytes = 0, hold_pack_unavailable = 0;
   uint64_t not_inst_pattern = 0, not_inst_stream = 0, not_inst_count = 0;
   uint64_t fix_applied = 0, fix_late = 0, fix_bad = 0, fix_stale = 0;
@@ -2359,6 +2361,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
   }
   const VkDeviceSize cache_budget = VkDeviceSize((std::max)(cfg_int("rt_mesh_budget_mb",2048),64)) << 20;
+  // rt_mesh_budget_own (common/rt_capture_budget.h mesh_cache_charged_as): charge only the cached meshes' BLAS.
+  const bool budget_own = cfg_int("rt_mesh_budget_own", 0) != 0;
+  VkDeviceSize cached_as = 0;
+  if (budget_own && native_pool)
+    for (const auto& [k, m] : g_meshes) cached_as += m.as.size;
 
   bvh_cpu_mark(0);
   // ---- 1. decide: new meshes, checks, per-draw BLAS, instances ----
@@ -2410,9 +2417,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // Old LRU policy reacted only after all uploads: one load could allocate
       // millions of wide vertices while evicted ranges still awaited GPU use.
       // A declined extraction keeps this draw's captured dynamic BLAS path.
-      if (native_pool && !capture_budget::mesh_cache_admit(g_pool_ra.used,as_bytes(),
+      if (native_pool && !capture_budget::mesh_cache_admit(g_pool_ra.used,
+              capture_budget::mesh_cache_charged_as(as_bytes(), cached_as, budget_own),
               m.pool_size,sz.accelerationStructureSize,cache_budget)) {
         ++g_st.budget_deferred;
+        ++g_st.budget_declined;
+        g_budget_declined = true;
         continue;
       }
       if (!pool_alloc(cmd, m.pool_size, &m.pool_off)) continue;
@@ -2420,6 +2430,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         g_pending_free.push_back({now, -1, m.pool_off, m.pool_size});
         continue;
       }
+      cached_as += m.as.size;
       m.ranges = fd.ranges;
       m.geo_key = fd.geo_key;
       for (const Range& r : m.ranges) g_buf_meshes[r.b].push_back(fd.mesh_key);
@@ -4504,19 +4515,29 @@ void bvh_on_present() {
     }
   }
   const VkDeviceSize budget = VkDeviceSize((std::max)(cfg_int("rt_mesh_budget_mb", 2048), 64)) << 20;
-  const VkDeviceSize used = as_bytes() + g_pool_ra.used;
+  // rt_mesh_budget_own (common/rt_capture_budget.h mesh_cache_charged_as): 0 charges every BLAS chunk byte.
+  const bool budget_own = cfg_int("rt_mesh_budget_own", 0) != 0;
+  VkDeviceSize cached_as = 0;
+  if (budget_own)
+    for (const auto& [k, m] : g_meshes) cached_as += m.as.size;
+  const VkDeviceSize used = capture_budget::mesh_cache_charged_as(as_bytes(), cached_as, budget_own) + g_pool_ra.used;
   const uint64_t lru_frames = uint64_t((std::max)(cfg_int("rt_mesh_lru_frames", 36000), 600));
-  if (used > budget || (now % 600) == 0) {
+  const bool lru_due = capture_budget::mesh_cache_lru_due(used, budget, g_budget_declined, budget_own, now);
+  g_budget_declined = false;
+  if (lru_due) {
     std::vector<std::pair<uint64_t, uint64_t>> old;   // last used, key
     for (auto& [k, m] : g_meshes)
       if (m.last_used + 8 < now) old.push_back({m.last_used, k});
     std::sort(old.begin(), old.end());
-    VkDeviceSize cur = used;
+    std::vector<capture_budget::LruMesh> plan;
+    plan.reserve(old.size());
     for (auto& [lu, k] : old) {
-      if (cur <= budget * 9 / 10 && lu + lru_frames > now) break;
       const Mesh& m = g_meshes[k];
-      cur -= (std::min)(cur, m.as.size + m.pool_size);
-      evict(k);
+      plan.push_back({lu, m.as.size + m.pool_size});
+    }
+    const size_t n_evict = capture_budget::mesh_cache_lru_count(plan, used, budget, lru_frames, now);
+    for (size_t i = 0; i < n_evict; ++i) {
+      evict(old[i].second);
       ++g_st.evict_lru;
     }
   }
@@ -4568,9 +4589,11 @@ void bvh_on_present() {
   }
   const double nb = double(s.builds);
   uint64_t mesh_tris = 0, ready = 0;
+  VkDeviceSize mesh_as = 0;
   for (auto& [k, m] : g_meshes) {
     mesh_tris += m.tris;
     ready += m.state == kReady;
+    mesh_as += m.as.size;
   }
   log_stats("[bvh] last %llu builds, per build: %.1f cached draws -> %.0f static instances (%.3fM triangles), %.1f captured "
       "draws (%.3fM triangles; per-draw BLAS: %.1f refits, %.1f rebuilds, %.2f new); TLAS refit %.0f%%; not instanceable per build: "
@@ -4592,7 +4615,8 @@ void bvh_on_present() {
       "%llu audits ok, rejected %llu/%llu/%llu (%s/%s/%s), %llu results lost (%llu timed out), max accepted error %.3f x tolerance; "
       "evicted %llu destroyed, %llu written, %llu LRU; %llu compactions (-%.1f MB); "
       "chunks reserved/live/pending %.1f/%.1f/%.1f MB, freed %llu (%.1f MB), relocated %llu (%.1f MB); "
-      "pool repacks %llu (-%.1f MB)",
+      "pool repacks %llu (-%.1f MB); budget (rt_mesh_budget_own=%d): charged %.1f / %.0f MB (pool %.1f, "
+      "cached-mesh BLAS %.1f, other BLAS %.1f), %llu draws declined",
       g_meshes.size(), size_t(ready), double(mesh_tris) * 1e-6, double(g_pool_ra.used) / 1048576.0,
       double(g_pool.size) / 1048576.0, double(as_bytes()) / 1048576.0, chunks, (unsigned long long)s.new_meshes,
       s.new_tris * 1e-6, (unsigned long long)s.budget_deferred, (unsigned long long)s.ready,
@@ -4604,7 +4628,12 @@ void bvh_on_present() {
       double(live) / 1048576.0, double(as_bytes() - live) / 1048576.0,
       (unsigned long long)g_chunks_freed, double(g_chunk_bytes_freed) / 1048576.0,
       (unsigned long long)g_relocated, double(g_relocated_bytes) / 1048576.0,
-      (unsigned long long)g_pool_repacks, double(g_pool_saved) / 1048576.0);
+      (unsigned long long)g_pool_repacks, double(g_pool_saved) / 1048576.0,
+      int(budget_own),
+      double(capture_budget::mesh_cache_charged_as(as_bytes(), mesh_as, budget_own) + g_pool_ra.used) / 1048576.0,
+      double(budget) / 1048576.0, double(g_pool_ra.used) / 1048576.0,
+      double(mesh_as) / 1048576.0, double(as_bytes() - (std::min)(as_bytes(), mesh_as)) / 1048576.0,
+      (unsigned long long)s.budget_declined);
   g_chunks_freed = g_chunk_bytes_freed = 0;
   log_stats("[bvh] instance matrices read at submit: %llu, non-finite/singular %llu; draws whose instance data changed "
       "between record and submit %llu; recorded but never submitted %llu",

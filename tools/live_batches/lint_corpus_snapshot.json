@@ -78499,6 +78499,21 @@
     "\\[cascade\\] wide-stride casters \\(rt_capture_wide_split\\):": [
       0,
       null
+    ],
+    "\\[bvh\\] last \\d+ builds, per build:": [
+      329,
+      [
+        "he1-dialogue1-edge.1.125642.log",
+        "frozen VALID match"
+      ]
+    ],
+    "\\[bvh\\] mesh cache: .*budget \\(rt_mesh_budget_own=1\\): charged": [
+      0,
+      null
+    ],
+    "\\[bvh\\] allocation failed": [
+      0,
+      null
     ]
   }
 }

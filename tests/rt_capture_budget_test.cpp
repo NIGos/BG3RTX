@@ -4,11 +4,105 @@
 #include <cstdlib>
 #include <limits>
 #include <utility>
+#include <vector>
 using namespace bg3::capture_budget;
 static unsigned checks;
 static void check(bool ok){++checks;if(!ok){std::fprintf(stderr,"capture budget check %u failed\n",checks);std::exit(1);}}
 static uint64_t upper(double mb){return uint64_t(std::ceil(mb*double(mib)));}
+
+// rt_mesh_budget_own: a turning view over a ring of static instanceable meshes, plus per-draw BLAS of the
+// non-instanceable (pattern) draws and the pool's other users. Sizes from rv2 (2026-11-09 14:58:21, S8 zoomed
+// out): 241 new meshes held 0.86M triangles (about 3600 each); pool vertices 64 B (192 B per triangle);
+// 4.0M captured triangles held 1.1-2.9 GB of non-mesh BLAS (about 400 B per triangle with pending ranges),
+// 2.0M of them pattern (800 MB); 844 MB pool with 55 meshes (about 700 MB holds, bounds and bases).
+// Compacted mesh BLAS about 80 B per triangle. The layer's order per build: admission against the charged
+// bytes, then the LRU pass when due (meshes drawn in the last 8 builds are never evicted).
+struct TurnResult{double visible_cached;uint64_t admitted_late,max_charged_after_lru;};
+static TurnResult turn_model(bool own,uint32_t ring){
+ const uint64_t budget=2048*mib,pool_other=700*mib,pattern_as=800*mib,tris=3600;
+ const uint64_t mesh_pool=tris*3*64,mesh_as=tris*80,dyn_as=tris*400;
+ const uint32_t view=600,step=10,builds=ring/step*4;   // four laps; the last two are measured
+ std::vector<int64_t> last(ring,-1);   // -1: not cached
+ uint64_t dyn_prev=0,admitted_late=0,max_charged=0,cached_seen=0,seen=0;
+ for(uint32_t b=0;b<builds;++b){
+  const uint64_t now=b+1000;
+  uint64_t pool=pool_other,cached_as=0;
+  for(uint32_t i=0;i<ring;++i)if(last[i]>=0){pool+=mesh_pool;cached_as+=mesh_as;}
+  uint64_t all_as=pattern_as+cached_as+dyn_prev,dyn=0;
+  const bool late=b>=builds/2;
+  bool declined=false;
+  for(uint32_t v=0;v<view;++v){
+   const uint32_t i=(b*step+v)%ring;
+   if(last[i]>=0)last[i]=int64_t(now);
+   else if(mesh_cache_admit(pool,mesh_cache_charged_as(all_as,cached_as,own),mesh_pool,mesh_as,budget)){
+    last[i]=int64_t(now);pool+=mesh_pool;cached_as+=mesh_as;all_as+=mesh_as;admitted_late+=late;
+   }else{dyn+=dyn_as;declined=true;}
+   if(late){++seen;cached_seen+=last[i]>=0;}   // cached (or admitted) in this build, else captured
+  }
+  dyn_prev=dyn;
+  all_as=pattern_as+cached_as+dyn;
+  const uint64_t used=mesh_cache_charged_as(all_as,cached_as,own)+pool;
+  if(mesh_cache_lru_due(used,budget,declined,own,now)){
+   std::vector<std::pair<int64_t,uint32_t>> old;
+   for(uint32_t i=0;i<ring;++i)if(last[i]>=0 && uint64_t(last[i])+8<now)old.push_back({last[i],i});
+   std::sort(old.begin(),old.end());
+   std::vector<LruMesh> plan;
+   for(auto& o:old)plan.push_back({uint64_t(o.first),mesh_pool+mesh_as});
+   const size_t n=mesh_cache_lru_count(plan,used,budget,36000,now);
+   for(size_t k=0;k<n;++k){last[old[k].second]=-1;pool-=mesh_pool;cached_as-=mesh_as;all_as-=mesh_as;}
+  }
+  if(late)max_charged=(std::max)(max_charged,mesh_cache_charged_as(all_as,cached_as,own)+pool);
+ }
+ return {double(cached_seen)/double(seen),admitted_late,max_charged};
+}
+
 int main(){
+ // rt_mesh_budget_own off: every BLAS byte, as before; on: the cached meshes' own BLAS (never above the total).
+ check(mesh_cache_charged_as(1677*mib,9*mib,false)==1677*mib);
+ check(mesh_cache_charged_as(1677*mib,9*mib,true)==9*mib);
+ check(mesh_cache_charged_as(5*mib,9*mib,true)==5*mib);
+ // rv2 14:58:21: pool 844 MB, all BLAS 1677 MB, 55 meshes: a 3600-triangle mesh (0.66 MB pool, 0.27 MB BLAS) was
+ // declined; charged by its own BLAS (about 55 x 0.3 MB) it fits. The pool hard cap still refuses at 2047 MB.
+ check(!mesh_cache_admit(upper(844.2),mesh_cache_charged_as(upper(1677.3),17*mib,false),3600*192,3600*80,2048*mib));
+ check(mesh_cache_admit(upper(844.2),mesh_cache_charged_as(upper(1677.3),17*mib,true),3600*192,3600*80,2048*mib));
+ check(!mesh_cache_admit(kMeshPoolHardCap,mesh_cache_charged_as(upper(1677.3),0,true),1,0,UINT64_MAX));
+ check(!mesh_cache_admit(2000*mib,mesh_cache_charged_as(upper(1677.3),40*mib,true),9*mib,1,2048*mib));
+ // The pass runs above the budget and every 600 frames as before; on, also after a decline at the budget.
+ check(mesh_cache_lru_due(2049*mib,2048*mib,false,false,1001) && mesh_cache_lru_due(0,2048*mib,false,false,1200));
+ check(!mesh_cache_lru_due(2047*mib,2048*mib,true,false,1001) && mesh_cache_lru_due(2047*mib,2048*mib,true,true,1001));
+ check(!mesh_cache_lru_due(2047*mib,2048*mib,false,true,1001));
+ // The LRU plan equals the old in-place loop for every charged level (key-off identity).
+ {
+  std::vector<LruMesh> old;
+  for(uint64_t i=0;i<40;++i)old.push_back({100+i*37,(1+i%7)*mib});
+  for(uint64_t used=0;used<=3000*mib;used+=7*mib)
+   for(uint64_t now:{uint64_t(1000),uint64_t(1700),uint64_t(40000)}){
+    size_t n=0;uint64_t cur=used;
+    for(const LruMesh& m:old){if(cur<=2048*mib*9/10 && m.last_used+600>now)break;cur-=(std::min)(cur,m.bytes);++n;}
+    check(mesh_cache_lru_count(old,used,2048*mib,600,now)==n);
+   }
+  // rv2 14:58:21 off: 2521 MB charged, 55 meshes of about 1 MB cannot bring it to 1843 MB: all old ones go.
+  std::vector<LruMesh> s8(55,LruMesh{900,mib});
+  check(mesh_cache_lru_count(s8,upper(844.2)+upper(1677.3),2048*mib,36000,1000)==55);
+  check(mesh_cache_lru_count(s8,upper(844.2)+55*mib,2048*mib,36000,1000)==0);
+ }
+ // Turning view: off, the per-draw BLAS of the declined draws keep the cache over budget (most visible static
+ // draws stay captured, re-admitted and evicted again); on, every visible mesh stays cached, a ring that fits
+ // is admitted once (0 admissions in laps 3-4), a larger ring evicts only meshes out of view, and the charged
+ // bytes after each LRU pass stay within the budget.
+ {
+  const TurnResult off=turn_model(false,1200),on=turn_model(true,1200),big=turn_model(true,2400);
+  std::printf("turn model: visible cached off %.4f / on %.4f / on, 2x ring %.4f; admissions in laps 3-4 off %llu / on %llu"
+              " / on, 2x ring %llu; max charged on %.0f MB, 2x ring %.0f MB\n",off.visible_cached,on.visible_cached,
+              big.visible_cached,(unsigned long long)off.admitted_late,(unsigned long long)on.admitted_late,
+              (unsigned long long)big.admitted_late,double(on.max_charged_after_lru)/double(mib),
+              double(big.max_charged_after_lru)/double(mib));
+  check(off.visible_cached<0.5);
+  check(on.visible_cached==1.0 && on.admitted_late==0 && on.max_charged_after_lru<=2048*mib);
+  // A decline at the budget leaves at most that build's new edge (10 of 600 meshes) captured; the pass it triggers
+  // frees 10% of the budget (about 220 meshes), so declines are rarer than one build in 20.
+  check(big.visible_cached>=1.0-10.0/600.0/20.0 && big.max_charged_after_lru<=2048*mib);
+ }
  // hq4 load: native 88-byte cache admission must account for BLAS and
  // pending pool ownership before uploads; optional refusal retains capture.
  check(mesh_cache_admit(819*mib,465*mib,500*mib,200*mib,2048*mib));

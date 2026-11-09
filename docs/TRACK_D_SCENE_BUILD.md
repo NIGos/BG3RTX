@@ -615,6 +615,7 @@ draw's identity (pipeline, binding 0, index range, n-th occurrence in the frame)
   when a transfer writes its index or vertex range (`vkCmdCopyBuffer(2)`,
   `vkCmdUpdateBuffer`, `vkCmdFillBuffer` hooks).
 - It is also evicted by LRU over `rt_mesh_budget_mb` and after `rt_mesh_lru_frames` unused.
+  What the budget charges: see "Mesh cache budget accounting" (`rt_mesh_budget_own`, 2026-11-09) below.
 - A periodic **audit** catches any rewrite the hooks cannot see (host writes to mapped
   vertex memory). Up to `rt_mesh_audits` cached draws per frame, each mesh at most every
   `rt_mesh_audit_frames`, are captured once more and compared. A failure evicts the mesh
@@ -768,7 +769,7 @@ Settings (`bg3rtx.ini`, all live):
 - `rt_bvh_split`; `rt_tlas_refit`; `rt_rebuild_frames`, which now paces the per-draw BLAS
   and the TLAS;
 - `rt_mesh_compact`, `rt_mesh_compact_per_frame`, `rt_mesh_new_tris`;
-- `rt_mesh_pool_mb`, `rt_mesh_pool_max_mb`, `rt_mesh_chunk_mb`, `rt_mesh_budget_mb`,
+- `rt_mesh_pool_mb`, `rt_mesh_pool_max_mb`, `rt_mesh_chunk_mb`, `rt_mesh_budget_mb`, `rt_mesh_budget_own`,
   `rt_mesh_lru_frames`;
 - `rt_mesh_audits`, `rt_mesh_audit_frames`, `rt_mesh_tol_abs`, `rt_mesh_tol_rel`.
 
@@ -1158,6 +1159,42 @@ and dropped 1-8 opaque draws per frame.
   `made opaque (region full) 0.00`, stride split `left out ... 0.00`, cascade `buffer full 0.0`; compare
   the opaque peak with rv1's key-off 1613 MB. In game: hair cards and strands as before, no missing
   characters or props in RT shadows/GI of the zoomed-out S8 view.
+
+### Mesh cache budget accounting (2026-11-09, claude/mesh-cache-rate, READY_FOR_LIVE)
+
+`rt_mesh_budget_own` (live, default 0; common/rt_capture_budget.h `mesh_cache_charged_as`, `mesh_cache_lru_due`,
+`mesh_cache_lru_count`). Why so much static geometry stayed on the per-draw path in the zoomed-out S8 turns
+(rv2-s8-capture-stride.1.145525, main 0b45b0c8; rv1 key-off baseline shows the same):
+- `rt_mesh_budget_mb` (2048) charged the whole mesh pool plus `as_bytes()`, every byte of the shared BLAS chunks:
+  per-draw, cascade, sun and groom BLAS and pending ranges, not only the cache's. In the turns pool + all BLAS was
+  2.5-3.8 GB (14:58:21: 844 + 1677 MB). Over the budget, the native-layout admission of 2026-11-03 declined every
+  new mesh (logged as "deferred by the per-build budget": 30k-49k per line, about 250 draws per build, i.e. every
+  instanceable captured draw), and the LRU evicted every mesh not drawn in the last 8 frames each frame: its 90%
+  target cannot be reached by evicting meshes while the other bytes alone exceed it. 28-60 meshes stayed resident,
+  300-700 LRU evictions and 200-650 re-extractions per 120 builds. Declined draws keep uncompacted per-draw BLAS,
+  which keeps the total over the budget: a loop broken only by a quiet view (then the cache refills to 2.7-3.5M
+  triangles and sits at 2044-2048 MB).
+- Not limiting: `rt_mesh_new_tris` (4M per build, 1024 meshes), verification (241-646 verified per line, 0 instance
+  or audit mismatches), the pool (2047 MB capacity, 528-1463 MB used; one "pool full" per run at a load burst).
+- The "pattern" rule (VS not class A: skinned, wind/cloth, UBO-offset variants; 11.2, 11.5) is by design: 359 of 610
+  captured draws per build. In steady windows captured draws equal pattern draws (381 vs 385, 1.7-2.2M triangles),
+  so about half of the 4.0M captured triangles (2.0M; up to 4M of 6.2M in the turns) was cacheable static geometry.
+- Second defect: admission refuses AT the budget, the LRU ran only ABOVE it (or every 600 frames for 36000-frame-old
+  meshes). A cache filled to the budget kept stale meshes and declined new ones (15:00:39-51: about 15 per build).
+- Fix with the key: charge the whole pool (shared and hard-capped, with mandatory users: hair bounds allocate first,
+  holds, bases; pending ranges included, so the 2026-11-03 pool protection is unchanged) plus only the cached meshes'
+  own BLAS; run the LRU pass after a build declined a mesh at the budget. Eviction rules are unchanged (8-frame
+  protection, oldest first, to 90%). The VRAM guard still caps BLAS chunks and asks for mesh LRU under real VRAM
+  pressure. Moving a static draw into the cache lowers memory: its compacted BLAS and 64-byte pool vertices replace
+  an uncompacted refit BLAS and a 64-byte hold snapshot, and instances share one mesh.
+- Key off: the same `used`, admission and LRU loop (CTest replays the old loop on 1300 cases). Host only: no shader,
+  ABI or variant change. The `[bvh] mesh cache` line ends with `budget (rt_mesh_budget_own=K): charged X / 2048 MB
+  (pool P, cached-mesh BLAS M, other BLAS O), N draws declined`.
+- Live check (prepared, not run): tools/live_batches/rel095_verify rv3-s8-mesh-cache-budget, the rv1 view and turns,
+  key 0 / 1 (two turn pairs) / 0 in one run. Predicted (predicted.json): ON turns keep 300-600 meshes, captured
+  triangles 4.0-6.2M -> 1.7-3.6M, BLAS median in motion 2.4-4.3 -> 1.0-2.0 ms (p99 7-13 -> 3-6), scene wait mean
+  5.6-7.5 -> 3-5 ms, no VRAM-guard BLAS chunk refusals (rv2 OFF: 42-146 per window, the cascade casters' BLAS left
+  out). Every window: capture, cascade, stride-split, scene-wait gates and `rejected N/0/0`.
 
 ### CPU hit-material lists (historical implementation, 2026-11-02)
 

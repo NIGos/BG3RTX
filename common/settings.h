@@ -688,6 +688,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_mesh_compact", "1"},
     {"rt_mesh_new_tris", "4000000"},
     {"rt_mesh_budget_mb", "2048"},
+    {"rt_mesh_budget_own", "0"},
     {"rt_mesh_audits", "2"},
     {"rt_mesh_audit_frames", "600"},
     {"rt_mesh_content_id", "0"},
