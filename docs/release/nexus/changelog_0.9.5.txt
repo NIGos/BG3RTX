@@ -11,7 +11,7 @@ RTX Hair (beta, off by default)
 - Strands are stored about 11 times smaller than before, with no visible difference.
 - New RTX Hair card on the Home page: hair styles ready, disk use, time left, pause/resume, and whether conversion may run while you play.
 - Optional "Convert all styles": converts every hair style of the game ahead of time (about 9 minutes for 1,217 styles on our PC). It reads the game's own files and needs a granny2.dll, for example the one in LSLib's ExportTool folder, which you pick once; BG3RTX does not ship or download that file.
-- Experimental (turn on experimental options): Strand hair edge resolve. Pick Analytic coverage, then Ctrl+Shift+F9 switches it on and off in game, to compare the dithering at strand edges.
+- Experimental (turn on experimental options): Strand hair edge resolve. Pick Analytic coverage, then Ctrl+Shift+F10 switches it on and off in game, to compare the dithering at strand edges.
 - A style whose hair was not fully loaded when it was first seen is copied again later instead of being skipped.
 - Fixed: since an earlier fix round strands could stay as the game's hair cards. They show again.
 - Fixed several strand-hair flashes and lags in motion (LOD switches, motion vectors, card fallback).
