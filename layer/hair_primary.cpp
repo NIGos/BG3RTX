@@ -1270,7 +1270,16 @@ static void timing_before_gbuffer(VkCommandBuffer cmd, uint64_t now) {
 
 void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
   live_tick();
-  if (!strands_on()) return;
+  if (!strands_on()) {
+    // 5m: level loads are tracked while strands are off too, so a switch-on in a scene already loaded starts at once
+    // instead of treating the first G-buffer image it sees as a level load (rhl1 2026-11-09: a 300-frame pause, 10 s).
+    if (g_header.b != VK_NULL_HANDLE && p.depth_image && uint64_t(p.depth_image) == geo_gbuffer_depth_image()) {
+      const uint64_t identity = image_identity(uint64_t(p.depth_image));   // before g_mu (tracker lock order)
+      std::lock_guard<std::mutex> lock(g_mu);
+      if (g_dd) observe_depth(uint64_t(p.depth_image), frame_index(), identity);
+    }
+    return;
+  }
   if (p.depth_image && uint64_t(p.depth_image) == geo_gbuffer_depth_image()) {
     const uint64_t identity = image_identity(uint64_t(p.depth_image));   // before g_mu (tracker lock order)
     std::lock_guard<std::mutex> lock(g_mu);

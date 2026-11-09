@@ -677,6 +677,13 @@ Independent review of the layer path; each finding verified in code before the f
   - Lines: `[hair primary] live: strands ON|OFF at frame N (switch k)`; while off, the period line `[hair primary]
     frame N: RTX Hair off (live): 0 grooms published; ... 0 G-buffer ...`. A session that never turned strands on
     skips the submit-time header work entirely.
+- rhl1 2026-11-09 01:07 (INVALID by a job readiness race, toggle correct): switch 1 ON -> strands after 12 s, OFF ->
+  cards that frame and 0 strand draws per period, switch 2 ON -> full strands in 2 s, no device loss. The 12 s were
+  3.6 s of groom-file indexing on the render thread (871 files at the first rt_hair_groom use) and the LoadGuard's
+  300-frame pause, because the first G-buffer image seen while on counted as a level load. Fixed: the index is read
+  at device creation on a below-normal thread, and LoadGuard observes the G-buffer image while strands are off.
+  The job waits on pipeline quiescence only; the edges are expectations (a later settings read moved camera-plan's
+  fresh-observation start past the edge line).
 - Live job (READY_FOR_LIVE, not queued): tools/live_batches/rtx_hair_live (rhl1-dialogue, Test Dialogue1): starts cards
   only, first activation in warmup, then rt_hair 1/0/1/0 and a cards-only window; gates in predicted.json.
 

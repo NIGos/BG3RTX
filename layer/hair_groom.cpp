@@ -7,6 +7,7 @@
 #include <cstring>
 #include <mutex>
 #include <set>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -217,10 +218,24 @@ const void* device_features(InstanceData* id, VkPhysicalDevice phys, const void*
 bool device_requested() { return g_requested; }
 void disable_device_request() { g_requested = false; g_suppressed = true; }
 void device_created(DeviceData*, bool rt_enabled) {
-  std::lock_guard lock(g_mu);
-  g_enabled = g_requested && rt_enabled;
-  if (cfg_int("rt_hair_groom", 0))
-    log("[hair groom] device %s linear swept spheres", g_enabled ? "with" : "WITHOUT (card path stays)");
+  {
+    std::lock_guard lock(g_mu);
+    g_enabled = g_requested && rt_enabled;
+    if (cfg_int("rt_hair_groom", 0))
+      log("[hair groom] device %s linear swept spheres", g_enabled ? "with" : "WITHOUT (card path stays)");
+    if (!g_enabled || g_loaded) return;
+  }
+  // docs/RTX_HAIR_PRIMARY.md 5m: index the groom files at startup on a below-normal thread, not at the first use. A
+  // live switch-on otherwise indexed all of them on the render thread (rhl1 2026-11-09: 871 files, 3.6 s stall).
+  // Header reads only; the render thread's first find() waits for the lock if it comes first.
+  HMODULE self = nullptr;   // keep the layer loaded while the thread runs
+  GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                     reinterpret_cast<LPCSTR>(&device_created), &self);
+  std::thread([] {
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    std::lock_guard lock(g_mu);
+    load_all();
+  }).detach();
 }
 bool lss_enabled() { return g_enabled; }
 
