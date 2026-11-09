@@ -1,0 +1,265 @@
+{
+  "name": "he2-dialogue1-still",
+  "save": "Test Dialogue1",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 1400.0,
+  "repeat": 1,
+  "live_batch": "hair-edge-still",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_native_tileset=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_tips=0,rt_hair_primary_passes=15,rt_stats_period_frames=60,detailed_logging=1,rt_hair_groom_shadow_t=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_capture=1,rt_hair_groom_coverage=0,rr_hair_strand_aa=2",
+  "live_flow": {
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "startup_only": [
+      "rt_hair_groom_primary"
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 7.995735607675038,
+        "windows": 44,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hair1-dialogue.1.191025.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap1-dialogue.1.203259.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-capture.1.224055.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-strands.1.224309.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.020405.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.033854.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3800000000046566,
+      "quantile": 0.95,
+      "samples": 27,
+      "maximum": 0.4969999999993888
+    }
+  },
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches/hair_edge_still/plans/he2-dialogue1-still.json"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "failed",
+    "\\[cascade\\] casters",
+    "\\[geo\\]",
+    "\\[alpha hair\\]",
+    "\\[alpha scalp\\]",
+    "\\[hair groom\\]",
+    "\\[hair primary\\]",
+    "\\[hair fibre\\]",
+    "gi: background builds",
+    "building in the background",
+    "skipped: no variant for",
+    "\\[bvh\\]",
+    "\\[rrpost\\] exposure (held|hold|probe)",
+    "\\[core\\] guard:",
+    "\\[fault\\]",
+    "\\[mem\\]",
+    "pool full",
+    "DEVICE_LOST",
+    "\\[pan\\]",
+    "\\[sl\\] present capture",
+    "\\[sl\\] DLSS-G frame",
+    "\\[hair primary\\] depth orphans .*:",
+    "\\[hair primary\\] shadow transmittance:",
+    "\\[hair primary\\] strand G-buffer draws GPU",
+    "\\[rrpost\\]",
+    "hair pipeline stencil"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[cfg\\] settings read",
+    "\\[hair primary\\] level load \\(first or new G-buffer images\\)",
+    "\\[hair primary\\] header at 0x[0-9a-f]+",
+    "\\b0 pipelines refused",
+    "\\[pan\\] burst 99110 complete: 16 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99111 complete: 16 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99112 complete: 16 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99113 complete: 16 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99114 complete: 16 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99115 complete: 16 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99116 complete: 16 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99117 complete: 16 frames, \\d+ samples, transport ok",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline built",
+    "\\[rrpost\\] rr_hair_strand_aa=0:",
+    "\\[rrpost\\] rr_hair_strand_aa=2:",
+    "\\[rrpost\\] strand snapshots \\(rr_hair_strand_aa=\\d\\): [1-9]\\d* at the G-buffer end",
+    "\\[rrpost\\] strand resolve \\(rr_hair_strand_aa=2\\): [1-9]\\d* frames, \\d+ fell back"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "skipped: no variant for",
+    "pipeline creation failed",
+    "shader module creation failed",
+    "\\[hair primary\\] UNAVAILABLE",
+    "\\[hair primary\\] .*could not be allocated",
+    "\\[hair primary\\] strand fragment shader unavailable",
+    "\\[hair groom\\] device WITHOUT",
+    "\\[hair groom\\] .*malformed",
+    "\\[geo\\] rt_native_hair rejected",
+    "\\[cascade\\] could not allocate",
+    "set 1 [1-9]\\d* out-of-range reads skipped",
+    "\\[hair primary\\].*\\b[1-9]\\d* pipelines refused",
+    "(?i)device (?:was )?lost",
+    "\\[fault\\]\\s+(read|write|execute) invalid",
+    "invalid/missing native state [1-9]\\d*",
+    "retired bounds-invalid primitives [1-9]\\d*",
+    "(?s)\\[hair primary\\] frame \\d+:[^\\n]*[1-9]\\d* G-buffer[^\\n]*\\n.*?\\[hair primary\\] level load \\(first or new G-buffer images\\)",
+    "(?s)\\[hair primary\\] level load \\(first or new G-buffer images\\)(?:(?!\\[hair primary\\] frame).)*\\[hair primary\\] frame \\d+:[^\\n]*\\b[1-9]\\d* G-buffer",
+    "\\[rrpost\\] strand resolve .*: 0 frames, [1-9]\\d* without",
+    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline creation failed",
+    "\\[shaders\\] rr_strand_aa\\.hlsl:strand_resolve compile call failed",
+    "\\[rrpost\\] rr_post\\.hlsl:strand_snapshot pipeline creation failed",
+    "\\[rrpost\\] strand snapshots .*: 0 at the G-buffer end, [1-9]\\d* refused",
+    "\\[pan\\] burst 991[01]\\d complete: .*transport INVALID"
+  ],
+  "expect_runner": [
+    "window-mode.*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=21\\b"
+  ],
+  "stop_on_dump": true,
+  "purpose": "rr_hair_strand_aa 0/2 on still pixels: eight RR-input K16 bursts (ABBA ABBA) in one Test Dialogue1 run with RTX Hair on, exposure held, a 90-frame settle before each burst; edge_burst.py --modes. READY_FOR_LIVE, not authorized.",
+  "estimated_phase_seconds": 251.1,
+  "expect_every": [
+    {
+      "name": "zero refused pipelines",
+      "select": "\\[hair primary\\] frame \\d+:",
+      "match": "\\b0 pipelines refused",
+      "min": 1,
+      "period_frames": 60,
+      "windows": [
+        "settle-1-off",
+        "settle-2-aa",
+        "settle-3-aa",
+        "settle-4-off",
+        "settle-5-off",
+        "settle-6-aa",
+        "settle-7-aa",
+        "settle-8-off"
+      ],
+      "settle_frames": 48
+    },
+    {
+      "name": "zero orphan depth",
+      "select": "\\[hair primary\\] frame \\d+:",
+      "match": "prepass card depth dropped without its G-buffer swap 0\\b",
+      "min": 1,
+      "period_frames": 60,
+      "windows": [
+        "settle-1-off",
+        "settle-2-aa",
+        "settle-3-aa",
+        "settle-4-off",
+        "settle-5-off",
+        "settle-6-aa",
+        "settle-7-aa",
+        "settle-8-off"
+      ],
+      "fail_fast": false,
+      "settle_frames": 48
+    },
+    {
+      "name": "depth orphans none",
+      "select": "\\[hair primary\\] depth orphans .*:",
+      "match": ": none\\s*$",
+      "min": 1,
+      "period_frames": 60,
+      "windows": [
+        "settle-1-off",
+        "settle-2-aa",
+        "settle-3-aa",
+        "settle-4-off",
+        "settle-5-off",
+        "settle-6-aa",
+        "settle-7-aa",
+        "settle-8-off"
+      ],
+      "fail_fast": false,
+      "settle_frames": 48
+    },
+    {
+      "name": "swapped frames in every strand window",
+      "select": "\\[hair primary\\] coverage \\(last \\d+ frames\\):",
+      "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b",
+      "min": 1,
+      "period_frames": 60,
+      "windows": [
+        "settle-1-off",
+        "settle-2-aa",
+        "settle-3-aa",
+        "settle-4-off",
+        "settle-5-off",
+        "settle-6-aa",
+        "settle-7-aa",
+        "settle-8-off"
+      ],
+      "settle_frames": 48
+    },
+    {
+      "name": "render-res chain GPU ms in every settle window",
+      "select": "\\[rrpost\\] gpu: render-res chain",
+      "match": "render-res chain [0-9.]+ ms/frame",
+      "min": 1,
+      "period_frames": 60,
+      "windows": [
+        "settle-1-off",
+        "settle-2-aa",
+        "settle-3-aa",
+        "settle-4-off",
+        "settle-5-off",
+        "settle-6-aa",
+        "settle-7-aa",
+        "settle-8-off"
+      ],
+      "settle_frames": 48
+    },
+    {
+      "name": "strand coverage at the G-buffer end in every aa settle window",
+      "select": "\\[rrpost\\] strand snapshot site G-buffer end",
+      "match": "strand snapshot site G-buffer end \\(frames \\d+-\\d+\\): [1-9]\\d* dispatches; per dispatch footprint \\d+ px, strand [1-9]\\d* px, coverage [1-9]\\d* px",
+      "min": 1,
+      "period_frames": 60,
+      "windows": [
+        "settle-2-aa",
+        "settle-3-aa",
+        "settle-6-aa",
+        "settle-7-aa"
+      ],
+      "settle_frames": 48
+    }
+  ],
+  "window_mode": "visible_unfocused_fg",
+  "fail_fast": true,
+  "max_minutes": 15
+}

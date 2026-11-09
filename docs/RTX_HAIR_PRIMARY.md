@@ -802,7 +802,26 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   flicker ratio is unchanged (off 3.03 / 2.66, aa 3.02 / 2.82): no edge-specific temporal gain; the off bursts alone
   differ by 30-80% (animated dialogue). Edge band hf -13% / -15% (smoother single frames). Static: Xr changed on the hair
   ring in b-aa (864 px) but not in d-aa (11). Energy Xr -0.55% (off spread 0.49%). Render-res chain about 0.35 ms in aa
-  windows vs 0.165 off (+0.18 ms; the snapshots now run inside run()'s timed dispatches).## 6. Open items
+  windows vs 0.165 off (+0.18 ms; the snapshots now run inside run()'s timed dispatches).
+- Method audit of he1 04:02 (offline, branch claude/hair-edge-still): the burst verdict cannot judge mode 2; the
+  measurement, not the theory, was wrong. (1) Animation counted as flicker: edge_burst.py `flicker` (temporal std /
+  mean per pixel, no motion exclusion) and `mc` (bilinear warp, disocclusions kept) on a band that is the silhouette, so
+  sub-pixel character motion becomes variance there (off bursts alone 30-80% apart). The MV sign and units are right
+  (rr_mvec = current - previous in pixels, MV scale -1, jitter excluded by the velocity FS); the bursts are 16
+  consecutive unstalled frames (dump.cpp waits after the burst). (2) No settle: the burst window set the mode and armed
+  0.1 s after ready, 0.31-2.3 s (about 9-40 frames) after the switch line (burst-off-1 right after the mode-2 'sites'
+  window). The final image carries rr_post_temporal's 1/16 accumulation (DoF/bloom of the hair over the blurred
+  background, TRACK_A_RR), which needs 108 frames to forget the other mode. (3) Exposure free: he1's step() set
+  qa_exposure_hold=0 in every window. (4) Mean of ratios: dark background pixels of the band dominate `flicker`.
+  Not a bug: band/core masks (class 5 in >= half the frames, render resolution, scaled to the display), MV warp sign.
+  Note: final's band includes the DoF composite, which mode 2 does not touch; rr_color isolates mode 2's own input.
+- Fix: edge_burst.py `*_still` masks (summed RR motion over the burst <= 1/4 px: motion then adds <= 3% of a
+  binary-coverage edge's variance), `still` = sqrt(mean variance) / mean, half-burst `drift`, and `judge()` against
+  the key-off repeats (sigma = sd(off) / mean(off) sqrt(1/n_aa + 1/n_off); PASS if the band falls by more than 2
+  sigma while the core and the band mean stay within 2 sigma; INVALID under 256 still px). Test hair_groom_test
+  test_edge_burst_still. Job tools/live_batches/hair_edge_still he2-dialogue1-still (READY_FOR_LIVE, not queued):
+  exposure held, eight bursts ABBA ABBA, each after a 108-frame settle in its own mode; ~6.3 min, ~4.4 GB.
+## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
    normal, is view space; 5g). Open: the root-to-tip sign of that frame.
