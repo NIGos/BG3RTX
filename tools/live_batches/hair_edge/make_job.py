@@ -49,18 +49,19 @@ def make_plan():
     warm = timed(step("warm-all", 2, frames=0), 25)   # compiles rr_strand_aa.hlsl and every strand pipeline
     warm.update(wait_log=[r"\[shaders\] cache: prefetched ", r"gi: gi/[^ ]+ generation ", r"\[auto\] scene ready"],
                 wait_log_timeout=180)
-    plan = [warm, timed(step("warm-untag", 1, frames=0), 1.1), timed(step("warm-base", 0, frames=0), 1.1),
+    plan = [warm, timed(step("warm-debug", 3, frames=0), 1.1), timed(step("warm-untag", 1, frames=0), 1.1),
+            timed(step("warm-base", 0, frames=0), 1.1),
             step("a-off", 0, True), step("b-aa", 2, True), step("c-off", 0, True), step("d-aa", 2, True),
-            step("e-untag", 1, True)]
+            step("e-untag", 1, True), step("f-debug", 3, True)]
+    # K8 bursts on a still camera (edge flicker without registration), in timed windows that outlast the capture: the
+    # 2026-11-09 he1 burst-off window closed with its 60-frame stats period (2 s at 30 fps) while the burst armed at
+    # 01:41:57.998 was still recording, so its completion line fell outside (fail-fast 01:42:00.025). Like
+    # edge_flicker's rendered bursts (5 s static windows, capture at 0.1 s), sized here for the K8 frames plus the
+    # measured capture-stall p95 (2.7 s) and decode.
     for label, aa in (("burst-off", 0), ("burst-aa", 2)):
-        if label == "burst-aa":
-            back = timed(step("return-camera", 2, frames=0), 2)
-            back.update(kind="pan", scan=18, motion_start=0, motion_end=2, key_period_ms=500, key_down_ms=100)
-            plan.append(back)
-        p = step(label, aa)
+        p = timed(step(label, aa, frames=0), 6)
         serial = SERIALS[label]
-        p.update(kind="pan", scan=16, seconds=3.3, motion_start=0, motion_end=2, key_period_ms=500, key_down_ms=100,
-                 capture_at=.1, serial=serial, registration_policy="per-frame-exclude-unregistered")
+        p.update(capture_at=.1, serial=serial)
         p["set"] += f",pan_prepare=1,pan_edge=1,pan_capture={serial},pan_delay_ms=0"
         plan.append(p)
     restore = timed(step("restore", 0, frames=0), 1.1)
@@ -80,7 +81,7 @@ def make_job(plan):
                     "pan bursts for strand edge flicker (tools/hair_groom/temporal_burst.py), energy and the "
                     "render-res chain GPU ms. READY_FOR_LIVE, not authorized.")
     labels = [p["label"] for p in plan]
-    windows = [l for l in labels if l in ("a-off", "b-aa", "c-off", "d-aa", "e-untag")]
+    windows = [l for l in labels if l in ("a-off", "b-aa", "c-off", "d-aa", "e-untag", "f-debug")]
     strands = windows + list(SERIALS)
     gates = []
     for g in j["expect_every"]:
@@ -97,7 +98,8 @@ def make_job(plan):
     j["expect"] = [e for e in j["expect"] if "shadow transmittance" not in e and "strand G-buffer draws GPU" not in e]
     j["expect"] += [r"\[hair primary\] (?:prepass|G-buffer) hair pipeline stencil: test \d, write mask 0x[0-9a-f]{2}",
                     r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built",
-                    r"\[rrpost\] rr_hair_strand_aa=0:", r"\[rrpost\] rr_hair_strand_aa=1:", r"\[rrpost\] rr_hair_strand_aa=2:"]
+                    r"\[rrpost\] rr_hair_strand_aa=0:", r"\[rrpost\] rr_hair_strand_aa=1:", r"\[rrpost\] rr_hair_strand_aa=2:",
+                    r"\[rrpost\] rr_hair_strand_aa=3:"]
     j["patterns"] += [r"\[rrpost\]", r"hair pipeline stencil"]
     # The edge resolve must build: a pipeline creation or DXC call failure (layer/rrpost.cpp compile_pipeline, which
     # names every entry under rr_post.hlsl; layer/shaders.cpp) and a period without a strand resolve frame are fatal.

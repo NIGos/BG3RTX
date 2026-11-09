@@ -239,6 +239,10 @@ void strand_resolve(uint3 id : SV_DispatchThreadID) {
       lb /= max(float(nb), 1.0);
     }
     if (hits > 0u && nb > 0u) xr = c * lh + (1.0 - c) * lb;
+    if (mode == 3u)   // debug view (he1 live 2026-11-09: mode 2 left every hair pixel of Xr unchanged): which test passed
+      xr = float3(1.0, own ? 1.0 : 0.0, hits > 0u && nb > 0u ? saturate(c) : 0.0) * max(dot(xc, 0.333), 0.05) * 4.0;
+  } else if (mode == 3u) {
+    xr = f.ok ? xc * 0.25 : float3(1.0, 0.0, 1.0);   // magenta: no usable header (tag, size, camera rebase)
   }
   OutR11[p] = finite3(xr);
 }

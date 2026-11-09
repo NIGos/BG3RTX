@@ -859,11 +859,12 @@ uint32_t half_bits(float v) {
 uint64_t g_strand_frames = 0, g_strand_missing = 0, g_strand_logged_at = 0;
 int g_strand_mode_logged = -1;
 bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const Push& pc, const uint32_t ext[2]) {
-  const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 2);
+  const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 3);
   if (mode != g_strand_mode_logged) {
     g_strand_mode_logged = mode;
     log("[rrpost] rr_hair_strand_aa=%d: %s", mode, mode == 0 ? "the game's dither resolve" :
-        mode == 1 ? "dither resolve with the strand footprint untagged" : "strand footprint untagged + analytic strand coverage");
+        mode == 1 ? "dither resolve with the strand footprint untagged" : mode == 2 ? "strand footprint untagged + analytic strand coverage" :
+        "debug view in Xr: red strand footprint, green strand pixel, blue coverage; magenta no usable header");
   }
   if (mode <= 0) return false;
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));

@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 2011,
+  "timeout": 2378,
   "repeat": 1,
   "live_batch": "hair-edge",
   "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_native_tileset=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_tips=0,rt_hair_primary_passes=15,rt_stats_period_frames=60,detailed_logging=1,rt_hair_groom_shadow_t=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_capture=1,rt_hair_groom_coverage=0,rr_hair_strand_aa=2",
@@ -105,7 +105,8 @@
     "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline built",
     "\\[rrpost\\] rr_hair_strand_aa=0:",
     "\\[rrpost\\] rr_hair_strand_aa=1:",
-    "\\[rrpost\\] rr_hair_strand_aa=2:"
+    "\\[rrpost\\] rr_hair_strand_aa=2:",
+    "\\[rrpost\\] rr_hair_strand_aa=3:"
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -140,16 +141,17 @@
   "expect_runner": [
     "window-mode.*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=13\\b",
-    "\\[motion-trace\\] phase=4 label=a-off repeat=0",
-    "\\[motion-trace\\] phase=5 label=b-aa repeat=0",
-    "\\[motion-trace\\] phase=6 label=c-off repeat=0",
-    "\\[motion-trace\\] phase=7 label=d-aa repeat=0",
-    "\\[motion-trace\\] phase=8 label=e-untag repeat=0"
+    "\\[motion-plan\\] complete phases=14\\b",
+    "\\[motion-trace\\] phase=5 label=a-off repeat=0",
+    "\\[motion-trace\\] phase=6 label=b-aa repeat=0",
+    "\\[motion-trace\\] phase=7 label=c-off repeat=0",
+    "\\[motion-trace\\] phase=8 label=d-aa repeat=0",
+    "\\[motion-trace\\] phase=9 label=e-untag repeat=0",
+    "\\[motion-trace\\] phase=10 label=f-debug repeat=0"
   ],
   "stop_on_dump": true,
   "purpose": "rr_hair_strand_aa 0/2/0/2 (+1) in one Test Dialogue1 run with RTX Hair on: PNG pairs and K8 pan bursts for strand edge flicker (tools/hair_groom/temporal_burst.py), energy and the render-res chain GPU ms. READY_FOR_LIVE, not authorized.",
-  "estimated_phase_seconds": 82.5,
+  "estimated_phase_seconds": 89.9,
   "expect_every": [
     {
       "name": "zero refused pipelines",
@@ -163,6 +165,7 @@
         "c-off",
         "d-aa",
         "e-untag",
+        "f-debug",
         "burst-off",
         "burst-aa"
       ]
@@ -179,6 +182,7 @@
         "c-off",
         "d-aa",
         "e-untag",
+        "f-debug",
         "burst-off",
         "burst-aa"
       ],
@@ -196,6 +200,7 @@
         "c-off",
         "d-aa",
         "e-untag",
+        "f-debug",
         "burst-off",
         "burst-aa"
       ],
@@ -213,6 +218,7 @@
         "c-off",
         "d-aa",
         "e-untag",
+        "f-debug",
         "burst-off",
         "burst-aa"
       ]
@@ -248,7 +254,8 @@
         "b-aa",
         "c-off",
         "d-aa",
-        "e-untag"
+        "e-untag",
+        "f-debug"
       ]
     }
   ],
