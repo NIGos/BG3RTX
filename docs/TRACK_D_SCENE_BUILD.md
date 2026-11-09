@@ -1573,3 +1573,5 @@ SpecId allocated; 1037+ remain available, 1032-1034 retired; request delta 0.
   frame time(on) - frame time(off) is the upper bound of any handout's saving. Below 0.5 ms (inside the on-a/on-b
   spread): drop the handout. 1 ms or more: build the UAB version above (estimate several days, one restart key, off by
   default).
+- Design answering the four blockers (2026-11-09, branch claude/scene-handout-design): docs/SCENE_HANDOUT_DESIGN.md
+  (UAB set 1 + TLAS address in the scene stamp + fallback by set copy at submit; run sh1 first).
