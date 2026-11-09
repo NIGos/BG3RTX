@@ -88,7 +88,8 @@ Frame frame() {
   f.rec = (uint64_t(sp.header.y) << 32) | uint64_t(sp.header.x);
   if (f.rec == 0u) return f;
   f.tag = sa_ld(f.rec);
-  f.width = sa_ld(f.rec + 4u); f.height = sa_ld(f.rec + 8u); f.grooms = sa_ld(f.rec + 12u);
+  f.width = sa_ld(f.rec + 4u); f.height = sa_ld(f.rec + 8u);
+  f.grooms = min(sa_ld(f.rec + 12u), 64u);   // common/hair_primary.h kMaxGrooms: key map and table reads stay in the header
   f.pool = sa_addr(f.rec + 24u); f.pixels = sa_addr(f.rec + 32u);
   f.view = asfloat(vk::RawBufferLoad<uint4>(f.rec + 40u, 8));
   f.pool_bytes = sa_ld(f.rec + 56u);

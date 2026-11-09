@@ -863,20 +863,25 @@ uint64_t g_strand_frames = 0, g_strand_missing = 0, g_strand_logged_at = 0, g_sn
 // rr_hair_strand_aa: at the lighting pass (the fibre passes read the pixel record there), the strand snapshot of this
 // frame (coverage, strand pixel, footprint) into the frame-parity image the resolve reads. Size: the post chain's Xs
 // (the render size of the last chain); none yet: no snapshot, the resolve stays the game's.
-void strand_snapshot(DeviceData* dd, VkCommandBuffer cmd) {
+// Lock order (he1 2026-11-09 02:31 hang): ngx.cpp Detour_Eval holds its g_mu and calls rrpost_take (our g_mu), so code
+// under our g_mu must never call into ngx (ngx_gbuffer_camera takes ngx's g_mu). The camera is read by the caller before
+// it locks (cam_ok, vp, pos, jitter in pixels per unit render size).
+struct SnapCamera { bool ok = false; float vp[16] = {}, pos[3] = {}, jit_unit[2] = {}; };
+void strand_snapshot(DeviceData* dd, VkCommandBuffer cmd, const SnapCamera& cam) {
   const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 3);
   if (mode <= 0 || !g_xs.image) return;
   const uint32_t w = g_xs.w, h = g_xs.h;
   Img& img = g_strand[frame_index() & 1];
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
   StrandPush sp{};
-  float jit[2] = {};
-  if (!hp || !hp->header || w > 32768u || h > 32768u || !ngx_gbuffer_camera(sp.vp, sp.cam, jit, w, h) ||
+  if (!hp || !hp->header || w > 32768u || h > 32768u || !cam.ok ||
       !img_ensure(dd, img, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, frame_index() & 1 ? "strand snapshot B" : "strand snapshot A")) {
     ++g_snap_missing;
     return;
   }
-  sp.jitter = half_bits(jit[0]) | (half_bits(jit[1]) << 16);
+  memcpy(sp.vp, cam.vp, sizeof sp.vp);
+  memcpy(sp.cam, cam.pos, sizeof sp.cam);
+  sp.jitter = half_bits(cam.jit_unit[0] * float(w)) | (half_bits(cam.jit_unit[1] * float(h)) << 16);
   sp.bmin = uint32_t(mode) << 30;
   sp.bmax = (w - 1) | ((h - 1) << 15);
   sp.header[0] = uint32_t(hp->header);
@@ -904,16 +909,13 @@ bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const P
   }
   if (mode <= 0) return false;
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
-  StrandPush sp{};
-  float jit[2] = {};
+  StrandPush sp{};   // the resolve reads only the bounds, the mode and the snapshot (no camera: no ngx call under g_mu)
   // The snapshot of this frame (written at its lighting pass): the pixel record no longer holds this frame's seal at the
   // post chain (he1 2026-11-09 02:04, f-debug).
   const Img& snap = g_strand[frame_index() & 1];
   const bool ok = hp && hp->header && pc.bmax[0] < 32768u && pc.bmax[1] < 32768u && snap.image &&
-                  g_strand_frame[frame_index() & 1] == frame_index() && pc.bmax[0] < snap.w && pc.bmax[1] < snap.h &&
-                  ngx_gbuffer_camera(sp.vp, sp.cam, jit, g_ch.w, g_ch.h);
+                  g_strand_frame[frame_index() & 1] == frame_index() && pc.bmax[0] < snap.w && pc.bmax[1] < snap.h;
   if (ok) {
-    sp.jitter = half_bits(jit[0]) | (half_bits(jit[1]) << 16);
     sp.bmin = pc.bmin[0] | (pc.bmin[1] << 15) | (uint32_t(mode) << 30);
     sp.bmax = pc.bmax[0] | (pc.bmax[1] << 15);
     sp.header[0] = uint32_t(hp->header);
@@ -1192,8 +1194,10 @@ void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs) {
     if (auto* dd = device_of(cmd)) rrpost_prewarm(dd);
     if (cfg_int("rr_post", 1) && cfg_int("rr_hair_strand_aa", 0) > 0)
       if (auto* dd = device_of(cmd)) {
+        SnapCamera cam;   // read before our lock (lock order: ngx, then rrpost)
+        cam.ok = ngx_gbuffer_camera(cam.vp, cam.pos, cam.jit_unit, 1u, 1u);
         std::lock_guard<std::mutex> lock(g_mu);
-        if (ensure_layout(dd)) strand_snapshot(dd, cmd);
+        if (ensure_layout(dd)) strand_snapshot(dd, cmd, cam);
       }
   }
   if (!cfg_int("rr", 1) || !cfg_int("rr_post", 1)) return;

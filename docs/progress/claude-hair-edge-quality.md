@@ -14,3 +14,5 @@
   added; bursts now static 6 s timed windows (the 60-frame window closed before the K8 burst completed).
 - he1 #2: the record has no current seal at the post chain (f-debug); the strand data are now snapshotted at the lighting
   pass into a frame-parity image. Baseline burst flicker: edge band 0.067 vs hair core 0.032 (final image).
+- he1 #3 freeze: lock-order inversion (rrpost g_mu -> ngx g_mu at the lighting snapshot vs ngx -> rrpost at the evaluate);
+  fixed (camera read before rrpost's lock, none in the resolve), test added. No live rerun without the coordinator.
