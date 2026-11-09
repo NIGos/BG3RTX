@@ -76075,6 +76075,161 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[auto\\] scene ready",
+        "\\[cfg\\] settings read",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "rr_hair_guides",
+          "1"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
+          "rt_hair",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "1"
+        ],
+        [
+          "rt_hair_fibre",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "1"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "1"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "1"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "1"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "1"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "1"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "1"
+        ],
+        [
+          "rt_hair_warmup",
+          "1"
+        ],
+        [
+          "rt_native_hair",
+          "1"
+        ],
+        [
+          "rt_native_scalp",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "60"
+        ],
+        [
+          "rt_timing_frames",
+          "60"
+        ],
+        [
+          "sharc_device",
+          "1"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -78669,6 +78824,26 @@
       null
     ],
     "\\[layer\\] optional scene handout update-after-bind request failed": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] warm-up: load quiet ended at frame \\d+, \\d+ frames after the level load \\(groom state settled for 30 frames, rt_hair_warmup\\)": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] warm-up: level load at frame \\d+: load quiet ended at frame \\d+ \\(\\+\\d+, groom state settled\\), first strand G-buffer swap at frame \\d+, \\d+ frames after the load \\(rt_hair_warmup 1\\)": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] warm-up: level load at frame \\d+: load quiet ended at frame \\d+ \\(\\+300, frame count\\), first strand G-buffer swap at frame \\d+, \\d+ frames after the load \\(rt_hair_warmup 0\\)": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] warm-up: last \\d+ frames: [1-9]\\d* draws swapped to strands for the first time since the level load; frames from their first publish: mean [0-9.]+, max \\d+": [
+      0,
+      null
+    ],
+    "\\[hair groom\\] warm-up: last \\d+ frames: [1-9]\\d* groom slots got their first primary key; frames from the first match: mean [0-9.]+, max \\d+ \\(rt_hair_warmup [01]\\)": [
       0,
       null
     ]

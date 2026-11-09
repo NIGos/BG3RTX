@@ -898,6 +898,8 @@ void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args)
 // rt_hair_groom_shadow_t (docs/RTX_HAIR_PRIMARY.md C2): the draw's packed strand transmittance for its groom InstInfo
 // row (hair_primary::pack_transmit; 0: key off or not measured yet, the strands block as before).
 uint32_t hair_primary_transmit(uint64_t key);
+// rt_hair_warmup (docs/RTX_HAIR_PRIMARY.md 5o): the scene build's settled signal of this frame, before its publish.
+void hair_primary_warmup(bool settled);
 // rec: the scene build's record (bvhsplit), so an ordered publish (rt_hair_groom_primary_order) knows when it is submitted.
 void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint64_t pool, uint64_t pool_bytes,
                           const hair_primary::Row* rows, const uint64_t* keys, const uint8_t* lods, uint32_t count,

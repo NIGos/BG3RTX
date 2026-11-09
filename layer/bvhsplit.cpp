@@ -499,6 +499,8 @@ struct GroomSlot {
   uint32_t prev_frames = 0;    // updates since the points range was allocated (the first copies garbage)
   uint64_t last_update = 0;    // round 3 M1: the build frame of the last points update (prev points are that frame's)
   bool keyed = false;          // round 3 H2: a primary key was published for this slot (kept across LOD switches)
+  bool measured = false;       // rt_hair_warmup: groom_pick_lod has read a screen size for this slot
+  uint64_t first_seen = 0;     // the frame this slot was made (warm-up line: frames until its key was published)
   AsAlloc as;
   VkDeviceSize build_scratch = 0, update_scratch = 0;
   bool built = false;          // the BLAS holds a full build of this LOD
@@ -926,6 +928,7 @@ struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_of
 static_assert(sizeof(GroomPush) == 48);
 struct GroomStats {
   uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0, lod_waits = 0, lod_drops = 0;
+  uint64_t keyed_new = 0, key_wait_sum = 0, key_wait_max = 0;   // slots whose first key was published (warm-up line)
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
   uint32_t lod[kGroomLods] = {};
   uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
@@ -1132,8 +1135,9 @@ VkAccelerationStructureBuildSizesInfoKHR groom_sizes(const GroomAsset::Lod& l) {
 // The angular size extent / distance picks LOD 0 above 0.09 rad (about a tenth of a 50-degree view), LOD 1
 // above 0.03, LOD 2 (or the last) below; a change needs 30 consecutive frames (no flicker at a threshold).
 // The bounds come from the newest ring slot whose frame completed on the GPU (never the slot a copy may still write).
-int groom_pick_lod(GroomSlot& g, int lods, uint64_t gpu_done) {
+int groom_pick_lod(GroomSlot& g, int lods, uint64_t gpu_done, bool warmup) {
   int want = g.lod < 0 ? 0 : g.lod;
+  bool first_measure = false;
   int slot = -1;
   for (int i = 0; i < 4; ++i)
     if (g.bounds_frame[i] && gpu_done > g.bounds_frame[i] + 1 && (slot < 0 || g.bounds_frame[i] > g.bounds_frame[slot])) slot = i;
@@ -1155,13 +1159,13 @@ int groom_pick_lod(GroomSlot& g, int lods, uint64_t gpu_done) {
       g.size = size;
       g.centre[0] = cx, g.centre[1] = cy, g.centre[2] = cz;
       g.bounds_frame_used = float(g.bounds_frame[slot]);
+      first_measure = warmup && !g.measured;   // rt_hair_warmup: the no-bounds LOD 0 was no choice (lod_vote)
+      g.measured = true;
     }
   }
   want = (std::min)(want, lods - 1);
   g.want = want;
-  if (g.lod < 0) return want;
-  if (want == g.lod) { g.lod_votes = 0; return g.lod; }
-  return ++g.lod_votes >= 30 ? (g.lod_votes = 0, want) : g.lod;
+  return hair_groom::lod_vote(g.lod, want, g.lod_votes, first_measure);
 }
 
 // Reads the index range of an indexed draw from existing host mappings (as content_sample) and returns its groom
@@ -2531,6 +2535,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                      bool prev_ok = false; uint32_t stride = 0; };   // round 3 M1: the slot's last update was the previous build frame
   const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
+  // rt_hair_warmup (docs/RTX_HAIR_PRIMARY.md 5o): hair draws and grooms of this frame not yet in their final state (join
+  // pending, LOD uploading or voted, held soup, full build, key not yet published). 0 with grooms published: the groom
+  // state is settled (hair_primary_warmup ends the level-load quiet window on that signal).
+  const bool warmup = cfg_int("rt_hair_warmup", 0) != 0;
+  uint32_t groom_unsettled = 0;
   std::unordered_map<uint64_t, size_t> groom_of_key;
   const bool groom_ready = g_groom_on && ensure_groom_pipeline() &&
       (g_groom_uv_rb.b || make_buf(g_groom_uv_rb, VkDeviceSize(kGroomUvJobs) * 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true,
@@ -2845,6 +2854,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
             (unsigned long long)fd.soup_off, fd.prims, stride, (unsigned long long)cap.xfb_size);
       groom_src = nullptr;
       groom_keep = true;
+      ++groom_unsettled;   // rt_hair_warmup: its cards this frame
     }
     if (hair && groom_ready && !fd.groom_id && fd.groom_miss == hair_groom::JoinMiss::NotHostMapped &&
         !g_groom_uv.count(fd.groom_identity) && fd.captured && !fd.held && fd.groom_indices == fd.prims * 3u &&
@@ -2885,6 +2895,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
     }
     if (hair && groom_ready && !fd.groom_id) {
+      // rt_hair_warmup: a join not decided yet (UV readback in flight, or not issued: no free job, draw not captured this
+      // frame). A partial draw of the mesh never joins (final, like count unknown or no file).
+      if (fd.groom_miss == hair_groom::JoinMiss::UvPending ||
+          (fd.groom_miss == hair_groom::JoinMiss::NotHostMapped && fd.groom_indices == fd.prims * 3u))
+        ++groom_unsettled;
       ++g_groom_st.unmatched;
       ++g_groom_st.miss[size_t(fd.groom_miss)];
       const uint64_t what = (uint64_t(fd.groom_indices) << 8) | uint64_t(fd.groom_miss);
@@ -2903,9 +2918,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         if (s.groom) groom_release(*s.groom, now);
         s.groom = std::make_shared<GroomSlot>();
         s.groom->id = fd.groom_id;
+        s.groom->first_seen = now;
       }
       GroomSlot& g = *s.groom;
-      int lod = groom_pick_lod(g, int(groom_src->lods.size()), life_gpu_done());
+      int lod = groom_pick_lod(g, int(groom_src->lods.size()), life_gpu_done(), warmup);
       if (const auto* src = hair_groom::find(fd.groom_id, groom_src->indices))
         for (uint32_t l = 0; l < kGroomLods; ++l) g.segments[l] = l < groom_src->lods.size() ? src->asset.lod_segments[l] : 0u;
       g_groom_seen.push_back(s.groom);
@@ -2925,6 +2941,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         if (built) resident.last_used = now;
         if (hair_groom::lod_this_frame(lod, g.lod, false, built != nullptr, true) == g.lod) {
           lp = built; lod = g.lod;
+          ++groom_unsettled;   // rt_hair_warmup: the wanted LOD is still uploading
           g.lod_votes = 29;   // groom_pick_lod returns the wanted LOD again on the next frame
           ++g_groom_st.lod_waits;
         }
@@ -2994,10 +3011,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         ++g_groom_st.matched;
         ++g_groom_st.lod[size_t(lod)];
         w.refit ? ++g_groom_st.refits : ++g_groom_st.builds;
+        if (!w.refit || g.lod_votes > 0) ++groom_unsettled;   // rt_hair_warmup: a full build, or a LOD vote in progress
       } else if (!crowd_cards && lod_keep && !lp && g.lod < 0 && !g.pos_size) {
+        ++groom_unsettled;   // rt_hair_warmup: its first LOD still uploading
         // Item 5: a new slot whose first LOD is still uploading keeps its (empty) slot, its LOD choice and the crowd
         // plan's entry instead of being released and made again every frame of the upload; cards meanwhile.
       } else if (!crowd_cards) {
+        ++groom_unsettled;   // rt_hair_warmup: no groom this frame (upload in flight, no pool room, ...)
         if (!lp && g.lod >= 0 && g.lod != lod) ++g_groom_st.lod_drops;   // a LOD switch dropped the groom (5i)
         groom_release(g, now);
         s.groom.reset();
@@ -3784,7 +3804,15 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           // GPU only from this build on): its draw keeps the card.
           // H2: a slot that published its key keeps it through a LOD switch (primary_key above).
           hp_keys[groom_count] = primary_key ? w.hp_key : 0;
+          // Warm-up line: frames from the slot's first match to its first published key (join, upload, builds).
+          if (primary_key && !w.g->keyed && w.g->first_seen && now >= w.g->first_seen) {
+            const uint64_t waited = now - w.g->first_seen;
+            ++g_groom_st.keyed_new;
+            g_groom_st.key_wait_sum += waited;
+            g_groom_st.key_wait_max = (std::max)(g_groom_st.key_wait_max, waited);
+          }
           if (primary_key) w.g->keyed = true;
+          else if (hp_on) ++groom_unsettled;   // rt_hair_warmup: its draw keeps the cards (no UVs, first update)
           hp_lods[groom_count] = uint8_t(w.g->lod < 0 ? 0 : w.g->lod);
         }
         ++groom_count;
@@ -3819,6 +3847,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           float viewport[4];
           geo_render_size(&w, &h);
           geo_gbuffer_viewport(viewport);
+          // rt_hair_warmup: this frame's settled signal, before the publish (which observes a level-load boundary).
+          if (warmup) hair_primary_warmup(groom_unsettled == 0);
           hair_primary_publish(cmd, rec, groom_tlas_address, g_pool.addr, g_pool.size, hp_rows, hp_keys, hp_lods, groom_count, w, h, viewport);
         }
       } else {
@@ -3899,6 +3929,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         (unsigned long long)g_groom_st.miss[1], (unsigned long long)g_groom_st.miss[2], (unsigned long long)g_groom_st.miss[3],
         (unsigned long long)g_groom_st.miss[4], (unsigned long long)g_groom_st.miss[5], (unsigned long long)g_groom_st.miss[6],
         double(g_groom_pool_used) / 1048576.0, double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0);
+    // Warm-up (docs/RTX_HAIR_PRIMARY.md 5o): how long matched grooms waited for their first primary key (UV join, LOD
+    // upload, full build, the second points update). Only in periods where a slot got its first key.
+    if (g_groom_st.keyed_new)
+      log_stats("[hair groom] warm-up: last %u frames: %llu groom slots got their first primary key; frames from the first "
+                "match: mean %.1f, max %llu (rt_hair_warmup %d)",
+                stats_period(300), (unsigned long long)g_groom_st.keyed_new,
+                double(g_groom_st.key_wait_sum) / double(g_groom_st.keyed_new), (unsigned long long)g_groom_st.key_wait_max,
+                cfg_int("rt_hair_warmup", 0));
     g_groom_st = GroomStats{};
   }
   out->pool = g_pool.b;

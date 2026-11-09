@@ -956,6 +956,55 @@ int main() {  test_round3();
     CHECK(g.allow_prepass(k));
     CHECK(!load.observe(0, frame) && !load.observe(0xB, frame));   // no image or the same image: no boundary
   }
+  {   // rt_hair_warmup (docs/RTX_HAIR_PRIMARY.md 5o): the load quiet window ends on the groom state's settled signal
+    using namespace hair_primary;
+    static_assert(kWarmupSettledFrames == uint64_t(bg3::hair_groom::kLodVoteFrames), "a settled run spans one LOD vote");
+    static_assert(kWarmupSettledFrames > 10, "hc1: the loss came 10 frames after the first publish");
+    static_assert(kWarmupSettledFrames < kLoadQuietFrames, "the frame count stays the upper bound");
+    LoadGuard load;
+    const uint64_t b = 1000;
+    CHECK(load.observe(0xA, b) && load.quiet(b) && load.boundary == b && !load.early);
+    for (uint64_t i = 0; i < 20; ++i) CHECK(!load.settle(b + i, false));   // joins and uploads pending
+    // A settled run one frame short, broken by an unsettled frame (a LOD switch's full build): no end.
+    uint64_t t = b + 20;
+    for (uint64_t i = 0; i < kWarmupSettledFrames; ++i) CHECK(!load.settle(t + i, true));
+    CHECK(!load.settle(t + kWarmupSettledFrames, false) && load.quiet(t + kWarmupSettledFrames));
+    // A gap longer than kWarmupGapFrames without a report (no groom published) restarts the run.
+    t += kWarmupSettledFrames + 1;
+    for (uint64_t i = 0; i < 10; ++i) CHECK(!load.settle(t + i, true));
+    const uint64_t s = t + 9 + kWarmupGapFrames + 1;
+    // Reports every kWarmupGapFrames frames (and a second report in one frame) keep the run.
+    for (uint64_t f = s; f < s + kWarmupSettledFrames; f += kWarmupGapFrames) CHECK(!load.settle(f, true) && !load.settle(f, true));
+    CHECK(load.quiet(s + kWarmupSettledFrames - 1));
+    CHECK(load.settle(s + kWarmupSettledFrames, true));   // kWarmupSettledFrames after the run's first frame
+    CHECK(load.early && load.quiet_until == s + kWarmupSettledFrames && !load.quiet(s + kWarmupSettledFrames));
+    CHECK(!load.settle(s + kWarmupSettledFrames + 1, true) && !load.settle(s + kWarmupSettledFrames + 2, false));
+    CHECK(!load.quiet(s + kWarmupSettledFrames + 2));   // an unsettled frame after the end does not reopen the window
+    // A new level: a fresh window, never settled -> exactly the old kLoadQuietFrames rule.
+    const uint64_t c = s + 500;
+    CHECK(load.observe(0xB, c) && !load.early && load.boundary == c && load.quiet(c));
+    CHECK(!load.settle(c - 1, true));   // a report from before the boundary is ignored
+    for (uint64_t f = c; f < c + kLoadQuietFrames; f += kWarmupSettledFrames) CHECK(!load.settle(f, true));   // gaps
+    CHECK(load.quiet(c + kLoadQuietFrames - 1) && !load.quiet(c + kLoadQuietFrames) && !load.early);
+    // The same image with a new creation id is a boundary too (item 14): it resets the run.
+    LoadGuard r;
+    CHECK(r.observe(0xC, 10, 7));
+    for (uint64_t f = 10; f < 10 + kWarmupSettledFrames; ++f) CHECK(!r.settle(f, true));
+    CHECK(r.observe(0xC, 10 + kWarmupSettledFrames, 8) && !r.settle(10 + kWarmupSettledFrames, true));
+    CHECK(r.quiet(10 + 2 * kWarmupSettledFrames - 1));
+  }
+  {   // groom slot LOD vote (common/hair_groom_budget.h lod_vote; rt_hair_warmup first measurement)
+    int votes = 0;
+    CHECK(lod_vote(-1, 2, votes, false) == 2 && lod_vote(-1, 1, votes, true) == 1);   // no LOD yet: the wanted one
+    CHECK(lod_vote(0, 0, votes, false) == 0 && votes == 0);
+    for (int i = 1; i < kLodVoteFrames; ++i) CHECK(lod_vote(0, 1, votes, false) == 0);   // key off: the 30-frame vote
+    CHECK(lod_vote(0, 1, votes, false) == 1 && votes == 0);
+    CHECK(lod_vote(0, 1, votes, false) == 0 && lod_vote(0, 0, votes, false) == 0 && votes == 0);   // reset by a frame at the LOD
+    votes = 5;
+    CHECK(lod_vote(0, 2, votes, true) == 2 && votes == 0);   // warm-up: the first measurement is taken at once
+    CHECK(lod_vote(2, 2, votes, true) == 2 && votes == 0);   // first measurement at the default: no change
+    CHECK(lod_vote(2, 1, votes, false) == 2 && votes == 1);   // later measurements vote as before
+  }
   { // Per-draw coverage evidence: neither publication nor an unavailable/newer pair proves coverage.
     using namespace hair_primary;
     CoverageGate g;

@@ -1,0 +1,131 @@
+{
+  "name": "hw1-dialogue",
+  "save": "Test Dialogue1",
+  "session": false,
+  "traces": 0,
+  "repeat": 1,
+  "hold": 120,
+  "timeout": 600.0,
+  "max_minutes": 10,
+  "window_mode": "visible_unfocused_fg",
+  "live_batch": "hair-warmup",
+  "tree": ".claude/worktrees/test-main",
+  "fail_fast": true,
+  "stop_on_dump": false,
+  "set": "preset=ultra,fg=2,headless=0,crash_dump=1,detailed_logging=1,rt_stats=0,rt_debug=0,gi_debug=0,ls_debug=0,rf_debug=0,ls_stats=0,rf_stats=0,ls_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_primary_check=0,replay_pack=0,qa_exposure_hold=0,rt_stats_period_frames=60,rt_timing_frames=60,rt_scene_wait_log_frames=60,rt_native_hair=1,rt_native_scalp=1,rt_bvh_split=1,sharc_device=1,rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_warmup=1",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches/hair_warmup/plans/dialogue.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[watch\\]",
+    "\\[crash\\]",
+    "\\[fault\\]",
+    "FAILED",
+    "\\[hair primary\\]",
+    "\\[hair groom\\]",
+    "\\[hair\\]",
+    "\\[hair capture\\]",
+    "\\[rt\\] scene wait",
+    "VK_ERROR",
+    "validation",
+    "DEVICE_LOST"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[hair groom\\] device with linear swept spheres",
+    "\\[hair primary\\] header at 0x[0-9a-f]+: static hair pipelines get strand variants",
+    "\\[hair primary\\] warm-up: load quiet ended at frame \\d+, \\d+ frames after the level load \\(groom state settled for 30 frames, rt_hair_warmup\\)",
+    "\\[hair primary\\] warm-up: level load at frame \\d+: load quiet ended at frame \\d+ \\(\\+\\d+, groom state settled\\), first strand G-buffer swap at frame \\d+, \\d+ frames after the load \\(rt_hair_warmup 1\\)",
+    "\\[hair primary\\] warm-up: level load at frame \\d+: load quiet ended at frame \\d+ \\(\\+300, frame count\\), first strand G-buffer swap at frame \\d+, \\d+ frames after the load \\(rt_hair_warmup 0\\)",
+    "\\[hair primary\\] warm-up: last \\d+ frames: [1-9]\\d* draws swapped to strands for the first time since the level load; frames from their first publish: mean [0-9.]+, max \\d+",
+    "\\[hair groom\\] warm-up: last \\d+ frames: [1-9]\\d* groom slots got their first primary key; frames from the first match: mean [0-9.]+, max \\d+ \\(rt_hair_warmup [01]\\)"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "(?i)device (?:was )?lost",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "\\[hair primary\\] UNAVAILABLE",
+    "\\[hair primary\\] strand variants not prepared",
+    "\\[hair primary\\] .* [1-9]\\d* pipelines refused",
+    "\\[hair groom\\] device WITHOUT",
+    "\\[hair primary\\] depth orphans \\(last \\d+ frames, first 4; [^)]*\\): [0-9a-f]{4}:"
+  ],
+  "expect_every": [
+    {
+      "name": "strands present after every load: every period line has strand G-buffer draws",
+      "select": "\\[hair primary\\] frame \\d+: \\d+ grooms published;",
+      "match": ", [1-9]\\d* G-buffer and \\d+ velocity strand draws",
+      "windows": [
+        "load-on",
+        "after-off",
+        "after-on"
+      ],
+      "min": 1,
+      "period_frames": 60
+    },
+    {
+      "name": "strands complete after every load: no dropout (a swapped draw under a tenth of its card pixels)",
+      "select": "\\[hair primary\\] dropouts \\(last \\d+ frames\\):",
+      "match": ": 0 swapped G-buffer draws wrote under a tenth",
+      "windows": [
+        "load-on",
+        "after-off",
+        "after-on"
+      ],
+      "min": 1,
+      "period_frames": 60
+    }
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "\\[hair-reload\\] selected save reload complete",
+    "\\[motion-plan\\] complete phases=10\\b",
+    "^Run ended: done"
+  ],
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 3,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 3.2265003226516886,
+        "windows": 68,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hair1-dialogue.1.191025.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap1-dialogue.1.203259.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-capture.1.224055.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-strands.1.224309.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.020405.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.033854.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.113042.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.125642.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3800000000046566,
+      "quantile": 0.95,
+      "samples": 35,
+      "maximum": 0.4969999999993888
+    }
+  },
+  "purpose": "RTX Hair warm-up (5o, rt_hair_warmup): Test Dialogue1 with RTX Hair on; first load with the key on, an F8 reload with it off, an F8 reload with it on. Observables: the per-load warm-up line (frames from the level load to the quiet end and to the first strand swap; settled versus frame count), the per-draw wait from first publish to first swap, the groom first-key wait, strand draws and 0 dropouts in every window after a load, no device loss.",
+  "estimated_phase_seconds": 99.9
+}
