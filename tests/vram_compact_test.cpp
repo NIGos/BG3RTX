@@ -143,5 +143,50 @@ int main() {
   CHECK(!evacuation(chunks, 0, {256}, moves));
   chunks[2].ra.arena = 0;
   CHECK(evacuation(chunks, 0, {256}, moves) && moves[0].chunk == 2);
+  // Replay of the 2026-11-09 stall: 10000 records already registered, then the current scene slot's
+  // material record R, then 30 s of failed builds at 60 fps with 4 records per frame (7200 records) during
+  // which R's slot is never re-picked. Unpinned, R is forgotten: slot_retired then never trusts it again and
+  // the slot pins rt_scene_oldest_live forever. Pinned, R keeps its state; unpinned records of its age go.
+  {
+    auto replay = [](bool pin_slot, size_t& forgotten) {
+      std::map<uint64_t, int> states;
+      vram_compact::RecordPins pins;
+      uint64_t next = 0;
+      forgotten = 0;
+      auto reg = [&] {
+        const uint64_t id = ++next;
+        states[id] = 1;   // submitted
+        vram_compact::prune_records(states, next, pins, [&](uint64_t) { ++forgotten; });
+        return id;
+      };
+      for (int i = 0; i < 10000; ++i) reg();
+      const uint64_t r = reg();
+      if (pin_slot) pins.retain(r);
+      const uint64_t neighbour = reg();
+      for (int i = 0; i < 1800 * 4; ++i) reg();
+      CHECK(!states.count(neighbour));
+      const bool kept = states.count(r) && states[r] == 1;
+      if (pin_slot) {   // the slot is built again: released, then forgotten like any old record
+        pins.release(r);
+        for (int i = 0; i < 8192; ++i) reg();
+        CHECK(!states.count(r));
+      }
+      return kept;
+    };
+    size_t forgotten_off = 0, forgotten_on = 0;
+    const bool kept_off = replay(false, forgotten_off), kept_on = replay(true, forgotten_on);
+    std::printf("Record pruning replay: slot record kept %d unpinned, %d pinned (%zu / %zu forgotten)\n", int(kept_off),
+                int(kept_on), forgotten_off, forgotten_on);
+    CHECK(!kept_off && kept_on);
+    // Below the limit nothing is forgotten; the newest `keep` ids always stay.
+    std::map<uint64_t, int> small{{1, 1}, {2, 1}};
+    vram_compact::RecordPins none;
+    vram_compact::prune_records(small, 10000, none, [](uint64_t) {});
+    CHECK(small.size() == 2);
+    std::map<uint64_t, int> big;
+    for (uint64_t i = 1; i <= 8193; ++i) big[i] = 1;
+    vram_compact::prune_records(big, 8193, none, [](uint64_t) {});
+    CHECK(big.size() == 4097 && big.begin()->first == 4097);
+  }
   std::printf("VRAM compact: %u checks passed\n", checks);
 }

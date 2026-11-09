@@ -1118,7 +1118,11 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   SceneSlot& scene = g_scene[scene_slot];
   if(native_hit::enabled()){
     scene.used=true;scene.last_use=frame_index();scene.tlas=VK_NULL_HANDLE;scene.set=VK_NULL_HANDLE;
+    // Pinned until the slot is built again: slot_retired never trusts a pruned record, so a slot not re-picked
+    // for 4096 records (builds failing, it stayed current) would never retire (vram_compact::prune_records).
+    bvh_rec_pin(scene.material_record,false);
     scene.material_record=bvh_rec_register(cmd);
+    bvh_rec_pin(scene.material_record,true);
   }
   scene_phase(3);
   const double t_prep0 = cpu_t ? qpc_ms() : 0;

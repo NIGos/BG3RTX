@@ -751,6 +751,8 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds);
 // dropped. States: 0 pending, 1 submitted, 2 dropped, -1 unknown (never trusted).
 uint64_t bvh_rec_register(VkCommandBuffer cmd);
 int bvh_rec_state(uint64_t id);
+// Keeps a build record's state known (never pruned) while pinned: a scene slot's material record (rtscene).
+void bvh_rec_pin(uint64_t id, bool pin);
 bool bvh_rec_matches_command(uint64_t id, VkCommandBuffer command);
 void bvh_cmd_reset(VkCommandBuffer cmd);
 void bvh_log_state(const char* prefix);   // device-loss / stall report (devfault.cpp)
