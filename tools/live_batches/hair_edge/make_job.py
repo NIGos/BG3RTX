@@ -35,6 +35,7 @@ def step(label, aa, trace=False, frames=60):
                                       pan_delay_ms="0"), trace=trace)
     if frames:
         p.update(frames=frames, settle_frames=0, stats_reset=True, motion_start=7, motion_end=7)
+    p["set"] += ",pan_inputs=0"
     return p
 
 
@@ -49,7 +50,9 @@ def make_plan():
     warm = timed(step("warm-all", 2, frames=0), 25)   # compiles rr_strand_aa.hlsl and every strand pipeline
     warm.update(wait_log=[r"\[shaders\] cache: prefetched ", r"gi: gi/[^ ]+ generation ", r"\[auto\] scene ready"],
                 wait_log_timeout=180)
-    plan = [warm, timed(step("warm-debug", 3, frames=0), 1.1), timed(step("warm-untag", 1, frames=0), 1.1),
+    warm_inputs = timed(step("warm-inputs", 2, frames=0), 1.1)   # pan_inputs=1 once before the measured windows
+    warm_inputs["set"] = warm_inputs["set"].replace(",pan_inputs=0", ",pan_inputs=1")
+    plan = [warm, warm_inputs, timed(step("warm-debug", 3, frames=0), 1.1), timed(step("warm-untag", 1, frames=0), 1.1),
             timed(step("warm-base", 0, frames=0), 1.1),
             step("a-off", 0, True), step("b-aa", 2, True), step("c-off", 0, True), step("d-aa", 2, True),
             step("e-untag", 1, True), step("f-debug", 3, True)]
@@ -62,7 +65,9 @@ def make_plan():
         p = timed(step(label, aa, frames=0), 6)
         serial = SERIALS[label]
         p.update(capture_at=.1, serial=serial)
-        p["set"] += f",pan_prepare=1,pan_edge=1,pan_capture={serial},pan_delay_ms=0"
+        # Full bursts with the RR inputs (rr_color, rr_mvec, material every frame): temporal_burst.py needs them; the
+        # 02:04 edge-only bursts (pan_edge=1) held one material frame and no RR input. About 0.55 GB per burst.
+        p["set"] = p["set"].replace(",pan_inputs=0", "") + f",pan_prepare=1,pan_edge=0,pan_inputs=1,pan_capture={serial},pan_delay_ms=0"
         plan.append(p)
     restore = timed(step("restore", 0, frames=0), 1.1)
     restore["set"] += ",dump_images=1,dump_png_width=960,dump_preview_f32=1"
@@ -88,7 +93,8 @@ def make_job(plan):
         if g["name"].startswith(("zero refused", "zero orphan", "depth orphans", "swapped frames")):
             gates.append(dict(g, windows=strands))
         elif g["name"].startswith("K8 "):
-            gates.append(g)
+            # pan_inputs adds the RR input samples: any sample count, 8 frames, transport ok.
+            gates.append(dict(g, match=g["match"].replace("20 samples", r"\d+ samples")))
     # The mode-switch line is logged when the setting is applied, before the window's motion-ready line (live
     # 2026-11-09 01:38: =2 at 01:38:13.4, b-aa ready at 01:38:16.1), so a per-window event gate can never see it.
     # Each mode's switch line is a plain expect instead; the plan order proves which window ran which mode.
@@ -99,13 +105,16 @@ def make_job(plan):
     j["expect"] += [r"\[hair primary\] (?:prepass|G-buffer) hair pipeline stencil: test \d, write mask 0x[0-9a-f]{2}",
                     r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built",
                     r"\[rrpost\] rr_hair_strand_aa=0:", r"\[rrpost\] rr_hair_strand_aa=1:", r"\[rrpost\] rr_hair_strand_aa=2:",
-                    r"\[rrpost\] rr_hair_strand_aa=3:"]
+                    r"\[rrpost\] rr_hair_strand_aa=3:",
+                    r"\[rrpost\] strand snapshots \(rr_hair_strand_aa=\d\): [1-9]\d* at the lighting pass"]
     j["patterns"] += [r"\[rrpost\]", r"hair pipeline stencil"]
     # The edge resolve must build: a pipeline creation or DXC call failure (layer/rrpost.cpp compile_pipeline, which
     # names every entry under rr_post.hlsl; layer/shaders.cpp) and a period without a strand resolve frame are fatal.
     j["forbid"] = list(j.get("forbid", [])) + [r"\[rrpost\] strand resolve .*: 0 frames, [1-9]\d* without",
                                                r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline creation failed",
-                                               r"\[shaders\] rr_strand_aa\.hlsl:strand_resolve compile call failed"]
+                                               r"\[shaders\] rr_strand_aa\.hlsl:strand_resolve compile call failed",
+                                               r"\[rrpost\] rr_post\.hlsl:strand_snapshot pipeline creation failed",
+                                               r"\[rrpost\] strand snapshots .*: 0 at the lighting pass, [1-9]\d* refused"]
     return j
 
 
