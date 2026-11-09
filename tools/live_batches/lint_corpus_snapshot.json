@@ -78854,6 +78854,46 @@
     "\\[bvh\\] mesh cache: .*rt_as_cap_occupied=1, reserved ": [
       0,
       null
+    ],
+    "\\[hair primary\\] strand feedback unavailable": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] header at 0x": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] live: strands ON at frame \\d+": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] header safety \\(last \\d+ frames\\).*build camera re-read at submit \\(item 11\\): [1-9]\\d* publishes checked": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] strand traces in counted frame \\d+:.*header camera \\(": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] frame \\d+: \\d+ grooms published; .*main G-buffer [1-9]\\d*/\\d+": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\)": [
+      0,
+      null
+    ],
+    "\\[pan\\] burst 99300 complete: \\d+ frames, \\d+ samples, transport ok": [
+      0,
+      null
+    ],
+    "\\[pan\\] burst 99301 complete: \\d+ frames, \\d+ samples, transport ok": [
+      0,
+      null
+    ],
+    "\\[pan\\] burst 99302 complete: \\d+ frames, \\d+ samples, transport ok": [
+      0,
+      null
     ]
   }
 }
