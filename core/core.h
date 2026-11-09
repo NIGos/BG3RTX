@@ -59,7 +59,12 @@ struct WaterRfIn {
   // this frame and the key is on, else null (the variant is then not selected).
   uint64_t hit_identity=0;
   VkImageView rf_hit = VK_NULL_HANDLE;
+  // rt_scene_handout=2 (increment 5): scene_tlas is the dummy and alpha the handed-out set R; the command buffer is
+  // registered with the handout; the water shaders (constant 1051) trace the stamp's reference address.
+  bool handout = false;
 };
+// The water pipelines carry constant 1051 = 1 and none is rebuilding (core/water.cpp make_pipe): water may take the handout.
+bool water_handout_ready();
 bool water_rf_wanted();
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in);
 void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p);

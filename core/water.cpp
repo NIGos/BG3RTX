@@ -70,6 +70,7 @@
 #include "../common/pipeline_async.h"
 #include "../common/native_tileset_capability.h"
 #include "../common/water_compose.h"
+#include "../common/scene_handout.h"
 #include "../common/water_policy.h"
 #include "../common/water_scene.h"
 #include "../common/shader_variant.h"
@@ -504,6 +505,7 @@ bool g_cbusy_logged = false;
 uint32_t g_cpasses[kRing] = {};
 // What the composition at the end of the forward water passes needs from this frame's lighting.
 struct Stash {
+  bool handout = false;   // increment 5: tlas is the dummy, alpha the handed-out set R of frame `frame`
   uint64_t hit_identity=0;
   uint64_t frame = 0, build_frame = 0;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
@@ -542,7 +544,7 @@ struct CWindow {
   // an earlier lighting's pass did not find the stash's pair current (the current slot stale, a newer
   // build older than this frame, the newer pair unavailable), and the stash's pair kept (pick_scene).
   uint64_t nl_cleared = 0, nl_old = 0, nl_ahead = 0;
-  uint64_t cur_stale = 0, newer_old = 0, newer_failed = 0, stash_kept = 0;
+  uint64_t cur_stale = 0, newer_old = 0, newer_failed = 0, stash_kept = 0, handout = 0;
   uint64_t camera_samples = 0, camera_missing = 0, tlas_age_sum = 0, tlas_age_max = 0, tlas_age_samples = 0;
   double camera_delta_sum = 0, camera_delta_max = 0;
 };
@@ -787,13 +789,13 @@ void maybe_log_compose() {
             "(on/off flips %llu); refused passes: no recent lighting (cleared %llu, older than %llu frames %llu, ahead "
             "%llu), no scene %llu; earlier lighting: current slot stale %llu, newer build before this frame %llu, newer "
             "pair unavailable %llu, lighting's pair kept %llu; non-finite terms %llu (the game's colour kept: "
-            "water_compose.h kCsNonFinite)",
+            "water_compose.h kCsNonFinite); scene handout %llu",
             (unsigned long long)W.frames, (unsigned long long)g_ccont.frames, (unsigned long long)g_ccont.composed_frames,
             (unsigned long long)g_ccont.uncomposed, (unsigned long long)g_ccont.flips, (unsigned long long)W.nl_cleared,
             (unsigned long long)kLightingLagFrames, (unsigned long long)W.nl_old, (unsigned long long)W.nl_ahead,
             (unsigned long long)W.no_scene, (unsigned long long)W.cur_stale, (unsigned long long)W.newer_old,
             (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept,
-            (unsigned long long)w[kCsNonFinite]);
+            (unsigned long long)w[kCsNonFinite], (unsigned long long)W.handout);
   log_stats("[water] surface partition: coverage-weighted owned %llu, invalid %llu; coverage zero %llu, partial %llu, full %llu, native/missing FS marker %llu, unmarked/layout %llu, FS spec off %llu, compose spec off %llu; marked owned %llu, foam texture source %llu, edge/flow mask source %llu; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
             (unsigned long long)w[kCsSurfaceClean], (unsigned long long)w[kCsSurfaceInvalid],
             (unsigned long long)w[kCsSurfaceFoamColour], (unsigned long long)w[kCsSurfaceFoamF0],
@@ -1045,8 +1047,9 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   g_cpasses[slot] = 0;
   g_st.frame = host->frame_index();
   g_st.tlas = in.scene_tlas;
-  g_st.build_frame = 0;
-  if (auto* ring = static_cast<bg3::water::BuildCameraRing*>(host->persist(bg3::water::kBuildCameraKey, sizeof(bg3::water::BuildCameraRing)))) {
+  g_st.handout = in.handout;
+  g_st.build_frame = in.handout ? g_st.frame : 0;   // the handout's build commits in this frame (its ring entry)
+  if (auto* ring = in.handout ? nullptr : static_cast<bg3::water::BuildCameraRing*>(host->persist(bg3::water::kBuildCameraKey, sizeof(bg3::water::BuildCameraRing)))) {
     bg3::water::BuildCameraLock lock(*ring);
     g_st.build_frame = bg3::water::find_build_camera(*ring, uint64_t(in.scene_tlas), g_st.frame).frame;
   }
@@ -1097,7 +1100,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     VkAccelerationStructureKHR ref=VK_NULL_HANDLE;
     uint64_t id=0;
     if(!reference_scene(cur,0,ref,id,[&](auto selected,auto* reference,auto* identity){
-         if(host->rt_omm_scene_reference)host->rt_omm_scene_reference(cmd,selected,reference,identity);
+         if(host->rt_omm_scene_reference)host->rt_omm_scene_reference(cmd,selected,reference,identity,false);
        })) {++g_cwin.newer_failed;return false;}
     tlas = ref, alpha = set;
     return true;
@@ -1110,12 +1113,28 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     VkAccelerationStructureKHR ref = VK_NULL_HANDLE;
     uint64_t id = 0;
     if(!reference_scene(g_st.tlas,g_st.hit_identity,ref,id,[&](auto selected,auto* reference,auto* identity){
-         host->rt_omm_scene_reference(cmd,selected,reference,identity);
+         host->rt_omm_scene_reference(cmd,selected,reference,identity,false);
        }))return false;
     tlas = ref, alpha = g_st.alpha;
     return true;
   };
-  ScenePick pick = pick_scene(use, cur_ok, cur == g_st.tlas, built, now, take_newer, keep_stash);
+  // Increment 5: a handout stash composes with the handout (this frame's pass joins it) or, once it resolved, with
+  // the committed scene of the stash's frame (rt_scene: no wait, it keeps that slot live); never the dummy alone.
+  bool handout_pick = false;
+  if (g_st.handout) {
+    VkDescriptorSet set = g_st.alpha;
+    VkAccelerationStructureKHR dummy = VK_NULL_HANDLE, committed = VK_NULL_HANDLE;
+    uint64_t f = 0, b = 0;
+    const bool registered = use == LightingUse::kThisFrame && host->rt_scene_handout &&
+                            host->rt_scene_handout(cmd, &set, &dummy, &f) && dummy == g_st.tlas;
+    const bool same = !registered && host->rt_scene && host->rt_scene(&committed, &b) && committed && b == g_st.frame;
+    switch (bg3::scene_handout::water_handout_pick(use == LightingUse::kThisFrame, registered, same)) {
+      case bg3::scene_handout::WaterPick::kHandout: handout_pick = true; ++g_cwin.handout; break;
+      case bg3::scene_handout::WaterPick::kCommitted: g_st.tlas = tlas = committed; g_st.handout = false; g_st.build_frame = b; break;
+      default: ++g_cwin.no_scene; g_ccont.note(now, false); return false;
+    }
+  }
+  ScenePick pick = handout_pick ? ScenePick::kStash : pick_scene(use, cur_ok, cur == g_st.tlas, built, now, take_newer, keep_stash);
   if (pick == ScenePick::kNone || !tlas || !alpha) {
     ++g_cwin.no_scene;
     g_ccont.note(now, false);
@@ -1129,7 +1148,8 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     if (auto* ring = static_cast<BuildCameraRing*>(host->persist(kBuildCameraKey, sizeof(BuildCameraRing)))) {
       BuildCameraLock lock(*ring);
       const uint64_t selected_build = pick == ScenePick::kNewer ? built : g_st.build_frame;
-      if (selected_build) build_camera = find_build_camera(*ring, uint64_t(tlas), now, selected_build);
+      if (handout_pick) build_camera.frame = g_st.build_frame;   // its commit writes that ring entry before this runs
+      else if (selected_build) build_camera = find_build_camera(*ring, uint64_t(tlas), now, selected_build);
       camera_buffer = ring->buffer;
     }
     if (!camera_buffer || !build_camera.frame) { if (shift_on) ++g_cwin.camera_missing; }
@@ -1290,6 +1310,13 @@ void release_compose() {
 
 
 bool water_rf_wanted() { return host->cfg_int("rt_water_reflections", 0) != 0; }
+// Increment 5: every water pipeline the frame may run carries constant 1051 = 1 (its key's "#handout=1") and none is
+// rebuilding to another key (p.req is the key it was built for).
+bool water_handout_ready() {
+  for (const Pipe* p : {&g_primary, &g_reflect, &g_copy, &g_compose})
+    if (p->p && p->req.find("#handout=1") == std::string::npos) return false;
+  return g_reflect.p && g_compose.p;
+}
 
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   if (!water_rf_wanted()) return;
@@ -1314,9 +1341,10 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   // and the lighting stash. The host AlphaDSL is a compatible superset: OMM
   // bindings 10/11 remain unused by these ordinary water shaders.
   WaterRfIn in=input;
-  if(!reference_scene(input.scene_tlas,input.hit_identity,in.scene_tlas,in.hit_identity,
+  // A handout pair (increment 5) has no TLAS to resolve: the shaders trace the stamp's reference address.
+  if(!input.handout && !reference_scene(input.scene_tlas,input.hit_identity,in.scene_tlas,in.hit_identity,
        [&](auto selected,auto* reference,auto* identity){
-         if(host->rt_omm_scene_reference)host->rt_omm_scene_reference(cmd,selected,reference,identity);
+         if(host->rt_omm_scene_reference)host->rt_omm_scene_reference(cmd,selected,reference,identity,false);
        })) {++g_win.skip_layout;return skip();}
   VkDescriptorSetLayout alpha_layout = VK_NULL_HANDLE;
   VkDescriptorSet alpha_any = VK_NULL_HANDLE;
