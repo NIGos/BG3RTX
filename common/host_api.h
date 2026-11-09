@@ -29,7 +29,9 @@
 // 29: ray tracing pipeline GI trace (gi_rt_pipeline): Bg3HostApi::rt_pipeline (appended), the three ray tracing
 //     pipeline entry points in VkDeviceFuncs (common/vk_funcs.h). Rebuild both DLLs.
 // 30: scene handout (docs/SCENE_HANDOUT_DESIGN.md increment 3): Bg3HostApi::rt_scene_handout (appended). Rebuild both DLLs.
-#define BG3RTX_ABI_VERSION 30
+// 31: Bg3HostApi::rt_omm_scene_reference takes `traversal` (false: a reference lookup that never traces the stamp's
+//     traversal address, e.g. water): only a real traversal refusal downgrades it (scene handout). Rebuild both DLLs.
+#define BG3RTX_ABI_VERSION 31
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -362,7 +364,7 @@ struct Bg3HostApi {
   // and supplies a nonzero build identity. False with a reference selects baseline.
   // False with no reference means the tuple is unavailable, never a quality pass.
   bool (*rt_omm_scene_reference)(VkCommandBuffer cmd, VkAccelerationStructureKHR selected_tlas,
-                                VkAccelerationStructureKHR* reference_tlas, uint64_t* build_identity);
+                                VkAccelerationStructureKHR* reference_tlas, uint64_t* build_identity, bool traversal);
   // ABI21: material-consuming dispatch only. Validate the exact selected tuple
   // and generation, then return query-owned AlphaDSL and retain THIS recording.
   // False means preserve existing output; ordinary/OMM dispatches do not call.

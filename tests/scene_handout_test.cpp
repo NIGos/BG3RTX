@@ -357,6 +357,28 @@ static void scripted() {
     CHECK(!q.retired({100}));        // G-buffer done, lighting still running: kept
     CHECK(q.retired({100, 200}));
   }
+  {  // 20 increment 5 (ABI 31): only a refusal by a caller that traces byte 24 downgrades it; a water lookup never does
+    CHECK(downgrade_on_refusal(true, false, true));
+    CHECK(!downgrade_on_refusal(false, false, true));   // water: reference lookup (the 60-per-60 downgrades of sh2)
+    CHECK(!downgrade_on_refusal(true, true, true));     // the recording may trace the accelerated TLAS
+    CHECK(!downgrade_on_refusal(true, false, false));   // the slot has no accelerated TLAS
+  }
+  {  // 21 increment 5: water compose on a handout stash
+    CHECK(water_handout_pick(true, true, false) == WaterPick::kHandout);     // this frame's pass joins the handout
+    CHECK(water_handout_pick(true, false, true) == WaterPick::kCommitted);   // it resolved: the committed scene of its frame
+    CHECK(water_handout_pick(false, true, true) == WaterPick::kCommitted);   // a later frame's pass never joins an old handout
+    CHECK(water_handout_pick(false, false, false) == WaterPick::kNone);      // neither: no compose (never the dummy alone)
+    CHECK(water_handout_pick(true, false, false) == WaterPick::kNone);
+    // The machine side of a water pass: it joins only the open handout of its own frame and slot.
+    Layer L = warm();
+    L.capture_begin();
+    const uint64_t l = L.lighting();
+    const int R = L.rec(l)->set_slot;
+    CHECK(L.m.hand_out(L.frame, L.new_rec(), R, 0xC3) == R);   // water's run_post / compose command buffer
+    const uint64_t g = L.capture_end(true);
+    L.submit({g, l});
+    CHECK(L.m.hand_out(L.frame, L.new_rec(), R, 0xC4) == -1);  // after the resolution: kCommitted path
+  }
   {  // 11 stale reservation (capture began, never ended for 3 frames): not handed out
     Layer L = warm();
     L.capture_begin();

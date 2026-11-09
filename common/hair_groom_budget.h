@@ -51,6 +51,19 @@ inline int lod_this_frame(int want, int built, bool want_ready, bool built_ready
   return -1;
 }
 
+// The screen-size LOD vote of a groom slot (layer/bvhsplit.cpp groom_pick_lod): a change needs kLodVoteFrames consecutive
+// frames wanting it (no flicker at a threshold). lod: the slot's LOD (-1: none yet, the wanted one is taken). first_measure
+// (rt_hair_warmup, docs/RTX_HAIR_PRIMARY.md 5o): this frame holds the slot's first screen-size measurement. Its LOD until
+// then is the no-bounds default (LOD 0, the bounds come from the groom's own points), not a choice at a threshold, so the
+// measured LOD is taken at once instead of after a whole vote (a second upload and full build ~30-50 frames into a load).
+constexpr int kLodVoteFrames = 30;
+inline int lod_vote(int lod, int want, int& votes, bool first_measure) {
+  if (lod < 0) return want;
+  if (want == lod) { votes = 0; return lod; }
+  if (first_measure) { votes = 0; return want; }
+  return ++votes >= kLodVoteFrames ? (votes = 0, want) : lod;
+}
+
 // Crowd plan (rt_hair_groom_crowd_ksegments, docs/RTX_HAIR_PRIMARY.md increment 5): the groom instances of a frame
 // share a budget of LSS segments (refit time and BLAS memory scale with segments; trace time scales with the hair
 // pixels/rays and only logarithmically with segments). Largest on screen first, each at its screen-size LOD or the

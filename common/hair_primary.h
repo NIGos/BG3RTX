@@ -499,8 +499,30 @@ inline int pick_publish(const Staged* staged, int n, uint64_t gbuffer_cmd, Submi
 // the first publish comes in the middle of the first level load (hc1 2026-11-04 00:25: device lost 10 frames after the
 // first publish, the level still streaming; strands enabled live after a load had survived).
 constexpr uint64_t kLoadQuietFrames = 300;
+// rt_hair_warmup (docs/RTX_HAIR_PRIMARY.md 5o): the quiet window ends on a completion signal instead of the frame count.
+// The scene build reports each frame whether the groom state is settled: grooms published, every matched hair draw
+// joined (no UV readback pending), its LOD resident and chosen (no upload, no LOD vote pending), refit (no full build)
+// and keyed. kWarmupSettledFrames such frames in a row end the window; kLoadQuietFrames stays the upper bound. 30 is
+// the LOD vote period (hair_groom::kLodVoteFrames): a groom settled that long has held its LOD through a whole vote,
+// and the window cannot end within hc1's 10 frames between a first publish and the loss. A frame without a report
+// (no groom published) up to kWarmupGapFrames apart does not break the run (the build may skip a frame index).
+constexpr uint64_t kWarmupSettledFrames = 30, kWarmupGapFrames = 2;
 struct LoadGuard {
   uint64_t image = 0, identity = 0, quiet_until = 0;
+  uint64_t boundary = 0;                        // frame of the last boundary
+  uint64_t settled_since = 0, settled_last = 0;   // the current run of settled reports (0: none)
+  bool early = false;                           // the window ended on the settled signal
+  // rt_hair_warmup: one report per scene build. True when this report ends the quiet window.
+  bool settle(uint64_t now, bool settled) {
+    if (!quiet(now) || now < boundary) return false;
+    if (!settled) { settled_since = settled_last = 0; return false; }
+    if (!settled_last || now > settled_last + kWarmupGapFrames) settled_since = now;
+    settled_last = now;
+    if (now < settled_since + kWarmupSettledFrames) return false;
+    quiet_until = now;
+    early = true;
+    return true;
+  }
   // The G-buffer depth image of this frame; true at a boundary (the first image, or a different one). identity: the
   // layer's creation id of that image (tracker ImageRec::id; 0 unknown). Review 2026-11-08 item 14: a new level may
   // destroy the depth image and get the same handle for its new one; the creation id differs, so that is a boundary too.
@@ -513,6 +535,9 @@ struct LoadGuard {
     image = depth_image;
     identity = image_identity;
     quiet_until = now + kLoadQuietFrames;
+    boundary = now;
+    settled_since = settled_last = 0;
+    early = false;
     return true;
   }
   bool quiet(uint64_t now) const { return now < quiet_until; }

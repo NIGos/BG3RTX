@@ -361,7 +361,8 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
 - Device lost after the F8 reload (hv1 18:40, cause not confirmed): a new level reuses Vulkan handles for other
   objects. The native hair FS module map is erased on vkDestroyShaderModule and on reuse (a reused handle could give
   a non-hair pipeline a strand variant). `hair_primary::LoadGuard`: a new G-buffer depth image marks a level load;
-  the groom gate, pixel record and feedback reset and strand swaps pause 300 frames. bvhsplit drops the groom join
+  the groom gate, pixel record and feedback reset and strand swaps pause 300 frames (5o, rt_hair_warmup: until the
+  groom state has been settled 30 frames, at most 300). bvhsplit drops the groom join
   verdicts, UV joins and UV readbacks in flight at the same boundary (their identities are built from handles).
   Live bisect: hair_validation hv5 (one F8 per stage: native + scalp, + physical origin, + groom, + primary, 60 s
   each); hv4 repeats the reload under GPU-AV.
@@ -827,6 +828,59 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   frame; missing or refused snapshot, missing resolve, out-of-order batches, resubmission: refused, never a wrong frame).
   Period line: '... N frames, M fell back ... (no snapshot of the frame: a at recording, b at submit); pairing: r
   resyncs, snapshots recorded up to k ahead of their resolve'. Snapshot memory 2 -> 1 image (-22 MB at 2560x1067).
+
+## 5o. Warm-up after a level load (offline 2026-11-09, branch claude/hair-warmup: key rt_hair_warmup, off)
+User report: after loading a save the strands are absent, flickering or incomplete for a while, then stabilise.
+Every delay between a character's first frame and its strands, from the code and three logs (he1 12:56 Dialogue1,
+sh2 18:43 Water Queens House, rv3 18:37):
+- **LoadGuard quiet window (5b): 300 frames, the whole delay.** Every new G-buffer depth image (level load, also the 3D
+  main menu, hence two lines in he1) pauses all strand swaps and probes for kLoadQuietFrames. he1: load at frame
+  ~1100, all 4 grooms joined and uploaded within ~15 frames, first strand G-buffer draws in the 1381-1440 window
+  (~+300..+330 frames, ~10 s at the unfocused 30 fps); sh2 the same (~+300, grooms ready after ~+100 of slow
+  streaming frames). 300 was a safety margin chosen after hv1/hc1 (device lost after F8 and 10 frames after a first
+  publish mid-load, causes then unconfirmed). Section 9 closes them with the boundary reset itself (kept),
+  soup_update_ok (held soup offsets) and the demoted-lane discard; no evidence needs the 300-frame length.
+- UV join soup readback: 1-3 frames per draw whose index buffer is not host data (sh2: 31.311 pending -> 31.367 matched).
+- LOD upload: 2-3 frames (staged, copied in the build, ready when that frame completed); the disk read is synchronous
+  in the build (7-39 MB per LOD). Groom index: read at device creation on a background thread (31-47 ms, 871 files).
+- First LOD: a new slot has no bounds yet, so groom_pick_lod starts at LOD 0, measures its screen size 2-3 frames
+  later and then needs a 30-frame vote: the screen-size LOD's upload and full build come ~30-50 frames into the load
+  (sh2: LOD 1/2 uploads 0.9 s after the LOD 0 ones; 14 full builds in the first window for 7 grooms).
+- Key: a groom's draw key is published from the second update of its points range (+2 frames, also after a LOD switch).
+- Swap gates after the window: two publishes, the coverage probe (kFreshFrames 12), the G-buffer proof, the prepass
+  card-depth drop: ~12-15 frames.
+Fix (rt_hair_warmup=1, live; knob exp_hair_warmup "RTX Hair fast start", developer, off in every preset):
+- The quiet window ends on a completion signal. bvhsplit reports per build whether the groom state is settled: grooms
+  published and no hair draw with a join pending (UV readback in flight, or a full draw not yet joined), no LOD
+  upload or LOD vote in progress, no first-LOD wait, no held soup, no full build, every groom keyed.
+  `hair_primary::LoadGuard::settle`: kWarmupSettledFrames (30) such builds in a row (reports up to 2 frames apart)
+  end the window; 300 stays the upper bound (a scene that never settles behaves as before). 30 = the LOD vote period
+  (hair_groom::kLodVoteFrames), and the window cannot end within hc1's 10 frames after a first publish. Every reset at
+  the boundary and every swap gate stay; final verdicts (count unknown, no file, UV mismatch, partial draw, crowd
+  cards) count as settled.
+- A slot's first screen-size measurement picks its LOD at once (hair_groom::lod_vote first_measure): the no-bounds
+  LOD 0 was no choice at a threshold, so the 30-frame anti-flicker vote does not apply. Later changes vote as before.
+- Rejected: a persistent join-verdict cache (keyed by UV hash it needs the same soup readback; keyed by draw identity it
+  is invalid across loads, handles are reused: saves at most 3 frames, which the settled run absorbs anyway), groom
+  prefetch from the save or the last session (index already off-thread at startup; a LOD read is 2-3 frames), upload of
+  all LODs at once (rt_hair_groom_lod_keep already keeps the built LOD during an upload; 1.5-2x pool bytes per groom;
+  the first-measurement rule removes the warm-up switch), full-build bursts (same count, the second one moves ~30-45
+  frames earlier).
+- Lines (always on, CPU only, both key values): `[hair primary] warm-up: level load at frame B: load quiet ended at
+  frame Q (+n, groom state settled|frame count), first strand G-buffer swap at frame F, m frames after the load
+  (rt_hair_warmup k)` once per load; per stats period `[hair primary] warm-up: last N frames: K draws swapped to strands
+  for the first time since the level load; frames from their first publish: mean, max` and `[hair groom] warm-up: last
+  N frames: K groom slots got their first primary key; frames from the first match: mean, max (rt_hair_warmup k)`;
+  with the key, `[hair primary] warm-up: load quiet ended at frame Q, n frames after the level load (groom state
+  settled for 30 frames, rt_hair_warmup)`.
+- Expected: load to first strands ~+300..+330 frames -> ~+55..+170 (5-10 s -> 1-3 s at 30 fps). Cost: CPU counters
+  and one call per build; no shader, request or ABI change.
+- Tests: hair_groom_asset_test (settled run, gap, broken run, upper bound, reports before the boundary, identity
+  boundary; lod_vote with and without the first measurement).
+- Live (READY_FOR_LIVE, not queued): tools/live_batches/hair_warmup hw1-dialogue: Test Dialogue1 with RTX Hair on,
+  first load key on, F8 reload key off, F8 reload key on (A/B between the reloads of one run); gates in predicted.json.
+  In game: load Test Dialogue1 with the knob on and watch the party's hair; strands should replace the cards within
+  1-2 s of the scene appearing.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
