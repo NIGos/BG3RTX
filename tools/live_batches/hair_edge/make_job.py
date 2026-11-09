@@ -97,9 +97,13 @@ def make_job(plan):
     j["expect_every"] = gates
     j["expect"] = [e for e in j["expect"] if "shadow transmittance" not in e and "strand G-buffer draws GPU" not in e]
     j["expect"] += [r"\[hair primary\] (?:prepass|G-buffer) hair pipeline stencil: test \d, write mask 0x[0-9a-f]{2}",
-                    r"\[rrpost\] rr_strand_aa\.hlsl:strand_resolve pipeline built"]
+                    r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built"]
     j["patterns"] += [r"\[rrpost\]", r"hair pipeline stencil"]
-    j["forbid"] = list(j.get("forbid", [])) + [r"\[rrpost\] strand resolve .*: 0 frames, [1-9]\d* without"]
+    # The edge resolve must build: a pipeline creation or DXC call failure (layer/rrpost.cpp compile_pipeline, which
+    # names every entry under rr_post.hlsl; layer/shaders.cpp) and a period without a strand resolve frame are fatal.
+    j["forbid"] = list(j.get("forbid", [])) + [r"\[rrpost\] strand resolve .*: 0 frames, [1-9]\d* without",
+                                               r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline creation failed",
+                                               r"\[shaders\] rr_strand_aa\.hlsl:strand_resolve compile call failed"]
     return j
 
 

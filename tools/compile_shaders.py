@@ -127,6 +127,17 @@ if rf_hit and rf_checker.exists():
 elif rf_hit:
     res.append(("rf hit shade descriptor interface", 1,
                 "missing native_hit_rf_bindings_test; build the checker before qualification"))
+# spirv-val of the RR-before-post requests (layer/rrpost.cpp, listed in shaders/precompile.txt): the layer builds them
+# without any other offline check. Cached per SPIR-V digest.
+_pre = root / "shaders" / "precompile.txt"
+rr_files = sorted({l.split("\t")[0] for l in (_pre.read_text(encoding="utf-8").splitlines() if _pre.exists() else [])
+                   if l.startswith("rr_") and "\t" in l} & set(files))
+if rr_files:
+    checked = compile_requests(tree, rr_files, tool=tool, cache=cache, label="compile_shaders rr", validate=True)
+    for f in rr_files:
+        if checked[f].ok and checked[f].valid is False:
+            res.append(("spirv-val " + f, 1, checked[f].log))
+    print(f"spirv-val: {len(rr_files)} RR-before-post requests checked")
 if verify:
     for r in verify_pp(tree, files, verify, tool, cache):
         res.append(("preprocessed cache key self-check " + r, 1, "compile failed or cached SPIR-V differs from a fresh compile"))

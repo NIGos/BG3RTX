@@ -64,7 +64,7 @@ TABLE["ls_k"] = [r"gi: gi/rt_local_shadows[^ ]*_k\.hlsl[^ ]* generation "]
 TABLE["ls_box"] = [r"gi: gi/rt_local_shadows_box\.hlsl[^ ]* generation "]
 TABLE["rr_post"] = [r"\[rrpost\] rr_post\.hlsl:resolve pipeline built"]
 # rr_hair_strand_aa (layer/rrpost.cpp strand_resolve): selects the strand_resolve dispatch, built once (prewarmed when on).
-TABLE["rr_hair_strand_aa"] = [r"\[rrpost\] rr_strand_aa\.hlsl:strand_resolve pipeline built"]
+TABLE["rr_hair_strand_aa"] = [r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built"]
 
 # VALID su1-ultra-s8-fg2.1.004527.log: core/gi.cpp refresh() records;
 # these scalar settings are push constants / pass enables, not new variants.
