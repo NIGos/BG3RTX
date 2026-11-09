@@ -5,6 +5,7 @@ Faster
 - Fixed a slowdown that grew over a session in busy scenes: the foliage micro-map builder retried refused work every frame. Measured: the scene wait no longer climbs from 2 to 18 ms.
 - Ray-tracing memory: freed acceleration-structure blocks are reused after a short delay instead of growing the pool.
 - Fixed video memory running out after a stretch where scenes could not be built (seen as a long stutter, then a crash in DLSS Frame Generation): freed ray-tracing memory was never reused again, and some ray-tracing memory could grow past its limit. It now stays within its limit and is reused once building resumes.
+- Less video memory for sun shadows in ray tracing: the shadow-caster capture keeps a reserve sized from how fast the scene really changes. Measured at Water Queens House zoomed out: about 1.5 to 2 GB less, with no caster left out.
 
 RTX Hair (beta, off by default)
 - One option turns it on: Lighting > RTX Hair, or the launcher's Home page. It switches live in game: Ctrl+Shift+F7 by default (change it on the Hotkeys page). Strands appear in about 2 s and go away at once. It needs only a supported RTX GPU; no files to download.
@@ -12,7 +13,7 @@ RTX Hair (beta, off by default)
 - Strands are stored about 11 times smaller than before, with no visible difference.
 - New RTX Hair card on the Home page: hair styles ready, disk use, time left, pause/resume, and whether conversion may run while you play.
 - Optional "Convert all styles": converts every hair style of the game ahead of time (about 9 minutes for 1,217 styles on our PC). It reads the game's own files and needs a granny2.dll, for example the one in LSLib's ExportTool folder, which you pick once; BG3RTX does not ship or download that file.
-- Strand hair edges: the edge resolve now applies on every frame in normal play (frame cap, Reflex, Frame Generation); before, it missed up to two frames in three.
+- Strand hair edges: the edge resolve now applies on every frame in normal play (frame cap, Reflex, Frame Generation 2x and 3x, busy scenes); before, it missed up to two frames in three, and in busy scenes it could use the previous frame's strands.
 - Experimental (turn on experimental options): Strand hair edge resolve. Pick Analytic coverage, then Ctrl+Shift+F10 switches it on and off in game, to compare the dithering at strand edges.
 - A style whose hair was not fully loaded when it was first seen is copied again later instead of being skipped.
 - Fixed: since an earlier fix round strands could stay as the game's hair cards. They show again.
@@ -26,3 +27,4 @@ Launcher
 Known
 - Tested only on an RTX 5090 with driver 621.01.
 - RTX Hair cost is not qualified yet. Strand edges can still show light dithering in motion.
+- With RTX Hair on, very wide zoomed-out views of large city scenes can leave a few objects out of ray tracing for a frame (the scene no longer fits the 2 GB capture).
