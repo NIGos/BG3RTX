@@ -794,7 +794,15 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   after each period: host_atomics_lint_test classifies it); line '[rrpost] strand snapshot site <site> (frames a-b): N
   dispatches; per dispatch footprint F px, strand S px, coverage C px'. he1 now runs with site 3, a counter window and
   counterbalanced bursts off/aa/off/aa (about 2.2 GB of bursts).
-## 6. Open items
+- he1 04:02 (bursts complete; INVALID only on the 'N frames, 0 fell back' expect, 1-3 per steady period): NOT a pass.
+  Counters: every site 0 strand px before frame ~1363 (no strand swaps yet), then G-buffer end ~77k strand px per
+  dispatch, decal end and lighting about half (the seal is already partly gone at the decal end); every measured window
+  is after 1363. Bursts (edge_burst.py, final image): edge band flicker aa-1 0.136 vs mean(off-1, off-2) 0.106 (+29%),
+  aa-2 0.136 vs off-2 0.074 (+83%); the core moves the same way (0.045 / 0.048 vs 0.045 / 0.028), and the band/core
+  flicker ratio is unchanged (off 3.03 / 2.66, aa 3.02 / 2.82): no edge-specific temporal gain; the off bursts alone
+  differ by 30-80% (animated dialogue). Edge band hf -13% / -15% (smoother single frames). Static: Xr changed on the hair
+  ring in b-aa (864 px) but not in d-aa (11). Energy Xr -0.55% (off spread 0.49%). Render-res chain about 0.35 ms in aa
+  windows vs 0.165 off (+0.18 ms; the snapshots now run inside run()'s timed dispatches).## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
    normal, is view space; 5g). Open: the root-to-tip sign of that frame.
