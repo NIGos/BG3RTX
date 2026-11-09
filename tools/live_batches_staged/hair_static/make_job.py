@@ -36,7 +36,7 @@ SET = ("preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_
 SERIALS = {"burst-strands": 99300, "burst-aa": 99301, "burst-cards": 99302}
 
 
-def phase(label, seconds, aa=0, strands=1, hold=1, wheel=None, inputs=0, serial=0, capture_at=0):
+def phase(label, seconds, aa=0, strands=1, hold=1, wheel=None, inputs=0, serial=0, capture_at=0, prepare=0):
     p = {"label": label, "kind": "static", "speed": "static", "seconds": seconds, "repeat_ms": 0, "scan": 16,
          "capture_at": capture_at, "serial": serial, "motion_start": seconds, "motion_end": seconds,
          "pixels_per_second": 0, "direction": 0,
@@ -45,7 +45,7 @@ def phase(label, seconds, aa=0, strands=1, hold=1, wheel=None, inputs=0, serial=
         # Full burst with the RR inputs (rr_color, rr_mvec, material every frame), as he1's (hair_edge/make_job.py).
         p["set"] += f",pan_prepare=1,pan_edge=0,pan_inputs=1,pan_capture={serial},pan_delay_ms=0"
     else:
-        p["set"] += f",pan_inputs={inputs},pan_capture=0,pan_delay_ms=0"
+        p["set"] += f",pan_inputs={inputs},pan_prepare={prepare},pan_capture=0,pan_delay_ms=0"
     if wheel:
         p["wheel"] = wheel
     return p
@@ -61,12 +61,15 @@ def make_plan():
         # for the 8 s of the wheel phase (the swap gates need ~12-15 frames; no level load, no LoadGuard window)
         phase("warm-cards", 3, strands=0, hold=0),
         phase("lower", 8, wheel=10, hold=0),
-        phase("warm-inputs", 1.1, inputs=1, hold=0),    # the RR input dump pipelines once before the bursts
-        phase("settle-strands", 4),
+        # The RR input dump pipelines and the pan pipelines (pan_prepare: gi/pan_primary, gi/pan_local) before the
+        # bursts: hs1 2026-11-09 compiled them inside burst 99300 (677 ms pipeline, 5.5 s DXC), a frame gap made its
+        # transport INVALID while 99301/99302 were ok. 8 s covers the ~6 s compile.
+        phase("warm-inputs", 8, inputs=1, hold=0, prepare=1),
+        phase("settle-strands", 4, prepare=1),
         phase("burst-strands", 14, serial=SERIALS["burst-strands"], capture_at=1.0),
-        phase("settle-aa", 4, aa=2),
+        phase("settle-aa", 4, aa=2, prepare=1),
         phase("burst-aa", 14, aa=2, serial=SERIALS["burst-aa"], capture_at=1.0),
-        phase("settle-cards", 4, strands=0),
+        phase("settle-cards", 4, strands=0, prepare=1),
         phase("burst-cards", 14, strands=0, serial=SERIALS["burst-cards"], capture_at=1.0),
         phase("restore", 2, strands=1, hold=0),
     ]

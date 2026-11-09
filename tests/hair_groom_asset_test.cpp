@@ -509,6 +509,33 @@ static void test_watchdog() {
   CHECK(du.judge(13) == 1 && du.active(4, 14));
   du.begin(); du.draw(6, 0, 0, 30); du.judge(20); du.begin(); du.draw(6, 0, 0, 30);   // too little evidence
   CHECK(du.judge(21) == 0 && !du.active(6, 22));
+  // rt_hair_watchdog_one_key (5i, hc1 2026-11-09): one key under its bound next to a passing draw cards that key only;
+  // off, or two bad keys, or no passing draw: the frame trips as before.
+  Watchdog ok;
+  ok.one_key = true;
+  ok.begin(); ok.draw(39907, 0, 39907, 0x7a27); ok.draw(21336, 20500, 21336, 0x27af);   // total 0.35: the frame would trip
+  CHECK(!ok.judge(200) && !ok.active(201) && ok.key_active(0x7a27, 201) && ok.key_active(0x7a27, 200 + kWatchdogFrames - 1) &&
+        !ok.key_active(0x7a27, 200 + kWatchdogFrames) && !ok.key_active(0x27af, 201) && ok.spared == 1 && ok.trips == 0);
+  ok.begin(); ok.draw(5000, 300, 5000, 1); ok.draw(5000, 200, 5000, 2); ok.draw(5000, 4800, 5000, 3);   // two bad keys
+  CHECK(ok.judge(210) && ok.active(211));
+  ok = Watchdog{}; ok.one_key = true;
+  ok.begin(); ok.draw(5000, 300, 5000, 1);   // the only swapped draw: no passing draw to spare it by
+  CHECK(ok.judge(220) && ok.active(221));
+  Watchdog off;   // key off: the hc1 frame trips every draw
+  off.begin(); off.draw(39907, 0, 39907, 0x7a27); off.draw(21336, 20500, 21336, 0x27af);
+  CHECK(off.judge(200) && off.active(201) && off.spared == 0);
+  // rt_hair_shared_key: two draws share key 7, one groom row published -> key 7 withheld; complete keys stay.
+  {
+    uint64_t rows[3] = {7, 9, 0};
+    const uint64_t draws[4] = {7, 7, 9, 11};   // 11: a hair draw without any row (cards, nothing to withhold)
+    CHECK(shared_key_complete(rows, 3, draws, 4) == 1 && rows[0] == 0 && rows[1] == 9 && rows[2] == 0);
+    uint64_t both[2] = {7, 7};
+    CHECK(shared_key_complete(both, 2, draws, 4) == 0 && both[0] == 7 && both[1] == 7);
+    uint64_t keyless[2] = {7, 0};   // the second character's row without a primary key (first update): withheld too
+    CHECK(shared_key_complete(keyless, 2, draws, 4) == 1 && keyless[0] == 0);
+    uint64_t single[1] = {9};
+    CHECK(shared_key_complete(single, 1, draws, 4) == 0 && single[0] == 9);
+  }
   // The no-fallback orphan blocks this key's prepass drop for 300 frames.
   DepthLatch d;
   d.prepass(7, 50);

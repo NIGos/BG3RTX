@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -697,6 +698,26 @@ inline Upgrade upgrade_plan(const DrawSlots& record_slots, const uint64_t* keys_
 inline bool groom_primary_key(bool has_uv, uint64_t hp_key, uint32_t prev_frames, bool keyed) {
   return has_uv && hp_key && (prev_frames > 1 || (keyed && prev_frames >= 1));
 }
+// rt_hair_shared_key (docs/RTX_HAIR_PRIMARY.md 5i, 2026-11-09): the G-buffer swap is keyed by the draw's index range
+// (hair_primary_draw_key), the groom by its occurrence: two characters with the same hairstyle share one key. A key
+// published by one character's groom swapped the other character's draw too while its own groom was out of the publish
+// (LOD switch, upload, held or refused soup, first update): that draw found no strand on its card and wrote 0 pixels.
+// row_keys: each groom row's published key (0: none); draw_keys: the key of every groom-matched hair draw of this
+// capture. A key keeps its rows only when it has at least as many keyed rows as draws; otherwise every row with it is
+// cleared (cards for all its draws this frame). Returns the number of rows cleared.
+inline uint32_t shared_key_complete(uint64_t* row_keys, uint32_t rows, const uint64_t* draw_keys, uint32_t draws) {
+  uint32_t cleared = 0;
+  for (uint32_t k = 0; k < rows; ++k) {
+    const uint64_t key = row_keys[k];
+    if (!key) continue;
+    uint32_t have = 0, want = 0;
+    for (uint32_t r = 0; r < rows; ++r) have += row_keys[r] == key;
+    for (uint32_t d = 0; d < draws; ++d) want += draw_keys[d] == key;
+    if (have >= want) continue;
+    for (uint32_t r = k; r < rows; ++r) if (row_keys[r] == key) { row_keys[r] = 0; ++cleared; }
+  }
+  return cleared;
+}
 // Round 3 M1: the row's previous points are valid only when they are the previous build frame's (the velocity variant
 // pairs them with the previous publish's camera): a slot that skipped updates (held, soup refused, crowd cards) returns
 // with points from an older frame. last_update: the build frame of the slot's last update before this one.
@@ -740,27 +761,49 @@ inline SubmitDecision submit_decision(const Staged* staged, const bool* submitte
 // draw without pixels next to measured ones may simply have left the view). Tripped: no swap for kWatchdogFrames
 // G-buffer frames (the readback ring plus freshness: decisions taken before this evidence arrived).
 constexpr uint64_t kWatchdogFrames = kHoldFrames;
+// rt_hair_watchdog_one_key (off; 5i 2026-11-09): a frame whose only draw under its own bound is one key, next to at
+// least one swapped draw above its own bound, does not trip the frame: that key alone keeps its cards for
+// kWatchdogFrames (key_active), every other draw keeps its strands. hc1 2026-11-09: one shared-key draw with 0 strand
+// pixels put every hair of the frame on cards twice a second.
 struct Watchdog {
   uint64_t until = 0, trips = 0, card = 0, accepted = 0, unmarked = 0;
   double max_sigma = 0.0;
-  void begin() { card = accepted = unmarked = 0; max_sigma = 0.0; }
+  bool one_key = false;   // rt_hair_watchdog_one_key
+  uint32_t good = 0, bad = 0;
+  uint64_t bad_key = 0, spared = 0;
+  std::unordered_map<uint64_t, uint64_t> key_until;
+  void begin() { card = accepted = unmarked = 0; max_sigma = 0.0; good = bad = 0; bad_key = 0; }
   // One swapped draw of the judged frame: its card and strand pixels (card 0 with last_card: no marker at all).
-  void draw(uint32_t c, uint32_t s, uint32_t last_card) {
+  void draw(uint32_t c, uint32_t s, uint32_t last_card, uint64_t key = 0) {
     if (c) max_sigma = (std::max)(max_sigma, cover_sigma(s, c));
     card += c;
     accepted += s;
     if (!c && last_card >= kDropoutMinCard) unmarked += last_card;
+    if (c >= kDropoutMinCard) {   // the draw against its own bound (the per-draw watchdog's term)
+      if (double(s) >= (std::min)(kCoverMin, kCoverRatioMin - cover_sigma(s, c)) * double(c)) ++good;
+      else { ++bad; bad_key = key; }   // one call per draw slot: each key once per judged frame
+    }
   }
   double bound() const { return (std::min)(kCoverMin, kCoverRatioMin - max_sigma); }
   // True when the frame trips the watchdog.
   bool judge(uint64_t now) {
     if (!card) card = unmarked;
     if (card < kDropoutMinCard || double(accepted) >= bound() * double(card)) return false;
+    if (one_key && bad == 1 && good >= 1 && bad_key) {
+      for (auto it = key_until.begin(); it != key_until.end();) it = it->second <= now ? key_until.erase(it) : std::next(it);
+      key_until[bad_key] = now + kWatchdogFrames;
+      ++spared;
+      return false;
+    }
     until = now + kWatchdogFrames;
     ++trips;
     return true;
   }
   bool active(uint64_t now) const { return now < until; }
+  bool key_active(uint64_t key, uint64_t now) const {
+    const auto it = key_until.find(key);
+    return it != key_until.end() && now < it->second;
+  }
 };
 
 // rt_hair_watchdog_draw (off; docs/RTX_HAIR_PRIMARY.md 5i item 11): the item 19 watchdog judged per draw key instead of

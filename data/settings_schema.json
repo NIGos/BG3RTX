@@ -556,6 +556,32 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_watchdog_draw": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_watchdog_draw": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_shared_key", "label": "Strand hair: shared style key",
+     "description": "Experimental: when two characters wear the same hair style, their hair turns to strands only when both have their strands ready, instead of one character's hair losing its cards with nothing drawn in their place. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: when two characters wear the same hair style, their hair turns to strands only when both have their strands ready, instead of one character's hair losing its cards with nothing drawn in their place. Unqualified.",
+     "details": "5i 2026-11-09: two characters with the same hair style in view (S8), turn the camera: with On their hair should no longer flash to cards.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_shared_key": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_shared_key": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "exp_hair_watchdog_one_key", "label": "Strand hair: one-style watchdog",
+     "description": "Experimental: when one hair style loses its strands in a frame while the others keep theirs, only that style falls back to its cards instead of every style. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: when one hair style loses its strands in a frame while the others keep theirs, only that style falls back to its cards instead of every style. Unqualified.",
+     "details": "5i 2026-11-09: turn the camera in S8 with several characters in view: with On one style that flashes to cards no longer takes the others with it.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_watchdog_one_key": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_watchdog_one_key": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_rr_hair_guides", "label": "RR hair guides",
      "description": "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,

@@ -969,6 +969,7 @@ static_assert(sizeof(GroomPush) == 48);
 struct GroomStats {
   uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0, lod_waits = 0, lod_drops = 0;
   uint64_t keyed_new = 0, key_wait_sum = 0, key_wait_max = 0;   // slots whose first key was published (warm-up line)
+  uint64_t shared_withheld = 0;   // rt_hair_shared_key: groom rows whose shared key was withheld (cards)
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
   uint32_t lod[kGroomLods] = {};
   uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
@@ -2730,8 +2731,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
     }
   }
+  // rt_hair_shared_key (docs/RTX_HAIR_PRIMARY.md 5i): every groom-matched hair draw of this capture by its swap key
+  // (held, refused or LOD-waiting ones too: each is swapped at the G-buffer by that key).
+  std::vector<uint64_t> groom_draw_keys;
   for (auto& [di, key] : dyn) {
     FrameDraw& fd = g_draws[di];
+    if (fd.groom_id && fd.hp_key) groom_draw_keys.push_back(fd.hp_key);
     if (fd.held) {
       // Re-certify held ranges for EACH new scene's invalid-status word. A
       // previous scene may have rejected these same bounds; never clear that
@@ -3823,6 +3828,20 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         (g_groom_inst[slot].b || make_buf(g_groom_inst[slot], VkDeviceSize(kGroomMax) * sizeof(VkAccelerationStructureInstanceKHR),
                                           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, true, "hair groom instances"))) {
       auto* gi = reinterpret_cast<VkAccelerationStructureInstanceKHR*>(g_groom_inst[slot].map);
+      // Each written row's primary key (groom_primary_key below), decided before the instances: rt_hair_shared_key
+      // clears a key that fewer rows than this capture's hair draws carry (two characters with one hairstyle, one of
+      // their grooms out of this publish): both draws keep their cards and the rows their 0x01 mask this frame.
+      std::vector<uint64_t> row_key;
+      row_key.reserve(groom_work.size());
+      for (const GroomWork& w : groom_work) {
+        if (w.card == UINT32_MAX) continue;
+        row_key.push_back(row_key.size() < hair_primary::kMaxGrooms &&
+                          hair_primary::groom_primary_key(w.g->uv_off != 0, w.hp_key, w.g->prev_frames, w.g->keyed)
+                              ? w.hp_key : 0);
+      }
+      if (hp_on && cfg_int("rt_hair_shared_key", 0) != 0)
+        g_groom_st.shared_withheld += hair_primary::shared_key_complete(row_key.data(), uint32_t(row_key.size()),
+                                                                        groom_draw_keys.data(), uint32_t(groom_draw_keys.size()));
       for (const GroomWork& w : groom_work) {
         if (w.card == UINT32_MAX) continue;   // its card instance was not written (cannot happen; be safe)
         VkAccelerationStructureInstanceKHR in{};
@@ -3834,8 +3853,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         // Round 3 H2: a slot that already published its key keeps it on a LOD switch frame (prev_frames 1): the new
         // LOD's points, UVs and BLAS are all written by this build, before this TLAS. Dropping it freed the draw slot,
         // put the draw in card mode at submit and refused the next frames: a strand-card-strand flash per LOD change.
-        const bool primary_key = groom_count < hair_primary::kMaxGrooms &&
-                                 hair_primary::groom_primary_key(w.g->uv_off != 0, w.hp_key, w.g->prev_frames, w.g->keyed);
+        const bool primary_key = groom_count < row_key.size() && row_key[groom_count] != 0;
         in.mask = hp_on && !primary_key ? 0x01 : 0xFF;
         in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
         in.accelerationStructureReference = w.g->as.addr;
@@ -3978,13 +3996,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   if (g_groom_on && (cfg_int("rt_stats_period_frames", 0) <= 0 ? now % 300 == 0 : now > g_groom_stats_start && (now - g_groom_stats_start) % stats_period(300) == 0)) {
     log_stats("[hair groom] frame %llu: %u groom instances; last %u frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
         "refits %llu, LOD switches waiting for upload %llu (kept) / %llu (groom dropped), compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
-        "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB",
+        "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB; shared-key rows withheld %llu (rt_hair_shared_key)",
         (unsigned long long)now, groom_count, stats_period(300), g_groom_st.max_instances, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
         g_groom_st.lod[2], (unsigned long long)g_groom_st.builds, (unsigned long long)g_groom_st.refits,
         (unsigned long long)g_groom_st.lod_waits, (unsigned long long)g_groom_st.lod_drops, (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched,
         (unsigned long long)g_groom_st.miss[1], (unsigned long long)g_groom_st.miss[2], (unsigned long long)g_groom_st.miss[3],
         (unsigned long long)g_groom_st.miss[4], (unsigned long long)g_groom_st.miss[5], (unsigned long long)g_groom_st.miss[6],
-        double(g_groom_pool_used) / 1048576.0, double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0);
+        double(g_groom_pool_used) / 1048576.0, double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0,
+        (unsigned long long)g_groom_st.shared_withheld);
     // Warm-up (docs/RTX_HAIR_PRIMARY.md 5o): how long matched grooms waited for their first primary key (UV join, LOD
     // upload, full build, the second points update). Only in periods where a slot got its first key.
     if (g_groom_st.keyed_new)
