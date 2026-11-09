@@ -8,6 +8,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 POWERSHELL = shutil.which('powershell.exe') if os.name == 'nt' else None
+# Windows PowerShell 5.1 started below a PowerShell 7 parent inherits its PSModulePath and then cannot
+# autoload its own modules (Get-FileHash not found). Drop it: 5.1 rebuilds its default path.
+CLEAN_ENV = {k: v for k, v in os.environ.items() if k.upper() != 'PSMODULEPATH'}
 
 
 @unittest.skipUnless(POWERSHELL, 'Windows PowerShell is required')
@@ -21,7 +24,7 @@ class ReleaseInstallTest(unittest.TestCase):
         self.game = self.root / 'fake game'
         (self.game / 'bin').mkdir(parents=True)
         (self.game / 'bin/bg3.exe').write_bytes(b'fake game, never executed')
-        self.env = dict(os.environ, LOCALAPPDATA=str(self.root / 'local'))
+        self.env = dict(CLEAN_ENV, LOCALAPPDATA=str(self.root / 'local'))
         self.package.mkdir()
         for name in ('install.ps1', 'uninstall.ps1'):
             shutil.copyfile(ROOT / 'scripts/release' / name, self.package / name)
@@ -201,7 +204,7 @@ class ReleaseInstallTest(unittest.TestCase):
         result = subprocess.run([POWERSHELL, '-NoProfile', '-NonInteractive', '-Command',
             'New-Item -ItemType Junction -Path ' + quote(self.install)
             + ' -Target ' + quote(target) + ' -ErrorAction Stop | Out-Null'],
-            capture_output=True, text=True, timeout=20)
+            env=CLEAN_ENV, capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         try:
             self.run_script('install.ps1', *self.install_args(), success=False)
