@@ -68,6 +68,8 @@ constexpr uint32_t kRefusedOffset = kMaxGrooms * 4, kOtherOffset = kRefusedOffse
 constexpr uint32_t kTransmitOffset = kOtherOffset + kMaxGrooms * 4;   // 768
 // Then (diagnostics, 2026-11-04 strand traces found no strand) the counted frame's traced pixel entries (any sealed
 // entry) and those with a strand, and one sampled ray of the strand G-buffer variant (kRayDebugOffset, 64 bytes).
+// A shared entry's trace covers only the slots that swap this frame: probe draws (refused slots) trace privately and
+// store nothing, so "with a strand" is 0 in a frame where every draw was refused, whatever the probes accepted.
 constexpr uint32_t kTracedOffset = kTransmitOffset + kMaxGrooms * 16;   // 1792
 constexpr uint32_t kRaySampleOffset = kTracedOffset + 16;
 // Then accepted strand pixels per compact draw-key slot for the four newest applied tags (tag, tag - 1, tag - 2, tag - 3): the count is recorded

@@ -1845,7 +1845,11 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_adjacent_total += g_adjacent_window;
     {
       const float* r = g_seen.ray;
-      log_stats("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
+      // Traced/hit are the shared pixel entries: their trace covers only the slots that swapped (header slot mask). A
+      // frame whose draws were all refused (watchdog, coverage) draws masked probes that trace privately, unstored: then
+      // 0 entries hold a strand while the probes' accepted pixels below are near their card pixels (2026-11-09 rv3-s8).
+      log_stats("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a swapped draw's "
+          "strand (shared trace; probe draws trace privately: see accepted pixels); sampled ray: "
           "origin (%.4f %.4f %.4f), card distance %.3f, direction (%.4f %.4f %.4f), committed %.0f, hit distance %.3f, "
           "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f), header camera (%.3f %.3f %.3f); counted with tag %u, "
           "header tag now %u; card pixels "
