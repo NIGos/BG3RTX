@@ -265,6 +265,41 @@ static void scripted() {
     CHECK(L.m.hand_out(L.frame, L.new_rec(), L.m.slot) == -1);   // nor the new reservation (not handed out)
     L.submit({post});
   }
+  {  // 14 increment 4, OMM on a reserved slot: the commit's accelerate() hands back every user so far with its command
+     // buffer (tickets registered on them); a user joining later sees `accelerated` (registers itself); a user whose
+     // recording already ended cannot hold tickets: the layer downgrades byte 24 (modelled: traversal = reference).
+    Layer L = warm();
+    L.capture_begin();
+    const uint64_t l = L.new_rec();
+    const int R = L.m.hand_out(L.frame, l, -1, 0xA1);
+    L.rec(l)->set_slot = R; L.rec(l)->handed = true;
+    uint64_t users[Machine::kMaxUsers], handles[Machine::kMaxUsers];
+    CHECK(L.m.accelerate(R, users, handles) == 0);   // not committing yet: refused
+    const int c = L.m.commit_slot();
+    CHECK(c == R);
+    const uint32_t n = L.m.accelerate(R, users, handles);
+    CHECK(n == 1 && users[0] == l && handles[0] == 0xA1 && L.m.accelerated);
+    CHECK(L.m.accelerate((R + 1) % kSlots, users, handles) == 0);   // only the committing slot
+    const uint64_t post = L.new_rec();
+    CHECK(L.m.hand_out(L.frame, post, R, 0xB2) == R && L.m.accelerated);   // the joiner must register tickets itself
+    L.m.commit_done(R, true, L.new_rec(), L.frame);
+    CHECK(L.m.accelerated);
+    L.m.close();
+    CHECK(!L.m.accelerated && L.m.user_count == 0);
+    L.capture_begin();
+    CHECK(!L.m.accelerated);   // a new reservation starts without the previous one's acceleration
+  }
+  {  // 15 OMM ticket lifetime model: byte 24 may stay accelerated only if every user still records at registration
+    struct User { bool recording; };
+    auto keep_accelerated = [](std::vector<User> users) {
+      bool all = true;
+      for (const auto& u : users) all = u.recording && all;   // handout_tickets: cmd_recording(cmd) == user
+      return all;
+    };
+    CHECK(keep_accelerated({{true}, {true}}));
+    CHECK(!keep_accelerated({{true}, {false}}));   // the lighting ended before the commit: downgrade
+    CHECK(keep_accelerated({}));                   // no handed-out user: the ordinary path registers per dispatch
+  }
   {  // 11 stale reservation (capture began, never ended for 3 frames): not handed out
     Layer L = warm();
     L.capture_begin();

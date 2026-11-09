@@ -46,7 +46,9 @@
    "energy": "static-on dumps.json pre-post mean within the static-off-a / static-off-b band (same scene, same shading)",
    "frame_time": "static-on and turn-on rendered median lower than the OFF windows by up to the OFF wait mean (0-7 ms); equal within the OFF a/b spread means the wait was not on the critical path (then the handout is not worth its risk)",
    "gpu": "rt passes GPU cost and scene build GPU equal within noise (the handout changes no GPU work; OMM acceleration is off under the handout: a small RT GPU cost increase is possible, report it)",
-   "unchanged": "0 opaque draws dropped, 0 timeouts, no device loss, no '[rt] scene handout layout off'"
+   "unchanged": "0 opaque draws dropped, 0 timeouts, no device loss, no '[rt] scene handout layout off'",
+   "omm_increment4": "with claude/scene-handout-4: the handout line reports 'OMM accelerated commits' > 0 and 'downgraded 0' in the steady ON windows (the lighting still records when the commit registers its tickets); RT GPU ms of the ON windows equal to OFF within noise (increment 3 alone: OMM off under the handout)",
+   "hit_materials": "still Off in this job: native hit materials refuse the handout until increment 4b (the real Ultra preset waits as before)"
   }
  }
 }

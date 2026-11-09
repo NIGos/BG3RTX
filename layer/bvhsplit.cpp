@@ -4027,6 +4027,18 @@ VkAccelerationStructureKHR bvh_omm_scene(uint32_t slot,VkAccelerationStructureKH
      !omm::cached_bake_ready(g_omm_records[slot],g_omm_records[slot],bvh_rec_state(g_omm_records[slot])))return VK_NULL_HANDLE;
   return g_omm_tlas[slot].as;
 }
+// rt_scene_handout (increment 4): the micro-map tickets a recording must hold to trace slot `slot`'s accelerated TLAS
+// (the ones bvh_omm_use registers), for the handout to register on each user recording. false: not accelerated now.
+bool bvh_omm_tickets(uint32_t slot,std::vector<uint64_t>* out){
+  out->clear();
+  std::lock_guard lock(g_mu);
+  if(slot>=kSceneSlots || !g_omm_expected[slot] || !cfg_hot(CfgHot::rt_omm) || !omm::available_for(g_dd) ||
+     (g_omm_ranges[slot].empty() && g_omm_dyn_tickets[slot].empty()) ||
+     !omm::cached_bake_ready(g_omm_records[slot],g_omm_records[slot],bvh_rec_state(g_omm_records[slot])))return false;
+  for(const auto& source:g_omm_ranges[slot])out->push_back(source.baked.ticket);
+  for(const uint64_t ticket:g_omm_dyn_tickets[slot])out->push_back(ticket);
+  return true;
+}
 bool bvh_omm_use(VkCommandBuffer cmd,uint32_t slot,VkAccelerationStructureKHR selected,uint64_t* identity){
   if(!identity)return false;*identity=0;
   std::lock_guard lock(g_mu);
