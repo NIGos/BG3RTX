@@ -802,7 +802,19 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   flicker ratio is unchanged (off 3.03 / 2.66, aa 3.02 / 2.82): no edge-specific temporal gain; the off bursts alone
   differ by 30-80% (animated dialogue). Edge band hf -13% / -15% (smoother single frames). Static: Xr changed on the hair
   ring in b-aa (864 px) but not in d-aa (11). Energy Xr -0.55% (off spread 0.49%). Render-res chain about 0.35 ms in aa
-  windows vs 0.165 off (+0.18 ms; the snapshots now run inside run()'s timed dispatches).## 6. Open items
+  windows vs 0.165 off (+0.18 ms; the snapshots now run inside run()'s timed dispatches).
+- Fallbacks in play (user session 2026-11-09 07:59, 0.9.5, Ultra, fg=3, fps_cap=58; fixed, branch
+  claude/strand-resolve-fallback): 145-395 of 600 resolves fell back while 599 of 600 snapshots ran. Cause: snapshot and
+  resolve were keyed on frame_index(), which counts presents (layer.cpp g_frame); the present runs on another thread, and
+  with the cap, Reflex and frame generation it often landed between a frame's G-buffer end and its post chain, so the
+  resolve looked for the next frame's snapshot (the 1-3 per period of he1 04:02 were the same race). The ring now keys
+  on recorded frames (common/strand_snapshot.h Ring begin/wrote/take): a frame begins at its first snapshot after the last
+  resolve (or at a repeated G-buffer end / an earlier site) and ends at its resolve, which reads only the snapshot
+  recorded since the resolve before it; a frame without one falls back once, never reading an older snapshot. CTest
+  hair_groom_asset_test test_strand_snapshot_ring. Live check: in normal play the period line reads 'N frames, 0 fell
+  back' with N equal to the snapshot count.
+
+## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
    normal, is view space; 5g). Open: the root-to-tip sign of that frame.

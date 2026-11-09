@@ -568,32 +568,65 @@ static void test_round3() {
   CHECK(!bg3::hair_groom::parse_lod(b.data(), b.size(), at, 1, lod));   // triangle 1 out of range for 1 triangle
 }
 
-// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5n): the resolve of frame f reads the snapshot only when frame f wrote it.
+// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5n): a resolve reads the snapshot its own frame recorded, whatever
+// frame_index() (presents) did in between; a frame without one falls back, never to an older frame's snapshot.
 static void test_strand_snapshot_ring() {
   namespace ss = bg3::strand_snapshot;
   const int32_t gbuf[5] = {83, 37, 37, 37, 37}, decal[4] = {83, 37, 37, 37}, other[4] = {97, 37, 37, 37};
   CHECK(ss::gbuffer_pass(5, gbuf, 129) && ss::gbuffer_pass(4, decal, 129));
   CHECK(!ss::gbuffer_pass(4, other, 129) && !ss::gbuffer_pass(4, decal, 130) && !ss::gbuffer_pass(3, decal, 129));
+  uint32_t slot = 9;
   ss::Ring r;
-  CHECK(!r.usable(0) && !r.usable(1));
-  // One G-buffer end per frame (plus the decal pass of the same frame): every resolve has its frame's snapshot.
+  CHECK(!r.take(&slot));   // a resolve before any snapshot
+  // One G-buffer end per frame: every resolve has its frame's snapshot, in alternating images. The user session
+  // (fps cap 58, fg=3) moved the present between the two in 145-395 of 600 frames; nothing here reads frame_index().
   uint64_t fallbacks = 0;
-  for (uint64_t f = 1; f <= 600; ++f) {
-    r.wrote(f);
-    r.wrote(f);   // decal pass, same frame
-    fallbacks += r.usable(f) ? 0 : 1;
+  uint32_t last = 2;
+  for (int f = 1; f <= 600; ++f) {
+    const ss::Ring::Begin b = r.begin(0);
+    CHECK(!b.skip && !b.merge);
+    r.wrote();
+    fallbacks += r.take(&slot) ? 0 : 1;
+    CHECK(slot == b.slot && slot != last);
+    last = slot;
   }
   CHECK(fallbacks == 0);
-  // A frame without a snapshot falls back (never the snapshot of two frames ago, same parity); the next one recovers.
-  CHECK(!r.usable(602) && !r.usable(601 + 2));
-  r.wrote(601);
-  CHECK(r.usable(601) && !r.usable(603));
-  // The lighting hook of he1 03:04-03:17 (one write in 188-590 of 600 frames) would make the resolve alternate.
+  // Every site (rr_hair_strand_snap_site=3): the decal end merges over the G-buffer end, a second decal match is
+  // skipped, the lighting site merges; the resolve reads that image.
+  ss::Ring m;
+  const ss::Ring::Begin g = m.begin(0);
+  m.wrote();
+  const ss::Ring::Begin d = m.begin(1);
+  CHECK(!d.skip && d.merge && d.slot == g.slot);
+  m.wrote();
+  CHECK(m.begin(1).skip);
+  const ss::Ring::Begin l = m.begin(2);
+  CHECK(!l.skip && l.merge && l.slot == g.slot);
+  m.wrote();
+  CHECK(m.take(&slot) && slot == g.slot);
+  // A frame whose snapshot was refused (begun, never written) falls back once, and never reads the older image; a
+  // second resolve with no new snapshot falls back too. The next frame recovers in the other image.
+  CHECK(m.begin(0).slot != g.slot);
+  CHECK(!m.take(&slot));
+  CHECK(!m.take(&slot));
+  const ss::Ring::Begin n = m.begin(0);
+  CHECK(!n.merge && n.slot == g.slot);
+  m.wrote();
+  CHECK(m.take(&slot) && slot == g.slot);
+  // A frame whose post chain broke before the resolve: the next G-buffer end starts a new frame (never merges into
+  // the unresolved one), and the next resolve reads that newest snapshot.
+  const ss::Ring::Begin u = m.begin(0);
+  m.wrote();
+  const ss::Ring::Begin v = m.begin(0);
+  CHECK(!v.skip && !v.merge && v.slot != u.slot);
+  m.wrote();
+  CHECK(m.take(&slot) && slot == v.slot);
+  // A snapshot in only every third frame: the other two fall back, consistently (400 of 600).
   ss::Ring sparse;
   fallbacks = 0;
-  for (uint64_t f = 1; f <= 600; ++f) {
-    if (f % 3 == 0) sparse.wrote(f);
-    fallbacks += sparse.usable(f) ? 0 : 1;
+  for (int f = 1; f <= 600; ++f) {
+    if (f % 3 == 0) { sparse.begin(0); sparse.wrote(); }
+    fallbacks += sparse.take(&slot) ? 0 : 1;
   }
   CHECK(fallbacks == 400);
 }
