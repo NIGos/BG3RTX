@@ -37,6 +37,7 @@ std::unordered_set<std::string> g_paths;   // every file looked at (indexed or r
 
 // Caller holds g_mu. Indexes the groom files not looked at yet; returns how many were added.
 uint32_t scan(bool initial) {
+  const ULONGLONG t0 = GetTickCount64();
   const std::string dir = groom_dir();
   WIN32_FIND_DATAA fd{};
   HANDLE h = FindFirstFileA((dir + "\\*.hgrm").c_str(), &fd);
@@ -51,7 +52,7 @@ uint32_t scan(bool initial) {
     auto l = std::make_unique<Loaded>();
     l->path = path;
     FILE* f = nullptr;
-    if (fopen_s(&f, path.c_str(), "rb") != 0 || !f) { ++bad; continue; }
+    if (fopen_s(&f, path.c_str(), "rb") != 0 || !f) { log("[hair groom] %s: unreadable, ignored", path.c_str()); ++bad; continue; }
     uint8_t head[40 + kSamples * 8] = {};
     const size_t got = fread(head, 1, sizeof head, f);
     uint64_t at = 0;
@@ -89,14 +90,16 @@ uint32_t scan(bool initial) {
       ++bad;
       continue;
     }
-    log("[hair groom] indexed %s: index id %016llx, %u indices, %u LODs%s", path.c_str(),
-        (unsigned long long)l->asset.index_id, l->asset.indices, l->asset.lod_count, l->asset.has_uv ? ", UV samples" : "");
+    // One summary line below (5m: 871 per-file lines at every launch were log spam); failures keep their own line.
     g_counts.insert(l->asset.indices);
     g_assets[l->asset.index_id] = std::move(l);
     ++ok;
   } while (FindNextFileA(h, &fd));
   FindClose(h);
-  if (initial || ok || bad) log("[hair groom] %u groom files %s, %u ignored", ok, initial ? "loaded" : "added at a level load", bad);
+  const double ms = double(GetTickCount64() - t0);
+  if (initial || ok || bad)
+    log("[hair groom] %u groom files %s in %.0f ms, %u ignored (%s)", ok, initial ? "loaded" : "added at a level load", ms, bad,
+        dir.c_str());
   return ok;
 }
 

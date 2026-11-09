@@ -77269,6 +77269,10 @@
     "\\[hair\\] rt_hair=0 from the settings: RTX Hair OFF": [
       0,
       null
+    ],
+    "\\[hair groom\\] [1-9]\\d* groom files loaded in \\d+ ms, \\d+ ignored": [
+      0,
+      null
     ]
   }
 }
