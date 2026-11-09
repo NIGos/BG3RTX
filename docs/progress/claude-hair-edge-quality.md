@@ -19,3 +19,5 @@
 - he1 03:04-03:17: mode 2 applied in 3 of 8 aa trace frames (~930 ring px changed, ring HF -12%), energy -0.1..-0.2% within
   noise. Burst windows fixed (out of periodic gates; tighten keeps a burst window's declared 14 s).
 - Snapshot moved to the scene G-buffer end (once per frame; the lighting hook fired in 188-590 of 600); fallbacks counted.
+- he1 03:38: not a pass: Xr unchanged on the hair ring in both aa traces (G-buffer-end snapshot holds no strand data); bursts
+  confounded (whole-frame flicker +130% between them). Energy +0.31%, cost +0.11 ms. tools/hair_groom/edge_burst.py added.
