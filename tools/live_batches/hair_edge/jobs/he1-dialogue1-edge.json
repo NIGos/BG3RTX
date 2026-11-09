@@ -52,7 +52,7 @@
     "-RealPresent",
     "-Move",
     "-MovePlan",
-    "captures/live_batches/hair_edge/plans/he1-dialogue1-edge.json"
+    "tools/live_batches/hair_edge/plans/he1-dialogue1-edge.json"
   ],
   "patterns": [
     "\\[hot\\]",

@@ -75,7 +75,7 @@ def make_job(plan):
     startup.update(BUNDLE, rr_hair_strand_aa="2")   # the strand_resolve pipeline exists from the start
     j["set"] = ",".join(f"{k}={v}" for k, v in startup.items())
     j["live_batch"] = "hair-edge"
-    j["args"] = ["-RealPresent", "-Move", "-MovePlan", f"captures/live_batches/hair_edge/plans/{NAME}.json"]
+    j["args"] = ["-RealPresent", "-Move", "-MovePlan", f"tools/live_batches/hair_edge/plans/{NAME}.json"]
     j["purpose"] = ("rr_hair_strand_aa 0/2/0/2 (+1) in one Test Dialogue1 run with RTX Hair on: PNG pairs and K8 "
                     "pan bursts for strand edge flicker (tools/hair_groom/temporal_burst.py), energy and the "
                     "render-res chain GPU ms. READY_FOR_LIVE, not authorized.")
