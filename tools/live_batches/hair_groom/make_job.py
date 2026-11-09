@@ -129,7 +129,7 @@ def job(name, save):
         r"\[geo\] transform feedback enabled: .*\(stride 88\)",
         r"\[hair groom\] \+ VK_NV_ray_tracing_linear_swept_spheres",
         r"\[hair groom\] device with linear swept spheres",
-        r"\[hair groom\] indexed .*\.hgrm: index id [0-9a-f]{16}",            # header-only index at start (streaming)
+        r"\[hair groom\] [1-9]\d* groom files loaded in \d+ ms, \d+ ignored",  # header-only index at start (one summary line, 5m)
         r"\[hair groom\] [0-9a-f]{16} LOD \d uploaded: [0-9.]+ MB in the mesh pool",  # per LOD on first use
         r"\[hair groom\] frame \d+: \d+ groom instances; last 300 frames: at most [1-9]\d* groom instances",
         r"gi: background builds done: [1-9]\d* builds in \d+ ms",

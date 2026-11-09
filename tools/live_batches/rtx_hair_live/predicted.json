@@ -18,6 +18,11 @@
    "source": "rt_hair=0 makes every RTX Hair key read 0: the same settings as the cards-only windows",
    "written": "2026-11-09"
   },
+  "first_swap": {
+   "predicted": "warmup-on: strand G-buffer draws within about 2 s of switch 1, as switch 2 in rhl1 01:07 (was 12 s: 3.6 s render-thread groom indexing plus a 300-frame first-image load pause)",
+   "source": "rhl1-dialogue.1.010732.log; hair_groom startup index thread, LoadGuard tracked while off",
+   "written": "2026-11-09"
+  },
   "device_loss": {
    "predicted": "none (no VK_ERROR_DEVICE_LOST, no [fault] line, no depth orphan)",
    "written": "2026-11-09"

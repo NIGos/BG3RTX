@@ -51,7 +51,7 @@
   "\\[geo\\] transform feedback enabled: .*\\(stride 88\\)",
   "\\[hair groom\\] \\+ VK_NV_ray_tracing_linear_swept_spheres",
   "\\[hair groom\\] device with linear swept spheres",
-  "\\[hair groom\\] indexed .*\\.hgrm: index id [0-9a-f]{16}",
+  "\\[hair groom\\] [1-9]\\d* groom files loaded in \\d+ ms, \\d+ ignored",
   "\\[hair groom\\] [0-9a-f]{16} LOD \\d uploaded: [0-9.]+ MB in the mesh pool",
   "\\[hair groom\\] frame \\d+: \\d+ groom instances; last 300 frames: at most [1-9]\\d* groom instances",
   "gi: background builds done: [1-9]\\d* builds in \\d+ ms",

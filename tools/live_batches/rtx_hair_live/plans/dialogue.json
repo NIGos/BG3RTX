@@ -38,12 +38,10 @@
     "direction": 0,
     "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_stats=0,qa_exposure_hold=1",
     "wait_log": [
-      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 1\\)",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_timeout": 180.0,
     "wait_log_fresh": [
-      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 1\\)",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
   },
@@ -62,14 +60,12 @@
     "direction": 0,
     "set": "rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_stats=0,qa_exposure_hold=1",
     "wait_log": [
-      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 1\\)",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0,
     "wait_log_fresh": [
-      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 1\\)",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ]
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "base-a",
@@ -119,18 +115,16 @@
     "trace_at": [
       9
     ],
-    "wait_log": [
-      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 2\\)",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0,
-    "wait_log_fresh": [
-      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 2\\)",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_stats": [
       "\\[hair primary\\] frame \\d+: \\d+ grooms published;"
     ]
@@ -152,18 +146,16 @@
     "trace_at": [
       9
     ],
-    "wait_log": [
-      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 2\\)",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0,
-    "wait_log_fresh": [
-      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 2\\)",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_stats": [
       "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\):"
     ]
@@ -185,18 +177,16 @@
     "trace_at": [
       9
     ],
-    "wait_log": [
-      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 3\\)",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0,
-    "wait_log_fresh": [
-      "\\[hair primary\\] live: strands ON at frame \\d+ \\(switch 3\\)",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_stats": [
       "\\[hair primary\\] frame \\d+: \\d+ grooms published;"
     ]
@@ -218,18 +208,16 @@
     "trace_at": [
       9
     ],
-    "wait_log": [
-      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 3\\)",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0,
-    "wait_log_fresh": [
-      "\\[hair primary\\] live: strands OFF at frame \\d+ \\(switch 3\\)",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_stats": [
       "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\):"
     ]
