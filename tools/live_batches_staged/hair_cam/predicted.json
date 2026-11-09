@@ -14,6 +14,17 @@
    "header_cameras_gpu": "'N header cameras copied on the GPU' with N about the publishes of the line (one per frame) in the cam windows, 0 in the others",
    "cost": "one 16-thread compute dispatch, two 12-byte copies and three barriers per publish: below the gpu line resolution (< 0.01 ms); report the strand G-buffer draws GPU line and rt passes GPU cost of turn-cam vs turn-off as recorded",
    "unchanged": "scene wait 0 timeouts in every window, no device loss, no 'strand feedback unavailable'"
+  },
+  "hk1-s8-shared-key": {
+   "written": "2026-11-10, claude/hair-shared-key-live, before any run (staged, not queued: no live permission)",
+   "watchdog_off": "turn-off-r/l: frame watchdog trips 1-19 per 120-frame period as in hc1 2026-11-09, swap refusals 'watchdog' hundreds per line, dropout entries dominated by the two-row keys (7a27, 5285, 93ea); no trip line in a turn-off window makes the run INVALID (the baseline did not reproduce, nothing is proven)",
+   "watchdog_shared": "turn-shared-r/l and turn-both-r/l: 'watchdog trips 0' and 'dropouts (last 120 frames): 0 swapped G-buffer draws' in every complete line",
+   "withheld_turns": "'shared-key rows withheld N' with N > 0 in the shared/both turns (frames where one occurrence's groom was out of the publish: both its draws on cards for that frame), 0 in the turn-off windows (key off)",
+   "withheld_static": "static-on (both keys on, static camera): 'shared-key rows withheld 0' expected. High there (about one row per frame per shared key) means a non-hair sibling draw of the same mesh joins the groom and shares the key (shared-key branch uncertainty 1): that key then never swaps; fix the draw count (groom_id and hp_key) before trusting the turns",
+   "spared": "'frame watchdog spared to one key N': 0 with rt_hair_watchdog_one_key 0; near 0 in turn-both too, since the shared-key gate already removes the bad frames (a nonzero N there is a single-key fault outside the shared-key cause)",
+   "strand_total": "hair draws strand/total main G-buffer: turn-off about 535/1549 per line (hc1); shared/both well above that (no 28-frame all-card holds), slightly below the static ratio for the frames a shared key is withheld",
+   "cost": "CPU only (a per-frame count over the capture's hair draws and groom rows): no GPU line changes; report rt passes GPU cost of turn-both vs turn-off as recorded",
+   "unchanged": "scene wait 0 timeouts in every window, no device loss, no 'strand feedback unavailable'"
   }
  }
 }
