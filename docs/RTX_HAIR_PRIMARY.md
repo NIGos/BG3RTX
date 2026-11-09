@@ -762,7 +762,17 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   snapshot holds everything); CTest test_strand_edge checks that no ngx call sits under rrpost's lock. Shader review:
   every loop has a constant bound, the groom count is clamped to kMaxGrooms (key map and table reads inside the header),
   record and pool reads stay behind the existing bound checks. No synchronization-validation fixture was run.
-## 6. Open items
+- he1 03:04-03:17 (4 runs, no freeze, snapshots 188-590 per 600 frames): mode 2 changed Xr on the hair ring in 3 of 8
+  aa windows (911 / 944 / 947 ring pixels of ~3600, ~600 hair pixels; 0-12 in every off and untag window); in the
+  other aa trace frames no snapshot of that frame existed (the lighting hook does not fire every frame) and the
+  game's resolve ran. Where it applied, the ring Laplacian HF of Xr fell 120 -> 105-106 (-12%). Xr mean aa/off
+  -0.11% to -0.20% against an off-pair spread of 0.31-0.56%: energy within noise. Crop pair (a-off / b-aa, 03:11, x6):
+  .scratch/hair_edge/he1_031114_xr_off_vs_aa_crop.png. The RR input inside the hair is heavily speckled in both.
+- Bursts ended early because they sat in periodic gates' windows: live_flow.tighten made them 60-frame stats windows
+  and auto-run ends a frame window on its count (03:17 burst-off closed 0.15 s after ready). Fixed: bursts only in plain
+  expects (timed windows), and tighten keeps a burst window's declared seconds (14 s) above its 5.1 s model; a pan_inputs
+  burst completed 7.5 s after arming. The fake-queue dry run (lean_dryrun) cannot time bursts (its fake game runs no
+  plan); make_job asserts the burst phases are timed and >= 14 s.## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
    normal, is view space; 5g). Open: the root-to-tip sign of that frame.

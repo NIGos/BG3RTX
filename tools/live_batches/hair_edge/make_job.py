@@ -89,7 +89,12 @@ def make_job(plan):
                     "render-res chain GPU ms. READY_FOR_LIVE, not authorized.")
     labels = [p["label"] for p in plan]
     windows = [l for l in labels if l in ("a-off", "b-aa", "c-off", "d-aa", "e-untag", "f-debug")]
-    strands = windows + list(SERIALS)
+    # Root cause of every early burst end (he1 03:03-03:17): the burst phases were in the windows of these periodic
+    # gates, so live_flow.tighten turned them into 60-frame stats windows (frames=60, stats_reset), and auto-run ends a
+    # frame window on its frame count, not on "seconds": the 03:17 burst-off window closed 0.15 s after motion-ready
+    # (32.537 -> 32.690), before the burst (armed at ready, ~7.5 s) could finish, and burst-aa never armed. Bursts keep
+    # only plain expects, so they stay timed windows of "seconds" after ready (auto-run phaseFinished).
+    strands = windows
     gates = []
     for g in j["expect_every"]:
         if g["name"].startswith(("zero refused", "zero orphan", "depth orphans", "swapped frames")):
@@ -130,6 +135,10 @@ def main():
         (HERE / folder / f"{NAME}.json").write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     from tools.live_batches.live_flow import tighten_files
     tighten_files(HERE, job_names=[NAME])
+    tight = json.loads((HERE / "plans" / f"{NAME}.json").read_text())
+    for p in tight:
+        if p["label"] in SERIALS:
+            assert "frames" not in p and not p.get("stats_reset") and p["seconds"] >= 14, (p["label"], p.get("frames"), p["seconds"])
     print(f"Generated {NAME}; no queue staging")
 
 

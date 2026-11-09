@@ -155,7 +155,7 @@
   ],
   "stop_on_dump": true,
   "purpose": "rr_hair_strand_aa 0/2/0/2 (+1) in one Test Dialogue1 run with RTX Hair on: PNG pairs and K8 pan bursts for strand edge flicker (tools/hair_groom/temporal_burst.py), energy and the render-res chain GPU ms. READY_FOR_LIVE, not authorized.",
-  "estimated_phase_seconds": 81.7,
+  "estimated_phase_seconds": 99.5,
   "expect_every": [
     {
       "name": "zero refused pipelines",
@@ -168,9 +168,7 @@
         "b-aa",
         "c-off",
         "d-aa",
-        "e-untag",
-        "burst-off",
-        "burst-aa"
+        "e-untag"
       ]
     },
     {
@@ -184,9 +182,7 @@
         "b-aa",
         "c-off",
         "d-aa",
-        "e-untag",
-        "burst-off",
-        "burst-aa"
+        "e-untag"
       ],
       "fail_fast": false
     },
@@ -201,9 +197,7 @@
         "b-aa",
         "c-off",
         "d-aa",
-        "e-untag",
-        "burst-off",
-        "burst-aa"
+        "e-untag"
       ],
       "fail_fast": false
     },
@@ -218,9 +212,7 @@
         "b-aa",
         "c-off",
         "d-aa",
-        "e-untag",
-        "burst-off",
-        "burst-aa"
+        "e-untag"
       ]
     },
     {

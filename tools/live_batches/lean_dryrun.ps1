@@ -82,7 +82,7 @@ $totalWaitSec = 0; $totalExpectedWaitSec = 0; $totalSec = 0; $totalTraces = 0; $
 foreach ($job in $jobs) {
   $n = $job.name
   $planRel = $job.args[[array]::IndexOf([string[]]$job.args, '-MovePlan') + 1]
-  Check "${n}: plan path is captures/live_batches/$Batch/plans/" ($planRel -like "captures/live_batches/$Batch/plans/*")
+  Check "${n}: plan path is captures/ or tools/live_batches/$Batch/plans/" ($planRel -like "captures/live_batches/$Batch/plans/*" -or $planRel -like "tools/live_batches/$Batch/plans/*")
   $plan = @(Get-Content (Join-Path $here ('plans\' + (Split-Path $planRel -Leaf))) -Raw | ConvertFrom-Json | ForEach-Object { $_ })
   $budget = $flowDurations[$n]
   if (-not $budget) { throw "live-flow duration missing for $n" }
@@ -159,12 +159,14 @@ Check "batch within $MaxMinutes min" ($min -le $MaxMinutes)
 Check "batch within $MaxMB MB" ($mb -le $MaxMB)
 
 function New-Root([string]$dir, [switch]$Strip) {
-  New-Item -ItemType Directory -Force (Join-Path $dir 'bin'), (Join-Path $dir 'captures\queue\pending'), (Join-Path $dir "captures\live_batches\$Batch\plans") | Out-Null
+  New-Item -ItemType Directory -Force (Join-Path $dir 'bin'), (Join-Path $dir 'captures\queue\pending'), (Join-Path $dir "captures\live_batches\$Batch\plans"), (Join-Path $dir "tools\live_batches\$Batch\plans") | Out-Null
   $dir = (Resolve-Path $dir).Path
   Set-Content -LiteralPath (Join-Path $dir '.queue-fake-root') 'synthetic only'
   Set-Content (Join-Path $dir 'bin\VkLayer_bg3rtx.dll') 'fake layer: scene ready at present'
   Set-Content (Join-Path $dir 'bin\bg3rtx_core.dll') 'fake core'
   Copy-Item (Join-Path $here 'plans\*.json') (Join-Path $dir "captures\live_batches\$Batch\plans")
+  # Jobs written since 2026-11-09 (he1) name tools/live_batches/<Batch>/plans: stage both locations.
+  Copy-Item (Join-Path $here 'plans\*.json') (Join-Path $dir "tools\live_batches\$Batch\plans")
   $t = (Get-Date).AddMinutes(-10); $entries = @()
   foreach ($f in $jobFiles) {
     $job = Get-Content $f.FullName -Raw | ConvertFrom-Json
