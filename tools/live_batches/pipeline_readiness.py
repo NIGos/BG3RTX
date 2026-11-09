@@ -115,7 +115,9 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_hair_groom_primary_current rt_hair_primary_frame_tag rt_hair_groom_lod_keep rt_hair_primary_hold "
     "rt_hair_tangent_world rt_hair_groom_cascade_drop rt_hair_capture "
     # Elastic capture reserve policy (common/rt_capture_budget.h CaptureHeadroom, read per frame in layer/geocapture.cpp).
-    "rt_capture_rise_reserve rt_alpha_floor_yield".split())
+    "rt_capture_rise_reserve rt_alpha_floor_yield "
+    # Startup-only capture layout (common/capture_stride.h): set at launch, never toggled in a run; no core pipeline.
+    "rt_capture_wide_split".split())
 for key in NO_PIPELINE:
     TABLE[key] = []
 

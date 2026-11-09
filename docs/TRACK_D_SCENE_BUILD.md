@@ -1118,6 +1118,47 @@ about 840 MiB (opaque 171 + alpha 668); BLAS chunks 1531 allocations (1056 of 64
   `opaque draws dropped (buffer full) 0.00` in every window; `[bvh] mesh cache ... freed N`
   near 0 and `[mem] ... (X empty)` with the reuse key on.
 
+### RT capture stride split (2026-11-09, claude/capture-stride, READY_FOR_LIVE)
+
+`rt_capture_wide_split` (startup, default 0; common/capture_stride.h). The RT capture is one XFB buffer
+under the 2047 MB hard cap (`capture_budget::kMeshPoolHardCap`: 32-bit offsets, maxStorageBufferRange).
+With `rt_native_hair=1` every vertex shader was patched at 88 bytes per vertex, but only the shaders that
+export the native strand frame (spirv_xfb.h `hair_flags`; 236 of 2403 dumped VS) fill bytes 24..87. The
+zoomed-out S8 view (rv1 12:13, 12:53, user settings) wanted about 2065 MB (opaque peak 1613 + alpha 446)
+and dropped 1-8 opaque draws per frame.
+- Design: per-module stride (option A of the brief). A module is patched at 88 when it has the strand
+  frame, else at the stride the layout has without native hair (64 with rt_hit_material, 80/40 with the
+  native tileset, else 24); the pipeline, the draw and every reader carry that stride. Split-mode readers
+  already take the stride per instance (InstInfo meta bits 0..7), per BLAS geometry or per push constant,
+  so no shader changed (226/226 requests byte-identical, variants.txt delta 0). Only the in-place
+  clip -> world conversion walks a region with one stride: wide draws get a third region,
+  `[wide_cursor, xfb.size)` at the top of the alpha region growing down; the alpha cursor may not cross
+  it. Rejected: a second capture buffer (option B) needs a new binding and InstInfo flag in every
+  reader (shader variants, set layout) for the same bytes saved.
+- CPU plumbing: ModInfo/PipeInfo/DrawRec stride; RtCapture `wide_base/wide_bytes/wide_stride` and
+  `stride` = the base stride; rt_convert converts 3 regions. bvhsplit: FrameDraw, Mesh (pool), DynSlot
+  (refit only over the same stride), Ext/OMM/groom/hold jobs carry their stride; a cached mesh is reused
+  only by a draw of its stride (the mesh key is the vertex inputs, not the VS). Cascade casters: wide
+  casters at the top of the cascade buffer, a second geometry of the cascade BLAS. The emissive and water
+  soups keep one stride: a wide draw is not captured there (counted). Without the split (legacy
+  fallback) wide draws are left out (counted): the soup BLAS has one stride per geometry.
+- Accounting: wide bytes count as alpha demand (they live in the alpha region); a wide draw that does
+  not fit is left out, counted as "made opaque" (alpha) or "opaque draws dropped" (opaque) in the
+  `[geo] RT capture` line, so its existing gates catch it, and in the sibling line
+  `[geo] RT capture stride split, last N frames: 88-byte strand-frame draws X per frame (Y alpha-tested),
+  peak Z MB ..., left out (region full or no split) W per frame; all other draws 64 bytes per vertex;
+  wide draws kept out of the emissive/water soups K`, plus `[cascade] wide-stride casters ...`.
+- Expected S8 bytes: opaque 1613 -> about 1173 MB at 64 bytes (upper bound: strand-frame characters
+  stay at 88), alpha at most 446 MB (hair cards stay 88, foliage shrinks): about 1500-1620 MB of 2047,
+  inside the 25% movement reserve. Not measured: cost (the +37.5% bytes of 2026-11-03 cost about 2 ms GI
+  on Ultra S8; the split should recover most of it) and the replay pack (casters.bin holds the base
+  casters only with the key on).
+- Live check (startup key, no 0/1/0 toggle possible): tools/live_batches/rel095_verify rv2-s8-capture-stride,
+  the rv1 plan with the key on from launch; every window: `opaque draws dropped (buffer full) 0.00`,
+  `made opaque (region full) 0.00`, stride split `left out ... 0.00`, cascade `buffer full 0.0`; compare
+  the opaque peak with rv1's key-off 1613 MB. In game: hair cards and strands as before, no missing
+  characters or props in RT shadows/GI of the zoomed-out S8 view.
+
 ### CPU hit-material lists (historical implementation, 2026-11-02)
 
 `perf_hitmat_lists` retired 2026-11-04: no saving (G-buffer hooks 1.16 ms both); hidden developer INI only, default 0; shared material snapshot/list paths retained.

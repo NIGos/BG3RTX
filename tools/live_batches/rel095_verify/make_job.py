@@ -6,8 +6,15 @@ notches, then identical right/left turns with rt_capture_rise_reserve 0 / 1 / 0,
 static window. Gates: no cascade casters or RT capture draw left out in any window (the reserve
 must cover every rise), no strand resolve fallback, no BLAS retirement stall, no device loss.
 Observables (predicted.json): cascade capture MB in `[mem] ours` lower with the key on.
+rv2 (rt_capture_wide_split, claude/capture-stride, 2026-11-09): the same launch with the startup key
+rt_capture_wide_split=1. A startup key cannot go 0/1/0 in one run (the XFB stride is a decoration of
+each vertex shader module, fixed when the game creates it), so rv2 runs the same plan and turns with
+the key on from launch; the key-off baseline is rv1 (same save, view and turns: 1-8 opaque draws per
+frame dropped at about 2065 MB demand, rv1 12:13 and 12:53). Gates in EVERY checked window: 0 opaque
+draws dropped, 0 alpha draws made opaque, 0 wide draws left out, 0 cascade casters left out.
 Generate: py -3 tools/live_batches/rel095_verify/make_job.py
 """
+import copy
 import json
 import pathlib
 
@@ -138,6 +145,41 @@ job = {
                "every window, 0 strand resolve fallbacks, no BLAS retirement stall.",
 }
 
+# rv2: rt_capture_wide_split=1 from launch (startup-only), the same plan; every checked window is gated.
+PLAN2 = "tools/live_batches/rel095_verify/plans/rv2_s8.json"
+STRIDE_LINE = "\\[geo\\] RT capture stride split, last \\d+ frames:"
+job2 = copy.deepcopy(job)
+job2.update({
+    "name": "rv2-s8-capture-stride",
+    "set": SET + ",rt_capture_wide_split=1",
+    "args": ["-RealPresent", "-Move", "-MovePlan", PLAN2],
+    "fail_fast": True,  # with the key on the view must fit: a window that drops draws decides the run
+    "purpose": "rt_capture_wide_split=1 (startup) in the rv1 S8 lowered view and turns: only strand-frame VS at 88 "
+               "bytes, all others at 64; 0 opaque draws dropped, 0 alpha draws made opaque and 0 wide draws left out "
+               "in every window (rv1 key-off baseline: 1-8 opaque draws/frame dropped), RT capture opaque peak about "
+               "1.2 GB instead of 1.6 GB.",
+})
+job2["patterns"] = job["patterns"] + ["\\[geo\\] rt_capture_wide_split", "\\[cascade\\] wide-stride casters"]
+job2["expect"] = job["expect"] + [
+    "\\[geo\\] rt_capture_wide_split on: strand-frame vertex shaders 88 bytes, all others 64 bytes per vertex",
+    STRIDE_LINE,
+    "\\[cascade\\] wide-stride casters \\(rt_capture_wide_split\\):",
+]
+job2["forbid"] = job["forbid"] + ["\\[geo\\] rt_capture_wide_split inactive"]
+job2["expect_every"] = [
+    every("capacity: cascade casters never left out (buffer full 0.0) in every window",
+          "\\[cascade\\] casters: cascade \\d+, \\d+ frames;", ", buffer full 0\\.0, added ", CHECKED),
+    every("capacity: RT capture drops no opaque draw in every window (key on from launch)",
+          "\\[geo\\] RT capture, last \\d+ frames:", "opaque draws dropped \\(buffer full\\) 0\\.00,", CHECKED),
+    every("capacity: no alpha draw made opaque in every window",
+          "\\[geo\\] RT capture, last \\d+ frames:", "made opaque \\(region full\\) 0\\.00,", CHECKED),
+    every("stride split: no wide (88-byte) draw left out in every window", STRIDE_LINE,
+          "left out \\(region full or no split\\) 0\\.00 per frame", CHECKED),
+] + [e for e in job["expect_every"] if e["name"].startswith(("scene wait", "strand resolve", "memory accounting"))]
+job2["live_flow"] = dict(job["live_flow"], startup_only=["rt_capture_wide_split"])
+
 (HERE / "plans" / "rv1_s8.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
-(HERE / "jobs" / f"{job['name']}.json").write_text(json.dumps(job, indent=1) + "\n", encoding="utf-8")
-print(f"{job['name']}: {len(plan)} phases, {job['estimated_phase_seconds']} s")
+(HERE / "plans" / "rv2_s8.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
+for j in (job, job2):
+    (HERE / "jobs" / f"{j['name']}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
+    print(f"{j['name']}: {len(plan)} phases, {j['estimated_phase_seconds']} s")

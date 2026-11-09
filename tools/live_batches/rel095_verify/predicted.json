@@ -11,6 +11,15 @@
    "alpha_made_opaque": "0.00 in the yield and both windows (S8 split 444 / 1603 MB)",
    "alpha_region_mb_yield": "about 440-660 MB instead of 818"
   },
+  "rv2-s8-capture-stride": {
+   "written": "2026-11-09, claude/capture-stride, before any rv2 run",
+   "rt_capture_opaque_dropped": "0.00 in every checked window (rv1 key-off: 0.03-8.44 per frame in the lowered turns)",
+   "alpha_made_opaque": "0.00 in every checked window",
+   "stride_split_left_out": "0.00 per frame in every checked window; 88-byte draws > 0 per frame (hair cards)",
+   "rt_capture_opaque_peak_mb": "about 1100-1250 MB in the lowered turns (rv1 key-off: 1550-1613 MB); alpha peak demand at most the rv1 446 MB",
+   "cascade_buffer_full": "0.0 in every window; '[cascade] wide-stride casters' line present",
+   "gi_gpu_ms": "equal or lower than rv1 in the same windows (the 88-byte layout cost about 2 ms on Ultra S8, 2026-11-03)"
+  },
   "he1-dialogue1-edge": {
    "strand_resolve": "'[rrpost] strand resolve (rr_hair_strand_aa=2): N frames, 0 fell back' present (INVALID at 04:06 before ee30abf7)"
   }

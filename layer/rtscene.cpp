@@ -924,12 +924,14 @@ bool read_mapped(VkBuffer b, VkDeviceSize offset, void* dst, size_t n) {
 bool rt_convert(VkCommandBuffer cmd, const RtCapture& cap) {
   if (!g_pipe) return false;
   const DeviceData* dd = g_dd;
-  const uint32_t stride = cap.stride, tri_bytes = 3 * cap.stride;
-  const uint32_t prims = uint32_t(cap.opaque_bytes / tri_bytes), aprims = uint32_t(cap.alpha_bytes / tri_bytes);
-  for (uint32_t region = 0; region < 2; ++region) {
-    const uint32_t n = region ? aprims : prims;
+  const uint32_t prims = uint32_t(cap.opaque_bytes / (3 * cap.stride)), aprims = uint32_t(cap.alpha_bytes / (3 * cap.stride));
+  // rt_capture_wide_split: a third region, the wide draws at the top of the alpha region, with their own stride.
+  const uint32_t wprims = cap.wide_stride ? uint32_t(cap.wide_bytes / (3 * cap.wide_stride)) : 0u;
+  for (uint32_t region = 0; region < 3; ++region) {
+    const uint32_t n = region == 2 ? wprims : region ? aprims : prims;
     if (!n) continue;
-    const VkDeviceSize base = region ? cap.alpha_base : 0;
+    const uint32_t stride = region == 2 ? cap.wide_stride : cap.stride, tri_bytes = 3 * stride;
+    const VkDeviceSize base = region == 2 ? cap.wide_base : region ? cap.alpha_base : 0;
     VkDescriptorBufferInfo in{cap.ubo, cap.ubo_offset, 224}, out{cap.xfb, base, VkDeviceSize(n) * tri_bytes};
     VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
     w[0].dstBinding = 0;
@@ -953,14 +955,14 @@ bool rt_convert(VkCommandBuffer cmd, const RtCapture& cap) {
 // rt_cascade_casters: the cascade soup, clip -> camera-relative world with the cascade's own
 // orthographic matrix (geocapture.cpp, after the cascade pass, in its command buffer).
 bool rt_cascade_convert(VkCommandBuffer cmd, VkBuffer xfb, uint32_t tris, uint32_t stride, VkBuffer ubo,
-                        VkDeviceSize ubo_offset) {
+                        VkDeviceSize ubo_offset, VkDeviceSize base) {
   if (!g_rt || !tris || !xfb || !ubo) return false;
   const VkPipeline pipe = g_ortho_live.load();
   const VkPipelineLayout layout = g_pl_live.load();
   if (!pipe || !layout) return false;
   {
     const DeviceData* dd = g_dd;
-    VkDescriptorBufferInfo in{ubo, ubo_offset, 224}, out{xfb, 0, VkDeviceSize(tris) * 3 * stride};
+    VkDescriptorBufferInfo in{ubo, ubo_offset, 224}, out{xfb, base, VkDeviceSize(tris) * 3 * stride};
     VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
     w[0].dstBinding = 0;
     w[0].descriptorCount = 1;
@@ -1046,6 +1048,9 @@ void attach_cascade(RtCapture& cap, const float* cam, uint64_t now) {
   cap.cascade_stride = soup.stride;
   cap.cascade_sig = soup.sig;
   cap.cascade_frame = from;
+  cap.cascade_wide_off = soup.wide_off;   // rt_capture_wide_split (0 triangles when off)
+  cap.cascade_wide_tris = soup.wide_tris;
+  cap.cascade_wide_stride = soup.wide_stride;
 }
 }  // namespace
 
@@ -1142,6 +1147,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   RtCapture capx = cap;
   capx.cascade_xfb = VK_NULL_HANDLE;
   capx.cascade_tris = 0;
+  capx.cascade_wide_tris = 0;
   capx.cascade_sig = 0;
   capx.cascade_frame = 0;
   {

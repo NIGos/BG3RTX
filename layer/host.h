@@ -624,6 +624,14 @@ struct RtCapture {
   float cascade_t[3];
   uint64_t cascade_sig;   // the cascade draw list (same: the BLAS may be refitted)
   uint64_t cascade_frame = 0;   // the frame whose converted soup it is (geo_cascade_soup; replay pack)
+  // rt_capture_wide_split (common/capture_stride.h): the wide-stride draws' region [wide_base, +wide_bytes) at the
+  // top of the alpha region, wide_stride bytes per vertex; `stride` is then the base stride of every other region.
+  // Split builds read each draw's own offset and stride (bvh_captured); 0 bytes when the key is off.
+  VkDeviceSize wide_base = 0, wide_bytes = 0;
+  uint32_t wide_stride = 0;
+  // and the cascade soup's wide casters (a second BLAS geometry): cascade_wide_tris 0 when off.
+  VkDeviceSize cascade_wide_off = 0;
+  uint32_t cascade_wide_tris = 0, cascade_wide_stride = 0;
 };
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap);
 // ---- rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2, common/cascade_casters.h) ----
@@ -635,6 +643,7 @@ struct CascadeSoup {
   VkBuffer xfb; uint32_t tris, stride; bool has_origin; float origin[3]; uint64_t sig;
   uint64_t record = 0;
   VkCommandBuffer producer = VK_NULL_HANDLE;
+  uint32_t wide_tris = 0, wide_stride = 0; VkDeviceSize wide_off = 0;   // rt_capture_wide_split (0: none)
 };
 struct AlphaSnapshot;
 int geo_cascade_soup(uint64_t frame, CascadeSoup* out);
@@ -646,8 +655,9 @@ int geo_cascade_layer(const Bg3PassInfo& p);
 void geo_cascade_note_build(int reason, uint32_t tris);
 // clip -> camera-relative world with the cascade's orthographic matrix (its camera-layout
 // UBO), in place (shaders/rt/xfb_to_world_ortho.hlsl). Restores the game's compute bindings.
+// base: the region's first byte (rt_capture_wide_split's wide casters; 0 for the ordinary ones).
 bool rt_cascade_convert(VkCommandBuffer cmd, VkBuffer xfb, uint32_t tris, uint32_t stride, VkBuffer ubo,
-                        VkDeviceSize ubo_offset);
+                        VkDeviceSize ubo_offset, VkDeviceSize base = 0);
 // The camera position (camera UBO byte 208, the origin of camera-relative space) of the
 // scene build of `frame`, from the last few builds.
 bool rt_build_camera(uint64_t frame, float pos[3]);
@@ -711,6 +721,7 @@ struct BvhDraw {
   bool alpha;                   // alpha-tested (its FS is in the table, UV captured)
   DrawArgs args;
   const CmdState* s;
+  uint32_t stride = 0;          // its XFB bytes per vertex (rt_capture_wide_split: per pipeline; 0: the capture's)
 };
 enum BvhVerdict { BVH_CAPTURE = 0, BVH_CACHED = 1, BVH_CACHED_AUDIT = 2 };
 BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris);
@@ -719,7 +730,9 @@ void bvh_set_record(uint32_t token, uint32_t rec);
 // The mesh pool buffer, its size and replacement epoch (hit-material pool basis jobs).
 bool bvh_pool_target(VkBuffer* buffer, VkDeviceSize* bytes, uint64_t* epoch);
 // The draw was captured into the soup at `offset` (`prims` triangles, all instances).
-void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec, uint32_t materialRecord=UINT32_MAX);
+// stride: the draw's XFB bytes per vertex (rt_capture_wide_split; 0: the capture's RtCapture::stride).
+void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec, uint32_t materialRecord=UINT32_MAX,
+                  uint32_t stride=0);
 // Uncaptured draw that is not instanceable (counted only).
 void bvh_note_skipped(uint32_t token);
 // rt_primary_fade_class: the draw's camera-fade cut is enabled (InstInfo kInfoCameraFade).

@@ -1,4 +1,5 @@
 #include "../common/perf_hook_state.h"
+#include "../common/capture_stride.h"
 #include "../common/cpu_exact_cache.h"
 #include "../common/cpu_instance_rows.h"
 #include "../common/cpu_build_keys.h"
@@ -451,6 +452,7 @@ struct Mesh {
   VkDeviceSize basis_off = 0, basis_size = 0;   // its UV/basis range in the pool (0: none)
   VkDeviceSize basis_over = 0;  // wanted a basis range but kBasisCapBytes was full (counted in g_basis_over)
   std::unique_ptr<std::vector<NativeOmmVariant>> omm;
+  uint32_t stride = 0;          // its pool vertices' bytes (the extracting draw's XFB stride; rt_capture_wide_split)
 };
 uint64_t g_mesh_gen = 0;
 std::unordered_map<uint64_t, Mesh> g_meshes;
@@ -527,6 +529,7 @@ struct DynSlot {
   uint64_t omm_ticket = 0;
   VkDeviceSize omm_index_off = 0, omm_index_size = 0;
   std::shared_ptr<GroomSlot> groom;   // rt_hair_groom
+  uint32_t stride = 0;          // the vertex stride its BLAS was built over (rt_capture_wide_split: per draw)
 };
 std::unordered_map<uint64_t, DynSlot> g_dyn;
 // rt_cascade_casters: the BLAS of last frame's cascade-only soup, a new one every build (the
@@ -534,6 +537,7 @@ std::unordered_map<uint64_t, DynSlot> g_dyn;
 AsAlloc g_casc_as;
 uint64_t g_casc_sig = 0;          // the draw list g_casc_as was built from (rt_cascade_refit)
 uint32_t g_casc_tris = 0, g_casc_refits = 0;
+uint32_t g_casc_wide_tris = 0;    // rt_capture_wide_split: its second geometry (wide casters; 0 none)
 VkDeviceSize g_casc_update_scratch = 0;
 uint64_t g_casc_n_build = 0, g_casc_n_refit = 0;
 uint64_t g_hold_epoch = 1;
@@ -570,6 +574,7 @@ struct FrameDraw {
   uint64_t geo_key = 0, pos_key = 0;  // pool material join (native_hit::pool_keys; rt_hit_material)
   std::shared_ptr<omm::NativePlainCapture> omm_material;
   std::vector<Range> ranges;
+  uint32_t stride = 0;          // its XFB bytes per vertex (rt_capture_wide_split; 0: the capture's)
 };
 std::vector<FrameDraw> g_draws;
 bool g_content_on = false;
@@ -1312,6 +1317,23 @@ VkAccelerationStructureBuildSizesInfoKHR blas_sizes(uint32_t prims, uint32_t str
   return sz;
 }
 
+// rt_capture_wide_split: the cascade casters' BLAS with its wide-stride casters as a second geometry
+// (prims1 0: exactly blas_sizes).
+VkAccelerationStructureBuildSizesInfoKHR blas_sizes2(uint32_t prims0, uint32_t stride0, uint32_t prims1, uint32_t stride1,
+                                                     VkBuildAccelerationStructureFlagsKHR flags) {
+  if (!prims1) return blas_sizes(prims0, stride0, false, flags);
+  const VkAccelerationStructureGeometryKHR g[2] = {tri_geometry(0, prims0, stride0, false), tri_geometry(0, prims1, stride1, false)};
+  VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+  bi.flags = flags;
+  bi.geometryCount = 2;
+  bi.pGeometries = g;
+  const uint32_t prims[2] = {prims0, prims1};
+  VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  g_dd->vk.GetAccelerationStructureBuildSizesKHR(g_dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, prims, &sz);
+  return sz;
+}
+
 VkAccelerationStructureGeometryKHR hair_geometry(VkDeviceAddress bounds) {
   VkAccelerationStructureGeometryKHR g{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
   g.geometryType=VK_GEOMETRY_TYPE_AABBS_KHR;
@@ -2036,6 +2058,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   fd.instances = d.args.instances;
   fd.first_instance = d.args.first_instance;
   fd.vs = d.vs;
+  fd.stride = d.stride;
   const CmdState* s = d.s;
   const bool indexed = d.args.kind == 1;
   // The draw's identity across frames (per-draw BLAS of captured draws). The
@@ -2143,6 +2166,8 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   }
   Mesh& m = it->second;
   if (m.tris != fd.tris_per_instance) return capture(BVH_CAPTURE);   // cannot happen for one key; be safe
+  // rt_capture_wide_split: the key is the vertex inputs, not the VS; a pipeline of another stride captures.
+  if (fd.stride && !capture_stride::mesh_stride_matches(m.stride, fd.stride)) return capture(BVH_CAPTURE);
   if (m.state == kNeedCheck && !m.check_pending) fd.check = true;
   if (m.state != kReady) return capture(BVH_CAPTURE);
   fd.cached = true;
@@ -2173,7 +2198,8 @@ void bvh_set_record(uint32_t token, uint32_t rec) {
   if (token < g_draws.size()) g_draws[token].rec = rec;
 }
 
-void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec, uint32_t materialRecord) {
+void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alpha, uint32_t rec, uint32_t materialRecord,
+                  uint32_t stride) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (token >= g_draws.size()) return;
   FrameDraw& fd = g_draws[token];
@@ -2182,6 +2208,7 @@ void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alph
   fd.soup_off = offset;
   fd.prims = prims;
   fd.cap_alpha = alpha;
+  if (stride) fd.stride = stride;
   fd.material_record=alpha?kNone:materialRecord;
   if (!fd.cached) fd.rec = alpha ? rec : kNone;
 }
@@ -2249,7 +2276,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   scratch.clear();
   const DeviceData* dd = g_dd;
   const uint64_t now = frame_index();
-  const uint32_t stride = cap.stride, tri_bytes = 3 * stride;
+  // rt_capture_wide_split: every draw, mesh, slot and job carries its own stride; cap.stride is the default.
+  const uint32_t cap_stride = cap.stride;
+  auto draw_stride = [cap_stride](const FrameDraw& f) { return f.stride ? f.stride : cap_stride; };
   const uint32_t hold_frames = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 4), 0, 120));
   const bool moving = rt_camera_moving();
   const uint32_t hold_max_prims = uint32_t((std::max)(cfg_int("rt_dyn_hold_max_prims", 8192), 0));
@@ -2333,11 +2362,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
 
   bvh_cpu_mark(0);
   // ---- 1. decide: new meshes, checks, per-draw BLAS, instances ----
-  struct Ext { uint64_t key; VkDeviceSize soup, soup_n, pool; uint32_t tris, mat0, matn, status; JobKind kind; uint32_t draw; };
+  struct Ext { uint64_t key; VkDeviceSize soup, soup_n, pool; uint32_t tris, mat0, matn, status; JobKind kind; uint32_t draw; uint32_t stride = 0; };
   std::vector<Ext> ext;
   struct MeshBuild { uint64_t key; };
   std::vector<MeshBuild> mesh_builds;
-  struct DynBuild { DynSlot* slot; VkDeviceSize soup_off; uint32_t prims; bool refit; HairBoundsPush hair; uint64_t omm = 0; uint32_t omm_tris = 0; };
+  struct DynBuild { DynSlot* slot; VkDeviceSize soup_off; uint32_t prims; bool refit; HairBoundsPush hair; uint64_t omm = 0; uint32_t omm_tris = 0; uint32_t stride = 0; };
   std::vector<DynBuild> dyn_builds;
   struct HairBoundsWork {HairBoundsPush push;bool pool_source;};
   std::vector<HairBoundsWork> hair_bounds_work;
@@ -2356,7 +2385,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       it->second.last_used = now;
       cached.push_back(i);
       if (fd.audit && fd.captured && fd.prims >= fd.tris_per_instance) {
-        ext.push_back({fd.mesh_key, fd.soup_off, 0, it->second.pool_off, it->second.tris, n_mats++, kNone, 0, kJobAudit, i});
+        ext.push_back({fd.mesh_key, fd.soup_off, 0, it->second.pool_off, it->second.tris, n_mats++, kNone, 0, kJobAudit, i, it->second.stride});
       }
       continue;
     }
@@ -2375,8 +2404,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       m.tris = fd.tris_per_instance;
       m.alpha = fd.alpha;
       m.created = m.last_used = m.last_audit = now;
-      m.pool_size = VkDeviceSize(m.tris) * tri_bytes;
-      VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(m.tris, stride, !m.alpha, mesh_flags);
+      m.stride = draw_stride(fd);
+      m.pool_size = VkDeviceSize(m.tris) * 3u * m.stride;
+      VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(m.tris, m.stride, !m.alpha, mesh_flags);
       // Old LRU policy reacted only after all uploads: one load could allocate
       // millions of wide vertices while evicted ranges still awaited GPU use.
       // A declined extraction keeps this draw's captured dynamic BLAS path.
@@ -2401,8 +2431,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       const Mesh& mm = g_meshes[fd.mesh_key];
       bool cross = fd.instances >= 2;
       ext.push_back({fd.mesh_key, fd.soup_off,
-                     cross ? fd.soup_off + VkDeviceSize(fd.instances - 1) * fd.tris_per_instance * tri_bytes : 0,
-                     mm.pool_off, mm.tris, n_mats, cross ? n_mats + 1 : kNone, 0, kJobExtract, i});
+                     cross ? fd.soup_off + VkDeviceSize(fd.instances - 1) * fd.tris_per_instance * 3u * mm.stride : 0,
+                     mm.pool_off, mm.tris, n_mats, cross ? n_mats + 1 : kNone, 0, kJobExtract, i, mm.stride});
       n_mats += cross ? 2 : 1;
       ++g_st.new_meshes;
       g_st.new_tris += fd.tris_per_instance;
@@ -2410,7 +2440,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       auto it = g_meshes.find(fd.mesh_key);
       if (it != g_meshes.end() && it->second.state == kNeedCheck && !it->second.check_pending) {
         it->second.check_pending = true;
-        ext.push_back({fd.mesh_key, fd.soup_off, 0, it->second.pool_off, it->second.tris, n_mats++, kNone, 0, kJobCheck, i});
+        ext.push_back({fd.mesh_key, fd.soup_off, 0, it->second.pool_off, it->second.tris, n_mats++, kNone, 0, kJobCheck, i, it->second.stride});
       }
     }
   }
@@ -2429,7 +2459,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // 2 stride, 3 not submitted / newer record, 4 epoch, 5 alpha record not restorable, 6 held.
       int why = 6;
       if (!s.hold_size) why = 1;
-      else if (s.hold_stride != stride && !(geo_native_hair_enabled() && s.hold_stride == 24u)) why = 2;
+      else if (s.hold_stride != (s.stride ? s.stride : cap_stride) && !(geo_native_hair_enabled() && s.hold_stride == 24u)) why = 2;
       else if (!(now > s.last_used && now - s.last_used <= hold_frames)) why = 0;
       else if (!(rec_submitted(s.hold_rec) && s.hold_rec == s.rec)) why = 3;
       else if (s.hold_epoch != g_hold_epoch) why = 4;
@@ -2437,6 +2467,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       FrameDraw fd;
       fd.dyn_key = key; fd.held = true; fd.prims = s.prims;
       fd.soup_off = s.hold_off; fd.cap_alpha = s.alpha;
+      fd.stride = s.stride;
       if (s.hold_has_alpha) {
         fd.rec = alpha_restore(s.hold_alpha);
         if (fd.rec == kNone) { ++g_hold_why[5]; continue; }   // never substitute an opaque alpha hold
@@ -2486,7 +2517,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // rt_hair_groom: this frame's matched hair draws (groom_decide), in TLAS-instance order of their cards.
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
                      uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; uint32_t prims = 0;
-                     bool prev_ok = false; };   // round 3 M1: the slot's last update was the previous build frame
+                     bool prev_ok = false; uint32_t stride = 0; };   // round 3 M1: the slot's last update was the previous build frame
   const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
   std::unordered_map<uint64_t, size_t> groom_of_key;
@@ -2546,7 +2577,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   }
   hair_capture::poll(g_dd, now);   // rt_hair_capture: readbacks the GPU finished go to the writer thread
   bool hair_capture_staged = false;
-  struct GroomUvCopy { uint32_t job; VkDeviceSize soup_off; };
+  struct GroomUvCopy { uint32_t job; VkDeviceSize soup_off; uint32_t stride; };
   std::vector<GroomUvCopy> groom_uv_copies;
   if (groom_ready) {
     // UV joins whose readback completed on the GPU: match against the files with that index count.
@@ -2579,8 +2610,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // Bakes of new micro-maps (dispatched after the soup conversion) and this frame's uv checks.
   const bool omm_dyn_on = cfg_int("rt_omm_dyn", 0) != 0 && alpha_test && omm::available_for(g_dd) && g_ring_transfer_source && g_pool.b &&
                           ensure_omm_dyn_pipe();
-  struct OmmBake { uint64_t key; VkDeviceSize soup_off; uint32_t tris, w, h; VkImageView view; float cut_lo, cut_hi, su, sv; };
-  struct OmmCheck { const DynMicromap* e; VkDeviceSize soup_off, index_off; uint32_t tris; };
+  struct OmmBake { uint64_t key; VkDeviceSize soup_off; uint32_t tris, w, h; VkImageView view; float cut_lo, cut_hi, su, sv; uint32_t stride; };
+  struct OmmCheck { const DynMicromap* e; VkDeviceSize soup_off, index_off; uint32_t tris; uint32_t stride; };
   std::vector<OmmBake> omm_bakes;
   std::vector<OmmCheck> omm_checks;
   std::unordered_set<uint64_t> omm_baking;
@@ -2647,6 +2678,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       continue;
     }
     DynSlot& s = g_dyn[key];
+    const uint32_t stride = draw_stride(fd);   // rt_capture_wide_split: this draw's vertex bytes
     AlphaRec hair_record{};
     const bool hair=geo_native_hair_enabled() && fd.cap_alpha && fd.rec!=kNone && alpha_native_hair_record(fd.rec,&hair_record);
     if(hair && !ensure_hair_pipeline()){
@@ -2687,7 +2719,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           } else {
             omm_baking.insert(mk);
             omm_bake_tris += fd.prims;
-            omm_bakes.push_back({mk, fd.soup_off, fd.prims, mw, mh, view, lo, hi, ar.scale[0], ar.scale[1]});
+            omm_bakes.push_back({mk, fd.soup_off, fd.prims, mw, mh, view, lo, hi, ar.scale[0], ar.scale[1], stride});
           }
         } else if (it->second.ready && it->second.tris == fd.prims && it->second.mask == view) {
           it->second.last_use = now;   // rt_omm_dyn_evict_frames: matched by a draw this build
@@ -2722,7 +2754,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // (a dropped command buffer left the BLAS unbuilt; a full build does not read it).
     // rt_omm_dyn: only with the same micro-map (the per-triangle indices may change: ALLOW_OPACITY_MICROMAP_UPDATE).
     bool refit = dyn_refit_ok && !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.hair==hair && s.flags == slot_flags &&
-                 s.omm_ticket == omm_want &&
+                 s.omm_ticket == omm_want && capture_stride::slot_refit_ok(s.stride, stride) &&
                  rec_submitted(s.rec) &&
                  s.since_build < uint32_t(rebuild_frames);
     // A full build never goes into the BLAS that TLASes in flight reference: a
@@ -2735,7 +2767,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // the TLAS is rebuilt; the old range is released once no live slot references it.
     // Refits (UPDATE) keep the layout and stay in place. rt_dyn_inplace=1: old behaviour.
     if (!refit && (fresh || !inplace_ok || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.hair!=hair || s.flags != slot_flags ||
-                   s.omm_ticket != omm_want)) {
+                   s.omm_ticket != omm_want || s.stride != stride)) {
       if (s.as.as) as_destroy(s.as);
       uint32_t cap_prims = fd.prims + fd.prims / 4;
       VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(cap_prims,dyn_flags):
@@ -2751,6 +2783,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
       s.cap_prims = cap_prims;
       s.alpha = fd.cap_alpha;
+      s.stride = stride;
       s.hair=hair;
       s.flags = slot_flags;
       s.omm_ticket = omm_want;
@@ -2763,7 +2796,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       s.update_scratch = sz.updateScratchSize;
     }
     if (omm_want) {
-      omm_checks.push_back({omm_entry, fd.soup_off, s.omm_index_off, fd.prims});
+      omm_checks.push_back({omm_entry, fd.soup_off, s.omm_index_off, fd.prims, stride});
       ++g_st.omm_dyn_att_draws;
       g_st.omm_dyn_att_tris += fd.prims;
     }
@@ -2784,7 +2817,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
          !alpha_native_hair_bounds(fd.rec,uint32_t(s.hair_bounds_off)))return false;
       s.hair_push=hp;hair_bounds_work.push_back({hp,false});
     }
-    dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp, omm_want, omm_entry ? omm_entry->tris : 0u});
+    dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp, omm_want, omm_entry ? omm_entry->tris : 0u, stride});
     // rt_hair_groom: the matched hair draw's groom (its card instance stays for primary queries).
     GroomAsset* groom_src = hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
                                 ? groom_asset(fd.groom_id, fd.groom_indices) : nullptr;
@@ -2810,7 +2843,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         if (g_groom_uv_jobs[j].used) continue;
         g_groom_uv_jobs[j] = {fd.groom_identity, now, rec, fd.groom_indices, true};
         g_groom_uv[fd.groom_identity] = GroomUvState{};
-        groom_uv_copies.push_back({j, fd.soup_off});
+        groom_uv_copies.push_back({j, fd.soup_off, stride});
         fd.groom_miss = hair_groom::JoinMiss::UvPending;
         break;
       }
@@ -2888,6 +2921,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       bool ok = lp != nullptr;
       const GroomAsset::Lod& l = lp ? *lp : groom_src->lods[size_t(lod)];
       GroomWork w{&g, &l, fd.soup_off, false, false, {}, key};
+      w.stride = stride;
       w.hp_key = fd.hp_key;
       w.prims = fd.prims;   // the shader bounds every triangle read by it
       // A new LOD, or primary strands turned on for a slot without per-point UVs: new points range and a full build.
@@ -3030,7 +3064,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if (native_hit::enabled()) {
       Mesh& mm = g_meshes[fd.mesh_key];
       use = native_hit::pool_lookup(fd.geo_key, fd.pos_key, fd.instances,
-                                    {mm.gen, mm.pool_off, mm.tris, stride, mm.basis_off, mm.basis_size, g_pool_epoch});
+                                    {mm.gen, mm.pool_off, mm.tris, mm.stride, mm.basis_off, mm.basis_size, g_pool_epoch});
       const VkDeviceSize need = native_hit::pool::basis_bytes(mm.tris);
       if (use.wants_basis && (!alpha || pool_alpha_rows) && !mm.basis_size && g_basis_bytes + need <= native_hit::pool::kBasisCapBytes &&
           pool_alloc(cmd, need, &mm.basis_off)) {
@@ -3052,7 +3086,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
     }
     const bool pool_row = (!alpha || pool_alpha_rows) && use.slot < native_hit::nh_pool_rows;
-    const uint32_t inf[4] = {uint32_t(m.pool_off), (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u) |
+    const uint32_t inf[4] = {uint32_t(m.pool_off), (m.stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u) |
                              (fd.camera_fade ? kInfoCameraFade : 0u) | (pool_row ? native_hit::nh_pool_meta : 0u) |
                              (pool_row && alpha ? (use.slot + 1u) << native_hit::nh_pool_alpha_slot_shift : 0u),
                              alpha ? 16 + fd.rec * kRecBytes : pool_row ? native_hit::nh_pool_rec_flag | use.slot : 0u, m.tris};
@@ -3102,7 +3136,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       groom_work[gw->second].card = n;
       groom_bit = kInfoGroomReplaced;
     }
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), ((fd.held ? s.hold_stride : stride) & 0xffu) | (fd.held ? kInfoPool | kInfoHeld : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u) | groom_bit,
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), ((fd.held ? s.hold_stride : draw_stride(fd)) & 0xffu) | (fd.held ? kInfoPool | kInfoHeld : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u) | groom_bit,
                              alpha ? 16 + fd.rec * kRecBytes : opaque_material?fd.material_record:0u, fd.prims};
     if (fd.camera_fade) camera_fade_marked(1, fd.prims);
     std::memcpy(inst_out + n, &in, sizeof in);
@@ -3129,18 +3163,20 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       (casc_refit_on ? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR : 0);
   if (casc) {
     casc_refit = casc_refit_on && g_casc_as.as && g_casc_sig == cap.cascade_sig && g_casc_tris == cap.cascade_tris &&
+                 g_casc_wide_tris == cap.cascade_wide_tris &&
                  g_casc_update_scratch && g_casc_refits < uint32_t((std::max)(cfg_int("rt_cascade_rebuild_frames", 60), 1));
     bool ok = casc_refit;
     if (!casc_refit) {
       if (g_casc_as.as) as_destroy(g_casc_as);
       const VkAccelerationStructureBuildSizesInfoKHR sz =
-          blas_sizes(cap.cascade_tris, cap.cascade_stride, false, casc_flags);
+          blas_sizes2(cap.cascade_tris, cap.cascade_stride, cap.cascade_wide_tris, cap.cascade_wide_stride, casc_flags);
       ok = as_create(sz.accelerationStructureSize, g_casc_as, nullptr, 2,
                      "BLAS chunk for the cascade casters (left out this frame)");
       casc_scratch = sz.buildScratchSize;
       g_casc_update_scratch = casc_refit_on ? sz.updateScratchSize : 0;
       g_casc_sig = cap.cascade_sig;
       g_casc_tris = cap.cascade_tris;
+      g_casc_wide_tris = cap.cascade_wide_tris;
       g_casc_refits = 0;
       ++g_casc_n_build;
     } else {
@@ -3244,7 +3280,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       const uint32_t count = g_groom_uv_jobs[c.job].count;
       VkBufferCopy r[hair_groom::kSamples];
       for (uint32_t s = 0; s < hair_groom::kSamples; ++s)
-        r[s] = {c.soup_off + VkDeviceSize(hair_groom::uv_sample_corner(s, count)) * stride + 16, VkDeviceSize(c.job) * 256 + s * 8, 8};
+        r[s] = {c.soup_off + VkDeviceSize(hair_groom::uv_sample_corner(s, count)) * c.stride + 16, VkDeviceSize(c.job) * 256 + s * 8, 8};
       dd->vk.CmdCopyBuffer(cmd, cap.xfb, g_groom_uv_rb.b, hair_groom::kSamples, r);
     }
     // rt_hair_groom_primary: the strand passes of the game's frame (G-buffer variant, coverage query, velocity) traced the
@@ -3274,7 +3310,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_groom_pipe);
       dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_groom_pl, 0, 2, wr);
       for (const GroomWork& w : groom_work) {
-        const GroomPush gp{w.l->points, uint32_t(w.soup_off), stride, uint32_t(w.l->tri), uint32_t(w.l->bary),
+        const GroomPush gp{w.l->points, uint32_t(w.soup_off), w.stride, uint32_t(w.l->tri), uint32_t(w.l->bary),
                            uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), uint32_t(w.g->uv_off),
                            uint32_t(w.g->prev_off), {w.prims, 0, 0}};
         dd->vk.CmdPushConstants(cmd, g_groom_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof gp, &gp);
@@ -3357,7 +3393,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       for (uint32_t i = 0; i < b.tris; ++i) tris[i] = {i * 64u, uint16_t(omm_mask::kOmbLevel), uint16_t(VK_OPACITY_MICROMAP_FORMAT_4_STATE_EXT)};
       std::memcpy(e.descriptors.map, tris.data(), size_t(tb));
       const uint32_t gx = (std::min)(b.tris, 65535u), gy = (b.tris + gx - 1) / gx;
-      const OmmDynPush pc{uint32_t(b.soup_off), stride, b.tris, gx, b.cut_lo, b.cut_hi, b.su, b.sv, 0, b.w, b.h, 0};
+      const OmmDynPush pc{uint32_t(b.soup_off), b.stride, b.tris, gx, b.cut_lo, b.cut_hi, b.su, b.sv, 0, b.w, b.h, 0};
       omm_dyn_dispatch(cmd, g_omm_dyn_pipe.bake, pc, cap.xfb, cap.xfb_size, e, gx, gy);
       omm::Input input{};
       input.descriptors = tris;
@@ -3378,7 +3414,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       g_omm_dyn.emplace(b.key, std::move(e));
     }
     for (const OmmCheck& c : omm_checks) {
-      const OmmDynPush pc{uint32_t(c.soup_off), stride, c.tris, 0, 0.0f, 0.0f, 0.0f, 0.0f, uint32_t(c.index_off), 0, 0, 0};
+      const OmmDynPush pc{uint32_t(c.soup_off), c.stride, c.tris, 0, 0.0f, 0.0f, 0.0f, 0.0f, uint32_t(c.index_off), 0, 0, 0};
       omm_dyn_dispatch(cmd, g_omm_dyn_pipe.check, pc, cap.xfb, cap.xfb_size, *c.e, (c.tris + 63) / 64, 1);
     }
     barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kAS | kXfer,
@@ -3417,7 +3453,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       uint32_t groups = (std::min)((e.tris + 255) / 256, 65535u);
       uint32_t pc[16] = {e.tris,
                          groups * 256,
-                         stride,
+                         e.stride ? e.stride : cap_stride,
                          e.kind == kJobExtract ? 0u : 1u,
                          uint32_t(e.soup),
                          uint32_t(e.pool),
@@ -3488,7 +3524,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     std::vector<VkDeviceSize> scratch_off;
     for (const MeshBuild& mb : mesh_builds) {
       const Mesh& m = g_meshes[mb.key];
-      geo.push_back(tri_geometry(g_pool.addr + m.pool_off, m.tris, stride, !m.alpha));
+      geo.push_back(tri_geometry(g_pool.addr + m.pool_off, m.tris, m.stride, !m.alpha));
       ranges.push_back({m.tris, 0, 0, 0});
       VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
       bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
@@ -3498,13 +3534,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       bi.geometryCount = 1;
       infos.push_back(bi);
       scratch_off.push_back(scratch);
-      scratch += (blas_sizes(m.tris, stride, !m.alpha, mesh_flags).buildScratchSize + al - 1) / al * al;
+      scratch += (blas_sizes(m.tris, m.stride, !m.alpha, mesh_flags).buildScratchSize + al - 1) / al * al;
     }
     for (const DynBuild& db : dyn_builds) {
       // The vertex range must lie in this frame's soup and its address be 4-byte aligned
       // (the component size of R32G32B32_SFLOAT, VUID-...-vertexData-03711; logged, the
       // capture guarantees it). Not a multiple of the stride: the alpha region starts at a
       // 256-byte boundary, which 24 does not divide.
+      const VkDeviceSize tri_bytes = 3u * VkDeviceSize(db.stride ? db.stride : cap_stride);
       if (db.soup_off % 4u || db.soup_off + VkDeviceSize(db.prims) * tri_bytes > cap.xfb_size) {
         static uint32_t logged = 0;
         if (logged++ < 20)
@@ -3512,7 +3549,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
               (unsigned long long)now, (unsigned long long)db.soup_off,
               (unsigned long long)(VkDeviceSize(db.prims) * tri_bytes), (unsigned long long)cap.xfb_size);
       }
-      geo.push_back(db.slot->hair?hair_geometry(g_pool.addr+db.slot->hair_bounds_off):tri_geometry(soup_addr + db.soup_off, db.prims, stride, !db.slot->alpha));
+      geo.push_back(db.slot->hair?hair_geometry(g_pool.addr+db.slot->hair_bounds_off):tri_geometry(soup_addr + db.soup_off, db.prims, db.stride ? db.stride : cap_stride, !db.slot->alpha));
       if (db.omm) {
         // rt_omm_dyn: the micro-map, indexed per triangle by this frame's check (the same flags and sizes as decided).
         omm_attach.emplace_back();
@@ -3553,13 +3590,21 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if (casc_build) {   // rt_cascade_casters: converted in place after last frame's cascade pass
       geo.push_back(tri_geometry(rt_buffer_address(cap.cascade_xfb), cap.cascade_tris, cap.cascade_stride, false));
       ranges.push_back({cap.cascade_tris, 0, 0, 0});
+      // rt_capture_wide_split: the wide casters as the second geometry. This info is the last one built here:
+      // infos[i].pGeometries = &geo[i] and its ranges read geo[i], geo[i + 1] / ranges[i], ranges[i + 1].
+      const bool casc_wide = cap.cascade_wide_tris && cap.cascade_wide_stride;
+      if (casc_wide) {
+        geo.push_back(tri_geometry(rt_buffer_address(cap.cascade_xfb) + cap.cascade_wide_off, cap.cascade_wide_tris,
+                                   cap.cascade_wide_stride, false));
+        ranges.push_back({cap.cascade_wide_tris, 0, 0, 0});
+      }
       VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
       bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
       bi.flags = casc_flags;
       bi.mode = casc_refit ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
       if (casc_refit) bi.srcAccelerationStructure = g_casc_as.as;
       bi.dstAccelerationStructure = g_casc_as.as;
-      bi.geometryCount = 1;
+      bi.geometryCount = casc_wide ? 2 : 1;
       infos.push_back(bi);
       scratch_off.push_back(scratch);
       scratch += (casc_scratch + al - 1) / al * al;
@@ -3787,7 +3832,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   for(const auto& draw:omm_draws) {
     const auto& fd=g_draws[draw.draw];auto found=g_meshes.find(fd.mesh_key);
     if(found==g_meshes.end() || !fd.omm_material)continue;
-    if(auto* variant=native_omm_variant(cmd,rec,found->second,*fd.omm_material,stride)) {
+    if(auto* variant=native_omm_variant(cmd,rec,found->second,*fd.omm_material,found->second.stride)) {
       g_omm_ranges[slot].push_back({draw.first,draw.count,fd.mesh_key,found->second.gen,variant->baked,variant->blas,
                                    fd.omm_material->source.buffer,fd.omm_material->source.bytes});
       g_st.omm_range_tris+=uint64_t(found->second.tris)*draw.count;

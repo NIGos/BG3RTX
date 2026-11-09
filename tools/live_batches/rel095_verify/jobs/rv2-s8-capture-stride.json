@@ -1,0 +1,227 @@
+{
+ "name": "rv2-s8-capture-stride",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 600,
+ "max_minutes": 10,
+ "repeat": 1,
+ "live_batch": "rel095-verify",
+ "tree": ".claude/worktrees/test-main",
+ "window_mode": "visible_unfocused_fg",
+ "fail_fast": true,
+ "stop_on_dump": false,
+ "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=0,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rr_hair_strand_aa=2,rt_capture_wide_split=1",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "tools/live_batches/rel095_verify/plans/rv2_s8.json"
+ ],
+ "patterns": [
+  "\\[auto\\]",
+  "\\[cfg\\]",
+  "\\[hot\\]",
+  "\\[watch\\]",
+  "\\[trace\\]",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[mem\\]",
+  "\\[vram\\]",
+  "\\[cascade\\]",
+  "\\[geo\\] RT capture",
+  "\\[bvh\\] mesh (cache|pool)",
+  "\\[rt\\] scene wait",
+  "rt passes: GPU cost",
+  "gi: GPU cost",
+  "\\[sl\\] DLSS-G frame",
+  "\\[sl\\] warn",
+  "\\[rrpost\\] strand resolve",
+  "\\[rrpost\\] exposure (held|hold)",
+  "\\[hair primary\\] frame",
+  "VK_ERROR",
+  "\\[log\\]",
+  "\\[geo\\] rt_capture_wide_split",
+  "\\[cascade\\] wide-stride casters"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[cfg\\] settings read",
+  "\\[mem\\] ours \\(\\w+\\): BLAS chunks \\d+ MB reserved in \\d+ chunks",
+  "\\[mem\\] device-local VRAM of this process: used [1-9]\\d* MB, budget [1-9]\\d* MB",
+  "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+  "\\[geo\\] RT capture, last \\d+ frames:",
+  "\\[trace\\] frame \\d+ written",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[geo\\] rt_capture_wide_split on: strand-frame vertex shaders 88 bytes, all others 64 bytes per vertex",
+  "\\[geo\\] RT capture stride split, last \\d+ frames:",
+  "\\[cascade\\] wide-stride casters \\(rt_capture_wide_split\\):"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "\\[cascade\\] could not allocate",
+  "\\[log\\] reached \\d+ MB",
+  "\\[sl\\] .*eWarnOutOfVRAM",
+  "\\[geo\\] rt_capture_wide_split inactive"
+ ],
+ "expect_every": [
+  {
+   "name": "capacity: cascade casters never left out (buffer full 0.0) in every window",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-yield-r",
+    "turn-yield-l",
+    "turn-both-r",
+    "turn-both-l",
+    "static-both",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  },
+  {
+   "name": "capacity: RT capture drops no opaque draw in every window (key on from launch)",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-yield-r",
+    "turn-yield-l",
+    "turn-both-r",
+    "turn-both-l",
+    "static-both",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  },
+  {
+   "name": "capacity: no alpha draw made opaque in every window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "made opaque \\(region full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-yield-r",
+    "turn-yield-l",
+    "turn-both-r",
+    "turn-both-l",
+    "static-both",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  },
+  {
+   "name": "stride split: no wide (88-byte) draw left out in every window",
+   "select": "\\[geo\\] RT capture stride split, last \\d+ frames:",
+   "match": "left out \\(region full or no split\\) 0\\.00 per frame",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-yield-r",
+    "turn-yield-l",
+    "turn-both-r",
+    "turn-both-l",
+    "static-both",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  },
+  {
+   "name": "scene wait: 0 timeouts in every window",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-yield-r",
+    "turn-yield-l",
+    "turn-both-r",
+    "turn-both-l",
+    "static-both",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  },
+  {
+   "name": "strand resolve: 0 fallbacks wherever strand hair is resolved",
+   "select": "\\[rrpost\\] strand resolve \\(rr_hair_strand_aa=2\\):",
+   "match": ", 0 fell back",
+   "min": 0,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-yield-r",
+    "turn-yield-l",
+    "turn-both-r",
+    "turn-both-l",
+    "static-both",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "memory accounting in every window",
+   "select": "\\[mem\\] ours \\(",
+   "match": "cascade capture \\d+ MB",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-yield-r",
+    "turn-yield-l",
+    "turn-both-r",
+    "turn-both-l",
+    "static-both",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  }
+ ],
+ "expect_runner": [
+  "\\[window-mode\\].*visible_unfocused",
+  "\\[wheel-input\\] phase=2 notches=10\\b",
+  "\\[motion-trace\\] phase=5 label=static-off-a repeat=0",
+  "\\[motion-trace\\] phase=12 label=static-both repeat=0",
+  "\\[motion-plan\\] complete phases=16\\b",
+  "^Run ended: done"
+ ],
+ "live_flow": {
+  "expected_fps": 30,
+  "settings_latency_s": 1,
+  "trace_stall_s": 3,
+  "startup_only": [
+   "rt_capture_wide_split"
+  ]
+ },
+ "estimated_phase_seconds": 256,
+ "purpose": "rt_capture_wide_split=1 (startup) in the rv1 S8 lowered view and turns: only strand-frame VS at 88 bytes, all others at 64; 0 opaque draws dropped, 0 alpha draws made opaque and 0 wide draws left out in every window (rv1 key-off baseline: 1-8 opaque draws/frame dropped), RT capture opaque peak about 1.2 GB instead of 1.6 GB."
+}
