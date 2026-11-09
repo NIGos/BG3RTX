@@ -18,3 +18,4 @@
   fixed (camera read before rrpost's lock, none in the resolve), test added. No live rerun without the coordinator.
 - he1 03:04-03:17: mode 2 applied in 3 of 8 aa trace frames (~930 ring px changed, ring HF -12%), energy -0.1..-0.2% within
   noise. Burst windows fixed (out of periodic gates; tighten keeps a burst window's declared 14 s).
+- Snapshot moved to the scene G-buffer end (once per frame; the lighting hook fired in 188-590 of 600); fallbacks counted.

@@ -78095,6 +78095,18 @@
     "\\[pan\\] burst 99101 complete: \\d+ frames, \\d+ samples, transport ok": [
       0,
       null
+    ],
+    "\\[rrpost\\] strand resolve \\(rr_hair_strand_aa=2\\): [1-9]\\d* frames, 0 fell back": [
+      0,
+      null
+    ],
+    "\\[rrpost\\] strand snapshots .*: 0 at the G-buffer end, [1-9]\\d* refused": [
+      0,
+      null
+    ],
+    "\\[rrpost\\] strand snapshots \\(rr_hair_strand_aa=\\d\\): [1-9]\\d* at the G-buffer end": [
+      0,
+      null
     ]
   }
 }

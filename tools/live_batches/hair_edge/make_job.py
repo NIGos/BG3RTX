@@ -115,7 +115,9 @@ def make_job(plan):
     j["expect"] += [r"\[hair primary\] (?:prepass|G-buffer) hair pipeline stencil: test \d, write mask 0x[0-9a-f]{2}",
                     r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built",
                     r"\[rrpost\] rr_hair_strand_aa=0:", r"\[rrpost\] rr_hair_strand_aa=1:", r"\[rrpost\] rr_hair_strand_aa=2:",
-                    r"\[rrpost\] strand snapshots \(rr_hair_strand_aa=\d\): [1-9]\d* at the lighting pass"]
+                    r"\[rrpost\] strand snapshots \(rr_hair_strand_aa=\d\): [1-9]\d* at the G-buffer end",
+                    # steady state: every resolve frame had its snapshot (5n, the G-buffer-end hook)
+                    r"\[rrpost\] strand resolve \(rr_hair_strand_aa=2\): [1-9]\d* frames, 0 fell back"]
     j["patterns"] += [r"\[rrpost\]", r"hair pipeline stencil"]
     # The edge resolve must build: a pipeline creation or DXC call failure (layer/rrpost.cpp compile_pipeline, which
     # names every entry under rr_post.hlsl; layer/shaders.cpp) and a period without a strand resolve frame are fatal.
@@ -123,7 +125,7 @@ def make_job(plan):
                                                r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline creation failed",
                                                r"\[shaders\] rr_strand_aa\.hlsl:strand_resolve compile call failed",
                                                r"\[rrpost\] rr_post\.hlsl:strand_snapshot pipeline creation failed",
-                                               r"\[rrpost\] strand snapshots .*: 0 at the lighting pass, [1-9]\d* refused"]
+                                               r"\[rrpost\] strand snapshots .*: 0 at the G-buffer end, [1-9]\d* refused"]
     return j
 
 

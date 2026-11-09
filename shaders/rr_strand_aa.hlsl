@@ -15,9 +15,9 @@
 //   docs 5n). Lh: the mean colour of the strand pixels around; Lb: the pixel's own colour when it shows no strand, else
 //   the mean of the non-strand pixels of its 5 x 5 window (none: unchanged). Depth, motion and guides stay the pixel's.
 //   Math twin: tools/hair_groom/edge_stability.py (box_strand_coverage, found probability), CTest hair_groom_test.
-// The strand data come from strand_snapshot, dispatched at the lighting pass of the same frame (the fibre passes read the
-// pixel record there; at the post chain it no longer holds this frame's seal, he1 2026-11-09 f-debug), into a
-// frame-parity image; strand_resolve reads only that image, the colours and the stencil.
+// The strand data come from strand_snapshot, dispatched at the end of the scene's G-buffer pass of the same frame (the
+// strand fragments have just sealed the pixel record; at the post chain it no longer holds this frame's seal, he1
+// 2026-11-09 f-debug), into a frame-parity image; strand_resolve reads only that image, the colours and the stencil.
 // A separate request: rr_post.hlsl and every other request keep their preprocessed text.
 #include "rt/hair_primary_rebase.hlsli"
 
@@ -167,8 +167,8 @@ float strand_coverage(Frame f, int2 p, float4x4 inv, float2 jit, out uint hits) 
 }
 
 // ---- snapshot (he1 2026-11-09 02:04: at the post chain the pixel record no longer carried this frame's seal: the
-// f-debug Xr showed no strand footprint on any pixel, header usable). Dispatched at the lighting pass of the same frame
-// (layer/rrpost.cpp strand_snapshot), where the fibre passes read the same record: per pixel (c, strand pixel, strand
+// f-debug Xr showed no strand footprint on any pixel, header usable). Dispatched at the scene G-buffer's end of the same
+// frame (layer/rrpost.cpp rrpost_pass_end -> strand_snapshot): per pixel (c, strand pixel, strand
 // footprint, 0) into a frame-parity image that the resolve reads. bmax = the render size - 1; header and camera set.
 [[vk::binding(8, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> Out16;
 [numthreads(8, 8, 1)]

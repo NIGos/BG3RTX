@@ -3,6 +3,7 @@
 #include "../common/hair_groom_asset.h"
 #include "../common/hair_groom_budget.h"
 #include "../common/hair_primary.h"
+#include "../common/strand_snapshot.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -567,15 +568,44 @@ static void test_round3() {
   CHECK(!bg3::hair_groom::parse_lod(b.data(), b.size(), at, 1, lod));   // triangle 1 out of range for 1 triangle
 }
 
-int main() {
-  test_round3();
+// rr_hair_strand_aa (docs/RTX_HAIR_PRIMARY.md 5n): the resolve of frame f reads the snapshot only when frame f wrote it.
+static void test_strand_snapshot_ring() {
+  namespace ss = bg3::strand_snapshot;
+  const int32_t gbuf[5] = {83, 37, 37, 37, 37}, decal[4] = {83, 37, 37, 37}, other[4] = {97, 37, 37, 37};
+  CHECK(ss::gbuffer_pass(5, gbuf, 129) && ss::gbuffer_pass(4, decal, 129));
+  CHECK(!ss::gbuffer_pass(4, other, 129) && !ss::gbuffer_pass(4, decal, 130) && !ss::gbuffer_pass(3, decal, 129));
+  ss::Ring r;
+  CHECK(!r.usable(0) && !r.usable(1));
+  // One G-buffer end per frame (plus the decal pass of the same frame): every resolve has its frame's snapshot.
+  uint64_t fallbacks = 0;
+  for (uint64_t f = 1; f <= 600; ++f) {
+    r.wrote(f);
+    r.wrote(f);   // decal pass, same frame
+    fallbacks += r.usable(f) ? 0 : 1;
+  }
+  CHECK(fallbacks == 0);
+  // A frame without a snapshot falls back (never the snapshot of two frames ago, same parity); the next one recovers.
+  CHECK(!r.usable(602) && !r.usable(601 + 2));
+  r.wrote(601);
+  CHECK(r.usable(601) && !r.usable(603));
+  // The lighting hook of he1 03:04-03:17 (one write in 188-590 of 600 frames) would make the resolve alternate.
+  ss::Ring sparse;
+  fallbacks = 0;
+  for (uint64_t f = 1; f <= 600; ++f) {
+    if (f % 3 == 0) sparse.wrote(f);
+    fallbacks += sparse.usable(f) ? 0 : 1;
+  }
+  CHECK(fallbacks == 400);
+}
+
+int main() {  test_round3();
   test_header_version(); test_watchdog(); test_load_identity(); test_zero_length_segment();
   test_cascade_card_drop();
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
-  test_current_pick(); test_coverage_footprint();
+  test_current_pick(); test_coverage_footprint(); test_strand_snapshot_ring();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

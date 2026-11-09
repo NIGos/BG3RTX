@@ -4,7 +4,11 @@
   "f-debug": "header usable (no magenta) but no pixel reads as strand footprint at the post chain: the pixel record no longer carries this frame's seal there, though the fibre passes read it at lighting. b-aa / d-aa still changed 650 / 610 hair pixels (0 in a, c, e): the coverage applied only in some frames",
   "burst baseline (edge-only bursts, final image, 8 frames)": "off: flicker (temporal std / mean) hair 0.0409, edge band 0.0674, core 0.0324; aa: 0.0465 / 0.0740 / 0.0344 (mode 2 not reliably active, one animated sample each: no effect claimed). Strand edges flicker twice as much as the hair core: the user's report quantified"
  },
- "design change": "strand_snapshot at the lighting pass writes (coverage, strand pixel, footprint) per pixel into a frame-parity image; strand_resolve reads only that image. Log line '[rrpost] strand snapshots (rr_hair_strand_aa=N): S at the lighting pass, R refused'.",
+ "design change": "strand_snapshot at the end of the scene G-buffer pass (once per rendered frame; the lighting hook fired in 188-590 of 600 frames, he1 03:04-03:17) writes (coverage, strand pixel, footprint) into a frame-parity image; strand_resolve reads only that image and falls back to the game's resolve, counted, in a frame without one.",
+ "per-frame (new gate)": {
+  "predicted": "'[rrpost] strand snapshots (rr_hair_strand_aa=2): S at the G-buffer end' with S about 600 per 600 frames (two per frame if the decal pass matches too: then about 1200), and 'strand resolve ... N frames, 0 fell back' in steady state; Xr changed on the hair ring in every aa trace frame",
+  "invalid_if": "fell back > 0 in a period fully inside an aa window"
+ },
  "f-debug (rr_hair_strand_aa=3)": {
   "predicted": "red on the strand footprint (the hair cards' strand pixels and the background between them), yellow (red + green) on strand pixels, white/blue tint where the coverage applies along the silhouette; grey (x 0.25) elsewhere",
   "invalid_if": "no snapshot line with S > 0, or no Xr dump in the f-debug trace"

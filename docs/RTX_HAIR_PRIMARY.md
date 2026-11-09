@@ -772,7 +772,15 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   and auto-run ends a frame window on its count (03:17 burst-off closed 0.15 s after ready). Fixed: bursts only in plain
   expects (timed windows), and tighten keeps a burst window's declared seconds (14 s) above its 5.1 s model; a pan_inputs
   burst completed 7.5 s after arming. The fake-queue dry run (lean_dryrun) cannot time bursts (its fake game runs no
-  plan); make_job asserts the burst phases are timed and >= 14 s.## 6. Open items
+  plan); make_job asserts the burst phases are timed and >= 14 s.
+- Per frame: the lighting hook (kCsLighting, the standard-class tiled-lighting hash) fired in 188-590 of 600 frames, so
+  the resolve alternated with the game's. The snapshot now runs at the end of the scene G-buffer pass (rrpost_pass_end,
+  after ngx_note_pass recorded the camera; size equal to the scene G-buffer, never a portrait pass), once per rendered
+  frame; a frame without its snapshot runs the game's resolve and is counted ('fell back'). common/strand_snapshot.h,
+  CTest hair_groom_asset_test test_strand_snapshot_ring (600 of 600 frames usable; a skipped frame never reads the
+  snapshot of two frames ago).
+
+## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
    normal, is view space; 5g). Open: the root-to-tip sign of that frame.

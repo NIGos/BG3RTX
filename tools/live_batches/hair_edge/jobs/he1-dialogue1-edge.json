@@ -109,7 +109,8 @@
     "\\[rrpost\\] rr_hair_strand_aa=0:",
     "\\[rrpost\\] rr_hair_strand_aa=1:",
     "\\[rrpost\\] rr_hair_strand_aa=2:",
-    "\\[rrpost\\] strand snapshots \\(rr_hair_strand_aa=\\d\\): [1-9]\\d* at the lighting pass"
+    "\\[rrpost\\] strand snapshots \\(rr_hair_strand_aa=\\d\\): [1-9]\\d* at the G-buffer end",
+    "\\[rrpost\\] strand resolve \\(rr_hair_strand_aa=2\\): [1-9]\\d* frames, 0 fell back"
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -141,7 +142,7 @@
     "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline creation failed",
     "\\[shaders\\] rr_strand_aa\\.hlsl:strand_resolve compile call failed",
     "\\[rrpost\\] rr_post\\.hlsl:strand_snapshot pipeline creation failed",
-    "\\[rrpost\\] strand snapshots .*: 0 at the lighting pass, [1-9]\\d* refused"
+    "\\[rrpost\\] strand snapshots .*: 0 at the G-buffer end, [1-9]\\d* refused"
   ],
   "expect_runner": [
     "window-mode.*visible_unfocused",
