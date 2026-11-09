@@ -23,7 +23,7 @@ class DiagnosticsPackageTest(unittest.TestCase):
         self.harness = self.base / "harness.ps1"
         # Mock only the light system query and process detection. Never launch a game process.
         self.harness.write_text(r'''
-param([string]$InstallDir, [string]$SavePath, [switch]$Running)
+param([string]$InstallDir, [string]$SavePath, [switch]$Running, [string]$PlayerProfiles)
 $ErrorActionPreference = 'Stop'
 function Get-CimInstance {
   param($ClassName, $OperationTimeoutSec)
@@ -37,14 +37,18 @@ function Get-Process {
 }
 $params = @{InstallDir=$InstallDir}
 if ($SavePath) { $params.SavePath = $SavePath }
+# Fixture profile folder only: the real Larian folder is never read by this test.
+if ($PlayerProfiles) { $params.IncludeLatestSave = $true; $params.PlayerProfiles = $PlayerProfiles }
 & $env:BG3RTX_TEST_PACKER @params
 ''', encoding="utf-8")
 
-    def run_packer(self, save=None, running=False, success=True):
+    def run_packer(self, save=None, running=False, success=True, profiles=None):
         command = [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                    "-File", str(self.harness), "-InstallDir", str(self.install)]
         if save is not None:
             command += ["-SavePath", str(save)]
+        if profiles is not None:
+            command += ["-PlayerProfiles", str(profiles)]
         if running:
             command += ["-Running"]
         env = os.environ.copy()
@@ -130,7 +134,7 @@ provider=sk-1234567890abcdefghijklmnop
         self.fixture()
         self.run_packer()
         with self.archive() as archive:
-            self.assertFalse(any(name.startswith("save/") for name in archive.namelist()))
+            self.assertFalse(any(name.startswith(("save/", "saves/")) for name in archive.namelist()))
         self.run_packer()
         self.assertEqual(len(list(self.install.glob("*.zip"))), 2)
 
@@ -144,6 +148,55 @@ provider=sk-1234567890abcdefghijklmnop
 
     def test_running_refused_before_save_access(self):
         result = self.run_packer(self.base / "does-not-exist.lsv", running=True, success=False)
+        self.assertIn("Baldur's Gate 3 is running", result.stderr)
+        self.assertFalse(list(self.install.glob("*.zip")))
+
+    def save_fixture(self):
+        """Two Story saves in two profiles plus decoys; the 2022 QuickSave is the newest .lsv."""
+        profiles = self.base / "PlayerProfiles"
+        old = profiles / "Public" / "Savegames" / "Story" / "Tav-1111__Old"
+        new = profiles / "Second" / "Savegames" / "Story" / "Tav-1234__QuickSave_1"
+        other = profiles / "Public" / "Savegames" / "Other"
+        for folder in (old, new, other):
+            folder.mkdir(parents=True)
+        (old / "Old.lsv").write_bytes(b"old save")
+        (new / "QuickSave_1.lsv").write_bytes(b"NEWSAVE\x00\xff\x01")
+        (new / "QuickSave_1.webp").write_bytes(b"RIFFthumb")
+        (old / "notes.txt").write_text("not a save", encoding="utf-8")
+        (other / "Elsewhere.lsv").write_bytes(b"not a Story save")
+        for path, year in ((old / "Old.lsv", 2021), (new / "QuickSave_1.lsv", 2022),
+                           (old / "notes.txt", 2024), (other / "Elsewhere.lsv", 2025)):
+            stamp = (year - 1970) * 365 * 86400
+            os.utime(path, (stamp, stamp))
+        return profiles, new
+
+    def test_latest_save_opt_in(self):
+        self.fixture()
+        profiles, new = self.save_fixture()
+        lsv = new / "QuickSave_1.lsv"
+        before = (lsv.read_bytes(), lsv.stat().st_mtime_ns, lsv.stat().st_mode)
+        result = self.run_packer(profiles=profiles)
+        self.assertEqual(before, (lsv.read_bytes(), lsv.stat().st_mtime_ns, lsv.stat().st_mode))
+        self.assertIn("Latest save: Tav-1234__QuickSave_1 (19 bytes", result.stdout)
+        with self.archive() as archive:
+            saves = sorted(n for n in archive.namelist() if n.startswith(("save/", "saves/")))
+            self.assertEqual(saves, ["saves/Tav-1234__QuickSave_1/QuickSave_1.lsv",
+                                     "saves/Tav-1234__QuickSave_1/QuickSave_1.webp"])
+            for name in saves:
+                self.assertEqual(archive.read(name), (new / name.rsplit("/", 1)[1]).read_bytes())
+                self.assertTrue(archive.getinfo(name).external_attr & 1)
+
+    def test_latest_save_none_found(self):
+        empty = self.base / "EmptyProfiles"
+        empty.mkdir()
+        self.run_packer(profiles=empty)
+        with self.archive() as archive:
+            self.assertFalse(any(n.startswith("saves/") for n in archive.namelist()))
+            self.assertIn("none found", archive.read("CONTENTS.txt").decode())
+
+    def test_latest_save_refused_while_running(self):
+        profiles, _ = self.save_fixture()
+        result = self.run_packer(running=True, success=False, profiles=profiles)
         self.assertIn("Baldur's Gate 3 is running", result.stderr)
         self.assertFalse(list(self.install.glob("*.zip")))
 

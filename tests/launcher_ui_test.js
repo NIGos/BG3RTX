@@ -39,6 +39,10 @@ assert(!ids.get('navigation').children.some(e=>e.id==='nav-Developer'));
  for(let p=0;p<4;p++){ids.get('preset-'+p).onclick();assert.deepStrictEqual(msg(),{type:'preset',value:p});}
  assert.strictEqual(ids.get('home-play').disabled,!fixture.canPlay,'Home Play follows canPlay like the footer');
  ids.get('home-play').onclick();assert.deepStrictEqual(msg(),{type:'play'});
+ // The report flow is reachable from Home (Play card), the same 'report' message as Support.
+ assert(all(ids.get('home-play-card')).includes(ids.get('home-report-open')),'report link on the Home Play card');
+ assert(/diagnostic report/i.test(ids.get('home-report-open').textContent));
+ ids.get('home-report-open').onclick();assert.deepStrictEqual(msg(),{type:'report'});
  // RTX Hair: the same control and message as its Lighting card.
  const act=id=>{const e=ids.get(id);assert(e,id+' missing');if(e.type==='checkbox'){e.checked=!e.checked;e.onchange();}else e.onclick();return msg();};
  {
@@ -244,5 +248,10 @@ for(const page of ['Home','Lighting','Hotkeys','Support']){render(fixture);ids.g
 // Apply badges: three kinds only.
 for(const page of ['Lighting','Surfaces','Performance','DLSS 5','Support']){render(fixture);ids.get('nav-'+page).onclick();
  for(const b of all(ids.get('section-content')).filter(e=>/^badge/.test(e.className||'')))assert(['Applies now','Applies after saving','Restart to apply','May need a restart'].includes(b.textContent),page+' badge '+b.textContent);}
+// Report preview: a save entry is listed with its note and size, never with a contents view.
+render({...fixture,report:{visible:true,privacy:'p',bytes:12,files:[{name:'CONTENTS.txt',size:4,text:'list'},{name:'saves/Tav/Tav.lsv',size:8,text:'',note:'Your save',binary:true}]}});
+assert(ids.get('report-file-'+encodeURIComponent('CONTENTS.txt'))&&!ids.get('report-file-'+encodeURIComponent('saves/Tav/Tav.lsv')),'no contents view for a save');
+assert(all(ids.get('report-preview')).some(e=>e.textContent==='Your save'),'save note shown');
+ids.get('prepare-report').onclick();assert.strictEqual(JSON.parse(JSON.stringify(sent.at(-1))).save,false,'latest save unticked by default');
 render({...fixture,developer:true});assert(!ids.get('navigation').children.some(e=>e.className==='nav-foot'&&e.children.some(c=>c.className==='switch-row')),'developer mode keeps its own disclosure');
 console.log('Renderer: Home dashboard, RTX Hair conversion, Hotkeys, category reachability, requirements, costs, focus, native controls, presets and developer authorization pass.');

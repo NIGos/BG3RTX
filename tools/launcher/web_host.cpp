@@ -329,8 +329,8 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?(std::string("Game started. ")+narrow(note)):std::string("Settings saved, but the game could not start. See Help & support.\n")+narrow(err)+"\n"+narrow(note);return ok;
       };
       hooks.reportHint=[] {return session_logging::hint(root_dir());};
-      hooks.prepareReport=[&h](const std::string& issue,bool logs,bool settings,bool system){
-        diagnostics::Request r;r.install_root=root_dir();r.issue=issue;r.include_logs=logs;r.include_settings=settings;r.include_system=system;
+      hooks.prepareReport=[&h](const std::string& issue,bool logs,bool settings,bool system,bool save){
+        diagnostics::Request r;r.install_root=root_dir();r.issue=issue;r.include_logs=logs;r.include_settings=settings;r.include_system=system;r.include_save=save;
         if(system)r.system_text=graphics_report(inspect_graphics());
         return diagnostics::prepare_report(r,[&h](size_t done,size_t total){PostMessageW(h.window,work_progress,done,total);return !h.cancel.load();});
       };
@@ -459,7 +459,7 @@ struct NativeReportPreview {
   diagnostics::ExportResult exported;
   std::thread worker;
   std::atomic<bool> cancel{false};
-  bool busy{}, exporting{}, closeWhenDone{};
+  bool busy{}, exporting{}, closeWhenDone{}, includeSave{};
   HFONT body{}, mono{};
   ~NativeReportPreview() {
     cancel = true;
@@ -485,7 +485,8 @@ void native_file(NativeReportPreview& p) {
   // The text control is a view of the frozen UTF-8 entry, not another read of
   // the original file. Export always uses the unmodified Snapshot bytes.
   const auto& entry = p.snapshot.files[size_t(index)];
-  SetWindowTextW(p.contents, widen(entry.text).c_str());
+  // A save is binary: show what it is, never its bytes.
+  SetWindowTextW(p.contents, widen(entry.binary ? entry.note : entry.text).c_str());
 }
 void native_work(NativeReportPreview& p, std::wstring destination = {}) {
   p.busy = true; p.cancel = false; p.exporting = !destination.empty();
@@ -502,6 +503,7 @@ void native_work(NativeReportPreview& p, std::wstring destination = {}) {
       else {
         diagnostics::Request request;
         request.install_root = root_dir();
+        request.include_save = p.includeSave;
         if (!p.cancel.load()) request.system_text = graphics_report(inspect_graphics());
         p.snapshot = diagnostics::prepare_report(request, progress);
       }
@@ -601,7 +603,11 @@ int native_report(HWND owner) {
   if (!window) { MessageBoxW(owner, L"Report preview could not open. No files were collected or saved.", L"Report a problem", MB_OK | MB_ICONERROR); return 2; }
   bool restoreOwner = owner && IsWindowEnabled(owner);
   if (restoreOwner) EnableWindow(owner, FALSE);
-  ShowWindow(window, SW_SHOW); native_work(preview);
+  ShowWindow(window, SW_SHOW);
+  // The latest save is opt-in: the default button is No.
+  preview.includeSave = MessageBoxW(window, (widen(diagnostics::save_option_text) + L"?").c_str(), L"Report a problem",
+    MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES;
+  native_work(preview);
   MSG message{};
   while (IsWindow(window)) {
     int result = GetMessageW(&message, nullptr, 0, 0);

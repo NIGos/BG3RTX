@@ -155,7 +155,8 @@ int main(int argc,char** argv){
   launcher::web::Hooks h;
   h.save=[&](launcher::State& candidate,const st::KVList&,std::string&){++saves;check(candidate.user.at("unmanaged")=="retained");return true;};
   h.play=[&](std::string&){++plays;return true;};
-  h.prepareReport=[&](const std::string& issue,bool logs,bool settings,bool system){++prepares;check(issue=="Line\n\"quoted\" \xe2\x98\x80");check(!logs&&settings&&system);launcher::diagnostics::Snapshot r;r.status=launcher::diagnostics::Status::Complete;r.files={{"ISSUE.txt",issue,""}};r.bytes=issue.size();return r;};
+  bool last_save=true;
+  h.prepareReport=[&](const std::string& issue,bool logs,bool settings,bool system,bool save){++prepares;last_save=save;check(issue=="Line\n\"quoted\" \xe2\x98\x80");check(!logs&&settings&&system);launcher::diagnostics::Snapshot r;r.status=launcher::diagnostics::Status::Complete;r.files={{"ISSUE.txt",issue,""}};if(save)r.files.push_back({"saves/Fixture/Fixture.lsv",std::string("SAVEBYTES\0\xff",11),"Your save",true});r.bytes=issue.size();return r;};
   h.exportReport=[&](const launcher::diagnostics::Snapshot& r,std::string&){++exports;check(r.files[0].text=="Line\n\"quoted\" \xe2\x98\x80");return true;};
   // Retired controls stay absent even with developer/experimental access.
   {
@@ -297,6 +298,11 @@ int main(int argc,char** argv){
   auto saved=s.values;s.values[st::knob_index("rr")]=-1;bridge.handle("{\"type\":\"preset\",\"value\":0}");bridge.handle("{\"type\":\"confirm\"}");check(s.values[st::knob_index("rr")]==0);s.values=saved;
   bridge.handle("{\"type\":\"report\"}");check(prepares==0);bridge.handle("{\"type\":\"exportReport\"}");check(exports==0);
   json=bridge.handle("{\"type\":\"prepareReport\",\"issue\":\"Line\\n\\\"quoted\\\" \\u2600\",\"logs\":false,\"settings\":true,\"system\":true}");check(prepares==1);check(json.find("Line\\u000a\\\"quoted\\\"")!=std::string::npos);bridge.handle("{\"type\":\"exportReport\"}");check(exports==1);
+  check(!last_save); // The latest save is opt-in: absent "save" means no save.
+  // With the save ticked, its bytes go to the ZIP but never into the preview JSON.
+  json=bridge.handle("{\"type\":\"prepareReport\",\"issue\":\"Line\\n\\\"quoted\\\" \\u2600\",\"logs\":false,\"settings\":true,\"system\":true,\"save\":true}");
+  check(prepares==2&&last_save);check(json.find("SAVEBYTES")==std::string::npos);check(json.find("\"binary\":true")!=std::string::npos);
+  bridge.handle("{\"type\":\"exportReport\"}");check(exports==2);
   launcher::GraphicsInspection p;bridge.set_compatibility(p);check(s.caps==0);bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.state_json().find("\"reason\":\"Needs an NVIDIA RTX GPU with DLSS\"")!=std::string::npos);
   bridge.set_restart_count(3);check(bridge.state_json().find("\"restartNeeded\":true")!=std::string::npos);
   check(bridge.state_json().find("Restart the game to apply 3 changes")!=std::string::npos);

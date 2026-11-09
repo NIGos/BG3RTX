@@ -255,7 +255,7 @@ std::string Bridge::handle(const std::string& message){
     int selected=get<int>(o,"value",-1);if(selected>=0&&size_t(selected)<inspection_.adapters.size())set_compatibility(inspection_,selected);else status_="Choose an available GPU.";
   }
   else if(type=="prepareReport"){
-    report_visible_=true;report_={};if(hooks_.prepareReport)report_=hooks_.prepareReport(get<std::string>(o,"issue"),get<bool>(o,"logs",true),get<bool>(o,"settings",true),get<bool>(o,"system",true));else report_.message="Reports are unavailable. Reopen the launcher.";
+    report_visible_=true;report_={};if(hooks_.prepareReport)report_=hooks_.prepareReport(get<std::string>(o,"issue"),get<bool>(o,"logs",true),get<bool>(o,"settings",true),get<bool>(o,"system",true),get<bool>(o,"save",false));else report_.message="Reports are unavailable. Reopen the launcher.";
   }else if(type=="exportReport"){
     if(report_.files.empty()||report_.status==diagnostics::Status::Cancelled||report_.status==diagnostics::Status::Failed)status_="Preview the report before saving.";
     else{std::string error;if(hooks_.exportReport&&hooks_.exportReport(report_,error))status_=error.empty()?"Report saved on your PC.":error;else status_=error.empty()?"Report not saved. Preview kept; retry or choose another folder.":error;}
@@ -301,7 +301,7 @@ std::string Bridge::state_json() const {
   if(hooks_.preparation){const auto prep=hooks_.preparation();if(!prep.empty())out+=",\"preparation\":"+prep;}
   out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"presetLabel\":"+q(preview_preset_>=0?st::kPresetLabel[preview_preset_]:st::kPresetLabel[state_.preset])+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
   out+=std::string(",\"report\":{\"visible\":")+b(report_visible_)+",\"privacy\":"+q(diagnostics::privacy_text)+",\"loggingHint\":"+q(report_hint_)+",\"bytes\":"+std::to_string(report_.bytes)+",\"status\":"+std::to_string(int(report_.status))+",\"message\":"+q(report_.message)+",\"files\":[";
-  first=true;for(auto& f:report_.files){if(!first)out+=",";first=false;out+="{\"name\":"+q(f.name)+",\"text\":"+q(f.text)+",\"note\":"+q(f.note)+",\"size\":"+std::to_string(f.text.size())+"}";}
+  first=true;for(auto& f:report_.files){if(!first)out+=",";first=false;out+="{\"name\":"+q(f.name)+",\"text\":"+q(f.binary?std::string():f.text)+",\"note\":"+q(f.note)+",\"size\":"+std::to_string(f.text.size())+(f.binary?",\"binary\":true":"")+"}";}
   return out+"]}}";
 }
 }

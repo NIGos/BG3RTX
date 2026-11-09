@@ -9,7 +9,7 @@ namespace launcher::web {
 struct Hooks {
   std::function<bool(State&, const bg3::settings::KVList&, std::string&)> save;
   std::function<bool(std::string&)> play;
-  std::function<diagnostics::Snapshot(const std::string&, bool, bool, bool)> prepareReport;
+  std::function<diagnostics::Snapshot(const std::string&, bool, bool, bool, bool)> prepareReport; // issue, logs, settings, system, latest save
   std::function<bool(const diagnostics::Snapshot&, std::string&)> exportReport;
   std::function<std::string()> browseGame;
   std::function<std::string()> browseDlss5Runtime;

@@ -4,6 +4,8 @@
 #endif
 #include <windows.h>
 #include <algorithm>
+#include <cctype>
+#include <cwchar>
 #include <regex>
 #include <sstream>
 #include <iomanip>
@@ -86,6 +88,74 @@ std::string stamp(FILETIME t) {
   return b;
 }
 bool cancelled(const Progress& cb, size_t d, size_t t) { return cb && !cb(d, t); }
+constexpr uint64_t hard_save = 256ull * 1024 * 1024;
+uint64_t ticks(FILETIME t) { return (uint64_t(t.dwHighDateTime) << 32) | t.dwLowDateTime; }
+bool has_ext(const std::wstring& s, const wchar_t* ext) {
+  size_t n = wcslen(ext); return s.size() > n && _wcsicmp(s.c_str() + s.size() - n, ext) == 0;
+}
+// Bounded, nonrecursive listing of one folder. Links (junctions, symlinks) are skipped.
+template <class F> void list_dir(const fs::path& dir, size_t limit, F&& f) {
+  WIN32_FIND_DATAW data{};
+  HANDLE h = FindFirstFileExW((dir / L"*").c_str(), FindExInfoBasic, &data, FindExSearchNameMatch, nullptr, 0);
+  if (h == INVALID_HANDLE_VALUE) return;
+  size_t seen = 0;
+  do {
+    if (++seen > limit) break;
+    const std::wstring n = data.cFileName;
+    if (n == L"." || n == L".." || (data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) continue;
+    f(data);
+  } while (FindNextFileW(h, &data));
+  FindClose(h);
+}
+// ZIP entry names use the export allowlist; anything else becomes '_'.
+std::string zip_safe(const std::string& s) {
+  std::string o;
+  for (char c : s) o += (std::isalnum(static_cast<unsigned char>(c)) && static_cast<unsigned char>(c) < 128) || c == '_' || c == '-' || c == '.' ? c : '_';
+  for (size_t p; (p = o.find("..")) != o.npos;) o[p] = '_';
+  if (o.size() > 100) o.resize(100);
+  return o.empty() ? "save" : o;
+}
+std::string megabytes(uint64_t b) {
+  char t[32]; snprintf(t, sizeof(t), "%.1f MB", double(b) / (1024.0 * 1024.0)); return t;
+}
+}
+
+fs::path default_player_profiles() {
+  wchar_t b[32768]; DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", b, 32768);
+  if (!n || n >= 32768) return {};
+  return fs::path(std::wstring(b, n)) / L"Larian Studios" / L"Baldur's Gate 3" / L"PlayerProfiles";
+}
+
+bool find_latest_save(const fs::path& profiles, LatestSave& out) {
+  out = {};
+  if (!safe_path(profiles)) return false;
+  bool found = false;
+  list_dir(profiles, 64, [&](const WIN32_FIND_DATAW& p) {
+    if (!(p.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return;
+    const auto story = profiles / p.cFileName / L"Savegames" / L"Story";
+    if (!safe_path(story)) return; // A link anywhere on the way: skip this profile.
+    list_dir(story, 8192, [&](const WIN32_FIND_DATAW& s) {
+      if (!(s.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return;
+      const auto folder = story / s.cFileName;
+      fs::path lsv; uint64_t when = 0, size = 0;
+      list_dir(folder, 64, [&](const WIN32_FIND_DATAW& f) {
+        if ((f.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !has_ext(f.cFileName, L".lsv")) return;
+        if (lsv.empty() || ticks(f.ftLastWriteTime) > when) {
+          lsv = folder / f.cFileName; when = ticks(f.ftLastWriteTime);
+          size = (uint64_t(f.nFileSizeHigh) << 32) | f.nFileSizeLow;
+        }
+      });
+      if (lsv.empty() || (found && when <= out.write_time)) return;
+      found = true; out = {folder, lsv, {}, size, when};
+      auto webp = lsv; webp.replace_extension(L".webp");
+      WIN32_FILE_ATTRIBUTE_DATA a{};
+      if (GetFileAttributesExW(webp.c_str(), GetFileExInfoStandard, &a) &&
+          !(a.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))) {
+        out.webp = webp; out.bytes += (uint64_t(a.nFileSizeHigh) << 32) | a.nFileSizeLow;
+      }
+    });
+  });
+  return found;
 }
 
 std::string redact_text(std::string text, const fs::path& root) {
@@ -229,8 +299,63 @@ Snapshot prepare_report(const Request& r, Progress cb) {
   add("system/system.txt", system);
   }
   if (!r.issue.empty()) add("issue.txt", r.issue);
+  std::string save_line = r.include_save ? "" : "Save: not included (not selected).\n";
+  if (r.include_save) {
+    LatestSave save;
+    const auto profiles = r.player_profiles.empty() ? default_player_profiles() : r.player_profiles;
+    const uint64_t cap = std::min(r.max_save_bytes, hard_save);
+    if (profiles.empty() || !find_latest_save(profiles, save)) {
+      note("Latest save: none found in the Baldur's Gate 3 Story save folders; not included.");
+    } else {
+      const std::string folder = utf8(save.folder.filename().wstring());
+      if (save.bytes > cap) {
+        note("Latest save " + folder + ": " + megabytes(save.bytes) + ", over the " + megabytes(cap) +
+          " report limit; not included. Send it separately if asked.");
+      } else if (out.files.size() + 3 >= r.max_files) {
+        note("Latest save " + folder + ": omitted (file limit).");
+      } else {
+        std::vector<Entry> copies;
+        bool lsv_ok = true;
+        for (const auto& path : {save.lsv, save.webp}) {
+          if (path.empty()) continue;
+          const bool is_lsv = path == save.lsv;
+          const std::string label = "Latest save " + folder + "/" + utf8(path.filename().wstring());
+          // Read access only, writers denied during the copy: a save being written fails
+          // instead of tearing. Never opened for writing; attributes and times stay unchanged.
+          Handle f;
+          f.h = safe_path(path) ? CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, nullptr) : INVALID_HANDLE_VALUE;
+          BY_HANDLE_FILE_INFORMATION info{};
+          if (f.h == INVALID_HANDLE_VALUE || !GetFileInformationByHandle(f.h, &info) ||
+              (info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) || !handle_matches(f.h, path)) {
+            note(label + ": unreadable (close the game and retry); not included.");
+            if (is_lsv) { lsv_ok = false; break; } else continue;
+          }
+          const uint64_t size = (uint64_t(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+          if (size > cap) { note(label + ": grew over the report limit; not included."); if (is_lsv) { lsv_ok = false; break; } else continue; }
+          std::string bytes; bytes.reserve(size_t(size));
+          bool ok = true;
+          for (uint64_t read = 0; read < size;) {
+            if (cancelled(cb, out.files.size(), out.files.size() + 1)) { out = {}; out.status = Status::Cancelled; out.message = "Report cancelled. No files saved."; return out; }
+            char b[65536]; DWORD got = 0;
+            if (!ReadFile(f.h, b, DWORD(std::min<uint64_t>(sizeof(b), size - read)), &got, nullptr)) { ok = false; break; }
+            if (!got) break;
+            bytes.append(b, got); read += got;
+          }
+          if (!ok || bytes.size() != size) { note(label + ": read failed or file changed; not included."); if (is_lsv) { lsv_ok = false; break; } else continue; }
+          copies.push_back({"saves/" + zip_safe(folder) + "/" + zip_safe(utf8(path.filename().wstring())), std::move(bytes),
+            "Your save, binary and unredacted (contains your character and progress). Last write UTC: " + stamp(info.ftLastWriteTime), true});
+        }
+        if (lsv_ok) {
+          uint64_t total = 0;
+          for (auto& e : copies) { total += e.text.size(); out.bytes += e.text.size(); out.files.push_back(std::move(e)); }
+          save_line = "Save: latest save included: " + folder + " (" + std::to_string(total) + " bytes, " + megabytes(total) + ").\n";
+        }
+      }
+    }
+  }
   std::ostringstream manifest;
-  manifest << privacy_text << "\n\nRead-only bounded snapshots. Text redaction is best effort; review every file.\n";
+  manifest << privacy_text << "\n\nRead-only bounded snapshots. Text redaction is best effort; review every file.\n" << save_line;
   for (const auto& f : out.files) manifest << f.name << " (" << f.text.size() << " bytes) " << f.note << '\n';
   manifest << "\nMissing/skipped/stale items:\n";
   for (const auto& n : notes) manifest << n << '\n';
@@ -243,15 +368,15 @@ Snapshot prepare_report(const Request& r, Progress cb) {
 ExportResult save_report_zip(const Snapshot& s, const fs::path& path, Progress cb) {
   if (s.status != Status::Complete && s.status != Status::Partial) return {Status::Failed, "Preview a report before saving."};
   if (!safe_path(path) || path.extension() != L".zip" || s.files.empty() || s.files.size() > hard_count) return {Status::Failed, "Choose a new .zip file in an existing local folder that is not a link."};
-  uint64_t bytes = 0;
+  uint64_t bytes = 0, binary = 0;
   std::vector<std::string> names;
   for (const auto& e : s.files) {
     if (e.name.empty() || e.name.size() > 255 || e.name.find("..") != e.name.npos || e.name.front() == '/' ||
         e.name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-") != e.name.npos ||
         std::find(names.begin(), names.end(), e.name) != names.end()) return {Status::Failed, "Report contains an invalid file. Prepare it again."};
-    names.push_back(e.name); bytes += e.text.size();
+    names.push_back(e.name); (e.binary ? binary : bytes) += e.text.size();
   }
-  if (bytes > hard_total) return {Status::Failed, "Report is too large to save."};
+  if (bytes > hard_total || binary > hard_save) return {Status::Failed, "Report is too large to save."};
   if (cancelled(cb, 0, s.files.size())) return {Status::Cancelled, "Save cancelled."};
   Handle output;
   // DELETE access + FILE_DISPOSITION_INFO deletes the exact owned handle on
@@ -289,7 +414,8 @@ ExportResult save_report_zip(const Snapshot& s, const fs::path& path, Progress c
     if (!put(h) || !put(e.text)) { ok = false; break; }
     u32(central, 0x02014b50); u16(central, 20); u16(central, 20); u16(central, 0x800); u16(central, 0); u16(central, 0); u16(central, 33);
     u32(central, hash); u32(central, length); u32(central, length); u16(central, uint16_t(e.name.size()));
-    u16(central, 0); u16(central, 0); u16(central, 0); u16(central, 0); u32(central, 0); u32(central, start); central += e.name;
+    // External attributes: DOS read-only bit on the archived save copy only.
+    u16(central, 0); u16(central, 0); u16(central, 0); u16(central, 0); u32(central, e.binary ? 1u : 0u); u32(central, start); central += e.name;
     ++done;
   }
   uint32_t central_start = offset;
