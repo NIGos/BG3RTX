@@ -4,6 +4,7 @@ Faster
 - Off-screen bounce light (Ultra's Far setting, or when turned on) now traces with the GPU's ray tracing pipeline and sorts the rays by what they hit (shader execution reordering). Measured on an RTX 5090: about 2 ms faster at the camp and the inn, and about 1.5 ms more at the camp from the sorting; same lighting. Both are on by default. GPUs without these features keep the previous path automatically.
 - Fixed a slowdown that grew over a session in busy scenes: the foliage micro-map builder retried refused work every frame. Measured: the scene wait no longer climbs from 2 to 18 ms.
 - Ray-tracing memory: freed acceleration-structure blocks are reused after a short delay instead of growing the pool.
+- Fixed video memory running out after a stretch where scenes could not be built (seen as a long stutter, then a crash in DLSS Frame Generation): freed ray-tracing memory was never reused again, and some ray-tracing memory could grow past its limit. It now stays within its limit and is reused once building resumes.
 
 RTX Hair (beta, off by default)
 - One option turns it on: Lighting > RTX Hair, or the launcher's Home page. It switches live in game: Ctrl+Shift+F7 by default (change it on the Hotkeys page). Strands appear in about 2 s and go away at once. It needs only a supported RTX GPU; no files to download.
@@ -11,6 +12,7 @@ RTX Hair (beta, off by default)
 - Strands are stored about 11 times smaller than before, with no visible difference.
 - New RTX Hair card on the Home page: hair styles ready, disk use, time left, pause/resume, and whether conversion may run while you play.
 - Optional "Convert all styles": converts every hair style of the game ahead of time (about 9 minutes for 1,217 styles on our PC). It reads the game's own files and needs a granny2.dll, for example the one in LSLib's ExportTool folder, which you pick once; BG3RTX does not ship or download that file.
+- Strand hair edges: the edge resolve now applies on every frame in normal play (frame cap, Reflex, Frame Generation); before, it missed up to two frames in three.
 - Experimental (turn on experimental options): Strand hair edge resolve. Pick Analytic coverage, then Ctrl+Shift+F10 switches it on and off in game, to compare the dithering at strand edges.
 - A style whose hair was not fully loaded when it was first seen is copied again later instead of being skipped.
 - Fixed: since an earlier fix round strands could stay as the game's hair cards. They show again.
