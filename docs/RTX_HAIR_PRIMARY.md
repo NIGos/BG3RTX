@@ -687,6 +687,49 @@ Independent review of the layer path; each finding verified in code before the f
 - Live job (READY_FOR_LIVE, not queued): tools/live_batches/rtx_hair_live (rhl1-dialogue, Test Dialogue1): starts cards
   only, first activation in warmup, then rt_hair 1/0/1/0 and a cards-only window; gates in predicted.json.
 
+## 5n. Strand edge dithering (offline 2026-11-09, branch claude/hair-edge-quality: key rr_hair_strand_aa, off)
+User (RTX Hair on): strands look good, their edges still dither. No capture of that session survives (the format);
+the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker data. Diagnosis from the code and models
+(`tools/hair_groom/edge_stability.py`, CTest `hair_groom_test` test_strand_edge):
+- Binary sub-pixel coverage (cause, structural). One ray per strand pixel at the raster point: a strand of 0.1-0.5 px is
+  a Bernoulli sample per pixel, all pixels on the screen-wide jitter (a dotted line that moves with the jitter). Unbiased,
+  and Halton-stratified per pixel; a clamped history (the rejection every temporal reconstructor applies) loses 8-13% of
+  the edge-band light (model taa_energy) and flickers.
+- The game's dither resolve on strands (likely the visible "dither"). RR's input is X after the port of 7401d785
+  (rr_post.hlsl `resolve`): per pixel, geometric means of the stencil bit-5 and other pixels of a 4 x 4 window, mixed by
+  their share. It exists to undo the cards' ordered alpha dither. The strand clones keep the native stencil state (the
+  prepass clone only drops depth writes, layer/hair_primary.cpp), so the tags follow the card dither (hp_tips_keep:
+  screen-space, 4 frame phases), not the strands. Model (card strip, opaque core, fading edges): the resolve on card tags
+  shifts the edge band by -4.2% and keeps the dither period; raw strands are unbiased (+0.03%). Unverified: which hair
+  pass writes bit 5. The layer now logs each hair pipeline's stencil state ("hair pipeline stencil:").
+- Ruled out by the code: screen-door alpha (tips off; coverage pair off; the shadow transmittance hash is per-ray white
+  noise, RR-compliant), card/strand mixing (whole draws, held by the coverage hold), depth/MV at edges (the hit's own
+  depth and the strand point's motion; 5e, 5g). Decorrelated per-pixel ray positions (white noise in the pixel box)
+  were modelled and rejected: ideal-accumulation flicker 0.034 -> 0.056, card-edge strands lost (the ray leaves the card).
+- Literature: NVIDIA LSS (Blackwell, RTX Character Rendering SDK) traces strands with per-pixel samples and relies on
+  DLSS-RR; the DLSS-RR Integration Guide 3.5 forbids screen-space dithering, checkerboards and screen-shared patterns
+  (jitter excepted) and 3.4.10 offers a transparency overlay (premultiplied, upscaled only). Frostbite (Tafuri 2019)
+  and Unreal's groom (hair visibility buffer, sample coverage, hair composition) render strands apart and composite
+  them with analytic coverage, with a minimum width and opacity fade (Persson's phone-wire AA, 2012). Stochastic
+  transparency (Enderton 2010) is unbiased but keeps the c (1 - c) variance; GBAA (Persson 2011) blends neighbour
+  colours by analytic coverage from geometry in the buffer. The Phantom intersector (Reshetov 2018) is a curve
+  intersector, not a coverage method. Our G-buffer swap cannot blend, so the coverage enters before RR, GBAA-style.
+- Implemented (`rr_hair_strand_aa`, knob exp_hair_strand_aa in Advanced, live 0/1/2, needs rr_post=1):
+  `shaders/rr_strand_aa.hlsl` replaces the resolve dispatch (layer/rrpost.cpp strand_resolve; the game's resolve when
+  the header or this frame's G-buffer camera is missing). 1: the resolve with every pixel a strand G-buffer fragment
+  sealed this frame read as untagged. 2: also, on that footprint, c Lh + (1 - c) Lb, c = sum over the strands the 3 x 3
+  rays hit of the strand's box coverage of the unjittered pixel (projected axis, radius from the hit's own depth) times
+  the in-pixel length share, over P = the probability that the shared jitter puts one of those 9 rays on it (box
+  coverage of the jitter square by 9 shifted bands); Lh the mean of the strand pixels, Lb the pixel's own colour or the
+  5 x 5 mean of non-strand pixels. Depth, MV and RR guides unchanged. New request only: every other request has
+  identical inputs (key off byte-identical). Camera: ngx_gbuffer_camera (the RR guide camera of this frame).
+- Offline (card strip, 0.3 px strands, 54 frames of 18-phase Halton, area reference 8 x 8): accumulated edge flicker
+  raw 0.0178, card-tag resolve 0.0117, analytic 0.0086; RMS error 0.0297 / 0.0354 / 0.0238; edge energy +0.03% /
+  -4.2% / +1.3% (whole image +0.02% / -0.8% / +0.9%: found strands' summed overlap and occluded strands' P). At 0.8 px:
+  flicker 0.0171 -> 0.0048. A 5 x 5 search over-counts (rejected). Cost: unmeasured (estimate +0.05-0.3 ms).
+- Live: tools/live_batches/hair_edge (he1-dialogue1-edge, lint 0 failing, not queued): key 0/2/0/2 PNG traces, a key-1
+  window, K8 pan bursts off/aa for temporal_burst.py. Predicted in its predicted.json (mc final -10 to -30% on hair,
+  energy within 1%, the stencil lines name the tagging pass).
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

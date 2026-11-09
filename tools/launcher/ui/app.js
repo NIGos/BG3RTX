@@ -222,7 +222,8 @@ function renderHotkeys(root) {
 }
 // Preparation (docs/RTX_HAIR_ROADMAP.md 2b, 2f; tools/launcher/preparation.cpp): the host sends
 // state.preparation = {items:[{id,title,line,detail,progress?,state}], whilePlaying, paused, pausable, convertAll,
-// hair:{ready?,captured?,total?,needed?,finished?,bytes?,etaSeconds?,source?,error?}, granny:{path,ok}, convertAllReason}.
+// hair:{ready?,captured?,total?,needed?,finished?,bytes?,etaSeconds?,source?,error?,tiers?:[{tier,total,finished}]}, granny:{path,ok},
+// grannyHelp?, convertAllReason}.
 // Every field may be missing (older hosts and converters): the panel shows what it has. Actions apply at once (no
 // Save, 'prep' messages): start, pause, resume, convertAll 0/1, browseGranny, clearGranny, whilePlaying 0/1.
 const prepBadges={done:'Ready',running:'Working',waiting:'Waiting',paused:'Paused',unavailable:'Unavailable',failed:'Stopped'};
@@ -262,6 +263,9 @@ function hairPanel(prep,hairSetting) {
  else row.append(el('p','description',p.line||''));
  if(typeof p.progress==='number'&&p.state!=='done'&&p.state!=='unavailable')row.append(progressBar(p,'RTX Hair conversion progress',p.state==='running'&&h.etaSeconds>0?minutes(h.etaSeconds):''));
  if(p.detail)row.append(el('p','cost',p.detail));
+ // Convert all styles: progress per tier, in conversion order (bg3rtx_hairconv --all).
+ if(Array.isArray(h.tiers)&&h.tiers.length){const names={seen:'Seen in game',companion:'Companions',player:'Character creation',named:'Named characters',hat:'Under hats',other:'Other characters',unused:'Unused'};
+  const t=el('p','cost',h.tiers.map(x=>(names[x.tier]||x.tier)+' '+num(x.finished)+'/'+num(x.total)).join(' · '));t.id='prep-hair-tiers';row.append(t);}
  if(h.error){const e=el('p','notice error compact','Last error: '+h.error);e.id='prep-hair-error';e.setAttribute('role','alert');row.append(e);}
  conv.append(row);
  if(p.state==='unavailable'){box.append(conv);return box;}
@@ -283,7 +287,7 @@ function hairPanel(prep,hairSetting) {
  const path=el('p','description path',g.path?g.path:'granny2.dll: not chosen');path.id='prep-granny-path';
  if(g.path&&g.ok===false)path.append(el('span','warn-text',' (not found)'));
  const pick=el('button','btn',g.path?'Change…':'Choose granny2.dll…');pick.id='prep-granny-browse';pick.setAttribute('aria-label',(g.path?'Change':'Choose')+' granny2.dll');pick.onclick=()=>send('prep',{action:'browseGranny',value:0});
- const help=el('p','cost','Only for All styles. granny2.dll comes with your own LSLib ExportTool download, next to ExportTool.exe. BG3RTX does not include it.');help.id='prep-granny-help';
+ const help=el('p','cost',prep.grannyHelp||'Convert all styles needs granny2.dll, which BG3RTX cannot include. If you have LSLib\'s ExportTool (github.com/Norbyte/lslib, Releases), point to the granny2.dll in its folder.');help.id='prep-granny-help';
  const prow=el('div','row');prow.append(pick);
  if(g.path){const clear=el('button','btn','Clear');clear.id='prep-granny-clear';clear.setAttribute('aria-label','Clear granny2.dll');clear.onclick=()=>send('prep',{action:'clearGranny',value:0});prow.append(clear);}
  [pick,...prow.children].forEach(b=>b.setAttribute('aria-describedby',help.id));

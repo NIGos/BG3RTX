@@ -387,6 +387,7 @@ bool ngx_rr_active() {
   return f != 0 && f + 3 >= frame_index();
 }
 
+
 // The nvngx_dlssd snippet NGX actually loaded (the game's 310.7.129, or
 // Streamline's 310.9.16 from bin/sl with fg>=2, or an OTA copy).
 static void log_dlssd_module() {
@@ -793,6 +794,18 @@ static bool finite_all(const float* f, int n) {
   for (int i = 0; i < n; ++i)
     if (!std::isfinite(f[i])) return false;
   return true;
+}
+
+// This frame's G-buffer camera (set 0 binding 2 read at the pass end): the camera-relative jittered view-projection
+// (_m2, row-major, v * M), the camera position and the jitter in render pixels (x = P20 W / 2, y = -P21 H / 2).
+bool ngx_gbuffer_camera(float vp[16], float pos[3], float jitter_px[2], uint32_t w, uint32_t h) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_gcam.ok || g_gcam.frame != frame_index()) return false;
+  memcpy(vp, &g_gcam.raw[32], 16 * sizeof(float));
+  memcpy(pos, &g_gcam.raw[52], 3 * sizeof(float));
+  jitter_px[0] = g_gcam.pj[2] * float(w) * 0.5f;
+  jitter_px[1] = -g_gcam.pj[3] * float(h) * 0.5f;
+  return finite_all(vp, 16) && finite_all(pos, 3);
 }
 
 static bool read_guide_camera(VkCommandBuffer cmd, GuideCamera& c, std::string& why) {

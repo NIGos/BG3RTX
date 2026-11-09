@@ -36,6 +36,7 @@ gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_
 rr_guides.hlsl	main	cs_6_0
 rr_post_temporal.hlsl	temporal	cs_6_0
 rr_post_temporal.hlsl	temporal_final	cs_6_0
+rr_strand_aa.hlsl	strand_resolve	cs_6_0
 rr_post.hlsl	bloom	cs_6_0
 rr_post.hlsl	check	cs_6_0
 rr_post.hlsl	copy	cs_6_0

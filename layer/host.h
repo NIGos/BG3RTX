@@ -508,6 +508,8 @@ void ngx_on_present();
 // ABI 7: Ray Reconstruction evaluated in the last few frames (not the rr key):
 // false with FSR/TAA, SR fallback, or a failed RR creation.
 bool ngx_rr_active();
+// This frame's G-buffer camera for rr_hair_strand_aa (rrpost.cpp): camera-relative jittered vp, position, jitter px.
+bool ngx_gbuffer_camera(float vp[16], float pos[3], float jitter_px[2], uint32_t w, uint32_t h);
 // RR's diffuse albedo guide (RGBA8, GENERAL) when it has this size.
 bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view);
 

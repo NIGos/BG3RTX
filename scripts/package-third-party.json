@@ -103,6 +103,12 @@
       ]
     },
     {
+      "component": "LSLib-derived format readers (bg3rtx_hairconv)",
+      "licences": [
+        "LSLib-MIT.txt"
+      ]
+    },
+    {
       "component": "WebView2 static loader and headers",
       "licences": [
         "WebView2-LICENSE.txt",

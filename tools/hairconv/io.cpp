@@ -279,7 +279,7 @@ int write_v3(const std::string& path, const Mesh& m, const Groom& g0, std::strin
     put<uint64_t>(out, packed[k].size());
     put(out, packed[k].data(), packed[k].size());
   }
-  const std::string tmp = path + "." + std::to_string(GetCurrentProcessId()) + ".tmp";
+  const std::string tmp = path + "." + std::to_string(GetCurrentProcessId()) + "." + std::to_string(GetCurrentThreadId()) + ".tmp";
   FILE* f = nullptr;
   if (fopen_s(&f, tmp.c_str(), "wb") != 0 || !f) return fail("cannot write " + tmp);
   const bool written = fwrite(out.data(), 1, out.size(), f) == out.size();
