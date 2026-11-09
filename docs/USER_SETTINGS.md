@@ -109,6 +109,9 @@ turn off other overlays (Steam, Discord, GOG Galaxy) for one launch.
 
 **Detailed logging** in Help & support is off by default in every preset; turn it on, restart the game and reproduce the problem before creating a bug report.
 
-Use **Report a problem…** in Help & support, or run `Diagnostics.cmd`, for a local report ZIP.
-Nothing is uploaded and no save is included by default. Review `CONTENTS.txt` and the ZIP before
+Use **Create a diagnostic report…** on Home (or **Report a problem…** in Help & support), or run
+`Diagnostics.cmd`, for a local report ZIP. Nothing is uploaded and no save is included by default.
+Tick **Include my latest save** in the report dialog (Diagnostics.cmd asks; answer Y) to add your
+newest save and its thumbnail under `saves/<save folder>/`: it helps reproduce the problem but contains
+your character and progress. The save is copied read-only; over 200 MB it is left out and named in `CONTENTS.txt`. Review `CONTENTS.txt` and the ZIP before
 sharing. See the [packaged README](release/README.md) for privacy and manual reporting.

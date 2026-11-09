@@ -28,6 +28,15 @@ try:
         assert set(z.namelist()) == {p.relative_to(expected).as_posix() for p in expected.rglob('*') if p.is_file()}
         for name in z.namelist():
             assert z.read(name) == (expected / name).read_bytes(), name
+    # Opt-in latest save: exact bytes of the fixture save, archived copy marked read-only.
+    save_dir = root / 'profiles' / 'Second' / 'Savegames' / 'Story' / 'Tav-1234__QuickSave_1'
+    with zipfile.ZipFile(root / 'report-save.zip') as z:
+        assert z.testzip() is None, 'ZIP CRC failure (save)'
+        saves = [n for n in z.namelist() if n.startswith('saves/')]
+        assert sorted(saves) == ['saves/Tav-1234__QuickSave_1/QuickSave_1.lsv', 'saves/Tav-1234__QuickSave_1/QuickSave_1.webp'], saves
+        for name in saves:
+            assert z.read(name) == (save_dir / name.rsplit('/', 1)[1]).read_bytes(), name
+            assert z.getinfo(name).external_attr & 1, name
     assert not (target / 'escape.zip').exists()
     print('Independent ZIP CRC, exact preview bytes, Unicode destination and junction checks passed.', flush=True)
 finally:

@@ -155,6 +155,8 @@ static void rebuild() {
     label(g.body,valid_game_dir(g.dir)?L"Game found.":L"Game not found. Choose its folder to enable Play.",16,y,w,56);y+=64;
     label(g.body,widen(st::kPresetDesc[g.st.preset]),16,y,w,96);y+=104;
     if(g.stage<4){button(g.body,NEXT,g.stage==3?L"Finish setup":L"Continue",16,y,176);y+=48;}
+    // Same report flow as Help & support, linked from the first page.
+    button(g.body,REPORT,L"Problem? Create a diagnostic report…",16,y,300);y+=48;
   } else if(g.tab==4) {
     label(g.body,L"Help & support",16,y,w,32,true);y+=40;
     label(g.body,L"Local report",16,y,w,28,true);y+=36;

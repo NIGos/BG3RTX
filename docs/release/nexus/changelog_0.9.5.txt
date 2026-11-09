@@ -24,6 +24,7 @@ Launcher
 - New Home page with what matters: RTX Hair, shader preparation, preset and Play. New Hotkeys page lists every in-game hotkey and lets you change them.
 - Shaders are prepared once after installing or updating, before Play, with a progress line in Preparation. The graphics driver still builds its first ray tracing pipeline in game (a short pause the first time).
 - Choosing an option now also turns on the options it needs.
+- Problem? Home now links "Create a diagnostic report". The report can include your latest save if you tick it (off by default; Diagnostics.cmd asks, default No).
 
 Known
 - Tested only on an RTX 5090 with driver 621.01.
