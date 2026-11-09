@@ -565,8 +565,31 @@ still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per per
   7 rejected: the compacted copy leaves the previous TLAS on the old, unmodified BLAS (destroyed after kGroomFreeLag):
     consistent. 8 confirmed, low (one frame of motion vectors after a skipped update), not changed. 9 confirmed, low
     (rt_groom_links reads one word past a groom's start table for its last segment, inside the pool), not changed.
-    10 rejected for the main view (one header per frame, applied in the first G-buffer command buffer). 11 not changed
-    (CPU-read UBO camera vs GPU soup; no evidence of a mismatch).
+    10 rejected for the main view (one header per frame, applied in the first G-buffer command buffer). 11 reopened
+    2026-11-09 (branch claude/hair-header-cam), below.
+- Item 11, header camera vs groom points (2026-11-09, claude/hair-header-cam, READY_FOR_LIVE). Evidence (rv3-s8 220145,
+  turns): sampled strand origin 0 -> 94-98.5% accepted/card (8 of 8 counted frames); origin 2.6-15.5 cm -> 18-80% (7 of
+  7), although "this frame's publish" was applied in 291-299 of 300 frames (origin should be 0). The header camera is
+  a CPU read of the game's mapped camera UBO at record time (rtscene g_this_build_cam), the points the GPU's read of
+  the same UBO at execute time (xfb_to_world, Cam binding 0): a game write in between makes them disagree. The frame
+  watchdog (item 19) then held every hair draw on cards for 28 frames (0-23 trips and up to 2045 watchdog refusals
+  per 300 frames).
+  - Proof (always on): the header safety line counts publishes whose UBO, re-read at the vkQueueSubmit carrying the
+    build, differs from the record-time read, with the max distance; the sampled-ray line prints the header camera
+    (camera - origin) and the evidence strand share (accepted/card pixels of the judged frame).
+  - `rt_hair_header_cam_gpu` (live, off): the build's command buffer copies the UBO (geo_copy_camera) into a 256-byte
+    device slot, moves the slot's previous position to kPrevCameraOffset (only when the previous publish, one frame
+    back, ran the copy; else kFlagPrevCamera is off), then copies the new position to kCameraOffset; apply_header skips
+    the camera region. The builds rewrite the points in place, so the header camera is the last executed build's, as
+    the points are. No shader change. Cost: one 16-thread dispatch, two 12-byte copies, three barriers per publish.
+  - `rt_hair_watchdog_draw` (live, off): the watchdog judges each swapped draw against its own bound (the frame
+    watchdog's per-draw term; markerless draws by the same rule) and holds only that key, for kWatchdogFrames, after
+    kWatchdogDrawBad = 2 bad judged frames in a row (one header per G-buffer frame: one bad publish makes one bad
+    frame). CTest hair_groom_asset_test test_watchdog.
+  - The "with a strand" trace counter was right but misnamed: it counts shared pixel entries, traced only for the slots
+    that swapped; when every draw is refused, the probes trace privately and store nothing (0 while accepted is 95%+).
+  - Live job (staged, not queued): tools/live_batches_staged/hair_cam (S8 turns, off / cam / draw / both / off).
+    The user checks it at S8 or Test Dialogue1 by turning the camera: with the GPU camera the hair stays strands.
 - Fixtures: CTest hair_groom_asset_test test_upgrade_safe, test_frame_tags (two G-buffer frames on one publish: ambiguous and reused with
   publish tags, distinct with frame tags; the counter judges the previous frame), test_lod_keep.
 - Live check (Test Dialogue1 and the isometric view, one session, camera and characters moving, both keys on/off/on):
