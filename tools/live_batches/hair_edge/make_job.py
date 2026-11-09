@@ -88,16 +88,16 @@ def make_job(plan):
             gates.append(dict(g, windows=strands))
         elif g["name"].startswith("K8 "):
             gates.append(g)
-    mode = r"\[rrpost\] rr_hair_strand_aa=(\d):"
-    for label, aa in (("b-aa", 2), ("c-off", 0), ("d-aa", 2), ("e-untag", 1)):
-        gates.append(dict(name=f"strand resolve mode {aa} in {label}", select=mode,
-                          match=rf"\[rrpost\] rr_hair_strand_aa={aa}:", event=True, min=1, windows=[label]))
+    # The mode-switch line is logged when the setting is applied, before the window's motion-ready line (live
+    # 2026-11-09 01:38: =2 at 01:38:13.4, b-aa ready at 01:38:16.1), so a per-window event gate can never see it.
+    # Each mode's switch line is a plain expect instead; the plan order proves which window ran which mode.
     gates.append(dict(name="render-res chain GPU ms in every window", select=r"\[rrpost\] gpu: render-res chain",
                       match=r"render-res chain [0-9.]+ ms/frame", min=1, period_frames=60, windows=windows))
     j["expect_every"] = gates
     j["expect"] = [e for e in j["expect"] if "shadow transmittance" not in e and "strand G-buffer draws GPU" not in e]
     j["expect"] += [r"\[hair primary\] (?:prepass|G-buffer) hair pipeline stencil: test \d, write mask 0x[0-9a-f]{2}",
-                    r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built"]
+                    r"\[rrpost\] rr_post\.hlsl:strand_resolve pipeline built",
+                    r"\[rrpost\] rr_hair_strand_aa=0:", r"\[rrpost\] rr_hair_strand_aa=1:", r"\[rrpost\] rr_hair_strand_aa=2:"]
     j["patterns"] += [r"\[rrpost\]", r"hair pipeline stencil"]
     # The edge resolve must build: a pipeline creation or DXC call failure (layer/rrpost.cpp compile_pipeline, which
     # names every entry under rr_post.hlsl; layer/shaders.cpp) and a period without a strand resolve frame are fatal.

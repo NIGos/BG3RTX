@@ -77665,6 +77665,18 @@
     "\\[shaders\\] rr_strand_aa\\.hlsl:strand_resolve compile call failed": [
       0,
       null
+    ],
+    "\\[rrpost\\] rr_hair_strand_aa=0:": [
+      0,
+      null
+    ],
+    "\\[rrpost\\] rr_hair_strand_aa=1:": [
+      0,
+      null
+    ],
+    "\\[rrpost\\] rr_hair_strand_aa=2:": [
+      0,
+      null
     ]
   }
 }
