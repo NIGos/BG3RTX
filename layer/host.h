@@ -680,6 +680,9 @@ bool rt_this_build_camera(uint64_t frame, float pos[3]);
 // The build being recorded's camera whatever frame_index() reads now (a present on another thread may advance it
 // between rt_after_capture and the code inside the build); its frame_index in *frame. false: the build has none.
 bool rt_current_build_camera(float pos[3], uint64_t* frame);
+// The build being recorded's camera UBO (the game's buffer and offset its xfb_to_world reads on the GPU; the camera
+// position is float 52, byte 208). false: the build has no readable camera.
+bool rt_current_build_ubo(VkBuffer* ubo, VkDeviceSize* offset);
 // Scene snapshots: each build writes one slot (its own TLAS for the split, its
 // InstInfo region of the bvhsplit ring, its alpha set and record region), and a
 // slot is reused only once the GPU finished every frame it was handed out in
