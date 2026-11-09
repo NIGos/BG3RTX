@@ -188,6 +188,10 @@ float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0
 uint64_t g_last_pub_camera_frame = 0;
 bool g_order = false;                       // the last publish was staged (the key on)
 std::unordered_map<uint64_t, uint64_t> g_key_seen;   // draw key -> frame_index of its last publish (round 3 L3)
+// Warm-up lines (docs/RTX_HAIR_PRIMARY.md 5o; always on, CPU only): frames from a level load to its first strand swap,
+// and per draw key from its first publish after the load to its first strand G-buffer swap (0 once swapped).
+std::unordered_map<uint64_t, uint64_t> g_first_pub;
+struct Warm { bool logged = true; uint64_t first_swaps = 0, wait_sum = 0, wait_max = 0; } g_warm;
 constexpr uint64_t kKeyForgetFrames = 600;
 int g_cfg_passes = 15;                   // rt_hair_primary_passes, read at each publish (round 3 L5)
 bool g_cfg_cascade_drop = false;            // rt_hair_groom_cascade_drop, likewise
@@ -602,6 +606,7 @@ void observe_depth(uint64_t image, uint64_t now, uint64_t identity) {
   g_pixels_fresh = true;
   g_transmit.clear();
   g_last_card.clear();                       // 5i (review 4): no dropout verdict against another scene's draws
+  g_first_pub.clear(); g_warm.logged = false;   // 5o: this load's warm-up line at its first strand swap
   for (CountSlot& c : g_cnt) c.valid = false;   // counts of the old pixel record are no evidence
   log("[hair primary] level load (first or new G-buffer images): strand swaps paused for %llu frames, groom state reset",
       (unsigned long long)hair_primary::kLoadQuietFrames);
@@ -728,6 +733,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_slots = {}; g_live_slots = {}; g_without_slot.clear();
   g_gate = hair_primary::SwapGate{};
   g_load = hair_primary::LoadGuard{};
+  g_first_pub.clear(); g_warm = Warm{};
   g_order = false;
   g_applied_frame = g_published = 0;
   g_pass_of.clear();
@@ -1525,6 +1531,22 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (pass == Pass::Gbuffer) {
     g_gate.gbuffer_drew(key);
+    {   // 5o warm-up lines: this key's first strand swap since its first publish after the load, and the load's first
+      const auto fp = g_first_pub.find(key);
+      if (fp != g_first_pub.end() && fp->second) {
+        const uint64_t waited = now >= fp->second ? now - fp->second : 0;
+        ++g_warm.first_swaps; g_warm.wait_sum += waited; g_warm.wait_max = (std::max)(g_warm.wait_max, waited);
+        fp->second = 0;
+      }
+      if (!g_warm.logged) {
+        g_warm.logged = true;
+        log("[hair primary] warm-up: level load at frame %llu: load quiet ended at frame %llu (+%llu, %s), first strand "
+            "G-buffer swap at frame %llu, %llu frames after the load (rt_hair_warmup %d)",
+            (unsigned long long)g_load.boundary, (unsigned long long)g_load.quiet_until,
+            (unsigned long long)(g_load.quiet_until - g_load.boundary), g_load.early ? "groom state settled" : "frame count",
+            (unsigned long long)now, (unsigned long long)(now - g_load.boundary), cfg_int("rt_hair_warmup", 0));
+      }
+    }
     if (g_gb_frames[(now + 1) % 16].frame == now + 1) g_gb_frames[(now + 1) % 16].swapped_slots |= 1u << draw;
     g_coverage.swapped(key, now + 1);
     {
@@ -1581,6 +1603,19 @@ void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args)
     s->hp_coverage = UINT32_MAX;
   }
   if (s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
+}
+
+// rt_hair_warmup (docs/RTX_HAIR_PRIMARY.md 5o): bvhsplit's per-build settled signal; ends the level-load quiet window
+// after hair_primary::kWarmupSettledFrames settled frames instead of kLoadQuietFrames.
+void hair_primary_warmup(bool settled) {
+  if (!strands_on()) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_dd) return;
+  const uint64_t now = frame_index();
+  if (g_load.settle(now, settled))
+    log("[hair primary] warm-up: load quiet ended at frame %llu, %llu frames after the level load (groom state settled "
+        "for %llu frames, rt_hair_warmup)", (unsigned long long)now, (unsigned long long)(now - g_load.boundary),
+        (unsigned long long)hair_primary::kWarmupSettledFrames);
 }
 
 void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint64_t pool, uint64_t pool_bytes,
@@ -1688,13 +1723,14 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms), now);
   // Round 3 L3: the per-key maps grew all session; drop keys not published for kKeyForgetFrames.
   for (uint32_t k = 0; k < count; ++k) if (keys[k]) g_key_seen[keys[k]] = now;
+  for (uint32_t k = 0; k < count; ++k) if (keys[k]) g_first_pub.try_emplace(keys[k], now);   // 5o warm-up line
   if (now % 300 == 0) {
     auto unseen = [&](uint64_t key) {
       const auto it = g_key_seen.find(key);
       return it == g_key_seen.end() || it->second + kKeyForgetFrames < now;
     };
     auto prune = [&](auto& map) { for (auto it = map.begin(); it != map.end();) it = unseen(it->first) ? map.erase(it) : std::next(it); };
-    prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame);
+    prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame); prune(g_first_pub);
     prune(g_coverage.latest); prune(g_coverage.incomplete); prune(g_coverage.swapping);
     for (auto it = g_key_seen.begin(); it != g_key_seen.end();) it = it->second + kKeyForgetFrames < now ? g_key_seen.erase(it) : std::next(it);
   }
@@ -1809,6 +1845,13 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         g_transmit.size(), sum[0] / n, sum[1] / n, sum[2] / n, g_transmit.empty() ? 0.0f : lo, hi,
         stats_period(300), (unsigned long long)g_transmit_rows);
     g_transmit_rows = 0;
+  }
+  if (stats_due(now) && g_warm.first_swaps) {
+    log_stats("[hair primary] warm-up: last %u frames: %llu draws swapped to strands for the first time since the level "
+        "load; frames from their first publish: mean %.1f, max %llu",
+        stats_period(300), (unsigned long long)g_warm.first_swaps, double(g_warm.wait_sum) / double(g_warm.first_swaps),
+        (unsigned long long)g_warm.wait_max);
+    g_warm.first_swaps = g_warm.wait_sum = g_warm.wait_max = 0;
   }
   if (stats_due(now) && g_ms_frames)
     log_stats("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
