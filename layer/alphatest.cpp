@@ -1599,20 +1599,33 @@ VkDescriptorSet alpha_slot_set(uint32_t slot) { return slot < kRing ? g_sets[slo
 // The handout fallback: set `dst` becomes a copy of set `src` (every binding the layer writes; the immutable samplers
 // 4/5 are the layout's). Only with the update-after-bind layout: `dst` may already be bound by a recording that is not
 // submitted yet. The views and tables of `src` now live in `dst` too (its dirty ranges and life-extended handles).
+// Every binding the layer writes in a set of g_dsl (native: also the hit-material bindings 12-15), `src` -> `dst`.
+static void copy_set_bindings(VkDescriptorSet src, VkDescriptorSet dst, bool native) {
+  VkCopyDescriptorSet copies[16]{};
+  uint32_t count = 0;
+  for (uint32_t binding : {0u, 1u, 2u, 3u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 19u}) {
+    if (binding == 19 && !g_tileset_binding) continue;
+    if ((binding == 10 || binding == 11) && !g_omm_layout) continue;
+    if (binding >= 12 && binding <= 15 && (!native || !native_hit::enabled())) continue;
+    auto& c = copies[count++];
+    c = {VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
+    c.srcSet = src; c.dstSet = dst; c.srcBinding = c.dstBinding = binding;
+    c.descriptorCount = binding == 19 ? kNativeSamplers : binding == 2 ? kTextures : binding == 3 ? kCaches
+                      : binding == 14 ? native_hit::cache_slots : binding == 15 ? native_hit::sampler_slots : 1u;
+  }
+  g_dd->vk.UpdateDescriptorSets(g_dd->device, 0, nullptr, count, copies);
+}
+bool alpha_copy_set_handles(VkDescriptorSet src, VkDescriptorSet dst, bool native) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_dd || !g_uab || !src || !dst || src == dst) return false;
+  copy_set_bindings(src, dst, native);
+  return true;
+}
+
 bool alpha_copy_set(uint32_t src, uint32_t dst) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_dd || !g_uab || src >= kRing || dst >= kRing || src == dst || !g_set_init[src]) return false;
-  VkCopyDescriptorSet copies[13]{};
-  uint32_t count = 0;
-  for (uint32_t binding : {0u, 1u, 2u, 3u, 6u, 7u, 8u, 9u, 10u, 11u, 19u}) {
-    if (binding == 19 && !g_tileset_binding) continue;
-    if ((binding == 10 || binding == 11) && !g_omm_layout) continue;
-    auto& c = copies[count++];
-    c = {VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
-    c.srcSet = g_sets[src]; c.dstSet = g_sets[dst]; c.srcBinding = c.dstBinding = binding;
-    c.descriptorCount = binding == 19 ? kNativeSamplers : binding == 2 ? kTextures : binding == 3 ? kCaches : 1u;
-  }
-  g_dd->vk.UpdateDescriptorSets(g_dd->device, 0, nullptr, count, copies);
+  copy_set_bindings(g_sets[src], g_sets[dst], true);
   // The whole arrays were copied: the next commit into `dst` rewrites at least what `src` held.
   g_set_tex[dst] = (std::max)(g_set_tex[dst], g_set_tex[src]);
   g_set_cache[dst] = (std::max)(g_set_cache[dst], g_set_cache[src]);

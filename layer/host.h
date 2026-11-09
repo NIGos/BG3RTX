@@ -1017,6 +1017,8 @@ bool alpha_stamp_traversal_to_reference(uint32_t slot);
 // rt_scene_handout=2: a slot's set; the fallback copy of set `src` into set `dst` (update-after-bind layout only).
 VkDescriptorSet alpha_slot_set(uint32_t slot);
 bool alpha_copy_set(uint32_t src, uint32_t dst);
+// Increment 4b: the same copy between any two sets of the set 1 layout (native: also the hit-material bindings 12-15).
+bool alpha_copy_set_handles(VkDescriptorSet src, VkDescriptorSet dst, bool native);
 // rt_scene_handout (increment 4, bvhsplit.cpp): the OMM tickets of slot `slot`'s accelerated TLAS; false: not accelerated.
 bool bvh_omm_tickets(uint32_t slot, std::vector<uint64_t>* out);
 // The legacy TLAS's InstInfo (one instance, the 2-geometry soup BLAS).

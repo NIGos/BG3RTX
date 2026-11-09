@@ -28,7 +28,13 @@ bool deferred_begin(VkCommandBuffer,CmdState*,const DrawArgs&,bool exactPipeline
 void deferred_finish(VkCommandBuffer,bool noGraphicsStorageWrites);
 void slot_in_use(uint32_t slot,uint64_t frame);
 bool slot_reusable(uint32_t slot,uint64_t gpuDone);
-bool register_use(VkCommandBuffer,uint32_t slot,VkDescriptorSet* query_alpha);
+bool register_use(VkCommandBuffer,uint32_t slot,VkDescriptorSet* query_alpha,bool commit=false);
+// rt_scene_handout=2 (increment 4b): the slot's handout query set; the commit-time query; the users' camera check;
+// the submit settle (users own the query, or the previous scene's query set is copied in).
+VkDescriptorSet handout_set(uint32_t slot);
+bool commit_query(VkCommandBuffer gbuffer,uint32_t slot);
+bool handout_camera_ok(uint32_t slot,VkBuffer camera,VkDeviceSize offset);
+void handout_settle(uint32_t slot,uint32_t prev,bool in_order,const std::vector<VkCommandBuffer>& users);
 // Pool material records (common/native_hit_pool.h, PLAN_M4 "Hit material on pool
 // instances"). Geometry/position keys of a class A draw (false: not keyable).
 bool pool_keys(const InstPipe&,const CmdState&,const DrawArgs&,uint64_t* geometry,uint64_t* position);

@@ -300,6 +300,63 @@ static void scripted() {
     CHECK(!keep_accelerated({{true}, {false}}));   // the lighting ended before the commit: downgrade
     CHECK(keep_accelerated({}));                   // no handed-out user: the ordinary path registers per dispatch
   }
+  {  // 16 increment 4b: hit-material query failed at the commit (no packet, no mapping, capacity): in order but
+     // resolved to P with the query reason, R poisoned (P stays the scene: its set and query set are copied into R's)
+    Layer L = warm();
+    const int P = L.cur;
+    L.capture_begin();
+    const uint64_t l = L.lighting();
+    const int R = L.rec(l)->set_slot;
+    CHECK(L.m.commit_slot() == R);
+    L.m.commit_query(R, false);
+    L.m.commit_done(R, true, 7, L.frame);
+    auto none = [](uint64_t) { return 0; };
+    auto before = [](uint64_t, int) { return true; };
+    const Resolution r = L.m.resolve(L.frame, 8, none, before);
+    CHECK(r.resolved && !r.in_order && r.reason == Fallback::kQuery && r.poison && r.prev == P && r.slot == R);
+    CHECK(L.m.n.fallback[uint32_t(Fallback::kQuery)] == 1 && !L.m.open() && !L.m.query_expected);
+  }
+  {  // 17 camera mismatch: a user bound another camera than the query's: resolved to P (kCamera, poisoned)
+    Layer L = warm();
+    L.capture_begin();
+    L.lighting();
+    const int R = L.m.commit_slot();
+    L.m.commit_query(R, true);
+    L.m.commit_done(R, true, 7, L.frame);
+    auto none = [](uint64_t) { return 0; };
+    auto before = [](uint64_t, int) { return true; };
+    const Resolution r = L.m.resolve(L.frame, 8, none, before, [](int) { return Fallback::kCamera; });
+    CHECK(r.reason == Fallback::kCamera && r.poison && L.m.n.mismatches() == 0 && L.m.n.fallbacks() == 1);
+  }
+  {  // 18 query built and the camera matches: in order; a slot committed without hit materials never expects a query
+    Layer L = warm();
+    L.capture_begin();
+    L.lighting();
+    int R = L.m.commit_slot();
+    L.m.commit_query(R, true);
+    L.m.commit_done(R, true, 7, L.frame);
+    auto none = [](uint64_t) { return 0; };
+    auto before = [](uint64_t, int) { return true; };
+    CHECK(L.m.resolve(L.frame, 8, none, before, [](int) { return Fallback::kNone; }).in_order);
+    L.present();
+    L.capture_begin();
+    L.lighting();
+    R = L.m.commit_slot();
+    CHECK(!L.m.query_expected);   // a new reservation starts without the previous query state
+    L.m.commit_query((R + 1) % kSlots, false);   // another slot: ignored
+    CHECK(!L.m.query_expected);
+    L.m.commit_done(R, true, 8, L.frame);
+    CHECK(L.m.resolve(L.frame, 8, none, before).in_order);
+  }
+  {  // 19 recycle pool model (rt_hit_material_recycle): a commit-time query is owned by the G-buffer recording and,
+     // after an in-order resolution, by every user recording; the pool may retire it only when all are GPU-done.
+    struct Owners { std::vector<uint64_t> ids; bool retired(const std::vector<uint64_t>& done) const {
+      for (auto id : ids) if (std::find(done.begin(), done.end(), id) == done.end()) return false; return !ids.empty(); } };
+    Owners q{{100}};                 // the G-buffer recording at the commit
+    q.ids.push_back(200);            // the lighting, added at its submit's resolution
+    CHECK(!q.retired({100}));        // G-buffer done, lighting still running: kept
+    CHECK(q.retired({100, 200}));
+  }
   {  // 11 stale reservation (capture began, never ended for 3 frames): not handed out
     Layer L = warm();
     L.capture_begin();

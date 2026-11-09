@@ -202,6 +202,11 @@ Increment 4 (2026-11-09, branch claude/scene-handout-4, off by default, no live)
   to the submit settle (the lighting's binding recorded at the handout; mismatch -> fallback to P's query set, the
   existing "reuse F-1 rows" rule, borrow_query); the fallback copies P's query set into R's like set 1.
 
+Increment 4b done (2026-11-09, branch claude/scene-handout-4b, off by default, READY_FOR_LIVE, no live): the plan above
+as written (commit-time query into a per-slot handout query set, camera check at the submit settle, P's query set as the
+fallback). Still waiting after it: legacy single-BLAS builds, frames whose capture has not begun at the first RT query,
+passes whose pipeline lacks constant 1051 (two frames after a toggle), water's once-per-frame settle in run_post.
+
 Total 4-5.5 days after a go from increment 0. Gate to start 1: sh1 frame time(on) - frame time(off) >= 1 ms
 (below 0.5 ms, inside the on-a/on-b spread: drop the handout, keep only S1/S2 if cheap).
 

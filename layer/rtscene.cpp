@@ -194,6 +194,10 @@ std::atomic<bool> g_ho_open{false};
 // Increment 4: the OMM tickets of the reserved slot's accelerated TLAS (set at its commit, under g_handout_mu), and the
 // window's counts: commits that kept byte 24 on the accelerated TLAS, and downgrades (a user could not hold the tickets).
 std::vector<uint64_t> g_ho_tickets;
+// Increment 4b: the camera bindings the handout's hit-material users bound (checked against the query's at the submit),
+// and the window's commit-time queries built / failed.
+std::vector<std::pair<VkBuffer, VkDeviceSize>> g_ho_cameras;
+uint64_t g_ho_query_built = 0, g_ho_query_failed = 0;
 uint64_t g_ho_omm_accelerated = 0, g_ho_omm_downgraded = 0;
 // Registers `tickets` on `cmd` while it still records `user` (omm_submit.cpp: the submit of that recording then keeps
 // the micro-map data alive until its GPU work is done). false: it ended or was reset, or a ticket was refused.
@@ -1058,10 +1062,9 @@ VkBufferUsageFlags rt_xfb_usage() {
 bool rt_alloc_device_address() { return g_bda_core; }
 
 // rt_scene_handout=2 needs the update-after-bind set 1 and the dummy TLAS (rt_scene_handout_layout at startup),
-// the BVH split, and no native hit materials (their per-dispatch query reads commit-time rows on the CPU).
+// the BVH split. Native hit materials (increment 4b): their query is built at the commit (native_hit::commit_query).
 bool handout_mode() {
-  return cfg_int("rt_scene_handout", 0) >= 2 && g_handout_on && g_dummy_ready && !native_hit::enabled() &&
-         !cfg_int("rt_hit_material", 0) && cfg_int("rt_scene_wait", 1) != 0;
+  return cfg_int("rt_scene_handout", 0) >= 2 && g_handout_on && g_dummy_ready && cfg_int("rt_scene_wait", 1) != 0;
 }
 
 void rt_before_capture(VkCommandBuffer cmd) {
@@ -1083,6 +1086,10 @@ void rt_before_capture(VkCommandBuffer cmd) {
       g_ho.reserve(now, pick, current);
       g_ho_open.store(g_ho.open(), std::memory_order_release);
     }
+    // The handout query set of the reserved slot exists before the lighting asks for it (increment 4b).
+    int reserved;
+    { std::lock_guard<std::mutex> h(g_handout_mu); reserved = g_ho.state == scene_handout::Machine::State::kReserved ? g_ho.slot : -1; }
+    if (reserved >= 0 && native_hit::enabled()) native_hit::handout_set(uint32_t(reserved));
   }
   // Last frame's BLAS build read the XFB buffer this pass is about to overwrite.
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -1418,6 +1425,13 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     ab.groom_first = res.groom_first;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     if(set)alpha_omm_commit(cmd,uint32_t(scene_slot));
+    if (set && handout_commit.slot >= 0 && native_hit::enabled() && cfg_int("rt_hit_material", 0)) {
+      // Increment 4b: the hit-material query of the reserved slot, built now into the G-buffer command buffer.
+      const bool query = native_hit::commit_query(cmd, uint32_t(scene_slot));
+      std::lock_guard<std::mutex> h(g_handout_mu);
+      g_ho.commit_query(scene_slot, query);
+      ++(query ? g_ho_query_built : g_ho_query_failed);
+    }
     restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
     if (cpu_t) {
       const double t2 = qpc_ms();
@@ -1714,13 +1728,15 @@ void wait_log(int ms) {
         g_wait_handed ? (", handed out " + std::to_string(g_wait_handed) + " (0 ms)").c_str() : "");
     {   // rt_scene_handout=2 (common/scene_handout.h): whenever a reservation was made in the window
       scene_handout::Counters c;
-      uint64_t omm_accelerated, omm_downgraded;
+      uint64_t omm_accelerated, omm_downgraded, query_built, query_failed;
       { std::lock_guard<std::mutex> h(g_handout_mu); c = g_ho.n; g_ho.n = {};
-        omm_accelerated = g_ho_omm_accelerated; omm_downgraded = g_ho_omm_downgraded; g_ho_omm_accelerated = g_ho_omm_downgraded = 0; }
+        omm_accelerated = g_ho_omm_accelerated; omm_downgraded = g_ho_omm_downgraded; g_ho_omm_accelerated = g_ho_omm_downgraded = 0;
+        query_built = g_ho_query_built; query_failed = g_ho_query_failed; g_ho_query_built = g_ho_query_failed = 0; }
       if (c.reserved || c.handed || c.fallbacks())
         log("[rt] scene handout: %llu frames, reserved %llu, handed out %llu, in order %llu, fallbacks %llu (not committed %llu, "
             "build failed %llu, order %llu, dropped %llu), pairing mismatches %llu, committed first %llu, unused %llu, users refused %llu; "
-            "OMM accelerated commits %llu, downgraded %llu",
+            "OMM accelerated commits %llu, downgraded %llu; hit material queries at the commit %llu, failed %llu "
+            "(fallbacks: query %llu, camera %llu)",
             (unsigned long long)g_wait.calls, (unsigned long long)c.reserved, (unsigned long long)c.handed,
             (unsigned long long)c.in_order, (unsigned long long)c.fallbacks(),
             (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kNotCommitted)],
@@ -1728,7 +1744,9 @@ void wait_log(int ms) {
             (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kOrder)],
             (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kDropped)], (unsigned long long)c.mismatches(),
             (unsigned long long)c.committed_first, (unsigned long long)c.unused, (unsigned long long)c.refused_busy,
-            (unsigned long long)omm_accelerated, (unsigned long long)omm_downgraded);
+            (unsigned long long)omm_accelerated, (unsigned long long)omm_downgraded, (unsigned long long)query_built,
+            (unsigned long long)query_failed, (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kQuery)],
+            (unsigned long long)c.fallback[uint32_t(scene_handout::Fallback::kCamera)]);
     }
     if (g_handout_downgrades) {   // rt_scene_handout: stamp traversal addresses set back to the reference TLAS
       log("[rt] scene handout: %llu stamp traversal downgrade(s) in the last %llu frames", (unsigned long long)g_handout_downgrades,
@@ -1813,6 +1831,7 @@ void rt_scene_handout_submit(const std::vector<VkCommandBuffer>& cmds) {
   std::lock_guard<std::mutex> lock(g_mu);   // no scene build is half recorded while R's set may be rewritten
   const uint64_t now = frame_index();
   scene_handout::Resolution r;
+  std::vector<VkCommandBuffer> users;
   {
     std::lock_guard<std::mutex> h(g_handout_mu);
     auto user_index = [&](uint64_t user) {
@@ -1824,9 +1843,19 @@ void rt_scene_handout_submit(const std::vector<VkCommandBuffer>& cmds) {
         if (bvh_rec_matches_command(rec, cmds[j])) return int(j) < at;   // in this batch: its position decides
       return bvh_rec_state(rec) == 1;   // an earlier submit
     };
-    r = g_ho.resolve(now, 8, user_index, record_before);
+    const int slot = g_ho.slot;
+    for (uint32_t i = 0; i < g_ho.user_count; ++i) users.push_back(reinterpret_cast<VkCommandBuffer>(g_ho.handles[i]));
+    auto cameras = [&](int s) {
+      for (const auto& [buffer, offset] : g_ho_cameras)
+        if (!native_hit::handout_camera_ok(uint32_t(s), buffer, offset)) return scene_handout::Fallback::kCamera;
+      return scene_handout::Fallback::kNone;
+    };
+    r = g_ho.resolve(now, 8, user_index, record_before, cameras);
+    if (r.resolved || slot < 0) g_ho_cameras.clear();
     g_ho_open.store(g_ho.open(), std::memory_order_release);
   }
+  if (r.resolved && native_hit::enabled())   // users own the query, or P's query set is copied into R's (increment 4b)
+    native_hit::handout_settle(uint32_t(r.slot), uint32_t(r.prev), r.in_order, users);
   if (!r.resolved) return;
   SceneSlot& R = g_scene[r.slot];
   R.last_use = (std::max)(R.last_use, now);
@@ -1894,6 +1923,25 @@ bool rt_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion* 
   return bvh_replay_region(info, info_offset, out);
 }
 bool rt_hit_material_use(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkDescriptorSet alpha,uint64_t identity,VkDescriptorSet* query_alpha){
+  // rt_scene_handout=2 (increment 4b): a pass bound to the handed-out set and the dummy TLAS gets the slot's handout
+  // query set; the query is built at the commit, the camera this pass bound is checked against it at the submit.
+  if(query_alpha && selected && selected==g_dummy_tlas && alpha && native_hit::enabled() && cfg_int("rt_hit_material",0)){
+    *query_alpha={};
+    int slot=-1;
+    {std::lock_guard h(g_handout_mu);
+     if(g_ho.open() && g_ho.handed && g_ho.slot>=0 && alpha_slot_set(uint32_t(g_ho.slot))==alpha){
+       const uint64_t user=cmd_recording(cmd);
+       for(uint32_t i=0;i<g_ho.user_count;++i)if(g_ho.users[i]==user)slot=g_ho.slot;}}
+    if(slot<0)return false;
+    Bg3Binding camera{};
+    if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,0,2,0,&camera) || !camera.buffer)return false;
+    {std::lock_guard h(g_handout_mu);
+     if(g_ho.slot!=slot || !g_ho.open())return false;
+     const std::pair<VkBuffer,VkDeviceSize> c{camera.buffer,camera.offset};
+     if(std::find(g_ho_cameras.begin(),g_ho_cameras.end(),c)==g_ho_cameras.end())g_ho_cameras.push_back(c);}
+    *query_alpha=native_hit::handout_set(uint32_t(slot));
+    return *query_alpha!=VK_NULL_HANDLE;
+  }
   if(query_alpha)*query_alpha={};
   static std::atomic<uint64_t> last_query_log{UINT64_MAX};const auto now=frame_index();
   if(cfg_int("rt_stats",0) && now%120==0 && last_query_log.exchange(now)!=now){
