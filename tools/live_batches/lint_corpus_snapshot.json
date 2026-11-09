@@ -78483,6 +78483,22 @@
         "he1-dialogue1-edge.1.113042.log",
         "frozen VALID match"
       ]
+    ],
+    "\\[geo\\] rt_capture_wide_split inactive": [
+      0,
+      null
+    ],
+    "\\[geo\\] rt_capture_wide_split on: strand-frame vertex shaders 88 bytes, all others 64 bytes per vertex": [
+      0,
+      null
+    ],
+    "\\[geo\\] RT capture stride split, last \\d+ frames:": [
+      0,
+      null
+    ],
+    "\\[cascade\\] wide-stride casters \\(rt_capture_wide_split\\):": [
+      0,
+      null
     ]
   }
 }

@@ -2,6 +2,7 @@
 #include "../common/cpu_exact_cache.h"
 #include "../common/cpu_cascade_model.h"
 #include "../common/rt_capture_budget.h"
+#include "../common/capture_stride.h"
 #include "../common/vram_guard.h"
 #include "../common/omm_native_plain_recipes.h"
 // Track D phase 1: capture the opaque scene geometry of BG3's G-buffer pass in
@@ -71,6 +72,7 @@ PFN_vkCmdBeginQuery p_begin_query = nullptr;
 PFN_vkCmdEndQuery p_end_query = nullptr;
 PFN_vkCmdDispatch p_dispatch = nullptr;
 VkDeviceSize g_ubo_align = 256;
+VkDeviceSize g_ssbo_align = 256;   // minStorageBufferOffsetAlignment (rt_capture_wide_split: the wide region's binding)
 // Camera UBO copy (shaders/geo_ubo_copy.hlsl), push descriptors.
 VkDescriptorSetLayout g_ubo_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_ubo_pl = VK_NULL_HANDLE;
@@ -90,6 +92,12 @@ uint32_t g_stride = 16;
 bool g_tileset_capture = false;
 uint32_t g_stride_without_tileset=16;
 bool g_alpha_mode = false;
+// rt_capture_wide_split (startup, common/capture_stride.h): modules without the native strand frame are
+// patched at g_base_stride, the stride the layout would have without rt_native_hair; strand-frame modules
+// keep g_stride (88). Off: g_base_stride == g_stride and every draw uses g_stride, as before.
+bool g_wide_split = false;
+uint32_t g_base_stride = 16;
+uint32_t g_base_without_tileset = 16;
 // The effective capture sizes: a cap left at its default follows the stride (common/rt_capture_budget.h).
 int xfb_mb() {
   return capture_budget::effective_mb(cfg_int("rt_xfb_mb", 384), capture_budget::kXfbDefaultMb, g_stride);
@@ -111,6 +119,7 @@ float g_gbuf_viewport[4] = {};                     // its viewport 0 (rt_hair_gr
 std::atomic<uint64_t> g_gbuf_depth{0};            // the last G-buffer pass's depth image (the prepass writes it)
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
 thread_local uint32_t t_last_hair_outputs = 0;
+thread_local uint32_t t_last_stride = 0;   // the XFB stride of the module patched last on this thread
 thread_local uint32_t t_last_vt_outputs = 0;
 thread_local uint32_t t_last_tileset_outputs = 0;
 thread_local bool t_last_no_writes = false;
@@ -135,6 +144,7 @@ struct ModInfo {
   uint32_t hair_outputs = 0;
   uint32_t vt_outputs = 0;
   uint32_t tileset_outputs = 0;
+  uint32_t stride = 0;       // its XFB stride (rt_capture_wide_split: base or wide)
 };
 std::unordered_map<VkShaderModule, ModInfo> g_patched;
 std::unordered_set<VkShaderModule> g_discard_mods;   // fragment shaders that can discard (alpha test)
@@ -165,7 +175,15 @@ struct PipeInfo {
   uint32_t color_mask = 0, blend_mask = 0;
   bool em_state = false, em_dynamic = false;
   uint32_t em_raster[9] = {}; // blend/src/dst/op/mask/cull/depth-test/write/compare
+  uint32_t stride = 0;       // its VS module's XFB stride (0: not patched)
 };
+// rt_capture_wide_split: the wide region's top, aligned for its storage binding (common/capture_stride.h
+// wide_unit); off: the buffer end, so every key-off comparison against wide_cursor is the old one against xfb.size.
+static VkDeviceSize wide_region_top(VkDeviceSize size) { return g_wide_split ? size / g_ssbo_align * g_ssbo_align : size; }
+// The XFB bytes per vertex of a draw of this pipeline. Without rt_capture_wide_split: g_stride, as before.
+static uint32_t pipe_stride(const PipeInfo& pi) { return g_wide_split && pi.stride ? pi.stride : g_stride; }
+// rt_capture_wide_split: a draw whose VS writes the wide (88-byte) layout; it never goes into a base-stride stream.
+static bool pipe_wide(const PipeInfo& pi) { return capture_stride::wide_draw(g_wide_split, pipe_stride(pi), g_base_stride); }
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
 std::atomic<uint64_t> g_pipe_generation{1};
 // Registry values are immutable after publication. Invalidate on create/destroy,
@@ -197,6 +215,7 @@ static bool draw_pipe(VkPipeline pipe, PipeInfo& out, uint64_t* generation = nul
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
 std::unordered_map<VkBuffer, VkDeviceSize> g_buffer_size;
 std::atomic<uint32_t> g_patch_count{0}, g_patch_skipped{0}, g_inst_modules{0}, g_inst_pipes{0};
+std::atomic<uint64_t> g_wide_em_skipped{0};   // rt_capture_wide_split: wide draws kept out of the emissive/water soups
 
 // ---- buffers ----
 struct Buf {
@@ -266,6 +285,7 @@ struct DrawRec {
   VkBuffer ubo;
   VkDeviceSize ubo_off;
   uint64_t offset, reserved; // byte range bound for this draw's XFB output
+  uint32_t stride = 0;       // its XFB bytes per vertex (rt_capture_wide_split: per pipeline)
 };
 
 struct Capture {
@@ -307,6 +327,10 @@ struct Capture {
   // [alpha_base, xfb.size) from alpha_cursor.
   VkDeviceSize opaque_end = 0, alpha_base = 0, alpha_cursor = 0;
   uint32_t alpha_draws = 0;
+  // rt_capture_wide_split (common/capture_stride.h): wide-stride draws fill [wide_cursor, xfb.size) downwards,
+  // inside the alpha region; alpha_cursor may not cross wide_cursor. xfb.size when off (no wide draw).
+  VkDeviceSize wide_cursor = 0, wide_top = 0, wide_demand = 0, wide_dropped_bytes = 0;   // region [wide_cursor, wide_top)
+  uint32_t wide_draws = 0, wide_dropped = 0, wide_alpha = 0;
   // What this frame wanted (for the next frame's split, AUDIT_RT fix 5) and what
   // did not fit; draws left out of the RT soup (fix 7).
   VkDeviceSize alpha_demand = 0, alpha_overflow_bytes = 0, opaque_overflow_bytes = 0;
@@ -345,6 +369,7 @@ struct RtDropLog {
            drop_topo_tris = 0, strips = 0, strip_tris = 0;
   uint64_t peak_alpha = 0, peak_opaque = 0;
   uint64_t source_draws = 0, no_depth_draws = 0, no_depth_tris = 0;
+  uint64_t wide_draws = 0, wide_alpha = 0, wide_dropped = 0, peak_wide = 0;   // rt_capture_wide_split
   bool first_alpha = false, first_opaque = false, first_drop = false;
 };
 std::mutex g_drop_mu;
@@ -589,6 +614,9 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.opaque_end = c.xfb.size;
   c.alpha_base = c.alpha_cursor = c.xfb.size;
   c.alpha_draws = 0;
+  c.wide_top = c.wide_cursor = wide_region_top(c.xfb.size);
+  c.wide_demand = c.wide_dropped_bytes = 0;
+  c.wide_draws = c.wide_dropped = c.wide_alpha = 0;
   c.alpha_demand = c.alpha_overflow_bytes = c.opaque_overflow_bytes = 0;
   c.alpha_overflow = c.opaque_overflow = 0;
   c.drop_indirect = c.drop_topo = c.strips = 0;
@@ -817,15 +845,16 @@ void process(Capture& c) {
     if (d.slot < 0) continue;
     uint64_t written = q[size_t(d.slot) * 2], needed = q[size_t(d.slot) * 2 + 1];
     if (needed > written) needed_more += needed - written;
-    const uint64_t tri_bytes = 3ull * g_stride;
+    const uint32_t stride = d.stride ? d.stride : g_stride;   // rt_capture_wide_split: per draw
+    const uint64_t tri_bytes = 3ull * stride;
     if (written * tri_bytes > d.reserved) { ++mismatched; written = d.reserved / tri_bytes; }
     uint64_t end = prev + written * 48;
     // Compact to 16 bytes per vertex (gl_Position): draws were written at
-    // their reserved offsets, g_stride bytes per vertex.
-    if (written && g_stride == 16) std::memmove(compact.data() + prev, xfb_raw + d.offset, size_t(written * 48));
+    // their reserved offsets, `stride` bytes per vertex.
+    if (written && stride == 16) std::memmove(compact.data() + prev, xfb_raw + d.offset, size_t(written * 48));
     else
       for (uint64_t v = 0; v < written * 3; ++v)
-        std::memcpy(compact.data() + prev + v * 16, xfb_raw + d.offset + v * g_stride, 16);
+        std::memcpy(compact.data() + prev + v * 16, xfb_raw + d.offset + v * stride, 16);
     ranges[i] = {prev / 16, uint32_t((end - prev) / 16)};
     if (d.count && d.instances && (d.kind == 0 || d.kind == 1)) {
       uint64_t want = uint64_t(d.count / 3) * d.instances * 3;
@@ -1144,6 +1173,7 @@ Capture g_ccap[3];                  // the captured cascade pass of frame F is g
 struct CcMeta {
   uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0;
   bool has_origin = false; float origin[3] = {}; uint64_t sig = 0;
+  uint32_t wide_tris = 0; uint64_t wide_off = 0;   // rt_capture_wide_split: the wide region at the buffer's top
 };
 CcMeta g_cc_meta[3];                // what g_ccap[i] holds, converted (frame 0: nothing)
 constexpr int kCcLayers = 8;
@@ -1162,6 +1192,7 @@ struct CcStats {
   uint64_t frames = 0, seen = 0, dup = 0, mesh_dup = 0, key_zero = 0, alpha = 0, drop = 0, ubo = 0, full = 0, added = 0, tris = 0, tris_max = 0;
   uint64_t bytes = 0, bytes_max = 0, demand_max = 0, keys = 0, unconverted = 0;
   uint64_t builds[6] = {}, build_tris = 0;
+  uint64_t wide_draws = 0, wide_tris = 0;   // rt_capture_wide_split: casters in the wide-stride region
 };
 CcStats g_cc_st;
 cascade::SetChanges g_cc_set_changes[kCcLayers]; // protected by g_cc_mu
@@ -1280,6 +1311,8 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.record_frame = f;
   c.readback = c.rt = c.split = c.cc_keys = false;
   c.cursor = 0;
+  c.wide_top = c.wide_cursor = wide_region_top(c.xfb.size);   // rt_capture_wide_split: wide casters, top down
+  c.wide_draws = 0;
   c.xfb_active = false;
   c.active_slot = -1;
   c.rt_ubo = VK_NULL_HANDLE;
@@ -1380,9 +1413,15 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   } else if(legacy==cascade::LegacyCaster::duplicate) {++c->c_dup;return;}
   uint64_t prims = pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST ? count / 3 : count > 2 ? count - 2 : 0;
   prims *= args.instances;
-  const uint64_t reserved = prims * 3ull * g_stride;
+  // rt_capture_wide_split: base-stride casters from 0 up, wide ones from the top down (two BLAS geometries).
+  const bool wide = pipe_wide(pi);
+  const uint64_t reserved = prims * 3ull * (wide ? g_stride : g_base_stride);
   if (!reserved) return;
-  if (c->cursor + reserved > c->xfb.size) {
+  VkDeviceSize off = c->cursor;
+  uint64_t wide_cursor = c->wide_cursor;
+  if (wide ? !capture_stride::place_wide(c->cursor, &wide_cursor,
+                                         capture_stride::wide_reserve(reserved, capture_stride::wide_unit(g_stride, g_ssbo_align)), &off)
+           : c->cursor + reserved > c->wide_cursor) {
     ++c->c_full;
     c->c_over += reserved;
     return;
@@ -1391,11 +1430,12 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     if(!static_candidate) ++c->c_dynamic_added;
     c->c_legacy_keys.insert(cascade::mix(cascade::draw_key(id),s->vs));
   }
-  VkDeviceSize off = c->cursor, size = reserved;
+  VkDeviceSize size = reserved;
   p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
   p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
   c->xfb_active = true;
-  c->cursor += reserved;
+  if (wide) c->wide_cursor = wide_cursor, ++c->wide_draws;
+  else c->cursor += reserved;
   ++c->c_added;
   c->c_tris += prims;
   // Same draws in the same order with the same triangle counts: the BLAS can be refitted.
@@ -1406,12 +1446,17 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
 
 void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   if (c->probe) return;
-  const uint32_t tris = uint32_t(c->cursor / (3ull * g_stride));
+  const uint32_t tris = uint32_t(c->cursor / (3ull * g_base_stride));
+  // rt_capture_wide_split: the wide casters' region, converted with its own stride (0 when off).
+  const uint32_t wide_tris = uint32_t((c->wide_top - c->wide_cursor) / (3ull * g_stride));
+  const uint64_t used = c->cursor + (c->wide_top - c->wide_cursor);
   bool converted = false;
-  if (tris && c->rt_ubo) {
+  if ((tris || wide_tris) && c->rt_ubo) {
     barrier(cmd, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT, VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
-    converted = rt_cascade_convert(cmd, c->xfb.b, tris, g_stride, c->rt_ubo, c->rt_ubo_off);
+    converted = !tris || rt_cascade_convert(cmd, c->xfb.b, tris, g_base_stride, c->rt_ubo, c->rt_ubo_off);
+    if (wide_tris)
+      converted = rt_cascade_convert(cmd, c->xfb.b, wide_tris, g_stride, c->rt_ubo, c->rt_ubo_off, c->wide_cursor) && converted;
     // -> the next frame's BLAS build (which has its own barriers too).
     barrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
             VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -1430,6 +1475,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   CcMeta meta{};
   if (converted) {
     meta.frame = f; meta.tris = tris; meta.rec = c->rec; meta.sig = c->c_sig;
+    meta.wide_tris = wide_tris; meta.wide_off = c->wide_cursor;
     // The cascade VS's world position is relative to its own UBO's origin (byte 208),
     // which is not the camera's (92 m away in S7): the rebase starts from it.
     if (mat_ok) { meta.has_origin = true; for (int k = 0; k < 3; ++k) meta.origin[k] = m.v[52 + k]; }
@@ -1445,27 +1491,28 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   ++st.frames;
   st.seen += c->c_seen, st.dup += c->c_dup, st.alpha += c->c_alpha, st.drop += c->c_drop, st.ubo += c->c_ubo;
   st.mesh_dup += c->c_mesh_dup; st.key_zero += c->c_key_zero;
-  st.full += c->c_full, st.added += c->c_added, st.tris += tris;
-  st.tris_max = (std::max)(st.tris_max, uint64_t(tris));
-  st.bytes += c->cursor;
-  st.bytes_max = (std::max)(st.bytes_max, uint64_t(c->cursor));
-  st.demand_max = (std::max)(st.demand_max, uint64_t(c->cursor) + c->c_over);
+  st.full += c->c_full, st.added += c->c_added, st.tris += tris + wide_tris;
+  st.tris_max = (std::max)(st.tris_max, uint64_t(tris) + wide_tris);
+  st.bytes += used;
+  st.bytes_max = (std::max)(st.bytes_max, used);
+  st.demand_max = (std::max)(st.demand_max, used + c->c_over);
+  st.wide_draws += c->wide_draws; st.wide_tris += wide_tris;
   if(cfg_int("rt_capture_elastic",0) && c->xfb.b){
     const uint64_t cap=elastic_cap(true);
-    const uint64_t demand=c->cursor+c->c_over;
+    const uint64_t demand=used+c->c_over;
     // Ignore inactive captures, just as the shrink window does. Preserve the
     // learned movement reserve across inactivity and allocation replacement.
     const uint64_t wanted=demand?c->headroom.capacity(demand,g_storage_range,cap,3,
         uint64_t(cascade_mb())<<20,c->xfb.size,cfg_int("rt_capture_rise_reserve",0)!=0):c->xfb.size;
-    const uint64_t target=c->elastic.observe(c->xfb.size,wanted,c->cursor+c->c_over);
+    const uint64_t target=c->elastic.observe(c->xfb.size,wanted,used+c->c_over);
     if(target!=c->elastic_target && target!=c->xfb.size)
       log("[cascade] capture capacity demand %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
-          double(c->cursor+c->c_over)/1048576.0,(unsigned long long)(target>>20),
+          double(used+c->c_over)/1048576.0,(unsigned long long)(target>>20),
           (unsigned long long)(c->xfb.size>>20),c->elastic.count,capture_budget::CascadeElasticWindow::samples);
     c->elastic_target=target;
   }
   if (!cfg_int("rt_capture_elastic",0) && c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
-    const uint64_t demand = uint64_t(c->cursor) + c->c_over;
+    const uint64_t demand = used + c->c_over;
     // rt_vram_guard: capped by the device budget's share (vram_guard::cap; never below the current size), and
     // refused while VRAM is low. The step is the 3 frame buffers at the new size (each replaced one is freed
     // deferred): refused, the left-out casters stay out (this line's counts) and the refusal is logged.
@@ -1481,7 +1528,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     }
   }
   st.keys += g_cc_keys.size(f);
-  st.unconverted += tris && !converted;
+  st.unconverted += (tris || wide_tris) && !converted;
   c->state = 0;
 }
 
@@ -1557,6 +1604,9 @@ void cascade_on_present() {
       st.dynamic_added/double(st.legacy_frames ? st.legacy_frames : 1),
       st.dynamic_excluded/double(st.legacy_frames ? st.legacy_frames : 1),(unsigned long long)st.set_changes,
       st.mesh_dup/n,st.key_zero/n);
+  if (g_wide_split)   // rt_capture_wide_split: a sibling line (the casters line keeps its format)
+    log_stats("[cascade] wide-stride casters (rt_capture_wide_split): %.1f draws, %.0f triangles per frame at %u bytes; "
+        "the other casters at %u bytes", st.wide_draws / n, st.wide_tris / n, g_stride, g_base_stride);
   // The inversion's premises, from the matrix the conversion used: orthographic (w column
   // (0, 0, 0, 1)), invertible, and the UBO's origin (byte 208) = the camera's of that frame.
   std::string ext;
@@ -1676,6 +1726,7 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     g_ts_period = p.limits.timestampPeriod;
     g_ubo_align = p.limits.minUniformBufferOffsetAlignment;
     g_storage_range=p.limits.maxStorageBufferRange;
+    g_ssbo_align = p.limits.minStorageBufferOffsetAlignment;
   }
   if (xfb_enabled) {
     p_bind_xfb = reinterpret_cast<PFN_vkCmdBindTransformFeedbackBuffersEXT>(
@@ -1694,9 +1745,21 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
       log("[geo] rt_native_hair rejected: requires rt_bvh_split=1 at startup; legacy procedural range not implemented");
     g_stride = g_alpha_mode ? (hair_requested && hair_split ? 88 : cfg_int("rt_hit_material",0) && hair_split ? 64 : 24) : 16;
     g_stride_without_tileset=g_stride;
+    // rt_capture_wide_split: the stride without native hair, for every module without the strand frame.
+    g_base_stride = g_alpha_mode ? (cfg_int("rt_hit_material",0) && hair_split ? 64u : 24u) : 16u;
+    g_base_without_tileset = g_base_stride;
     g_tileset_capture=g_alpha_mode && hair_split && cfg_hot(CfgHot::rt_native_tileset)!=0;
     if(cfg_hot(CfgHot::rt_native_tileset) && !g_tileset_capture)log("[geo] native Tileset COLOR rejected: restart with rt_alpha=1 rt_bvh_split=1");
     if(g_tileset_capture)g_stride=(std::max)(g_stride,cfg_int("rt_hit_material",0)?80u:40u);
+    if(g_tileset_capture)g_base_stride=(std::max)(g_base_stride,cfg_int("rt_hit_material",0)?80u:40u);
+    // Needs the split (per-instance strides): the legacy soup BLAS has one stride per geometry.
+    g_wide_split = capture_stride::active(cfg_int("rt_capture_wide_split",0)!=0 && hair_split, g_alpha_mode, g_stride, g_base_stride);
+    if (!g_wide_split) g_base_stride = g_stride;
+    if (cfg_int("rt_capture_wide_split",0))
+      log("[geo] rt_capture_wide_split %s: strand-frame vertex shaders %u bytes, all others %u bytes per vertex%s",
+          g_wide_split ? "on" : "inactive", g_stride, g_base_stride,
+          g_wide_split ? "; wide draws in their own region at the top of the alpha region" :
+                         " (needs rt=1 rt_alpha=1 rt_bvh_split=1 and a layout wider than the base, i.e. rt_native_hair=1)");
     log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
         g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,
         g_alpha_mode ? "; ray tracing scene from the depth prepass" : "");
@@ -1711,7 +1774,12 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
 }
 
 bool geo_native_tileset_enabled() { return g_tileset_capture; }
-void geo_native_tileset_disable(){g_tileset_capture=false;g_stride=g_stride_without_tileset;}
+void geo_native_tileset_disable(){
+  g_tileset_capture=false;g_stride=g_stride_without_tileset;
+  // rt_capture_wide_split: modules patched before keep their stride; only an untouched base may change.
+  if(!g_wide_split)g_base_stride=g_stride;
+  else if(g_patch_count.load()==0)g_base_stride=g_base_without_tileset;
+}
 
 void geo_render_size(uint32_t* width, uint32_t* height) { *width = g_gbuf_w.load(); *height = g_gbuf_h.load(); }
 uint64_t geo_gbuffer_depth_image() { return g_gbuf_depth.load(); }
@@ -1725,6 +1793,7 @@ VkDeviceSize geo_ubo_align() { return g_ubo_align ? g_ubo_align : 256; }
 bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>& out) {
   t_last_uv = -1;
   t_last_hair_outputs = 0;
+  t_last_stride = 0;
   t_last_vt_outputs = 0;
   t_last_tileset_outputs = 0;
   t_last_no_writes = false;
@@ -1754,6 +1823,17 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
                      g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs,
                      detail_vs?4u:native_hit::instanced_frame_location(t_last_hash));
   if (!ok) return false;
+  t_last_stride = g_stride;
+  // rt_capture_wide_split: no strand frame at the wide stride -> the module is patched at the base stride
+  // (same decorations below byte 24..87 as the layout without native hair; spirv_xfb.h).
+  if (const uint32_t s = capture_stride::module_stride(g_wide_split, g_stride, g_base_stride, t_last_hair_outputs);
+      s != g_stride) {
+    ok = patch_vs(ci->pCode, ci->codeSize / 4, out, s, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && native_tileset_coverage::vertex(t_last_hash),&t_last_tileset_outputs,
+                  g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs,
+                  detail_vs?4u:native_hit::instanced_frame_location(t_last_hash));
+    if (!ok) return false;
+    t_last_stride = s;
+  }
   // The instancing analysis runs on the game's original SPIR-V.
   if (rt_enabled()) {
     t_last_inst = analyze_vs_instancing(ci->pCode, ci->codeSize / 4, t_last_uv);
@@ -1781,7 +1861,7 @@ void geo_note_module(VkShaderModule m, bool patched) {
   if (t_last_always_discard && !patched) g_always_discard_mods.insert(m);
   if (t_last_model == 0 || t_last_model == 4) g_mod_io[m] = ModIo{t_last_model, std::move(t_last_io), t_last_hash,t_last_no_writes};
   if (!patched) return;
-  g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash, t_last_hair_outputs,t_last_vt_outputs,t_last_tileset_outputs};
+  g_patched[m] = ModInfo{t_last_uv, t_last_inst, t_last_hash, t_last_hair_outputs,t_last_vt_outputs,t_last_tileset_outputs,t_last_stride};
 }
 
 void geo_forget_module(VkShaderModule m) {
@@ -1893,6 +1973,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
           pi.uv = it->second.uv;
           pi.hair_outputs = it->second.hair_outputs;
           pi.vt_outputs = it->second.vt_outputs; pi.tileset_outputs=it->second.tileset_outputs;
+          pi.stride = it->second.stride;
           pi.inst = make_inst_pipe(cis[i], it->second);
           if (pi.inst.ok) ++g_inst_pipes;
         }
@@ -2194,6 +2275,8 @@ void rt_capture_stats(const Capture& c) {
           (unsigned long long)row.draws, (unsigned long long)row.tris);
   l.peak_alpha = (std::max)(l.peak_alpha, uint64_t(c.alpha_demand));
   l.peak_opaque = (std::max)(l.peak_opaque, uint64_t(c.cursor + c.opaque_overflow_bytes));
+  l.wide_draws += c.wide_draws; l.wide_alpha += c.wide_alpha; l.wide_dropped += c.wide_dropped;
+  l.peak_wide = (std::max)(l.peak_wide, uint64_t(c.wide_top - c.wide_cursor) + c.wide_dropped_bytes);
   const double mb = 1.0 / (1 << 20);
   if (c.alpha_overflow && !l.first_alpha) {
     l.first_alpha = true;
@@ -2226,6 +2309,13 @@ void rt_capture_stats(const Capture& c) {
         double(l.peak_opaque) * mb, double(c.xfb.size) * mb, double(l.alpha_overflow) / l.frames,
         double(l.opaque_overflow) / l.frames, double(l.drop_indirect) / l.frames, double(l.drop_topo) / l.frames,
         double(l.drop_topo_tris) / l.frames, double(l.strips) / l.frames, double(l.strip_tris) / l.frames);
+    if (g_wide_split)   // rt_capture_wide_split: a sibling line (the line above keeps its format)
+      log_stats("[geo] RT capture stride split, last %llu frames: %u-byte strand-frame draws %.2f per frame (%.2f "
+          "alpha-tested), peak %.1f MB at the top of the alpha region, left out (region full or no split) %.2f per "
+          "frame; all other draws %u bytes per vertex; wide draws kept out of the emissive/water soups %llu",
+          (unsigned long long)l.frames, g_stride, double(l.wide_draws) / l.frames, double(l.wide_alpha) / l.frames,
+          double(l.peak_wide) * mb, double(l.wide_dropped) / l.frames, g_base_stride,
+          (unsigned long long)g_wide_em_skipped.exchange(0));
     l = RtDropLog{};
     l.first_alpha = l.first_opaque = l.first_drop = true;   // only the first occurrence is logged at once
   }
@@ -2247,7 +2337,9 @@ static void em_pass_ubo(VkCommandBuffer cmd, EmPass* e, CmdState* s) {
 static bool water_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args, EmPass* e) {
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
   draw_pipe(s->pipe[0], pi);
-  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
+  // rt_capture_wide_split: the water and emissive soups have one stride (g_base_stride): a wide draw is not captured.
+  if (pipe_wide(pi)) pi.xfb = false, ++g_wide_em_skipped;
+  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_base_stride,
               pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   WaterRange r{};
   const int w = water_draw(cmd, s, args, in, pi.depth_write, &r, &e->water_swap);
@@ -2282,7 +2374,8 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
           pi.em_raster[5], pi.em_raster[6], pi.em_raster[7], pi.em_raster[8], unsigned(pi.em_dynamic));
   }
   em_pass_ubo(cmd, e, s);
-  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
+  if (pipe_wide(pi)) pi.xfb = false, ++g_wide_em_skipped;   // rt_capture_wide_split: see water_pre_draw
+  EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_base_stride,
               pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   VkBuffer soup = VK_NULL_HANDLE;
   VkDeviceSize off = 0, bytes = 0;
@@ -2299,27 +2392,29 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     CpuDetailTimer timer(CpuDetailMaterial);
     bool exact=false,pool_pipeline=false,basis_pipeline=false;InstPipe pool_inst{};
     PipeInfo p{}; uint64_t generation = 0;
+    uint32_t material_stride = g_stride;   // rt_capture_wide_split: this pipeline's VS stride
     if(draw_pipe(s->pipe[0], p, &generation)) {
+      material_stride = pipe_stride(p);
       s->geo_material_no_writes &= p.no_storage_writes;
       struct Eligibility { bool exact=false, pool=false, basis=false; InstPipe inst{}; };
       auto classify = [&] {
         Eligibility value;
       const bool tileset=native_hit::tileset_deferred(s->vs,s->fs);
       native_hit::MaterialPipelineFacts facts;
-      facts.tileset=tileset;facts.tileset_capture=g_tileset_capture;facts.stride=g_stride;
+      facts.tileset=tileset;facts.tileset_capture=g_tileset_capture;facts.stride=material_stride;
       facts.tileset_outputs=p.tileset_outputs;facts.tileset_inputs_valid=p.tileset_material_inputs.valid;facts.vt_outputs=p.vt_outputs;
       facts.xfb=p.xfb;facts.material_state=p.material_state;facts.depth_test=p.depth_test;facts.blend_mask=p.blend_mask;
       facts.color_mask=p.color_mask;facts.triangle_list=p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;facts.uv_ok=p.uv_match==UV_OK;
       value.exact=native_hit::exact_material_pipeline(facts);
       // Class A G-buffer draws feed the pool material records (their meshes are BVH-cached).
       if(p.inst.ok){value.inst=p.inst;value.pool=native_hit::pool::pool_material_pipeline(facts);
-        value.basis=value.pool && p.xfb && p.vt_outputs==1u && g_stride>=64u;}
+        value.basis=value.pool && p.xfb && p.vt_outputs==1u && material_stride>=64u;}
         return value;
       };
       Eligibility value;
       if(cfg_hot(CfgHot::perf_hook_state) || cfg_hot(CfgHot::cpu_opt3)) {
         thread_local perf::GenerationCache<std::array<uint64_t,5>, Eligibility> cache;
-        value = cache.get({uint64_t(s->pipe[0]), s->vs, s->fs, g_stride, uint64_t(g_tileset_capture)},
+        value = cache.get({uint64_t(s->pipe[0]), s->vs, s->fs, material_stride, uint64_t(g_tileset_capture)},
                           generation, classify);
       } else value = classify();
       exact=value.exact;
@@ -2338,10 +2433,10 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
 
     } else s->geo_material_no_writes=false;
     VkBuffer buffer{};VkDeviceSize offset=0,bytes=0;
-    if(pool_inst.ok && native_hit::pool_observe(cmd,s,args,pool_inst,pool_pipeline,basis_pipeline,g_stride,&buffer,&offset,&bytes)){
+    if(pool_inst.ok && native_hit::pool_observe(cmd,s,args,pool_inst,pool_pipeline,basis_pipeline,material_stride,&buffer,&offset,&bytes)){
       p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;return;
     }
-    if(native_hit::deferred_begin(cmd,s,args,exact,g_stride,&buffer,&offset,&bytes)){
+    if(native_hit::deferred_begin(cmd,s,args,exact,material_stride,&buffer,&offset,&bytes)){
       p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;
     }return;
   }
@@ -2400,9 +2495,13 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     }
     prims *= instances;
   } else {
-    prims = (uint64_t((std::max)(cfg_hot(CfgHot::geo_indirect_mb), 1)) << 20) / (3ull * g_stride);
+    prims = (uint64_t((std::max)(cfg_hot(CfgHot::geo_indirect_mb), 1)) << 20) / (3ull * pipe_stride(pi));
   }
-  const uint64_t tri_bytes = 3ull * g_stride;
+  // rt_capture_wide_split: this pipeline's stride; a wide draw goes into the wide region (start_capture).
+  const uint32_t stride = pipe_stride(pi);
+  const bool wide = c->rt && pipe_wide(pi);
+  d.stride = stride;
+  const uint64_t tri_bytes = 3ull * stride;
   if (c->rt && pi.xfb && pi.triangles && prims && kind <= 1) {
     if (c->state_log) {
       ++c->source_draws;
@@ -2426,7 +2525,9 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
            !((pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP || pi.topo == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN) &&
              (kind == 0 || !pi.restart) && cfg_hot(CfgHot::rt_strips)))
     d.skip = 4, ++c->drop_topo, c->drop_topo_tris += prims;
-  else if ((c->readback && c->slots >= c->max_slots) || c->cursor + d.reserved > c->opaque_end) d.skip = 3;
+  // rt_capture_wide_split without the split (its fallback): the legacy soup BLAS has one stride per geometry.
+  else if (wide && !c->split) d.skip = 5, ++c->wide_dropped, c->wide_dropped_bytes += d.reserved;
+  else if (!wide && ((c->readback && c->slots >= c->max_slots) || c->cursor + d.reserved > c->opaque_end)) d.skip = 3;
   bool capture = d.skip == 0 && d.reserved > 0;
   if (c->rt && d.skip == 0 && pi.topo != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) ++c->strips, c->strip_tris += prims;
   // Track D phase 3: an alpha-tested draw (its fragment shader is in the
@@ -2455,7 +2556,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     // Native camera cutouts retain their original projection/Frame packet.
     // Keep the matching positions dynamic, never a separately transformed cache.
     BvhDraw bd{list && pi.inst.ok && (!alpha_fs || (pi.inst.uv_ok && a.kind != 4 && a.kind != 3 && a.kind != 5)) ? &pi.inst : nullptr, s->vs, d.pipe_id, alpha_fs,
-               args, s};
+               args, s, stride};
     uint32_t mesh_tris = 0;
     BvhVerdict v;
     {CpuDetailTimer timer(CpuDetailBvh);v = bvh_classify(cmd, bd, &token, &mesh_tris);}
@@ -2471,10 +2572,31 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // Alpha-tested draws go into the alpha region.
   bool alpha = false;
   uint32_t rec = UINT32_MAX;
-  if (alpha_fs && !audit) {
+  bool wide_left_out = false;
+  if (alpha_fs && !audit && wide) {
+    // rt_capture_wide_split: an alpha-tested wide draw. Its demand counts as alpha (it lives in the alpha region);
+    // full: left out (counted as made opaque in the RT capture line, and as wide dropped), never in the opaque region.
+    CpuDetailTimer timer(CpuDetailAlpha);
+    uint64_t wide_cursor = c->wide_cursor;
+    VkDeviceSize off = 0;
+    if (d.skip == 0) c->alpha_demand += d.reserved;
+    if (d.skip != 0) {
+      wide_left_out = true;   // skip 5 (no split) is counted above; the other skips are not alpha captures
+    } else if (!capture_stride::place_wide(c->alpha_cursor, &wide_cursor,
+                                           capture_stride::wide_reserve(d.reserved, capture_stride::wide_unit(stride, g_ssbo_align)), &off)) {
+      ++c->alpha_overflow, ++c->wide_dropped, c->wide_dropped_bytes += d.reserved;
+      wide_left_out = true;
+    } else if (alpha_add_draw(cmd, a, 0, uint32_t(prims), &rec)) {   // first_tri: legacy lookup only (split here)
+      alpha = true;
+      capture = true;
+      d.offset = off;
+      c->wide_cursor = wide_cursor;
+      ++c->wide_draws, ++c->wide_alpha;
+    }
+  } else if (alpha_fs && !audit) {
     CpuDetailTimer timer(CpuDetailAlpha);
     c->alpha_demand += d.reserved;
-    if (c->alpha_cursor + d.reserved > c->xfb.size) {
+    if (c->alpha_cursor + d.reserved > c->wide_cursor) {
       ++c->alpha_overflow;
       c->alpha_overflow_bytes += d.reserved;
     } else if (alpha_add_draw(cmd, a, uint32_t((c->alpha_cursor - c->alpha_base) / tri_bytes), uint32_t(prims), &rec)) {
@@ -2483,17 +2605,33 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       d.offset = c->alpha_cursor;
     }
   }
-  if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
+  if (wide && !alpha && capture && !wide_left_out) {
+    // rt_capture_wide_split: an opaque wide draw (or an audit, or an alpha draw without a record) in the wide region.
+    if (!(alpha_fs && !audit)) c->alpha_demand += d.reserved;
+    uint64_t wide_cursor = c->wide_cursor;
+    VkDeviceSize off = 0;
+    if (capture_stride::place_wide(c->alpha_cursor, &wide_cursor,
+                                   capture_stride::wide_reserve(d.reserved, capture_stride::wide_unit(stride, g_ssbo_align)), &off)) {
+      d.offset = off;
+      c->wide_cursor = wide_cursor;
+      ++c->wide_draws;
+    } else {
+      capture = false;
+      ++c->opaque_overflow, ++c->wide_dropped, c->wide_dropped_bytes += d.reserved;
+    }
+  }
+  if (wide_left_out) capture = false;
+  if (c->rt && !alpha && !wide && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
   if(c->rt && g_tileset_capture && cfg_hot(CfgHot::rt_native_tileset) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
   uint32_t materialRecord=UINT32_MAX;
   if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST){
     CpuDetailTimer timer(CpuDetailOpaqueMaterial);
-    materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,g_stride,uint32_t(prims));
+    materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,stride,uint32_t(prims));
   }
   if (token != UINT32_MAX) {
     CpuDetailTimer timer(CpuDetailBvhRecord);
-    if (capture) bvh_captured(token, d.offset, uint32_t(prims), alpha, alpha ? rec : UINT32_MAX,materialRecord);
+    if (capture) bvh_captured(token, d.offset, uint32_t(prims), alpha, alpha ? rec : UINT32_MAX,materialRecord,stride);
     else bvh_note_skipped(token);
   }
   if (capture && c->rt) {
@@ -2507,14 +2645,14 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if (capture) {
     if(c->rt && alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST){
       CpuDetailTimer timer(CpuDetailAlphaMaterial);
-      native_hit::note_prepass(cmd,s,args,rec,d.offset,g_stride,uint32_t(prims));
+      native_hit::note_prepass(cmd,s,args,rec,d.offset,stride,uint32_t(prims));
     }
     CpuDetailTimer timer(CpuDetailXfbCommands);
     VkDeviceSize off = d.offset, size = d.reserved;
     p_bind_xfb(cmd, 0, 1, &c->xfb.b, &off, &size);
     p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
     c->xfb_active = true;
-    (alpha ? c->alpha_cursor : c->cursor) += d.reserved;
+    if (!wide) (alpha ? c->alpha_cursor : c->cursor) += d.reserved;   // a wide draw moved wide_cursor above
   }
   if (capture && c->readback) {
     d.slot = int32_t(c->slots);
@@ -2559,8 +2697,8 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
   if (geo_is(s, GeoKind::Em)) {
     auto* e = geo_empass(s);
     s->geo = {};
-    if (e && e->em) em_pass_done(cmd, s, e->ubo, e->ubo_off, g_stride, e->ranges, e->ts);
-    if (e && e->water) water_pass_done(cmd, e->ubo, e->ubo_off, g_stride, e->water_ranges, e->draws, e->water_draws);
+    if (e && e->em) em_pass_done(cmd, s, e->ubo, e->ubo_off, g_base_stride, e->ranges, e->ts);
+    if (e && e->water) water_pass_done(cmd, e->ubo, e->ubo_off, g_base_stride, e->water_ranges, e->draws, e->water_draws);
     delete e;
     return;
   }
@@ -2608,8 +2746,12 @@ void geo_pass_after(VkCommandBuffer cmd, CmdState* s) {
       rc.opaque_bytes = c->cursor;
       rc.alpha_base = c->alpha_base;
       rc.alpha_bytes = c->alpha_cursor - c->alpha_base;
-      rc.stride = g_stride;
+      rc.stride = g_base_stride;   // == g_stride without rt_capture_wide_split
       rc.alpha_region = c->alpha_base < c->xfb.size;
+      // rt_capture_wide_split: the wide draws' region [wide_cursor, xfb.size), g_stride bytes per vertex.
+      rc.wide_base = c->wide_cursor;
+      rc.wide_bytes = c->wide_top - c->wide_cursor;
+      rc.wide_stride = rc.wide_bytes ? g_stride : 0u;
       rc.ubo = c->rt_ubo;
       rc.ubo_offset = c->rt_ubo_off;
       rc.signature = c->sig;
@@ -2689,8 +2831,9 @@ int geo_cascade_soup(uint64_t frame, CascadeSoup* out) {
   const Capture& c = g_ccap[frame % 3];
   if (m.frame != frame || !m.tris || !c.xfb.b) return 1;
   if (bvh_rec_state(m.rec) != 1) return 2;   // its conversion has not run (yet) or never will
-  *out = CascadeSoup{c.xfb.b, m.tris, g_stride, m.has_origin, {m.origin[0], m.origin[1], m.origin[2]}, m.sig,
+  *out = CascadeSoup{c.xfb.b, m.tris, g_base_stride, m.has_origin, {m.origin[0], m.origin[1], m.origin[2]}, m.sig,
                      m.rec, c.cmd};
+  out->wide_tris = m.wide_tris; out->wide_off = m.wide_off; out->wide_stride = m.wide_tris ? g_stride : 0u;
   return 0;
 }
 
@@ -2838,7 +2981,7 @@ bool geo_native_tileset_inputs(VkPipeline pipeline,uint32_t subtype) {
 }
 bool geo_native_tileset_material_inputs(VkPipeline pipeline,native_hit::TilesetInputs* out) {
  if(!out)return false;*out={};std::lock_guard lock(g_mu);auto p=g_pipes.find(pipeline);
- if(!g_tileset_capture || g_stride<80u || !native_hit::enabled() || p==g_pipes.end())return false;
+ if(!g_tileset_capture || !native_hit::enabled() || p==g_pipes.end() || pipe_stride(p->second)<80u)return false;
  const auto& info=p->second;
  if(!info.xfb || info.uv!=1 || !info.tileset_material_inputs.valid)return false;
  if((info.tileset_family==1u && info.tileset_outputs!=1u) ||
