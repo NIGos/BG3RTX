@@ -283,11 +283,14 @@ bool as_handle(VkDeviceSize size, int ci, VkDeviceSize off, AsAlloc& out) {
 // Bytes of BLAS (arena != 0: per-draw, groom, cascade, sun) and pool requests of the frame's other users refused
 // since the last present: part of their demand (rt_mesh_budget_own headroom, common/rt_capture_budget.h DemandPeak).
 VkDeviceSize g_as_refused = 0, g_pool_refused = 0;
+// BLAS requests of the frame's other users (arena != 0) refused since the last mesh cache line (rt_as_cap_occupied gate).
+uint64_t g_as_refusals = 0;
 bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint32_t arena, const char* capped_what);
+VkDeviceSize as_bytes();   // live + pending bytes of every chunk (rt_as_cap_occupied)
 bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr, uint32_t arena = 0,
                const char* capped_what = "BLAS chunk for an unguarded build (over the chunks' cap)") {
   const bool ok = as_create_raw(size, out, guard_what, arena, capped_what);
-  if (!ok && arena != 0) g_as_refused += size;
+  if (!ok && arena != 0) { g_as_refused += size; ++g_as_refusals; }
   return ok;
 }
 bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint32_t arena, const char* capped_what) {
@@ -300,26 +303,34 @@ bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint
   const uint32_t allocation_arena = cfg_int("rt_vram_compact", 0) ? arena : UINT32_MAX;
   int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena);
   if (ci < 0) {
-    VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
+    const VkDeviceSize base = VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20;
+    const VkDeviceSize cs = (std::max)(base, size);
+    const VkDeviceSize cap = vram_cap(vram_guard::kAsChunks, UINT64_MAX);
     // Retained empty chunks (rt_as_chunk_reuse_frames) too small for this range must not count against
     // the chunks' share: free them before the cap check, as the sweep would have without retention.
-    if (vram_guard_on() && as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX))
+    if (vram_guard_on() && as_reserved() + cs > cap)
       for (AsChunk& c : g_chunks)
         if (c.buf.b && c.ra.reclaimable() && c.ra.empty_since) {
           ++g_chunks_freed;g_chunk_bytes_freed += c.buf.size;
           free_buf(c.buf);c.ra = as_chunks::ChunkRanges{};
         }
+    // rt_as_cap_occupied (as_chunks::chunk_within_cap): a chunk larger than a base chunk may pass the reserved cap
+    // while the occupied bytes stay within it (it cannot use the free space inside base chunks), up to the cap + 25%.
+    const bool within_reserved = as_chunks::chunk_within_cap(as_reserved(), as_bytes(), cs, base, cap, false);
+    const bool within = within_reserved ||
+        as_chunks::chunk_within_cap(as_reserved(), as_bytes(), cs, base, cap, cfg_int("rt_as_cap_occupied", 0) != 0);
     if (guard_what && vram_guard_on() &&
-        !vram_allow(vram_guard::kAsChunks, cs, guard_what,
-                    as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX)))   // over the budget's share
+        !vram_allow(vram_guard::kAsChunks, cs, guard_what, !within))   // over the budget's share
       return false;
     // Unguarded callers (cascade BLAS, compaction copies) ignore Low but never pass the cap: refused, logged as
-    // over the cap (vram_allow with over_cap refuses without touching the guard's grants).
-    if (!guard_what && vram_guard_on() &&
-        !as_chunks::unguarded_chunk_ok(as_reserved(), cs, vram_cap(vram_guard::kAsChunks, UINT64_MAX))) {
+    // over the cap (vram_allow with over_cap refuses without touching the guard's grants). Past the reserved cap
+    // (rt_as_cap_occupied) they also pass the guard's ordinary check, Low included.
+    if (!guard_what && vram_guard_on() && !within) {
       vram_allow(vram_guard::kAsChunks, cs, capped_what, true);
       return false;
     }
+    if (!guard_what && vram_guard_on() && !within_reserved && !vram_allow(vram_guard::kAsChunks, cs, capped_what, false))
+      return false;
     AsChunk c;
     if (!make_buf(c.buf, cs, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false, "BLAS chunk (mesh/per-draw BLAS)"))
       return false;
@@ -4755,7 +4766,8 @@ void bvh_on_present() {
       "pool repacks %llu (-%.1f MB); budget (rt_mesh_budget_own=%d): charged %.1f / %.0f MB (pool %.1f, "
       "cached-mesh BLAS %.1f, other BLAS %.1f), %llu draws declined; headroom: pool share %.1f MB (others' peak %.1f), "
       "BLAS share %.1f MB (others' peak %.1f), %llu draws outside the shares, %llu meshes evicted for them; "
-      "%llu hair draws left out (bounds did not fit the pool)",
+      "%llu hair draws left out (bounds did not fit the pool); %llu BLAS requests of the other users refused "
+      "(rt_as_cap_occupied=%d, reserved %.1f MB, occupied %.1f MB, cap %.1f MB)",
       g_meshes.size(), size_t(ready), double(mesh_tris) * 1e-6, double(g_pool_ra.used) / 1048576.0,
       double(g_pool.size) / 1048576.0, double(as_bytes()) / 1048576.0, chunks, (unsigned long long)s.new_meshes,
       s.new_tris * 1e-6, (unsigned long long)s.budget_deferred, (unsigned long long)s.ready,
@@ -4777,7 +4789,11 @@ void bvh_on_present() {
       double(g_pool_other_peak.peak()) / 1048576.0,
       g_cache_as_share == UINT64_MAX ? -1.0 : double(g_cache_as_share) / 1048576.0,
       double(g_as_other_peak.peak()) / 1048576.0, (unsigned long long)s.share_declined,
-      (unsigned long long)s.share_evicted, (unsigned long long)s.hair_bounds_left_out);
+      (unsigned long long)s.share_evicted, (unsigned long long)s.hair_bounds_left_out,
+      (unsigned long long)g_as_refusals, cfg_int("rt_as_cap_occupied", 0) != 0 ? 1 : 0,
+      double(as_reserved()) / 1048576.0, double(as_bytes()) / 1048576.0,
+      vram_guard_on() ? double(vram_cap(vram_guard::kAsChunks, UINT64_MAX)) / 1048576.0 : -1.0);
+  g_as_refusals = 0;
   g_chunks_freed = g_chunk_bytes_freed = 0;
   log_stats("[bvh] instance matrices read at submit: %llu, non-finite/singular %llu; draws whose instance data changed "
       "between record and submit %llu; recorded but never submitted %llu",

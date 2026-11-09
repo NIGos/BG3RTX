@@ -704,6 +704,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_capture_elastic", "1"},
     {"rt_capture_rise_reserve", "1"},
     {"rt_as_chunk_reuse_frames", "120"},
+    {"rt_as_cap_occupied", "0"},
     {"rt_shadows", "1"},
     {"contact_shadows", "1"},
     {"rt_strength", "1.0"},

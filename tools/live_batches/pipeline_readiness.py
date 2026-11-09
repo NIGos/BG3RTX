@@ -122,6 +122,8 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     # Mesh cache budget accounting (common/rt_capture_budget.h mesh_cache_charged_as, read per build/present in
     # layer/bvhsplit.cpp): which bytes rt_mesh_budget_mb charges. Host policy only, no pipeline.
     "rt_mesh_budget_own "
+    # BLAS chunk cap by occupancy (common/as_chunk_alloc.h chunk_within_cap, layer/bvhsplit.cpp as_create): host only.
+    "rt_as_cap_occupied "
     # Startup-only capture layout (common/capture_stride.h): set at launch, never toggled in a run; no core pipeline.
     "rt_capture_wide_split".split())
 for key in NO_PIPELINE:

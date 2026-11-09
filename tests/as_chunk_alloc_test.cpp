@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <vector>
 using namespace bg3::as_chunks;
 static unsigned checks;
 static void check(bool ok, int line) {
@@ -54,6 +55,60 @@ static MotionResult motion(bool separate) {
   }
   return result;
 }
+// rv3 191231 key off (S8 zoomed-out turns, 19:15:01-14): 4189 MB reserved in 50 chunks, 1237 MB live, 0 empty, the
+// guard cap about 4013-4189 MB; refused per window 290-575, all larger than a 64 MB chunk: the cascade casters'
+// BLAS (64-136 MB, rebuilt into a new range almost every frame) and grooms (72-136 MB). Replay: 48 base chunks of
+// 64 MB holding 26 MB live each (per-draw and cached BLAS, sparse after the turns), cap 4013 MB, a cascade rebuild
+// every frame (64-136 MB), a groom rebuild every 10 frames (72-136 MB), ranges retired after 6 frames, empty
+// chunks retained 120 frames. Key off: the reserved cap; on: rt_as_cap_occupied (chunk_within_cap).
+struct FragResult { unsigned refused, created; uint64_t peak; };
+static FragResult fragmentation(bool occupied_cap) {
+  constexpr uint64_t MB = 1ull << 20, base = 64 * MB, cap = 4013 * MB;
+  struct Pending { uint64_t frame; int chunk; uint64_t off, size; };
+  std::vector<Chunk> cs;
+  std::vector<Pending> pending;
+  for (int i = 0; i < 48; ++i) {
+    Chunk c; c.ra.init(base); c.ra.arena = 1; uint64_t o = 0; c.ra.alloc(26 * MB, 256, &o); cs.push_back(c);
+  }
+  FragResult r{0, 0, 0};
+  auto reserved = [&] { uint64_t n = 0; for (const auto& c : cs) n += c.ra.cap; return n; };
+  auto occupied = [&] { uint64_t n = 0; for (const auto& c : cs) n += c.ra.used; return n; };
+  // as_create (layer/bvhsplit.cpp) on a CPU model: -1 when refused.
+  auto create = [&](uint64_t size, uint32_t arena, uint64_t* off) {
+    int ci = allocate_fullest(cs, size, 256, off, -1, arena);
+    const uint64_t chunk = size > base ? size : base;
+    if (ci >= 0) return ci;
+    if (reserved() + chunk > cap)
+      for (auto& c : cs) if (c.ra.cap && c.ra.reclaimable() && c.ra.empty_since) c.ra = {};
+    if (!chunk_within_cap(reserved(), occupied(), chunk, base, cap, occupied_cap)) { ++r.refused; return -1; }
+    Chunk c; c.ra.init(chunk); c.ra.arena = arena; c.ra.alloc(size, 256, off);
+    ++r.created;
+    for (size_t i = 0; i < cs.size(); ++i) if (!cs[i].ra.cap) { cs[i] = c; return int(i); }
+    cs.push_back(c);
+    return int(cs.size() - 1);
+  };
+  int casc = -1, groom = -1;
+  uint64_t casc_off = 0, casc_size = 0, groom_off = 0, groom_size = 0;
+  for (uint64_t frame = 1; frame <= 600; ++frame) {
+    for (auto it = pending.begin(); it != pending.end();) {
+      if (!retired(it->frame, frame, frame - 2, frame - 1)) { ++it; continue; }
+      cs[it->chunk].ra.release(it->off, it->size); it = pending.erase(it);
+    }
+    for (auto& c : cs) if (c.ra.cap && c.ra.reclaimable() && !keep_empty_chunk(c.ra, frame, 120, false)) c.ra = {};
+    auto rebuild = [&](int& ci, uint64_t& off, uint64_t& size, uint64_t want, uint32_t arena) {
+      if (ci >= 0) { cs[ci].ra.mark_pending(size); pending.push_back({frame, ci, off, size}); ci = -1; }
+      size = want;
+      const unsigned before = r.refused;
+      ci = create(want, arena, &off);
+      if (frame <= 120) r.refused = before;   // warm-up
+    };
+    rebuild(casc, casc_off, casc_size, (64 + frame * 37 % 73) * MB, 2);
+    if (frame % 10 == 0) rebuild(groom, groom_off, groom_size, (72 + frame * 13 % 65) * MB, 1);
+    r.peak = (std::max)(r.peak, reserved());
+  }
+  return r;
+}
+
 int main() {
   uint64_t off = 0;
   // Live ownership ends immediately, but occupied bytes survive all pending
@@ -246,6 +301,27 @@ int main() {
     CHECK(unguarded_chunk_ok(cap - chunk_mb, chunk_mb, cap) && !unguarded_chunk_ok(cap - chunk_mb + 1, chunk_mb, cap));
     CHECK(!unguarded_chunk_ok(0, cap + 1, cap));
     CHECK(unguarded_chunk_ok(1ull << 40, 64 * MB, UINT64_MAX));
+  }
+  {
+    constexpr uint64_t MB = 1ull << 20;
+    const FragResult old = fragmentation(false), occ = fragmentation(true);
+    std::printf("rv3 fragmentation: refused key off %u / on %u (frames 121-600); chunks created %u / %u; peak reserve "
+                "%.0f / %.0f MB of a 4013 MB cap\n", old.refused, occ.refused, old.created, occ.created,
+                double(old.peak) / MB, double(occ.peak) / MB);
+    std::fflush(stdout);
+    CHECK(old.refused > 0);
+    CHECK(occ.refused == 0 && occ.peak <= 4013 * MB + 4013 * MB / 4);
+    // chunk_within_cap: without the key exactly unguarded_chunk_ok; with it only an oversized chunk may pass the
+    // reserved cap, while the occupied bytes plus it stay within the cap and the reserve within cap + 25%.
+    const uint64_t cap = 4013 * MB;
+    for (uint64_t res : {uint64_t(0), 3000 * MB, 3885 * MB, 3886 * MB, 4189 * MB})
+      for (uint64_t ch : {64 * MB, 128 * MB})
+        CHECK(chunk_within_cap(res, 0, ch, 64 * MB, cap, false) == unguarded_chunk_ok(res, ch, cap));
+    CHECK(chunk_within_cap(4189 * MB, 1300 * MB, 128 * MB, 64 * MB, cap, true));
+    CHECK(!chunk_within_cap(4189 * MB, 1300 * MB, 64 * MB, 64 * MB, cap, true));       // base chunks: unchanged
+    CHECK(!chunk_within_cap(4189 * MB, 3900 * MB, 128 * MB, 64 * MB, cap, true));      // occupied over the cap
+    CHECK(!chunk_within_cap(4900 * MB, 1300 * MB, 128 * MB, 64 * MB, cap, true));      // past cap + 25%
+    CHECK(chunk_within_cap(1ull << 40, 0, 128 * MB, 64 * MB, UINT64_MAX, false));     // guard off: unchanged
   }
   std::printf("AS chunk allocator: %u checks passed\n", checks);
 }

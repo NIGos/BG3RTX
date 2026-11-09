@@ -51,6 +51,13 @@
    "omm_increment4": "with claude/scene-handout-4: the handout line reports 'OMM accelerated commits' > 0 and 'downgraded 0' in the steady ON windows (the lighting still records when the commit registers its tickets); RT GPU ms of the ON windows equal to OFF within noise (increment 3 alone: OMM off under the handout)",
    "hit_materials": "On (real Ultra, increment 4b): the handout line reports 'hit material queries at the commit' about one per frame, 'failed' 0 and fallbacks query 0, camera 0 in the steady ON windows; the hit-material counters ('[hit material query]' with rt_stats in check-on) as in check-off; if the G-buffer command buffer is not a one-time recording every commit query fails: then fallbacks query = frames (a decisive failure of increment 4b, not of the handout)",
    "written_4b": "2026-11-09, claude/scene-handout-4b, before any sh2 run: the job switched to the real Ultra preset"
+  },
+  "rv5-s8-blas-cap-occupied": {
+   "written": "2026-11-09, claude/blas-frag, before any rv5 run",
+   "refusals_on": "0 BLAS requests of the other users refused in every ON mesh cache line (OFF: the guard window line shows 290-575 per window in the turns, rv3 191231)",
+   "reserved_on": "BLAS chunks reserved up to about cap + 6% (CTest replay: 4233 MB at a 4013 MB cap), never past cap + 25%; occupied (live + pending) at most the cap",
+   "cascade_on": "no '[vram] guard: refused BLAS chunks ... cascade casters (left out this frame)' line in the ON windows; cascade buffer full 0.0 in every window (unchanged)",
+   "unchanged": "scene builds 120 per 120 frames, 0 skipped, capture and stride-split gates in every window; GPU ms within the OFF spread (placement only)"
   }
  }
 }
