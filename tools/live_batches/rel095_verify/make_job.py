@@ -85,7 +85,7 @@ job = {
     "live_batch": "rel095-verify",
     "tree": ".claude/worktrees/test-main",
     "window_mode": "visible_unfocused_fg",
-    "fail_fast": True,
+    "fail_fast": False,  # rv4 12:09: the S8 view overflows the 2047 MB capture even with the yield (2065 MB demand); measure every window
     "stop_on_dump": False,
     "set": SET,
     "args": ["-RealPresent", "-Move", "-MovePlan", PLAN],
