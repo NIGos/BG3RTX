@@ -91,6 +91,15 @@ inline bool keep_empty_chunk(ChunkRanges& r, uint64_t now, uint64_t frames, bool
   return now - r.empty_since < frames;
 }
 
+// A new chunk for a caller rt_vram_guard does not ask (the cascade casters' BLAS, compaction copies of cached
+// meshes and grooms): allowed only while the chunks stay within their cap for the budget (vram_guard::cap,
+// UINT64_MAX with the guard off: unchanged). The guarded callers already stop at that cap, so the reserve
+// can no longer pass it. User log 2026-11-09 08:02:05: 8196 MB in 91 chunks (15 MB live, 0 empty) against a
+// cap of about 3.9 GB while the guard refused 64640 guarded requests; only these callers could add them.
+inline bool unguarded_chunk_ok(uint64_t reserved, uint64_t chunk_bytes, uint64_t cap) {
+  return chunk_bytes <= cap && reserved <= cap - chunk_bytes;
+}
+
 // Pending ranges cannot be reused based on elapsed presents alone. The fence
 // AND the oldest potentially referenced scene slot must have retired.
 inline bool retired(uint64_t frame, uint64_t now, uint64_t gpu_done, uint64_t oldest_live) {

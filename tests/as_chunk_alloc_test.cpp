@@ -209,5 +209,43 @@ int main() {
   CHECK(mixed.reserved > separated.reserved);
   CHECK(mixed.occupied == separated.occupied && mixed.live == separated.live);
   CHECK(separated.peak == 448 * (1ull << 20));
+  // User log 2026-11-09: retirement stalled (every freed range stays pending), the guard refused every guarded
+  // chunk, and the cascade casters' BLAS (an unguarded caller) took a new chunk at each rebuild: 8196 MB in 91
+  // chunks against a cap of about 3.9 GB. Replay: a 90 MB cascade BLAS rebuilt each frame for 120 frames,
+  // its previous range never retired, cap 3904 MB (budget 30392 MB). Without the cap check the reserve grows
+  // without bound; with it, it stops at the cap and later rebuilds are refused.
+  {
+    constexpr uint64_t MB = 1ull << 20, cap = 3904 * MB, chunk_mb = 64 * MB, casc = 90 * MB;
+    auto replay = [&](bool capped, unsigned& refused) {
+      std::vector<Chunk> chunks;
+      uint64_t reserved = 0;
+      refused = 0;
+      for (unsigned frame = 0; frame < 120; ++frame) {
+        uint64_t off = 0;
+        if (allocate_fullest(chunks, casc, 256, &off, -1, 2) >= 0) continue;
+        const uint64_t cs = casc > chunk_mb ? casc : chunk_mb;
+        if (capped && !unguarded_chunk_ok(reserved, cs, cap)) { ++refused; continue; }
+        Chunk c;
+        c.ra.init(cs);
+        c.ra.arena = 2;
+        CHECK(c.ra.alloc(casc, 256, &off));
+        c.ra.mark_pending(casc);   // replaced next frame, never retired (the stall)
+        chunks.push_back(c);
+        reserved += cs;
+      }
+      return reserved;
+    };
+    unsigned refused_off = 0, refused_on = 0;
+    const uint64_t uncapped = replay(false, refused_off), capped = replay(true, refused_on);
+    std::printf("Stalled retirement: unguarded reserve %.0f MB uncapped, %.0f MB capped (%u rebuilds refused)\n",
+                double(uncapped) / MB, double(capped) / MB, refused_on);
+    CHECK(uncapped == 120 * casc && refused_off == 0);
+    CHECK(capped <= cap && capped + casc > cap && refused_on == 120 - unsigned(capped / casc));
+    // Edges: exactly at the cap fits, one byte over does not, a chunk larger than the cap never fits,
+    // and the guard off (cap UINT64_MAX) is unchanged.
+    CHECK(unguarded_chunk_ok(cap - chunk_mb, chunk_mb, cap) && !unguarded_chunk_ok(cap - chunk_mb + 1, chunk_mb, cap));
+    CHECK(!unguarded_chunk_ok(0, cap + 1, cap));
+    CHECK(unguarded_chunk_ok(1ull << 40, 64 * MB, UINT64_MAX));
+  }
   std::printf("AS chunk allocator: %u checks passed\n", checks);
 }
