@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace bg3::capture_budget {
@@ -29,6 +30,40 @@ inline bool mesh_cache_admit(uint64_t pool,uint64_t acceleration,uint64_t vertic
     pool>budget || acceleration>budget-pool)return false;
  const uint64_t free=budget-pool-acceleration;
  return vertices<=free && blas<=free-vertices;
+}
+// rt_mesh_budget_own (claude/mesh-cache-rate, 2026-11-09, default 0, live): the BLAS bytes that the mesh
+// cache's rt_mesh_budget_mb charges, in mesh_cache_admit and in the LRU pass (layer/bvhsplit.cpp).
+// 0 (old): every byte of the shared BLAS chunks, so also the per-draw, cascade, sun and groom BLAS and pending
+// ranges. In the zoomed-out S8 turns (rv2 2026-11-09 14:57-14:59) the whole pool plus all BLAS was 2.5-3.8 GB
+// against 2048 MB: every new mesh was declined (about 250 draws per build) and every mesh not drawn in the
+// last 8 frames was evicted each frame (35-60 meshes left). The declined draws then stay captured with their
+// own uncompacted BLAS, which keeps the total over the budget: a loop that only a quiet view breaks.
+// 1: only the cached meshes' own BLAS. The whole pool stays charged (shared and hard-capped, with mandatory
+// users: hair bounds, holds, bases; pending ranges included), so the pool limits of the 2026-11-03 load fix
+// are unchanged. Other BLAS chunks stay under the VRAM guard's chunk cap and its mesh LRU ask.
+inline uint64_t mesh_cache_charged_as(uint64_t all_as,uint64_t cached_as,bool own){
+ return own?(std::min)(cached_as,all_as):all_as;
+}
+// When the LRU pass runs (on present): above the budget, every 600 frames (meshes unused for lru_frames), and
+// with rt_mesh_budget_own also after a build declined a mesh for the budget. Admission refuses AT the budget while
+// the old pass ran only ABOVE it, so a cache filled to the budget kept its stale meshes and new ones stayed
+// captured (rv2 15:00:39-51: pool + all BLAS 2044-2047 of 2048 MB, about 15 draws declined per build).
+inline bool mesh_cache_lru_due(uint64_t charged,uint64_t budget,bool declined,bool own,uint64_t now){
+ return charged>budget || now%600==0 || (own && declined);
+}
+// The LRU pass over the budget (layer/bvhsplit.cpp): `old` are the meshes not drawn in the last 8 frames,
+// oldest first, each with its last use and its bytes (pool vertices + BLAS). Returns how many to evict from
+// the front: while the charged bytes are above 90% of the budget, or the mesh is unused for lru_frames.
+struct LruMesh{uint64_t last_used,bytes;};
+template<class Seq>
+inline size_t mesh_cache_lru_count(const Seq& old,uint64_t charged,uint64_t budget,uint64_t lru_frames,uint64_t now){
+ size_t n=0;
+ for(const LruMesh& m:old){
+  if(charged<=budget*9/10 && m.last_used+lru_frames>now)break;
+  charged-=(std::min)(charged,m.bytes);
+  ++n;
+ }
+ return n;
 }
 // The cascade capture after a frame that overflowed: its demand (captured + left-out bytes) + 25%, in
 // 16 MB steps, under the same 2047 MB / device-range cap; never below `current`.

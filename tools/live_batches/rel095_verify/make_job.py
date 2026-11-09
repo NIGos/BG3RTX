@@ -12,6 +12,8 @@ each vertex shader module, fixed when the game creates it), so rv2 runs the same
 the key on from launch; the key-off baseline is rv1 (same save, view and turns: 1-8 opaque draws per
 frame dropped at about 2065 MB demand, rv1 12:13 and 12:53). Gates in EVERY checked window: 0 opaque
 draws dropped, 0 alpha draws made opaque, 0 wide draws left out, 0 cascade casters left out.
+rv3 (rt_mesh_budget_own, claude/mesh-cache-rate): the same view and turns with release defaults, the live key
+0 / 1 / 0 in one run (two ON turn pairs: fill, then steady state).
 Generate: py -3 tools/live_batches/rel095_verify/make_job.py
 """
 import copy
@@ -178,8 +180,95 @@ job2["expect_every"] = [
 ] + [e for e in job["expect_every"] if e["name"].startswith(("scene wait", "strand resolve", "memory accounting"))]
 job2["live_flow"] = dict(job["live_flow"], startup_only=["rt_capture_wide_split"])
 
+# rv3 (rt_mesh_budget_own, claude/mesh-cache-rate, 2026-11-09): the rv1/rv2 view and turns with release defaults
+# (wide split and rise reserve on), toggling the live key 0 / 1 / 0. Key off, pool + every BLAS byte was 2.5-3.8 GB
+# against the 2048 MB mesh cache budget in the turns (rv2 14:57-14:59): 35-60 cached meshes, about 250 static draws
+# per build declined and captured, 4.0-6.2M captured triangles. Two ON turn pairs: the first fills the cache, the
+# second is the steady state. Same-run A/B only: observables in predicted.json.
+PLAN3 = "tools/live_batches/rel095_verify/plans/rv3_s8.json"
+SET3 = SET.replace("rt_capture_rise_reserve=0", "rt_capture_rise_reserve=1") + ",rt_capture_wide_split=1,rt_mesh_budget_own=0"
+
+
+def phase3(label, seconds, own, kind="static", direction=0, wheel=None, hold=1, trace=None):
+    p = phase(label, seconds, (0, 1), kind, direction, wheel, hold, trace)
+    p["set"] = f"rt_mesh_budget_own={own},qa_exposure_hold={hold}"
+    return p
+
+
+plan3 = [
+    phase3("warmup", 20, 0, hold=0),
+    phase3("warm-on", 6, 1, hold=0),
+    phase3("lower", 8, 0, wheel=10, hold=0),
+    phase3("turn-off-a-r", 20, 0, "rotate", 1),
+    phase3("turn-off-a-l", 20, 0, "rotate", -1),
+    phase3("static-off-a", 15, 0, trace=12),
+    phase3("turn-on-r", 20, 1, "rotate", 1),
+    phase3("turn-on-l", 20, 1, "rotate", -1),
+    phase3("turn-on2-r", 20, 1, "rotate", 1),
+    phase3("turn-on2-l", 20, 1, "rotate", -1),
+    phase3("static-on", 15, 1, trace=12),
+    phase3("turn-off-b-r", 20, 0, "rotate", 1),
+    phase3("turn-off-b-l", 20, 0, "rotate", -1),
+    phase3("static-off-b", 15, 0),
+    phase3("restore", 2, 0, hold=0),
+]
+ON3 = ["turn-on-r", "turn-on-l", "turn-on2-r", "turn-on2-l", "static-on"]
+OFF3 = ["turn-off-a-r", "turn-off-a-l", "static-off-a", "turn-off-b-r", "turn-off-b-l", "static-off-b"]
+CHECKED3 = OFF3[:3] + ON3 + OFF3[3:]
+CACHE_LINE = "\\[bvh\\] mesh cache: \\d+ meshes"
+job3 = copy.deepcopy(job2)
+job3.update({
+    "name": "rv3-s8-mesh-cache-budget",
+    "set": SET3,
+    "args": ["-RealPresent", "-Move", "-MovePlan", PLAN3],
+    "fail_fast": True,  # every gate below must hold key off as well (rv2 passed them key off)
+    "estimated_phase_seconds": sum(p["seconds"] for p in plan3),
+    "purpose": "rt_mesh_budget_own 0 / 1 / 0 in the rv1 S8 lowered view and turns (release defaults): with the key "
+               "the mesh cache keeps the static meshes of the turn (about 300-550 meshes instead of 35-60), captured "
+               "triangles per build fall from 4.0-6.2M to about 1.8-2.6M, BLAS builds/refits GPU median in motion from "
+               "2.4-4.3 ms to about 1.0-2.0 ms (p99 7-13 -> 3-6 ms); capture, cascade, cache correctness and scene "
+               "wait gates hold in every window.",
+})
+job3["patterns"] = job2["patterns"] + ["\\[bvh\\] last \\d+ builds", "\\[rt\\] scene build GPU"]
+job3["expect"] = job["expect"] + [
+    STRIDE_LINE,
+    "\\[bvh\\] last \\d+ builds, per build:",
+    "\\[bvh\\] mesh cache: .*budget \\(rt_mesh_budget_own=1\\): charged",
+]
+job3["forbid"] = job2["forbid"] + ["\\[bvh\\] allocation failed"]
+job3["expect_every"] = [
+    every("key state: the mesh cache line reports rt_mesh_budget_own=1 in the ON windows", CACHE_LINE,
+          "budget \\(rt_mesh_budget_own=1\\)", ON3),
+    every("key state: the mesh cache line reports rt_mesh_budget_own=0 in the OFF windows", CACHE_LINE,
+          "budget \\(rt_mesh_budget_own=0\\)", OFF3),
+    every("cache correctness: no instance or audit mismatch in every window", CACHE_LINE,
+          "rejected \\d+/0/0 ", CHECKED3),
+    every("capacity: cascade casters never left out (buffer full 0.0) in every window",
+          "\\[cascade\\] casters: cascade \\d+, \\d+ frames;", ", buffer full 0\\.0, added ", CHECKED3),
+    every("capacity: RT capture drops no opaque draw in every window",
+          "\\[geo\\] RT capture, last \\d+ frames:", "opaque draws dropped \\(buffer full\\) 0\\.00,", CHECKED3),
+    every("capacity: no alpha draw made opaque in every window",
+          "\\[geo\\] RT capture, last \\d+ frames:", "made opaque \\(region full\\) 0\\.00,", CHECKED3),
+    every("stride split: no wide (88-byte) draw left out in every window", STRIDE_LINE,
+          "left out \\(region full or no split\\) 0\\.00 per frame", CHECKED3),
+    every("scene wait: 0 timeouts in every window", "\\[rt\\] scene wait: \\d+ frames",
+          "got this frame's scene, 0 timeouts", CHECKED3),
+    every("strand resolve: 0 fallbacks wherever strand hair is resolved",
+          r"\[rrpost\] strand resolve \(rr_hair_strand_aa=2\):", ", 0 fell back", CHECKED3, when_present=True, min=0),
+    every("memory accounting in every window", "\\[mem\\] ours \\(", "cascade capture \\d+ MB", CHECKED3),
+]
+job3["expect_runner"] = [
+    "\\[window-mode\\].*visible_unfocused",
+    "\\[wheel-input\\] phase=2 notches=10\\b",
+    "\\[motion-trace\\] phase=5 label=static-off-a repeat=0",
+    "\\[motion-trace\\] phase=10 label=static-on repeat=0",
+    f"\\[motion-plan\\] complete phases={len(plan3)}\\b",
+    "^Run ended: done",
+]
+
 (HERE / "plans" / "rv1_s8.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
 (HERE / "plans" / "rv2_s8.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
-for j in (job, job2):
+(HERE / "plans" / "rv3_s8.json").write_text(json.dumps(plan3, indent=1) + "\n", encoding="utf-8")
+for j in (job, job2, job3):
     (HERE / "jobs" / f"{j['name']}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
-    print(f"{j['name']}: {len(plan)} phases, {j['estimated_phase_seconds']} s")
+    print(f"{j['name']}: {len(plan3 if j is job3 else plan)} phases, {j['estimated_phase_seconds']} s")
