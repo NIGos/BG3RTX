@@ -10,6 +10,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 PS = shutil.which('powershell.exe') if os.name == 'nt' else None
+# Windows PowerShell 5.1 started below a PowerShell 7 parent inherits its PSModulePath and then cannot
+# autoload its own modules (Get-FileHash not found). Drop it: 5.1 rebuilds its default path.
+CLEAN_ENV = {k: v for k, v in os.environ.items() if k.upper() != 'PSMODULEPATH'}
 
 
 @unittest.skipUnless(PS, 'Windows PowerShell 5.1 required')
@@ -40,7 +43,7 @@ class SetupMetadataTest(unittest.TestCase):
             [PS, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
              str(ROOT / 'scripts/release/build_setup.ps1'), '-PayloadDir', str(self.payload),
              '-OutDir', str(out or self.out), '-Compiler', str(self.base / 'absent-compiler.exe')],
-            capture_output=True, text=True, timeout=30)
+            env=CLEAN_ENV, capture_output=True, text=True, timeout=30)
         self.assertNotEqual(result.returncode, 0)
         return result.stdout + result.stderr
 
