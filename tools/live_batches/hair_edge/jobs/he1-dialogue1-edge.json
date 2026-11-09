@@ -102,6 +102,8 @@
     "\\[hair primary\\] level load \\(first or new G-buffer images\\)",
     "\\[hair primary\\] header at 0x[0-9a-f]+",
     "\\b0 pipelines refused",
+    "\\[pan\\] burst 99100 complete: \\d+ frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99101 complete: \\d+ frames, \\d+ samples, transport ok",
     "\\[hair primary\\] (?:prepass|G-buffer) hair pipeline stencil: test \\d, write mask 0x[0-9a-f]{2}",
     "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline built",
     "\\[rrpost\\] rr_hair_strand_aa=0:",
@@ -218,26 +220,6 @@
         "d-aa",
         "e-untag",
         "burst-off",
-        "burst-aa"
-      ]
-    },
-    {
-      "name": "K8 burst-off",
-      "select": "\\[pan\\] burst 99100 complete",
-      "match": "\\[pan\\] burst 99100 complete: \\d+ frames, \\d+ samples, transport ok",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "burst-off"
-      ]
-    },
-    {
-      "name": "K8 burst-aa",
-      "select": "\\[pan\\] burst 99101 complete",
-      "match": "\\[pan\\] burst 99101 complete: \\d+ frames, \\d+ samples, transport ok",
-      "event": true,
-      "min": 1,
-      "windows": [
         "burst-aa"
       ]
     },

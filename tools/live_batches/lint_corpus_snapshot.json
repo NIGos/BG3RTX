@@ -78087,6 +78087,14 @@
     "\\[rrpost\\] strand snapshots \\(rr_hair_strand_aa=\\d\\): [1-9]\\d* at the lighting pass": [
       0,
       null
+    ],
+    "\\[pan\\] burst 99100 complete: \\d+ frames, \\d+ samples, transport ok": [
+      0,
+      null
+    ],
+    "\\[pan\\] burst 99101 complete: \\d+ frames, \\d+ samples, transport ok": [
+      0,
+      null
     ]
   }
 }
