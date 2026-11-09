@@ -133,6 +133,9 @@ Item hair_item(const HairInput& in, const Settings& s) {
   }
   const bool left = !have || finished < needed;
   const std::string detail = json_string(in.status_json, "detail");
+  // bg3rtx_hairconv --all without a usable granny2.dll (or game files): state "unavailable" with its reason. Shown as
+  // a stopped run so the panel keeps its controls (choose granny2.dll, Styles seen in game, Try again).
+  const bool all_unavailable = !in.running && json_string(in.status_json, "state") == "unavailable";
   if (in.running) {
     it.state = "running";
     it.detail = detail.empty() || detail.rfind("Converting", 0) != 0 ? "Converting. The first estimate appears within a minute." : detail;
@@ -143,6 +146,10 @@ Item hair_item(const HairInput& in, const Settings& s) {
   } else if (in.failed) {
     it.state = "failed";
     it.detail = "Conversion stopped" + (in.error.empty() ? std::string(".") : ": " + in.error);
+  } else if (all_unavailable) {
+    const std::string why = json_string(in.status_json, "error");
+    it.state = "failed";
+    it.detail = "Convert all styles is not available" + (why.empty() ? std::string(".") : ": " + why);
   } else if (!left) {
     it.state = "done";
     it.detail = "All needed styles are done.";
@@ -194,7 +201,11 @@ Item shader_item(const ShaderInput& in) {
 HairFacts hair_facts(const HairInput& in, const Settings& s) {
   HairFacts f;
   f.captured = in.captured;
-  const std::string& j = in.status_json;
+  const std::string& full = in.status_json;
+  // Top-level fields only: the "tiers" objects have their own "total" / "finished".
+  std::string j = full;
+  if (const size_t a = j.find("\"tiers\""); a != std::string::npos)
+    if (const size_t b = j.find(']', a); b != std::string::npos) j.erase(a, b - a + 1);
   double v = 0;
   auto num = [&](const char* key, int& out) { if (json_number(j, key, v) && v >= 0) out = int(v); };
   num("ready", f.ready);
@@ -203,12 +214,46 @@ HairFacts hair_facts(const HairInput& in, const Settings& s) {
   num("total", f.total);
   if (json_number(j, "bytes", v) && v >= 0) f.bytes = v;
   if (json_number(j, "eta_s", v) && v >= 0) f.eta_s = v;
+  if (f.total < 0) num("all", f.total);   // bg3rtx_hairconv --all: every catalogue row
   f.source = json_string(j, "source");
   if (f.source.empty()) f.source = json_string(j, "mode");
+  if (f.source == "game") f.source = "all";   // --all reads the game's paks
   if (f.source != "all" && f.source != "seen") f.source = s.convert_all ? "all" : "seen";
   if (in.failed) f.error = in.error.empty() ? "The converter stopped." : in.error;
   else f.error = json_string(j, "error");
+  // "tiers": [{"tier": "companion", "total": 6, "finished": 6}, ...] (flat objects, no nesting inside).
+  const size_t at = full.find("\"tiers\"");
+  const size_t open = at == std::string::npos ? at : full.find('[', at);
+  const size_t close = open == std::string::npos ? open : full.find(']', open);
+  for (size_t p = open; close != std::string::npos && (p = full.find('{', p)) != std::string::npos && p < close;) {
+    const size_t e = full.find('}', p);
+    if (e == std::string::npos || e > close) break;
+    const std::string obj = full.substr(p, e - p + 1);
+    HairTier t;
+    t.tier = json_string(obj, "tier");
+    double n = 0;
+    if (json_number(obj, "total", n)) t.total = int(n);
+    if (json_number(obj, "finished", n)) t.finished = int(n);
+    if (!t.tier.empty() && t.total > 0) f.tiers.push_back(t);
+    p = e + 1;
+  }
   return f;
+}
+
+const char* const kGrannyLine =
+    "Convert all styles needs granny2.dll, which BG3RTX cannot include. If you have LSLib's ExportTool "
+    "(github.com/Norbyte/lslib, Releases), point to the granny2.dll in its folder.";
+
+std::string hair_exit_error(int code, const std::string& last) {
+  std::string line = last;
+  const std::string prefix = "bg3rtx_hairconv --all: ";
+  if (line.rfind(prefix, 0) == 0) line = line.substr(prefix.size());
+  switch (code) {
+    case 2: return "The converter was started with wrong arguments (exit 2).";
+    case 3: return "granny2.dll could not be used" + (line.empty() ? std::string(".") : ": " + line);
+    case 4: return "The game files could not be read: check the game folder" + (line.empty() ? std::string(".") : " (" + line + ").");
+    default: return line.empty() ? "The converter stopped (exit " + std::to_string(code) + ")." : line;
+  }
 }
 
 std::string convert_all_reason(const std::string& granny, bool granny_ok, bool game_ok) {
@@ -275,7 +320,15 @@ std::string to_json(const std::vector<Item>& items, const Settings& s, bool hair
   if (f.eta_s >= 0) field("etaSeconds", std::to_string(int64_t(f.eta_s)));
   if (!f.source.empty()) field("source", q(f.source));
   if (!f.error.empty()) field("error", q(f.error));
+  if (!f.tiers.empty()) {
+    std::string t;
+    for (const HairTier& x : f.tiers)
+      t += std::string(t.empty() ? "" : ",") + "{\"tier\":" + q(x.tier) + ",\"total\":" + std::to_string(x.total) +
+           ",\"finished\":" + std::to_string(x.finished) + "}";
+    field("tiers", "[" + t + "]");
+  }
   o += ",\"hair\":{" + h + "}";
+  o += ",\"grannyHelp\":" + q(kGrannyLine);
   o += ",\"granny\":{\"path\":" + q(s.granny) + ",\"ok\":" + (extra.granny_ok ? "true" : "false") + "}";
   o += ",\"convertAllReason\":" + q(extra.all_reason) + "}";
   return o;
@@ -451,7 +504,7 @@ void Manager::tick(bool game_running) {
   // Hair: bg3rtx_hairconv over the captures, oldest first (the order the game saw them), resumable by its state.
   if (m.hair.active() && !m.hair.running()) {
     if (m.hair.exit_code == 0) m.hair_done = true;
-    else { m.hair_failed = true; m.hair_error = last_line(m.report_dir + L"\\batch.log"); }
+    else { m.hair_failed = true; m.hair_error = hair_exit_error(int(m.hair.exit_code), last_line(m.report_dir + L"\\batch.log")); }
   }
   // Source: the styles the game captured, or (Convert all styles, with the player's granny2.dll) every style in the paks.
   const bool all = m.all_ok();

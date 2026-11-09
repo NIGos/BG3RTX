@@ -42,6 +42,8 @@ struct Input {
   float stretch[3] = {1, 1, 1};   // v2 (layer capture): posed / first-seen card edge length, min / median / max
 };
 bool read_hcap(const std::string& path, Input& out, std::string* error);
+// DDS mip 0 as RGBA8, decoded as Pillow does (tools/hairconv/dds.cpp): BC1/BC2/BC3 and 32-bit RGBA.
+bool decode_dds(const uint8_t* data, size_t size, Mask& out, std::string* error);
 
 // convert.Groom without joints/weights/normal_offset (the v3 file does not store them).
 struct Groom {

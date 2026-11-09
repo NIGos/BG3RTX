@@ -118,6 +118,7 @@ below describe those exact bytes, including original line endings. Inventory pro
 | Collected filename | SHA-256 (verbatim release copy) |
 |---|---|
 | `DLSS5-bridge-MIT.txt` | `813b2964a4ab9aa6c41e00c7094a389d61feeb918fcf690cb9b3e454b678770e` |
+| `LSLib-MIT.txt` | `fa9c0df6576add66ad19422659a4135b26ff3d46a06480fae6d5248ffc4e8adc` |
 | `NVIDIA-RTX-SDKs-DLSS.txt` | `dc2778a3283427285984cdb5b3f7f03eae7d8a06057f672f2999c5ee7fd4f67d` |
 | `Streamline-MIT.txt` | `7b6f23e7d6f3ad6292f9308d2b42cdc3d82ae4e9b2abb55f230279d83bedd43d` |
 | `Streamline-3rd-party-licenses.md` | `cb251639994465f31d2178c16acedf1ff4f9cef1c370a09782ed36d4c86c1dca` |
@@ -183,6 +184,7 @@ Retain all subordinate notices as additional files in this directory.
 - `Vulkan-Headers-LICENSE.txt`
 - `Vulkan-Headers-Apache-2.0.txt`
 - `Vulkan-Headers-MIT.txt`
+- `LSLib-MIT.txt`
 
 ## Required notices and release actions
 
@@ -214,6 +216,21 @@ not made, endorsed or supported by NVIDIA or Larian Studios.
 
 ## Offline-only, paused and externally supplied components
 
+- **LSLib-derived format readers in `bg3rtx_hairconv.exe` (2026-11-09, `--all` mode).** `tools/hairconv/pak.cpp`
+  (LSPK v18 package list and entries, LSF v2-v7 resources, LSX) and `tools/hairconv/granny.cpp` (GR2 v7 header,
+  section table, relocation tables, data-tree member layout) port the layouts that LSLib by Norbyte
+  (`https://github.com/Norbyte/lslib`, MIT) reads (`PackageFormat.cs`, `LSFReader.cs`, `GR2/Reader.cs`), through the
+  repository's own Python readers (`tools/assets/lspk.py`, `lsf.py`, `lsx.py`). No LSLib binary or source file is
+  copied. The LZ4 decoder is written from the LZ4 format description. The shipped converter now contains this derived
+  code; LSLib's MIT notice ships as `licences/LSLib-MIT.txt` (verbatim from
+  `https://github.com/Norbyte/lslib/blob/master/LICENSE`, supplied by the coordinator on 2026-11-09; required notice).
+- **granny2.dll (RAD Game Tools / Epic): never shipped, never downloaded.** Its licence does not allow redistribution
+  and the game folder contains none. `bg3rtx_hairconv --all --granny <path>` loads a copy the player already has (for
+  example from their own LSLib ExportTool download) with `LoadLibraryEx` of that exact path, and calls only its section
+  decompression entry points (`GrannyBeginFileDecompression`, `GrannyDecompressIncremental`,
+  `GrannyEndFileDecompression`, `GrannyDecompressData`) plus `GrannyGetVersionString` and `GrannySetLogCallback`.
+  Without it the mode is unavailable and the capture model stays. Game files are read in place, read-only; the
+  grooms it writes stay on the player's PC.
 - **LSLib: not shipped and not required to run the player package.** Offline asset/VT tools
   use it (`tools/assets/vt_alpha.ps1`); mesh probes pin v1.20.4. These tools and LSLib DLLs
   are excluded by the package's explicit list. LSLib is identified as MIT in the existing
@@ -258,7 +275,7 @@ The selected SDK DXC remains a packaging-machine source, not a player SDK requir
 ## Package dependency coverage (2026-11-03)
 
 `scripts/package-third-party.json` owns the ten third-party DLL destinations and
-notice dependencies, plus the six compiled SDK components. The packer reads this
+notice dependencies, plus the seven compiled components (LSLib-derived readers added 2026-11-09). The packer reads this
 manifest before any build/write and copies binaries only through it. Missing notice
 files remain fatal; fixture-only texts in tests never enter the release collection.
 All existing notice files ship under `licences/` and therefore enter generated `files.txt`.
@@ -288,8 +305,8 @@ separately; no ordinary package promotion or redistribution approval is implied.
    builds or package writes. Project licence is GPL-3.0-or-later with the NVIDIA SDK exception
    (user decision 2026-11-04). NVIDIA notification, Microsoft runtime
    terms and game-data redistribution decisions remain open; see RELEASE_OFFLINE_STATUS.md.
-3. **LSLib MIT text (conditional; not a player-package blocker while excluded).** If LSLib
-   or dependent offline tools are distributed, obtain the exact v1.20.4 `LICENSE` from
+3. **LSLib MIT text: resolved 2026-11-09** for the format readers in `bg3rtx_hairconv.exe`: `LSLib-MIT.txt` (master
+   `LICENSE`, verbatim, required notice). Still conditional for distributing LSLib itself or its tools: then obtain the exact v1.20.4 `LICENSE` from
    `https://github.com/Norbyte/lslib/blob/v1.20.4/LICENSE`, plus the separate notices/terms
    for every bundled dependency (MIT for LSLib does not cover every portable-release DLL).
    No LSLib executable, licence or matching NuGet/vcpkg package was found in the inspected locations.

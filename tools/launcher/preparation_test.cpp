@@ -118,6 +118,31 @@ int main() {
         jf.find("\"source\":\"all\"") != std::string::npos && jf.find("\"finished\"") == std::string::npos &&
         jf.find("\"granny\":{\"path\":\"C:\\\\Tools\\\\ExportTool\\\\granny2.dll\",\"ok\":true}") != std::string::npos &&
         jf.find("\"convertAllReason\":\"\"") != std::string::npos, "json facts");
+  // bg3rtx_hairconv --all's real status (docs/RTX_HAIR_ROADMAP.md 2f): source "game", "all", tiers with their own totals.
+  fi = {};
+  fi.status_json = "{\"kind\": \"hair_grooms\", \"source\": \"game\", \"ready\": 898, \"finished\": 1217, \"needed\": 1217, "
+                   "\"all\": 1217, \"bytes\": 2721040055, \"eta_s\": 0, \"state\": \"done\", \"tiers\": [{\"tier\": \"companion\", "
+                   "\"total\": 6, \"finished\": 6}, {\"tier\": \"player\", \"total\": 432, \"finished\": 400}], \"line\": \"x\"}";
+  f = hair_facts(fi, g);
+  check(f.source == "all" && f.total == 1217 && f.ready == 898 && f.tiers.size() == 2 && f.tiers[1].tier == "player" &&
+        f.tiers[1].total == 432 && f.tiers[1].finished == 400, "--all facts: game source, all as total, tiers");
+  const std::string jt = to_json({it}, g, true, Extra{f, true, ""});
+  check(jt.find("\"tiers\":[{\"tier\":\"companion\",\"total\":6,\"finished\":6},") != std::string::npos &&
+        jt.find("\"grannyHelp\":\"Convert all styles needs granny2.dll, which BG3RTX cannot include.") != std::string::npos,
+        "--all json: tiers and the granny2.dll line");
+  // Without a usable granny2.dll: state unavailable with its reason, shown as a stopped run (controls stay).
+  fi.status_json = "{\"kind\": \"hair_grooms\", \"source\": \"game\", \"state\": \"unavailable\", \"error\": "
+                   "\"granny2.dll not found at the given path\", \"line\": \"Convert all styles is not available.\"}";
+  Item ua = hair_item(fi, g);
+  check(ua.state == "failed" && ua.detail == "Convert all styles is not available: granny2.dll not found at the given path" &&
+        hair_facts(fi, g).error == "granny2.dll not found at the given path", "--all unavailable -> stopped with its reason");
+  check(hair_exit_error(3, "bg3rtx_hairconv --all: the given DLL is not granny2.dll") ==
+            "granny2.dll could not be used: the given DLL is not granny2.dll" &&
+        hair_exit_error(2, "x") == "The converter was started with wrong arguments (exit 2)." &&
+        hair_exit_error(4, "bg3rtx_hairconv --all: game packages: no .pak files") ==
+            "The game files could not be read: check the game folder (game packages: no .pak files)." &&
+        hair_exit_error(1, "boom") == "boom" && hair_exit_error(5, "") == "The converter stopped (exit 5).",
+        "exit codes 2/3/4 -> one-line errors");
   std::printf("preparation: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
 }
