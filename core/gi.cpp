@@ -225,7 +225,7 @@ struct HandoutFrame {
 };
 HandoutFrame g_hof;
 uint64_t g_handout_unready = 0;   // last frame a handout pass met a pipeline without constant 1051
-struct HandoutStats { uint64_t calls = 0, frames = 0, settled = 0, settle_spec = 0, settle_refused = 0, settle_water = 0, settle_failed = 0; };
+struct HandoutStats { uint64_t calls = 0, frames = 0, settled = 0, settle_spec = 0, settle_refused = 0, settle_water = 0, settle_failed = 0, water_handout = 0; };
 HandoutStats g_hos;
 VkAccelerationStructureKHR rt_tlas_ordinary(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity, bool* scene_current);
 // The committed pair for a pass of a handout frame that cannot use the handout (once per frame: rt_scene_set waits).
@@ -245,11 +245,11 @@ bool handout_settle(VkCommandBuffer cmd, VkAccelerationStructureKHR& tlas, VkDes
 void handout_log() {
   if (host->cfg_int("rt_scene_handout", 0) < 2 && !g_hos.frames) return;
   if (++g_hos.calls < stats_period(600)) return;
-  host->log("[core] scene handout: %llu RT frames, %llu took a handout; %llu settled to the committed scene (pipeline without "
-            "constant 1051 %llu, pass not registered %llu, water %llu), %llu found none",
+  host->log("scene handout: %llu RT frames, %llu took a handout; %llu settled to the committed scene (pipeline without "
+            "constant 1051 %llu, pass not registered %llu, water %llu), %llu found none; water on the handout %llu",
             (unsigned long long)g_hos.calls, (unsigned long long)g_hos.frames, (unsigned long long)g_hos.settled,
             (unsigned long long)g_hos.settle_spec, (unsigned long long)g_hos.settle_refused,
-            (unsigned long long)g_hos.settle_water, (unsigned long long)g_hos.settle_failed);
+            (unsigned long long)g_hos.settle_water, (unsigned long long)g_hos.settle_failed, (unsigned long long)g_hos.water_handout);
   g_hos = HandoutStats{};
 }
 bool g_hair_origin_cap=false,g_hair_origin_init=false,g_hair_origin_frame=false;
@@ -2386,7 +2386,7 @@ bg3::omm::SceneBinding<VkAccelerationStructureKHR> prepare_omm_traversal(VkComma
   }
   const bool required=active && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   return bg3::omm::SceneBinding<VkAccelerationStructureKHR>(b.tlas,required,[&](auto selected,auto& reference,uint64_t& identity){
-    const bool fast=host->rt_omm_scene_reference && host->rt_omm_scene_reference(cmd,selected,&reference,&identity);
+    const bool fast=host->rt_omm_scene_reference && host->rt_omm_scene_reference(cmd,selected,&reference,&identity,true);
     if(!reference || (fast && !identity))host->log("[omm scene] traversal tuple unavailable; dispatch rejected (not a quality pass)");
     return fast && g_omm_pipelines.contains(pipeline);
   },b.omm_identity);
@@ -3317,7 +3317,7 @@ VkAccelerationStructureKHR rt_tlas_ordinary(VkCommandBuffer cmd, VkDescriptorSet
   if(bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t)))) ||
      bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t))))){
     VkAccelerationStructureKHR reference{};
-    const bool fast=host->rt_omm_scene_reference && host->rt_omm_scene_reference(cmd,tlas,&reference,omm_identity);
+    const bool fast=host->rt_omm_scene_reference && host->rt_omm_scene_reference(cmd,tlas,&reference,omm_identity,true);
     if(!reference || !*omm_identity){++g_rt_frames_missing;return VK_NULL_HANDLE;}
     if(!fast)tlas=reference;
   }
@@ -4112,16 +4112,27 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   // Water reflections and forward composition (core/water.cpp, rt_water_reflections).
   VkAccelerationStructureKHR water_tlas = s.tlas;
   VkDescriptorSet water_alpha = s.alpha;
+  bool water_handout = false;
   if (water_tlas && water_tlas == g_hof.dummy && g_hof.frame == host->frame_index() && water_rf_wanted()) {
-    // rt_scene_handout=2: water finds its OMM reference and build camera by the real TLAS: the committed pair.
-    uint64_t identity = 0;
-    ++g_hos.settle_water;
-    if (!handout_settle(cmd, water_tlas, water_alpha, identity)) water_tlas = VK_NULL_HANDLE;
+    // rt_scene_handout=2 (increment 5): water takes the handout when its pipelines carry constant 1051 and this
+    // command buffer joins the handout; otherwise it waits once for the committed pair (handout_settle).
+    VkDescriptorSet set = g_hof.set;
+    VkAccelerationStructureKHR dummy = VK_NULL_HANDLE;
+    uint64_t frame = 0;
+    water_handout = water_handout_ready() && host->rt_scene_handout && host->rt_scene_handout(cmd, &set, &dummy, &frame) &&
+                    set == g_hof.set && dummy == g_hof.dummy;
+    if (water_handout) ++g_hos.water_handout;
+    else {
+      uint64_t identity = 0;
+      ++g_hos.settle_water;
+      if (!handout_settle(cmd, water_tlas, water_alpha, identity)) water_tlas = VK_NULL_HANDLE;
+    }
   }
   if (water_tlas && water_alpha && water_rf_wanted()) {
     Push wpc = pc;
     wpc.rt_stats = 0;
     WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, water_tlas, water_alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
+    win.handout = water_handout;
     if (reflection_applied && host->cfg_int("rt_water_rr_hitdist", 0)) win.rf_hit = g_rf_hit.view;
     water_rf(cmd, win);
   }

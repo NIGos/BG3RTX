@@ -1891,7 +1891,9 @@ bool rt_scene_set(VkAccelerationStructureKHR* tlas, VkDescriptorSet* set, uint64
   return hand_out(tlas, set, built_frame);
 }
 
-bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkAccelerationStructureKHR* reference,uint64_t* identity){
+// traversal (ABI 31): the caller's shaders may trace the stamp's traversal address (byte 24). Only such a refusal
+// downgrades it; a reference lookup (water: its shaders read the reference word 16) leaves it alone.
+bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selected,VkAccelerationStructureKHR* reference,uint64_t* identity,bool traversal){
   if(!reference || !identity)return false;const uint64_t expected=*identity;*reference=VK_NULL_HANDLE;*identity=0;
   if(!g_rt || !selected || !cmd)return false;
   std::lock_guard lock(g_mu);
@@ -1903,13 +1905,13 @@ bool rt_omm_scene_reference(VkCommandBuffer cmd,VkAccelerationStructureKHR selec
     s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(i,s.last_use);update_oldest_live();
     // Even reference-only dispatches can write stale-proof feedback at byte144.
     if(!omm::mark_feedback_use(cmd) && omm::available()){
-      if(s.omm_reference && alpha_stamp_traversal_to_reference(i))++g_handout_downgrades;
+      if(scene_handout::downgrade_on_refusal(traversal,false,s.omm_reference!=VK_NULL_HANDLE) && alpha_stamp_traversal_to_reference(i))++g_handout_downgrades;
       *reference=VK_NULL_HANDLE;*identity=0;return false;}
     uint64_t accelerated_identity{};
     const bool fast=s.omm_reference && bvh_omm_use(cmd,i,selected,&accelerated_identity) && accelerated_identity==s.rec;
     // rt_scene_handout: a recording that may not trace the accelerated TLAS binds the reference one; the stamp's
     // traversal address (read by spec-1051 shaders) follows, never back up (docs/SCENE_HANDOUT_DESIGN.md 3.3).
-    if(!fast && s.omm_reference && alpha_stamp_traversal_to_reference(i))++g_handout_downgrades;
+    if(scene_handout::downgrade_on_refusal(traversal,fast,s.omm_reference!=VK_NULL_HANDLE) && alpha_stamp_traversal_to_reference(i))++g_handout_downgrades;
     return fast;
   }
   return false;

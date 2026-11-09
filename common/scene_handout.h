@@ -49,6 +49,22 @@ struct Resolution {
   uint64_t frame = 0;         // the frame the handout was made in
 };
 
+// Increment 5 (ABI 31): a refusal of the OMM accelerated TLAS downgrades the slot's traversal address (byte 24) only
+// when the caller's shaders trace it; a reference lookup (water) never does.
+inline bool downgrade_on_refusal(bool traversal, bool fast, bool slot_accelerated) {
+  return traversal && !fast && slot_accelerated;
+}
+
+// Increment 5: the water compose pass of a frame whose lighting stash is a handout (dummy TLAS + set R).
+enum class WaterPick : uint32_t { kHandout = 0, kCommitted, kNone };
+// this_frame: the pass composes this frame's lighting; registered: the layer let its command buffer join the open
+// handout; committed: the current committed scene is the stash's own frame (the handout resolved, never a wait).
+inline WaterPick water_handout_pick(bool this_frame, bool registered, bool committed) {
+  if (this_frame && registered) return WaterPick::kHandout;
+  if (committed) return WaterPick::kCommitted;
+  return WaterPick::kNone;
+}
+
 struct Machine {
   static constexpr uint32_t kMaxUsers = 8;
   enum class State : uint32_t { kIdle = 0, kReserved, kCommitted, kFailed };
