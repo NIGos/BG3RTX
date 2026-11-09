@@ -1195,6 +1195,35 @@ and dropped 1-8 opaque draws per frame.
   triangles 4.0-6.2M -> 1.7-3.6M, BLAS median in motion 2.4-4.3 -> 1.0-2.0 ms (p99 7-13 -> 3-6), scene wait mean
   5.6-7.5 -> 3-5 ms, no VRAM-guard BLAS chunk refusals (rv2 OFF: 42-146 per window, the cascade casters' BLAS left
   out). Every window: capture, cascade, stride-split, scene-wait gates and `rejected N/0/0`.
+- rv3 result (183745 and 191231, main 0c71ad4b): key off fine; key on the cache filled as predicted (19:15:28: 433 meshes,
+  3.60M triangles, 1.41M static / 2.02M captured triangles per build) and then took the pool (1977-2034 / 2047 MB)
+  and the BLAS chunks (4013 MB, the VRAM guard cap). From 19:15:34 no scene was built: the hair bounds pool request
+  (`bvh_build`, allocated first) failed and returned false for the whole build; a failed build commits no scene,
+  and freed ranges retire only behind a newer scene (`as_chunks::retired`, `rt_scene_oldest_live`), so the pool
+  never emptied: a deadlock (118 of 120 frames skipped, live BLAS 54 MB, RT passes skipped for the rest of the run).
+
+#### Headroom for the frame's other users (2026-11-09, claude/mesh-cache-rate-2, READY_FOR_LIVE)
+
+- Bug fix, key-independent: a native hair draw whose bounds do not fit the pool is left out of that build (counted:
+  `N hair draws left out (bounds did not fit the pool)`), like a refused per-draw BLAS; the build never fails for it.
+  Unchanged output whenever the old path succeeded.
+- With `rt_mesh_budget_own=1`, two-bucket rolling peaks over 600-1200 frames (`DemandPeak`) of the mandatory other
+  users: pool (hair bounds, grooms, OMM indices: pool used minus cache vertices/bases, hold snapshots and pending
+  ranges) and BLAS chunks (per-draw, cascade, sun, groom BLAS: all minus cached-mesh BLAS and pending), each plus the
+  bytes they were refused since the last present (`pool_alloc`/`as_create` wrappers; the cache's own and the holds'
+  requests use `pool_alloc_raw`). The cache's share = capacity (pool cap, guard chunk cap) - peak - 25% (the elastic
+  captures' reserve). Admission needs both shares (`mesh_cache_fits`); the share pass on present evicts meshes unused
+  for 8+ frames, oldest first, to 90% when the cache is above a share or a mesh was declined for them
+  (`mesh_cache_share_count`). Hold snapshots (optional) keep out of the unused part of the reserve
+  (`mesh_cache_hold_limit`): counted as demand they shrank the share, more draws stayed captured and needed more holds.
+  Pending ranges are not demand: they retire behind the next built scene, which a refusal no longer prevents.
+- CTest model (rt_capture_budget_test `starve_model`, rv3 sizes: 8000-triangle meshes, 450 MB fixed other pool use,
+  600 MB standing holds, 800 MB pattern BLAS, a 64 MB group of new bounds at a stop): old own rule 300 of the last 300
+  builds failed (pool stuck with 939 MB pending); with the headroom 0 failed, 0 hair draws left out, 99.9% of the
+  visible meshes cached, pool peak 1947 / 2047 MB.
+- Mesh cache line appends `headroom: pool share X MB (others' peak Y), BLAS share Z MB (others' peak W), N draws outside
+  the shares, M meshes evicted for them; K hair draws left out`. rv3 gates now also need `[rt] last 120 frames: 120
+  split builds` and `0 skipped` in every window and 0 hair draws left out in the ON windows.
 
 ### CPU hit-material lists (historical implementation, 2026-11-02)
 

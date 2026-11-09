@@ -56,6 +56,121 @@ static TurnResult turn_model(bool own,uint32_t ring){
  return {double(cached_seen)/double(seen),admitted_late,max_charged};
 }
 
+// rv3 starvation (19:15:28-34, S8 turns then a stop, rt_mesh_budget_own=1): the shared pool (2047 MB) and BLAS chunks
+// (VRAM guard cap 4013 MB) with the frame's other users. Per build: new native hair draws need fresh bounds in the
+// pool (old ones freed); visible uncached meshes are captured with a per-draw BLAS (refused: left out) and, while
+// the camera stands, a 64-byte hold snapshot (refused: skipped). Freed ranges retire only behind a newer built
+// scene (as_chunks::retired, oldest_live). Old own rule (charged 2048 MB budget only): the cache fills the pool,
+// the first stop's holds take the rest, the hair bounds fail, the build fails, nothing retires again: deadlock.
+// headroom=true adds the shares (others' peak + 25%) and leaves a draw out instead of failing the build.
+struct StarveResult{uint32_t failed_last,built_last,left_out;double visible_cached;uint64_t max_pool,max_as;};
+static StarveResult starve_model(bool headroom){
+ // rv3 19:15:28: 433 meshes held 3.6M triangles (about 8000 each); pattern draws about 2.0M triangles (800 MB of
+ // per-draw BLAS; 600 MB of standing holds at 64 bytes with the small uncached draws, so that the other users held
+ // about 1.1-1.3 GB of the full pool at 19:15:33); the turn swept more static meshes than the pool holds. Other pool
+ // users while turning (grooms, OMM indices, bases, kept holds): rv3 19:15:22, pool 733 MB with 312 meshes of 0.6M
+ // triangles (about 115 MB of vertices), so about 600 MB: 450 MB fixed here plus bounds and pending ranges.
+ const uint64_t pool_cap=kMeshPoolHardCap,as_cap=4013*mib,budget=2048*mib,tris=8000;
+ const uint64_t mesh_pool=tris*3*64,mesh_as=tris*80,dyn_as=tris*400,hold=tris*3*64;
+ const uint64_t pattern_as=800*mib,pattern_hold=600*mib,bounds=8*mib,fixed_pool=450*mib;
+ const uint32_t ring=1000,view=300,builds=1200;
+ std::vector<int64_t> last(ring,-1);
+ // Pending ranges: [0] the other users', [1] evicted cache meshes' (counted on the cache's side, layer evict()).
+ struct Pend{uint64_t frame,pool,as;bool cache;};
+ std::vector<Pend> pend;
+ uint64_t cache_pool=0,cache_as=0,dyn=0,holds=0,bounds_live=0,pend_pool[2]={},pend_as[2]={},max_pool=0,max_as=0;
+ uint64_t pool_refused=0,as_refused=0,seen=0,cached_seen=0,last_built=0;
+ uint32_t failed_last=0,built_last=0,left_out=0,pos=0;
+ DemandPeak pool_peak,as_peak;
+ uint64_t pool_share=UINT64_MAX,as_share=UINT64_MAX,hold_limit=UINT64_MAX,want_extra=0;
+ auto pool_used=[&]{return fixed_pool+cache_pool+holds+bounds_live+pend_pool[0]+pend_pool[1];};
+ auto as_used=[&]{return cache_as+dyn+pend_as[0]+pend_as[1];};
+ auto free_later=[&](uint64_t now,uint64_t pool,uint64_t as,bool cache){
+  if(!pool && !as)return;
+  pend.push_back({now,pool,as,cache});pend_pool[cache]+=pool;pend_as[cache]+=as;
+ };
+ auto evict_mesh=[&](uint32_t i,uint64_t now){
+  last[i]=-1;cache_pool-=mesh_pool;cache_as-=mesh_as;free_later(now,mesh_pool,mesh_as,true);
+ };
+ for(uint32_t b=0;b<builds;++b){
+  const uint64_t now=b+1000;
+  const bool still=(b/150)%2==1;   // 150 builds turning, 150 standing
+  if(!still)pos+=10;
+  bool ok=true,declined=false,share_declined=false;
+  // 1. mandatory hair bounds, allocated first; the previous ones are freed. The build after the first standing
+  // one brings a group of characters into view (64 MB of new bounds and groom points): a mandatory request at a
+  // full pool, larger than what retires from before the last built scene.
+  free_later(now,bounds_live,0,false);bounds_live=0;
+  // Bounds not granted stay wanted: the hair draws ask again every build.
+  if(b%300==151)want_extra=64*mib;
+  const uint64_t want=bounds+want_extra;
+  if(pool_used()+want<=pool_cap){bounds_live=want;want_extra=0;}
+  else{pool_refused+=want;if(headroom)++left_out;else ok=false;}   // old: the whole build fails
+  // 2. holds: snapshotted draw by draw at the first standing build (optional, they fill the pool to the brim),
+  // kept while standing, released on moving. Visible meshes: cached, admitted, or captured with a per-draw BLAS.
+  const bool snap=ok && still && holds==0;
+  uint64_t new_dyn=pattern_as,new_holds=0;
+  if(!still){free_later(now,holds,0,false);holds=0;}
+  // Holds are optional: never counted as demand; with headroom they also keep out of the mandatory reserve.
+  const uint64_t hold_cap=headroom?(std::min)(pool_cap,hold_limit):pool_cap;
+  if(snap)for(uint64_t h=0;h<pattern_hold;h+=mib)if(pool_used()+new_holds+mib<=hold_cap)new_holds+=mib;
+  for(uint32_t v=0;v<view && ok;++v){
+   const uint32_t i=(pos+v)%ring;
+   if(last[i]>=0)last[i]=int64_t(now);
+   else if(!mesh_cache_admit(pool_used()+new_holds,cache_as,mesh_pool,mesh_as,budget))declined=true;
+   else if(headroom && !mesh_cache_fits(cache_pool,mesh_pool,pool_share,cache_as,mesh_as,as_share))
+    share_declined=true;
+   else if(pool_used()+new_holds+mesh_pool<=pool_cap && as_used()+new_dyn+mesh_as<=as_cap){
+    last[i]=int64_t(now);cache_pool+=mesh_pool;cache_as+=mesh_as;
+   }
+   if(last[i]!=int64_t(now)){
+    if(as_used()+new_dyn+dyn_as<=as_cap)new_dyn+=dyn_as;else{as_refused+=dyn_as;++left_out;}
+    if(snap && pool_used()+new_holds+hold<=hold_cap)new_holds+=hold;
+   }
+   if(b>=builds-300){++seen;cached_seen+=last[i]==int64_t(now);}
+  }
+  if(ok){dyn=new_dyn;if(snap)holds=new_holds;}
+  // 3. a built scene lets ranges at least 6 builds old retire (as_chunks::retired); a failed one retires nothing.
+  if(ok)last_built=now;
+  for(size_t k=0;k<pend.size();){
+   if(now-pend[k].frame>=6 && pend[k].frame<last_built){
+    pend_pool[pend[k].cache]-=pend[k].pool;pend_as[pend[k].cache]-=pend[k].as;pend.erase(pend.begin()+k);
+   }else ++k;
+  }
+  if(b>=builds-300){failed_last+=!ok;built_last+=ok;}
+  max_pool=(std::max)(max_pool,pool_used());max_as=(std::max)(max_as,as_used());
+  // 4. present: the budget LRU (own rule), then the share pass; meshes drawn in the last 8 builds stay.
+  auto old_meshes=[&]{
+   std::vector<std::pair<int64_t,uint32_t>> old;
+   for(uint32_t i=0;i<ring;++i)if(last[i]>=0 && uint64_t(last[i])+8<now)old.push_back({last[i],i});
+   std::sort(old.begin(),old.end());
+   return old;
+  };
+  if(mesh_cache_lru_due(pool_used()+cache_as,budget,declined,true,now)){
+   const auto old=old_meshes();
+   std::vector<LruMesh> plan;for(auto& o:old)plan.push_back({uint64_t(o.first),mesh_pool+mesh_as});
+   const size_t n=mesh_cache_lru_count(plan,pool_used()+cache_as,budget,36000,now);
+   for(size_t k=0;k<n;++k)evict_mesh(old[k].second,now);
+  }
+  // The others' demand: live bytes of the mandatory users plus refused requests; pending ranges (transient, they
+  // retire behind the next built scene) and optional holds are not demand.
+  const uint64_t mandatory=fixed_pool+bounds_live+pool_refused;
+  pool_peak.observe(mandatory,now,600);
+  as_peak.observe(dyn+as_refused,now,600);
+  pool_refused=as_refused=0;
+  if(headroom){
+   pool_share=mesh_cache_share(pool_cap,pool_peak.peak());
+   as_share=mesh_cache_share(as_cap,as_peak.peak());
+   hold_limit=mesh_cache_hold_limit(pool_cap,pool_peak.peak(),mandatory);
+   const auto old=old_meshes();
+   std::vector<ShareMesh> plan;for(auto& o:old)plan.push_back({uint64_t(o.first),mesh_pool,mesh_as});
+   const size_t n=mesh_cache_share_count(plan,cache_pool,pool_share,cache_as,as_share,share_declined);
+   for(size_t k=0;k<n;++k)evict_mesh(old[k].second,now);
+  }
+ }
+ return {failed_last,built_last,left_out,seen?double(cached_seen)/double(seen):0.0,max_pool,max_as};
+}
+
 int main(){
  // rt_mesh_budget_own off: every BLAS byte, as before; on: the cached meshes' own BLAS (never above the total).
  check(mesh_cache_charged_as(1677*mib,9*mib,false)==1677*mib);
@@ -102,6 +217,31 @@ int main(){
   // A decline at the budget leaves at most that build's new edge (10 of 600 meshes) captured; the pass it triggers
   // frees 10% of the budget (about 220 meshes), so declines are rarer than one build in 20.
   check(big.visible_cached>=1.0-10.0/600.0/20.0 && big.max_charged_after_lru<=2048*mib);
+ }
+ // rv3 starvation: the old own rule deadlocks (no scene built in the last 300 builds); with the shares and the
+ // left-out fallback every build commits a scene, and the cache still holds most of the visible meshes.
+ {
+  const StarveResult old=starve_model(false),fix=starve_model(true);
+  std::printf("starvation model: last 300 builds failed/built old %u/%u, headroom %u/%u; visible cached old %.3f, "
+              "headroom %.3f; left out with headroom %u; peak pool %.0f / AS %.0f MB\n",old.failed_last,old.built_last,
+              fix.failed_last,fix.built_last,old.visible_cached,fix.visible_cached,fix.left_out,
+              double(fix.max_pool)/double(mib),double(fix.max_as)/double(mib));
+  check(old.built_last==0 && old.failed_last==300);
+  check(fix.failed_last==0 && fix.built_last==300 && fix.max_pool<=kMeshPoolHardCap && fix.max_as<=4013*mib);
+  check(fix.visible_cached>0.5);
+ }
+ // Shares: capacity minus the others' peak + 25%; a mesh fits only inside both.
+ check(mesh_cache_share(2047*mib,1000*mib)==797*mib && mesh_cache_share(2047*mib,1700*mib)==0);
+ check(mesh_cache_fits(100,50,150,10,5,15) && !mesh_cache_fits(100,51,150,10,5,15) && !mesh_cache_fits(100,50,150,10,6,15));
+ {
+  DemandPeak p;p.observe(500,0,600);p.observe(100,599,600);check(p.peak()==500);
+  p.observe(100,600,600);check(p.peak()==500);   // the previous bucket still holds it
+  p.observe(50,1200,600);check(p.peak()==100);    // forgotten after a full bucket
+  std::vector<ShareMesh> s(10,ShareMesh{0,10,1});
+  check(mesh_cache_share_count(s,100,100,10,10,false)==0);   // within both shares: nothing
+  check(mesh_cache_share_count(s,120,100,10,10,false)==3);   // 120 -> 90 (90% of 100)
+  check(mesh_cache_share_count(s,50,100,13,10,false)==4);    // BLAS 13 -> 9
+  check(mesh_cache_share_count(s,100,100,10,10,true)==1);    // at the share after a decline: 100 -> 90
  }
  // hq4 load: native 88-byte cache admission must account for BLAS and
  // pending pool ownership before uploads; optional refusal retains capture.

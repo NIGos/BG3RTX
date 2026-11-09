@@ -59,7 +59,8 @@
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
   "\\[geo\\] RT capture stride split, last \\d+ frames:",
   "\\[bvh\\] last \\d+ builds, per build:",
-  "\\[bvh\\] mesh cache: .*budget \\(rt_mesh_budget_own=1\\): charged"
+  "\\[bvh\\] mesh cache: .*budget \\(rt_mesh_budget_own=1\\): charged",
+  "\\[bvh\\] mesh cache: .*; headroom: pool share "
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -213,6 +214,58 @@
     "turn-off-b-r",
     "turn-off-b-l",
     "static-off-b"
+   ]
+  },
+  {
+   "name": "scene builds: a split build in every frame of every window",
+   "select": "\\[rt\\] last 120 frames: ",
+   "match": "\\[rt\\] last 120 frames: 120 split builds",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-on-r",
+    "turn-on-l",
+    "turn-on2-r",
+    "turn-on2-l",
+    "static-on",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ],
+   "period_frames": 120
+  },
+  {
+   "name": "scene wait: 0 frames skipped (RT passes without a scene) in every window",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": ", 0 skipped\\)",
+   "min": 1,
+   "windows": [
+    "turn-off-a-r",
+    "turn-off-a-l",
+    "static-off-a",
+    "turn-on-r",
+    "turn-on-l",
+    "turn-on2-r",
+    "turn-on2-l",
+    "static-on",
+    "turn-off-b-r",
+    "turn-off-b-l",
+    "static-off-b"
+   ]
+  },
+  {
+   "name": "headroom: no native hair draw left out for want of pool room in the ON windows",
+   "select": "\\[bvh\\] mesh cache: \\d+ meshes",
+   "match": "; 0 hair draws left out ",
+   "min": 1,
+   "windows": [
+    "turn-on-r",
+    "turn-on-l",
+    "turn-on2-r",
+    "turn-on2-l",
+    "static-on"
    ]
   },
   {

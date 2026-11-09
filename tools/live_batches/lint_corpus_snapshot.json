@@ -78846,6 +78846,10 @@
     "\\[hair groom\\] warm-up: last \\d+ frames: [1-9]\\d* groom slots got their first primary key; frames from the first match: mean [0-9.]+, max \\d+ \\(rt_hair_warmup [01]\\)": [
       0,
       null
+    ],
+    "\\[bvh\\] mesh cache: .*; headroom: pool share ": [
+      0,
+      null
     ]
   }
 }

@@ -34,7 +34,8 @@
    "vram_on": "no '[vram] guard window: N growth attempts of BLAS chunks refused' line in the ON windows (rv2 OFF: 42-146 per window, cascade casters' BLAS left out); BLAS chunks reserved below the OFF windows' 4.0-4.2 GB",
    "first_on_pair": "turn-on-r/l: an admission burst (hundreds of new meshes per line, BLAS p99 up to the OFF level) while the cache fills; not judged",
    "unchanged": "0 opaque draws dropped, 0 alpha made opaque, 0 wide draws left out, cascade buffer full 0.0, rejected N/0/0 (no instance or audit mismatch) in every window, key on and off",
-   "off_b": "returns to the OFF-a numbers within their spread (the first OFF build evicts down to the old accounting)"
+   "off_b": "returns to the OFF-a numbers within their spread (the first OFF build evicts down to the old accounting)",
+   "revised_mesh_cache_rate_2": "2026-11-09, claude/mesh-cache-rate-2, before the rerun: every window 120 split builds per 120 frames and 0 skipped frames (rv3 191231 key on: none built after 19:15:34); ON windows 0 hair draws left out; the cache stays inside its shares (mesh cache line: pool share = 2047 - 1.25 x others' peak, BLAS share = guard cap - 1.25 x others' peak), so it holds fewer meshes than the first fill (433 / 3.6M) when the pool's mandatory users peak high; captured triangles in the ON turns still below the OFF windows"
   },
   "sh2-s8-scene-handout": {
    "written": "2026-11-09, claude/scene-handout-3, before any sh2 run (no live of increment 3 yet)",

@@ -65,6 +65,57 @@ inline size_t mesh_cache_lru_count(const Seq& old,uint64_t charged,uint64_t budg
  }
  return n;
 }
+// rt_mesh_budget_own headroom (claude/mesh-cache-rate-2, 2026-11-09). rv3 (19:15:28, S8 turns, key on): the cache
+// grew to 433 meshes, the pool to 1977 / 2047 MB and the BLAS chunks to the VRAM guard's cap. Its meshes were all
+// in use (the LRU never evicts meshes drawn in the last 8 frames), so the frame's other users found no room: the
+// cascade casters' BLAS and grooms were refused and the hair bounds (pool) failed, which failed the whole build.
+// Freed ranges only retire behind a newer scene, so from then on no scene was built (118 of 120 frames skipped).
+// With the key the cache keeps out of the room the other users of each shared resource need: their peak demand
+// (live bytes, pending ranges and refused requests) over the last 600 to 1200 frames, plus the 25% reserve of the
+// elastic captures. Two-bucket rolling peak: each bucket spans `window` observations.
+struct DemandPeak{
+ uint64_t cur=0,prev=0,start=0;bool any=false;
+ void observe(uint64_t v,uint64_t now,uint64_t window){
+  if(!any){any=true;start=now;}
+  else if(now>=start+window){prev=cur;cur=0;start=now;}
+  cur=(std::max)(cur,v);
+ }
+ uint64_t peak()const{return (std::max)(cur,prev);}
+};
+// The cache's share of a resource of `capacity` bytes whose other users peaked at `other_peak`.
+inline uint64_t mesh_cache_share(uint64_t capacity,uint64_t other_peak){
+ const uint64_t need=other_peak>UINT64_MAX/2?UINT64_MAX:other_peak+other_peak/4;
+ return capacity>need?capacity-need:0;
+}
+// Optional pool users (hold snapshots) may fill the pool only up to this limit: the mandatory users' reserve
+// (their peak + 25%, of which `mandatory_now` is already allocated) stays free.
+inline uint64_t mesh_cache_hold_limit(uint64_t capacity,uint64_t mandatory_peak,uint64_t mandatory_now){
+ const uint64_t need=mandatory_peak>UINT64_MAX/2?UINT64_MAX:mandatory_peak+mandatory_peak/4;
+ const uint64_t reserve=need>mandatory_now?need-mandatory_now:0;
+ return capacity>reserve?capacity-reserve:0;
+}
+// A new mesh fits when both its pool vertices and its BLAS stay inside the cache's shares.
+inline bool mesh_cache_fits(uint64_t cache_pool,uint64_t vertices,uint64_t pool_share,
+                            uint64_t cache_as,uint64_t blas,uint64_t as_share){
+ return cache_pool<=pool_share && vertices<=pool_share-cache_pool && cache_as<=as_share && blas<=as_share-cache_as;
+}
+// The share pass on present: meshes not drawn in the last 8 frames, oldest first, with their pool and BLAS bytes.
+// Runs when the cache is above a share or a build declined a mesh for the shares (as mesh_cache_lru_due: a cache
+// at its share would otherwise keep stale meshes); evicts from the front while the cache is above 90% of either.
+struct ShareMesh{uint64_t last_used,pool,as;};
+template<class Seq>
+inline size_t mesh_cache_share_count(const Seq& old,uint64_t cache_pool,uint64_t pool_share,
+                                     uint64_t cache_as,uint64_t as_share,bool declined){
+ if(!declined && cache_pool<=pool_share && cache_as<=as_share)return 0;
+ size_t n=0;
+ for(const ShareMesh& m:old){
+  if(cache_pool<=pool_share/10*9 && cache_as<=as_share/10*9)break;
+  cache_pool-=(std::min)(cache_pool,m.pool);
+  cache_as-=(std::min)(cache_as,m.as);
+  ++n;
+ }
+ return n;
+}
 // The cascade capture after a frame that overflowed: its demand (captured + left-out bytes) + 25%, in
 // 16 MB steps, under the same 2047 MB / device-range cap; never below `current`.
 inline uint64_t cascade_grow(uint64_t current,uint64_t demand,uint64_t storage_limit){

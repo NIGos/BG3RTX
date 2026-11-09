@@ -280,8 +280,17 @@ bool as_handle(VkDeviceSize size, int ci, VkDeviceSize off, AsAlloc& out) {
 }
 // capped_what (guard_what nullptr): a new chunk is still refused past the chunks' cap (as_chunks::unguarded_chunk_ok),
 // named in the guard's refusal line.
+// Bytes of BLAS (arena != 0: per-draw, groom, cascade, sun) and pool requests of the frame's other users refused
+// since the last present: part of their demand (rt_mesh_budget_own headroom, common/rt_capture_budget.h DemandPeak).
+VkDeviceSize g_as_refused = 0, g_pool_refused = 0;
+bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint32_t arena, const char* capped_what);
 bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr, uint32_t arena = 0,
                const char* capped_what = "BLAS chunk for an unguarded build (over the chunks' cap)") {
+  const bool ok = as_create_raw(size, out, guard_what, arena, capped_what);
+  if (!ok && arena != 0) g_as_refused += size;
+  return ok;
+}
+bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint32_t arena, const char* capped_what) {
   out = AsAlloc{};
   size = (size + kAsAlign - 1) / kAsAlign * kAsAlign;
   VkDeviceSize off = 0;
@@ -375,7 +384,21 @@ vram_compact::QuietWindow g_pool_quiet;
 bool g_pool_snapshots = false;
 uint64_t g_pool_repacks = 0, g_pool_saved = 0;
 
+bool pool_alloc_raw(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off);
+// A refused request counts as demand of the pool's mandatory other users; the cache (vertices, bases) and the
+// optional hold snapshots call pool_alloc_raw.
 bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
+  const bool ok = pool_alloc_raw(cmd, size, off);
+  if (!ok) g_pool_refused += size;
+  return ok;
+}
+VkDeviceSize pool_cap_max();
+// rt_vram_guard: the cap also follows the device budget (vram_guard::cap; 2047 MB on the 32 GB reference).
+VkDeviceSize pool_cap_max() {
+  return (std::min)(VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20,
+                    VkDeviceSize(vram_cap(vram_guard::kMeshPool, UINT64_MAX)));
+}
+bool pool_alloc_raw(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
   if (g_pool_copy.target.b) return false; // immutable source until copy confirmation
   if (g_pool.b && g_pool_ra.alloc(size, 16, off)) return true;
   // Below 2^31 bytes and within maxStorageBufferRange (common/rt_capture_budget.h mesh_pool_capacity:
@@ -386,9 +409,7 @@ bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
     g_dd->inst->GetPhysicalDeviceProperties(g_dd->physical, &p);
     s_range = p.limits.maxStorageBufferRange;
   }
-  // rt_vram_guard: the cap also follows the device budget (vram_guard::cap; 2047 MB on the 32 GB reference).
-  const VkDeviceSize cfg_max = (std::min)(VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20,
-                                          VkDeviceSize(vram_cap(vram_guard::kMeshPool, UINT64_MAX)));
+  const VkDeviceSize cfg_max = pool_cap_max();
   const VkDeviceSize cap = capture_budget::mesh_pool_capacity(
       g_pool.size, size, VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20, cfg_max, s_range);
   if (!cap) {
@@ -458,6 +479,11 @@ uint64_t g_mesh_gen = 0;
 std::unordered_map<uint64_t, Mesh> g_meshes;
 std::unordered_map<VkBuffer, std::vector<uint64_t>> g_buf_meshes;
 bool g_budget_declined = false;   // a build declined a new mesh for rt_mesh_budget_mb since the last LRU pass
+// rt_mesh_budget_own headroom: the other users' peak demand of the pool / BLAS chunks and the cache's shares (on present).
+capture_budget::DemandPeak g_pool_other_peak, g_as_other_peak;
+VkDeviceSize g_cache_pool_share = UINT64_MAX, g_cache_as_share = UINT64_MAX;
+VkDeviceSize g_pool_hold_limit = UINT64_MAX;   // with the key: hold snapshots keep the pool at or below this
+bool g_share_declined = false;   // a build declined a new mesh for the shares since the last share pass
 // Static instance ranges retain baseline order and InstInfo. The accelerated
 // scene replaces only these ranges' BLAS addresses after copying late matrices.
 struct OmmInstanceRange {
@@ -768,6 +794,9 @@ struct Stats {
   uint64_t evict_destroy = 0, evict_write = 0, evict_lru = 0, compactions = 0, compact_saved = 0;
   uint64_t dyn_refit = 0, dyn_rebuild = 0, dyn_new = 0, budget_deferred = 0, tlas_refit = 0;
   uint64_t budget_declined = 0;   // of budget_deferred: refused by mesh_cache_admit (rt_mesh_budget_mb), per draw and build
+  uint64_t share_declined = 0;    // of budget_deferred: outside the cache's pool/BLAS share (rt_mesh_budget_own headroom)
+  uint64_t share_evicted = 0;     // evicted by the share pass (rt_mesh_budget_own headroom)
+  uint64_t hair_bounds_left_out = 0;   // native hair draws left out of a build: their bounds did not fit the pool
   uint64_t hold_pack_jobs = 0, hold_pack_bytes = 0, hold_copy_jobs = 0, hold_copy_bytes = 0, hold_pack_unavailable = 0;
   uint64_t not_inst_pattern = 0, not_inst_stream = 0, not_inst_count = 0;
   uint64_t fix_applied = 0, fix_late = 0, fix_bad = 0, fix_stale = 0;
@@ -2360,16 +2389,18 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // Mark newly discovered slots for normal expiry even if this scene fails.
       s.last_used=now;
       const VkDeviceSize bytes=(VkDeviceSize(prims)+prims/4u)*24u;
-      if (!pool_alloc(cmd,bytes,&s.hair_bounds_off)) return false;
+      // Pool full: this draw is left out below (counted), never the whole build. A failed build commits no scene,
+      // and freed ranges retire only behind a newer scene: rv3 19:15:34 stopped building for the rest of the run.
+      if (!pool_alloc(cmd,bytes,&s.hair_bounds_off)) continue;
       s.hair_bounds_size=bytes;
     }
   }
   const VkDeviceSize cache_budget = VkDeviceSize((std::max)(cfg_int("rt_mesh_budget_mb",2048),64)) << 20;
   // rt_mesh_budget_own (common/rt_capture_budget.h mesh_cache_charged_as): charge only the cached meshes' BLAS.
   const bool budget_own = cfg_int("rt_mesh_budget_own", 0) != 0;
-  VkDeviceSize cached_as = 0;
-  if (budget_own && native_pool)
-    for (const auto& [k, m] : g_meshes) cached_as += m.as.size;
+  VkDeviceSize cached_as = 0, cache_pool = 0;
+  if (budget_own)
+    for (const auto& [k, m] : g_meshes) { cached_as += m.as.size; cache_pool += m.pool_size + m.basis_size; }
 
   bvh_cpu_mark(0);
   // ---- 1. decide: new meshes, checks, per-draw BLAS, instances ----
@@ -2429,12 +2460,21 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         g_budget_declined = true;
         continue;
       }
-      if (!pool_alloc(cmd, m.pool_size, &m.pool_off)) continue;
+      // rt_mesh_budget_own: leave the frame's other users of the pool and the BLAS chunks their peak demand + 25%.
+      if (budget_own && !capture_budget::mesh_cache_fits(cache_pool, m.pool_size, g_cache_pool_share,
+                                                          cached_as, sz.accelerationStructureSize, g_cache_as_share)) {
+        ++g_st.budget_deferred;
+        ++g_st.share_declined;
+        g_share_declined = true;
+        continue;
+      }
+      if (!pool_alloc_raw(cmd, m.pool_size, &m.pool_off)) continue;   // the cache's own request: not other demand
       if (!as_create(sz.accelerationStructureSize, m.as, "BLAS chunk for a new cached mesh (stays uncached)")) {
         g_pending_free.push_back({now, -1, m.pool_off, m.pool_size});
         continue;
       }
       cached_as += m.as.size;
+      cache_pool += m.pool_size;
       m.ranges = fd.ranges;
       m.geo_key = fd.geo_key;
       for (const Range& r : m.ranges) g_buf_meshes[r.b].push_back(fd.mesh_key);
@@ -2705,7 +2745,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       log("[hair geometry] bounds pipeline unavailable: scene rejected, RT must not pass its gate");return false;
     }
     // The bounds were reserved before the decisions (the native pool pass above; the Vulkan AABB stride is 24).
-    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u)return false;
+    // Without them (pool full) the draw is left out of this build, like a refused per-draw BLAS.
+    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u){++g_st.hair_bounds_left_out;key=0;continue;}
     if(!hair && geo_native_hair_enabled() &&
        (cpu_opt ? cfg_hot(CfgHot::rt_hair_pool_trim) : cfg_int("rt_hair_pool_trim",0)) && s.hair_bounds_size){
       // A toggled-to-triangle slot can remain active indefinitely. Its old
@@ -3036,8 +3077,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         s.hold_size = 0;
       }
       s.hold_rec = 0;
+      // rt_mesh_budget_own: a new snapshot (optional) keeps out of the mandatory users' reserve; its refusal is not
+      // their demand.
+      const bool hold_room = !budget_own || g_pool_ra.used + bytes <= g_pool_hold_limit;
+      auto hold_alloc = [&] { return hold_room && pool_alloc_raw(cmd, bytes, &s.hold_off); };
       if (material_ok && dyn_hold_pack_range(fd.soup_off, uint64_t(fd.prims)*3u, stride, cap.xfb_size) &&
-          (s.hold_size || pool_alloc(cmd, bytes, &s.hold_off))) {
+          (s.hold_size || hold_alloc())) {
         s.hold_size = bytes; s.hold_stride = snapshot_stride; s.hold_epoch = g_hold_epoch;
         s.hold_rec = rec;
         if (snapshot_stride != stride)
@@ -3098,7 +3143,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                                     {mm.gen, mm.pool_off, mm.tris, mm.stride, mm.basis_off, mm.basis_size, g_pool_epoch});
       const VkDeviceSize need = native_hit::pool::basis_bytes(mm.tris);
       if (use.wants_basis && (!alpha || pool_alpha_rows) && !mm.basis_size && g_basis_bytes + need <= native_hit::pool::kBasisCapBytes &&
-          pool_alloc(cmd, need, &mm.basis_off)) {
+          pool_alloc_raw(cmd, need, &mm.basis_off)) {   // cache-owned: a refusal is not other demand
         mm.basis_size = need;   // passed to the record by the next lookup; extracted at its G-buffer draw
         g_basis_bytes += need;
         if (mm.basis_over) { --g_basis_over; g_basis_over_bytes -= (std::min)(g_basis_over_bytes, mm.basis_over); mm.basis_over = 0; }
@@ -4591,6 +4636,48 @@ void bvh_on_present() {
       ++g_st.evict_lru;
     }
   }
+  // rt_mesh_budget_own headroom (common/rt_capture_budget.h DemandPeak): the mandatory other users of the pool (hair
+  // bounds, grooms, OMM indices) and of the BLAS chunks (per-draw, cascade, sun, groom BLAS) peaked at their live
+  // bytes plus what they were refused; the cache keeps out of that + 25%, and the optional hold snapshots keep out of
+  // the unused part of that reserve. Pending ranges are transient (they retire behind the next built scene, which a
+  // refused allocation no longer prevents); holds are optional. Observed with the key off too (log only).
+  {
+    VkDeviceSize cache_pool = 0, cache_as = 0, holds = 0, pend_pool = 0, pend_as = 0;
+    for (const auto& [k, m] : g_meshes) { cache_pool += m.pool_size + m.basis_size; cache_as += m.as.size; }
+    for (const auto& [k, d] : g_dyn) holds += d.hold_size;
+    for (const PendingFree& p : g_pending_free) (p.chunk < 0 ? pend_pool : pend_as) += p.size;
+    const VkDeviceSize pool_used = g_pool_ra.used, all_as = as_bytes();
+    const VkDeviceSize pool_owned = cache_pool + holds + pend_pool, as_owned = cache_as + pend_as;
+    const VkDeviceSize mandatory = pool_used - (std::min)(pool_used, pool_owned);
+    g_pool_other_peak.observe(mandatory + g_pool_refused, now, 600);
+    g_as_other_peak.observe(all_as - (std::min)(all_as, as_owned) + g_as_refused, now, 600);
+    g_pool_refused = g_as_refused = 0;
+    const VkDeviceSize pool_cap = (std::min)(pool_cap_max(), VkDeviceSize(capture_budget::kMeshPoolHardCap));
+    const VkDeviceSize as_cap = vram_guard_on() ? VkDeviceSize(vram_cap(vram_guard::kAsChunks, UINT64_MAX)) : UINT64_MAX;
+    g_cache_pool_share = capture_budget::mesh_cache_share(pool_cap, g_pool_other_peak.peak());
+    g_cache_as_share = capture_budget::mesh_cache_share(as_cap, g_as_other_peak.peak());
+    g_pool_hold_limit = capture_budget::mesh_cache_hold_limit(pool_cap, g_pool_other_peak.peak(), mandatory);
+    const bool share_declined = g_share_declined;
+    g_share_declined = false;
+    if (budget_own && (share_declined || cache_pool > g_cache_pool_share || cache_as > g_cache_as_share)) {
+      std::vector<std::pair<uint64_t, uint64_t>> old;   // last used, key
+      for (auto& [k, m] : g_meshes)
+        if (m.last_used + 8 < now) old.push_back({m.last_used, k});
+      std::sort(old.begin(), old.end());
+      std::vector<capture_budget::ShareMesh> plan;
+      plan.reserve(old.size());
+      for (auto& [lu, k] : old) {
+        const Mesh& m = g_meshes[k];
+        plan.push_back({lu, m.pool_size + m.basis_size, m.as.size});
+      }
+      const size_t n_evict = capture_budget::mesh_cache_share_count(plan, cache_pool, g_cache_pool_share, cache_as,
+                                                                    g_cache_as_share, share_declined);
+      for (size_t i = 0; i < n_evict; ++i) {
+        evict(old[i].second);
+        ++g_st.share_evicted;
+      }
+    }
+  }
   // Empty chunks go, independent of guard state/cap (after the reuse window below). used still owns
   // pending ranges until BOTH the fence and all old TLAS slots retire above.
   // free_buf uses the existing deferred destruction queue, after retired AS
@@ -4666,7 +4753,9 @@ void bvh_on_present() {
       "evicted %llu destroyed, %llu written, %llu LRU; %llu compactions (-%.1f MB); "
       "chunks reserved/live/pending %.1f/%.1f/%.1f MB, freed %llu (%.1f MB), relocated %llu (%.1f MB); "
       "pool repacks %llu (-%.1f MB); budget (rt_mesh_budget_own=%d): charged %.1f / %.0f MB (pool %.1f, "
-      "cached-mesh BLAS %.1f, other BLAS %.1f), %llu draws declined",
+      "cached-mesh BLAS %.1f, other BLAS %.1f), %llu draws declined; headroom: pool share %.1f MB (others' peak %.1f), "
+      "BLAS share %.1f MB (others' peak %.1f), %llu draws outside the shares, %llu meshes evicted for them; "
+      "%llu hair draws left out (bounds did not fit the pool)",
       g_meshes.size(), size_t(ready), double(mesh_tris) * 1e-6, double(g_pool_ra.used) / 1048576.0,
       double(g_pool.size) / 1048576.0, double(as_bytes()) / 1048576.0, chunks, (unsigned long long)s.new_meshes,
       s.new_tris * 1e-6, (unsigned long long)s.budget_deferred, (unsigned long long)s.ready,
@@ -4683,7 +4772,12 @@ void bvh_on_present() {
       double(capture_budget::mesh_cache_charged_as(as_bytes(), mesh_as, budget_own) + g_pool_ra.used) / 1048576.0,
       double(budget) / 1048576.0, double(g_pool_ra.used) / 1048576.0,
       double(mesh_as) / 1048576.0, double(as_bytes() - (std::min)(as_bytes(), mesh_as)) / 1048576.0,
-      (unsigned long long)s.budget_declined);
+      (unsigned long long)s.budget_declined,
+      g_cache_pool_share == UINT64_MAX ? -1.0 : double(g_cache_pool_share) / 1048576.0,
+      double(g_pool_other_peak.peak()) / 1048576.0,
+      g_cache_as_share == UINT64_MAX ? -1.0 : double(g_cache_as_share) / 1048576.0,
+      double(g_as_other_peak.peak()) / 1048576.0, (unsigned long long)s.share_declined,
+      (unsigned long long)s.share_evicted, (unsigned long long)s.hair_bounds_left_out);
   g_chunks_freed = g_chunk_bytes_freed = 0;
   log_stats("[bvh] instance matrices read at submit: %llu, non-finite/singular %llu; draws whose instance data changed "
       "between record and submit %llu; recorded but never submitted %llu",
