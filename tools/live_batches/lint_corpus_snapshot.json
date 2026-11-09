@@ -77650,11 +77650,19 @@
       0,
       null
     ],
-    "\\[rrpost\\] rr_strand_aa\\.hlsl:strand_resolve pipeline built": [
+    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline built": [
+      0,
+      null
+    ],
+    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline creation failed": [
       0,
       null
     ],
     "\\[rrpost\\] strand resolve .*: 0 frames, [1-9]\\d* without": [
+      0,
+      null
+    ],
+    "\\[shaders\\] rr_strand_aa\\.hlsl:strand_resolve compile call failed": [
       0,
       null
     ]

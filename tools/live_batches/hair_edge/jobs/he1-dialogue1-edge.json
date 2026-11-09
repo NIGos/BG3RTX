@@ -102,7 +102,7 @@
     "\\[hair primary\\] header at 0x[0-9a-f]+",
     "\\b0 pipelines refused",
     "\\[hair primary\\] (?:prepass|G-buffer) hair pipeline stencil: test \\d, write mask 0x[0-9a-f]{2}",
-    "\\[rrpost\\] rr_strand_aa\\.hlsl:strand_resolve pipeline built"
+    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline built"
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -130,7 +130,9 @@
     "retired bounds-invalid primitives [1-9]\\d*",
     "(?s)\\[hair primary\\] frame \\d+:[^\\n]*[1-9]\\d* G-buffer[^\\n]*\\n.*?\\[hair primary\\] level load \\(first or new G-buffer images\\)",
     "(?s)\\[hair primary\\] level load \\(first or new G-buffer images\\)(?:(?!\\[hair primary\\] frame).)*\\[hair primary\\] frame \\d+:[^\\n]*\\b[1-9]\\d* G-buffer",
-    "\\[rrpost\\] strand resolve .*: 0 frames, [1-9]\\d* without"
+    "\\[rrpost\\] strand resolve .*: 0 frames, [1-9]\\d* without",
+    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline creation failed",
+    "\\[shaders\\] rr_strand_aa\\.hlsl:strand_resolve compile call failed"
   ],
   "expect_runner": [
     "window-mode.*visible_unfocused",
