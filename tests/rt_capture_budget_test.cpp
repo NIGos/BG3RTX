@@ -31,6 +31,14 @@ int main(){
   check(r==541*mib && 1024*mib-r>=440*mib);   // opaque keeps room for the 440 MB peak that overflowed
   check(alpha_region(1024*mib,409*mib,613*mib,418*mib,700*mib,true,60)==409*mib);}   // never below the floor
  check(alpha_region(1024*mib,409*mib,0,200*mib,300*mib,true,60)==409*mib);   // reserves fit: unchanged policy
+ // rt_alpha_floor_yield: the lowered S8 view (rv1 2026-11-09 11:39): alpha 435, opaque 1568 MB of 2047.
+ {const uint64_t size=2047*mib,wide=818*mib,base=171*mib;
+  check(alpha_region(size,wide,wide,435*mib,1568*mib,true,60)==wide);                 // key off: 40% kept
+  const uint64_t r=alpha_region(size,wide,wide,435*mib,1568*mib,true,60,base);
+  check(r>=435*mib && size-r>=1568*mib);                                            // both fit
+  check(alpha_region(size,wide,wide,100*mib,1900*mib,true,60,base)==base);          // never below base
+  check(alpha_region(1024*mib,409*mib,0,200*mib,300*mib,true,60,base)==409*mib);    // fits: unchanged
+  check(alpha_region(size,wide,0,0,0,true,60,base)==wide);}                         // load frame: wide floor
  check(opaque_partition_demand(700*mib,400*mib,false)==700*mib); // 24-byte path unchanged.
  check(opaque_partition_demand(700*mib,400*mib,true)==300*mib);
  check(opaque_partition_demand(700*mib,0,true)==700*mib);

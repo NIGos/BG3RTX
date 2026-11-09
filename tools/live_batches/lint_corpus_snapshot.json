@@ -78462,6 +78462,27 @@
     "\\[rrpost\\] strand snapshot site decal end \\(frames \\d+-\\d+\\): [1-9]\\d* dispatches": [
       0,
       null
+    ],
+    "\\[mem\\] ours \\(\\w+\\): BLAS chunks \\d+ MB reserved in \\d+ chunks": [
+      396,
+      [
+        "he1-dialogue1-edge.1.113042.log",
+        "frozen VALID match"
+      ]
+    ],
+    "\\[cascade\\] casters: cascade \\d+, \\d+ frames;": [
+      335,
+      [
+        "he1-dialogue1-edge.1.113042.log",
+        "frozen VALID match"
+      ]
+    ],
+    "\\[geo\\] RT capture, last \\d+ frames:": [
+      332,
+      [
+        "he1-dialogue1-edge.1.113042.log",
+        "frozen VALID match"
+      ]
     ]
   }
 }

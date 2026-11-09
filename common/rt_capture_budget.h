@@ -227,23 +227,31 @@ inline bool corrected_partition_feedback(uint32_t stride){return stride==40u || 
 
 // Existing per-frame alpha partition arithmetic. Physical MB limits and the
 // 1.5x alpha / 1.1x opaque reserves are unchanged.
+// cap_floor (rt_alpha_floor_yield=1, 2026-11-09): the lowest region the opaque cap and the demand split may
+// leave (the stride-scaled rt_alpha_mb), instead of `floor` (40% of the buffer at a wide stride). The
+// lowered S8 view (rv1 11:39) had alpha 435 MB of an 818 MB floor region while opaque peaked at 1568 MB of
+// the 1229 MB left: 1.27 opaque draws/frame dropped; split by demand both fit (444 / 1603 MB).
 inline uint64_t alpha_region(uint64_t size,uint64_t floor,uint64_t current,
                              uint64_t alpha_previous,uint64_t opaque_previous,
-                             bool automatic,int max_percent){
+                             bool automatic,int max_percent,uint64_t cap_floor=UINT64_MAX){
+ const uint64_t yield_floor=(std::min)(floor,cap_floor);
  uint64_t region=current?current:floor;
  if(automatic){
   uint64_t wanted=(std::max)(floor,(alpha_previous*3/2+mib-1)/mib*mib);
   if(wanted>region || wanted*2<region)region=wanted;
-  uint64_t cap=size/100*uint64_t((std::clamp)(max_percent,5,90));
+  const uint64_t pct_cap=size/100*uint64_t((std::clamp)(max_percent,5,90));
+  uint64_t cap=pct_cap;
   uint64_t opaque=opaque_previous*11/10;
-  if(opaque && opaque<size)cap=(std::min)(cap,(std::max)(size-opaque,floor));
+  if(opaque && opaque<size)cap=(std::min)(cap,(std::max)(size-opaque,yield_floor));
   // Both reserves do not fit (alpha x1.5 + opaque x1.1 > size): the buffer is split in proportion to the two
   // demands, so both keep the same relative headroom. Before, alpha kept its 50% while opaque had 10%: the inn
   // rotation (lean_regression lr2 2026-11-02 04:42) had alpha 418 MB in a 613 MB region while opaque grew from
   // about 373 to 440 MB of the remaining 411 MB (0.02 draws/frame dropped); split by demand: 541 / 483 MB.
   if(alpha_previous && opaque_previous && alpha_previous*3/2+opaque_previous*11/10>size){
    const double share=double(size)*double(alpha_previous)/double(alpha_previous+opaque_previous);
-   cap=(std::min)(cap,(std::max)(uint64_t(share)/mib*mib,floor));
+   const uint64_t split=(std::max)(uint64_t(share)/mib*mib,yield_floor);
+   // With the yield the split decides alone: the opaque cap would take its 10% headroom from alpha's need.
+   cap=cap_floor!=UINT64_MAX?(std::min)(pct_cap,split):(std::min)(cap,split);
   }
   region=(std::min)(region,cap);
  } else region=floor;

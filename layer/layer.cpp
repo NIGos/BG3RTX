@@ -784,12 +784,21 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
   // Freed BLAS ranges retire once the GPU and every scene slot that may reference them are done (bvhsplit
   // as_chunks::retired, rt_scene_oldest_live): a few frames of rebuilds. More pending than the chunks' floor (the
   // largest live AS of the qualified long session, 1408 MB) means retirement stalled (user log 2026-11-09:
-  // 8 GB pending, 15 MB live): the slots' states, once per session.
+  // 8 GB pending, 15 MB live): the slots' states, once per session. A burst of rebuilds also passes the floor for
+  // a few frames while retirement works (rv1 S8 2026-11-09: 1615 MB pending, every slot fresh): report only when
+  // the oldest live scene frame has not advanced for 300 frames with the floor exceeded throughout.
   static bool s_stall_logged = false;
-  if (on && !s_stall_logged && b.as_pending > vram_guard::kCapRef[vram_guard::kAsChunks].floor) {
+  static uint64_t s_stall_oldest = 0, s_stall_since = 0;
+  const bool over = on && b.as_pending > vram_guard::kCapRef[vram_guard::kAsChunks].floor;
+  const uint64_t oldest_live = over ? rt_scene_oldest_live() : 0;
+  if (!over || !s_stall_since || oldest_live != s_stall_oldest) {
+    s_stall_oldest = oldest_live;
+    s_stall_since = over ? frame : 0;
+  } else if (!s_stall_logged && frame - s_stall_since >= 300) {
     s_stall_logged = true;
-    log("[vram] BLAS ranges awaiting retirement: %.0f MB (live %.0f MB) exceed 1408 MB: retirement stalled",
-        double(b.as_pending) / 1048576.0, double(b.as_live) / 1048576.0);
+    log("[vram] BLAS ranges awaiting retirement: %.0f MB (live %.0f MB) exceed 1408 MB for %llu frames, oldest live "
+        "scene frame %llu: retirement stalled", double(b.as_pending) / 1048576.0, double(b.as_live) / 1048576.0,
+        (unsigned long long)(frame - s_stall_since), (unsigned long long)oldest_live);
     rt_log_state("[vram] retirement stall:");
     bvh_log_state("[vram] retirement stall:");
   }

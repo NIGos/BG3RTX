@@ -847,6 +847,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_alpha_fine_lod", "1"},
     {"rt_vt_alpha_miss_log", "0"},
     {"rt_alpha_max_pct", "60"},
+    {"rt_alpha_floor_yield", "0"},
     {"rt_strips", "1"},
     {"gi_rt", "1"},
     {"gi_rt_radius", "1.0"},

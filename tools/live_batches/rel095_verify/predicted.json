@@ -1,0 +1,18 @@
+{
+ "batch": "rel095-verify",
+ "written": "2026-11-09, before the rv4 run (after rv1 attempts 1-3)",
+ "predictions": {
+  "rv1-s8-release-verify": {
+   "cascade_capture_mb_on_vs_off": "lower with rt_capture_rise_reserve=1 (opt-vram model: about -1.7 GB for 3 slots in the 2026-11-08 user log); equal is a fail of the key, not of the release",
+   "cascade_buffer_full": "0.0 in every window, key on and off",
+   "rt_capture_opaque_dropped": "OFF windows: about 1.27/frame in the lowered view (rv1 11:39, 11:44); yield and both windows: 0.00",
+   "strand_resolve_fallbacks": "0 (forbid line)",
+   "blas_retirement_stall_line": "absent (300-frame persistence)",
+   "alpha_made_opaque": "0.00 in the yield and both windows (S8 split 444 / 1603 MB)",
+   "alpha_region_mb_yield": "about 440-660 MB instead of 818"
+  },
+  "he1-dialogue1-edge": {
+   "strand_resolve": "'[rrpost] strand resolve (rr_hair_strand_aa=2): N frames, 0 fell back' present (INVALID at 04:06 before ee30abf7)"
+  }
+ }
+}
