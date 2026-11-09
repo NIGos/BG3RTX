@@ -21,3 +21,5 @@
 - Snapshot moved to the scene G-buffer end (once per frame; the lighting hook fired in 188-590 of 600); fallbacks counted.
 - he1 03:38: not a pass: Xr unchanged on the hair ring in both aa traces (G-buffer-end snapshot holds no strand data); bursts
   confounded (whole-frame flicker +130% between them). Energy +0.31%, cost +0.11 ms. tools/hair_groom/edge_burst.py added.
+- Snapshot sites (rr_hair_strand_snap_site 0/1/2/3 merged) with per-site device-local counters; he1 with site 3, a counter
+  window and counterbalanced bursts off/aa/off/aa; predicted.json revised before the run.

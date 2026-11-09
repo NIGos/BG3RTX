@@ -23,30 +23,31 @@
           0,
           0
         ],
-        "fps": 23.885350318586458,
-        "windows": 33,
+        "fps": 7.995735607675038,
+        "windows": 44,
         "logs": [
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hair1-dialogue.1.191025.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap1-dialogue.1.203259.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-capture.1.224055.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hcap3-strands.1.224309.log",
-          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.020405.log"
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.020405.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\he1-dialogue1-edge.1.033854.log"
         ]
       }
     ],
     "trace_export": {
       "seconds": 0.3800000000046566,
       "quantile": 0.95,
-      "samples": 22,
+      "samples": 27,
       "maximum": 0.4969999999993888
     },
     "trace_capture_stall": {
       "seconds": 3.07654,
       "source": "hair1-dialogue.1.191025.log",
       "quantile": 0.95,
-      "samples": 22,
+      "samples": 27,
       "maximum": 3.1143,
-      "logs": 5
+      "logs": 6
     }
   },
   "args": [
@@ -104,11 +105,14 @@
     "\\b0 pipelines refused",
     "\\[pan\\] burst 99100 complete: \\d+ frames, \\d+ samples, transport ok",
     "\\[pan\\] burst 99101 complete: \\d+ frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99102 complete: \\d+ frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99103 complete: \\d+ frames, \\d+ samples, transport ok",
     "\\[hair primary\\] (?:prepass|G-buffer) hair pipeline stencil: test \\d, write mask 0x[0-9a-f]{2}",
     "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline built",
     "\\[rrpost\\] rr_hair_strand_aa=0:",
-    "\\[rrpost\\] rr_hair_strand_aa=1:",
     "\\[rrpost\\] rr_hair_strand_aa=2:",
+    "\\[rrpost\\] strand snapshot site G-buffer end \\(frames \\d+-\\d+\\): [1-9]\\d* dispatches",
+    "\\[rrpost\\] strand snapshot site decal end \\(frames \\d+-\\d+\\): [1-9]\\d* dispatches",
     "\\[rrpost\\] strand snapshots \\(rr_hair_strand_aa=\\d\\): [1-9]\\d* at the G-buffer end",
     "\\[rrpost\\] strand resolve \\(rr_hair_strand_aa=2\\): [1-9]\\d* frames, 0 fell back"
   ],
@@ -147,16 +151,15 @@
   "expect_runner": [
     "window-mode.*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=13\\b",
+    "\\[motion-plan\\] complete phases=15\\b",
     "\\[motion-trace\\] phase=5 label=a-off repeat=0",
     "\\[motion-trace\\] phase=6 label=b-aa repeat=0",
     "\\[motion-trace\\] phase=7 label=c-off repeat=0",
-    "\\[motion-trace\\] phase=8 label=d-aa repeat=0",
-    "\\[motion-trace\\] phase=9 label=e-untag repeat=0"
+    "\\[motion-trace\\] phase=8 label=d-aa repeat=0"
   ],
   "stop_on_dump": true,
   "purpose": "rr_hair_strand_aa 0/2/0/2 (+1) in one Test Dialogue1 run with RTX Hair on: PNG pairs and K8 pan bursts for strand edge flicker (tools/hair_groom/temporal_burst.py), energy and the render-res chain GPU ms. READY_FOR_LIVE, not authorized.",
-  "estimated_phase_seconds": 99.5,
+  "estimated_phase_seconds": 130.0,
   "expect_every": [
     {
       "name": "zero refused pipelines",
@@ -168,8 +171,7 @@
         "a-off",
         "b-aa",
         "c-off",
-        "d-aa",
-        "e-untag"
+        "d-aa"
       ]
     },
     {
@@ -182,8 +184,7 @@
         "a-off",
         "b-aa",
         "c-off",
-        "d-aa",
-        "e-untag"
+        "d-aa"
       ],
       "fail_fast": false
     },
@@ -197,8 +198,7 @@
         "a-off",
         "b-aa",
         "c-off",
-        "d-aa",
-        "e-untag"
+        "d-aa"
       ],
       "fail_fast": false
     },
@@ -212,8 +212,7 @@
         "a-off",
         "b-aa",
         "c-off",
-        "d-aa",
-        "e-untag"
+        "d-aa"
       ]
     },
     {
@@ -226,8 +225,7 @@
         "a-off",
         "b-aa",
         "c-off",
-        "d-aa",
-        "e-untag"
+        "d-aa"
       ]
     }
   ],

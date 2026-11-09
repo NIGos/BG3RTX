@@ -170,21 +170,39 @@ float strand_coverage(Frame f, int2 p, float4x4 inv, float2 jit, out uint hits) 
 // f-debug Xr showed no strand footprint on any pixel, header usable). Dispatched at the scene G-buffer's end of the same
 // frame (layer/rrpost.cpp rrpost_pass_end -> strand_snapshot): per pixel (c, strand pixel, strand
 // footprint, 0) into a frame-parity image that the resolve reads. bmax = the render size - 1; header and camera set.
+// bmin bits 0-1: the hook site (0 G-buffer end, 1 decal end, 2 lighting); bit 2: merge (a later site of the same frame:
+// write only the pixels where this site finds a strand footprint, keep the earlier site's elsewhere).
+// Counters (he1 03:38: the G-buffer-end snapshot changed no hair pixel): per site 4 words, footprint, strand and
+// coverage pixels and dispatches, accumulated over a period in a device-local buffer, reduced per workgroup
+// (layer/rrpost.cpp copies them to the host after the period; host_atomics_lint_test).
 [[vk::binding(8, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> Out16;
+[[vk::binding(12, 0)]] RWStructuredBuffer<uint> Counters;
+groupshared uint gsCount[3];
 [numthreads(8, 8, 1)]
-void strand_snapshot(uint3 id : SV_DispatchThreadID) {
+void strand_snapshot(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex, uint3 gid : SV_GroupID) {
+  const uint site = min(sp.bmin & 3u, 2u);
+  const bool merge = (sp.bmin & 4u) != 0u;
+  if (gi < 3u) gsCount[gi] = 0u;
+  GroupMemoryBarrierWithGroupSync();
   const uint2 size = unpack15(sp.bmax) + 1u;
-  if (any(id.xy >= size)) return;
-  const int2 p = int2(id.xy);
-  const Frame f = frame();
-  uint4 e;
-  float4 s = 0.0;
-  if (footprint(f, p, e)) {
-    uint hits;
-    const float c = strand_coverage(f, p, hp_inverse4(sp.vp), f16tof32(uint2(sp.jitter & 0xFFFFu, sp.jitter >> 16)), hits);
-    s = float4(hits > 0u ? c : 0.0, strand_at(f, p, e) ? 1.0 : 0.0, 1.0, 0.0);
+  if (all(id.xy < size)) {
+    const int2 p = int2(id.xy);
+    const Frame f = frame();
+    uint4 e;
+    float4 s = 0.0;
+    if (footprint(f, p, e)) {
+      uint hits;
+      const float c = strand_coverage(f, p, hp_inverse4(sp.vp), f16tof32(uint2(sp.jitter & 0xFFFFu, sp.jitter >> 16)), hits);
+      s = float4(hits > 0u ? c : 0.0, strand_at(f, p, e) ? 1.0 : 0.0, 1.0, 0.0);
+      InterlockedAdd(gsCount[0], 1u);
+      if (s.y != 0.0) InterlockedAdd(gsCount[1], 1u);
+      if (s.x > 0.0) InterlockedAdd(gsCount[2], 1u);
+    }
+    if (!merge || s.z != 0.0) Out16[id.xy] = s;
   }
-  Out16[id.xy] = s;
+  GroupMemoryBarrierWithGroupSync();
+  if (gi < 3u && gsCount[gi] != 0u) InterlockedAdd(Counters[site * 4u + gi], gsCount[gi]);
+  if (gi == 0u && all(gid.xy == 0u)) InterlockedAdd(Counters[site * 4u + 3u], 1u);
 }
 
 // ---- the resolve, at the post chain: the snapshot in In2 (x coverage, y strand pixel, z footprint) ----

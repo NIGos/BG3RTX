@@ -788,6 +788,12 @@ the 09:51 bg3rtx.log has the full bundle, rr_post=1 and no stencil or flicker da
   (+0.11 ms, the resolve; the snapshot runs outside that line). Next: a per-period GPU count of the snapshot's footprint
   and strand pixels (device-local, per-workgroup reduced) to see what the G-buffer-end record holds, and bursts
   counterbalanced off/aa/off/aa.
+- Snapshot sites and counters (offline): dev key rr_hair_strand_snap_site 0 G-buffer end, 1 decal end, 2 lighting, 3 every
+  site merged (a later site writes only the pixels where it finds a strand footprint). The snapshot counts footprint,
+  strand and coverage pixels and dispatches per site in a device-local buffer (per-workgroup reduction, copied to the host
+  after each period: host_atomics_lint_test classifies it); line '[rrpost] strand snapshot site <site> (frames a-b): N
+  dispatches; per dispatch footprint F px, strand S px, coverage C px'. he1 now runs with site 3, a counter window and
+  counterbalanced bursts off/aa/off/aa (about 2.2 GB of bursts).
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
