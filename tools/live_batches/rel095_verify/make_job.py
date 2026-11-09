@@ -234,6 +234,7 @@ job3["expect"] = job["expect"] + [
     STRIDE_LINE,
     "\\[bvh\\] last \\d+ builds, per build:",
     "\\[bvh\\] mesh cache: .*budget \\(rt_mesh_budget_own=1\\): charged",
+    "\\[bvh\\] mesh cache: .*; headroom: pool share ",
 ]
 job3["forbid"] = job2["forbid"] + ["\\[bvh\\] allocation failed"]
 job3["expect_every"] = [
@@ -253,6 +254,15 @@ job3["expect_every"] = [
           "left out \\(region full or no split\\) 0\\.00 per frame", CHECKED3),
     every("scene wait: 0 timeouts in every window", "\\[rt\\] scene wait: \\d+ frames",
           "got this frame's scene, 0 timeouts", CHECKED3),
+    # rv3 19:15:34 (claude/mesh-cache-rate-2): the cache took the pool and the BLAS chunks, a hair bounds allocation
+    # failed the whole build and no scene was built again (118 of 120 frames skipped, no "[rt] last" lines). Every
+    # window must build a scene in every frame and skip none.
+    every("scene builds: a split build in every frame of every window", "\\[rt\\] last 120 frames: ",
+          "\\[rt\\] last 120 frames: 120 split builds", CHECKED3, period_frames=120),
+    every("scene wait: 0 frames skipped (RT passes without a scene) in every window", "\\[rt\\] scene wait: \\d+ frames",
+          ", 0 skipped\\)", CHECKED3),
+    every("headroom: no native hair draw left out for want of pool room in the ON windows", CACHE_LINE,
+          "; 0 hair draws left out ", ON3),
     every("strand resolve: 0 fallbacks wherever strand hair is resolved",
           r"\[rrpost\] strand resolve \(rr_hair_strand_aa=2\):", ", 0 fell back", CHECKED3, when_present=True, min=0),
     every("memory accounting in every window", "\\[mem\\] ours \\(", "cascade capture \\d+ MB", CHECKED3),

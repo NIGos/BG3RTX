@@ -78671,6 +78671,10 @@
     "\\[layer\\] optional scene handout update-after-bind request failed": [
       0,
       null
+    ],
+    "\\[bvh\\] mesh cache: .*; headroom: pool share ": [
+      0,
+      null
     ]
   }
 }
