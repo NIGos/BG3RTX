@@ -543,6 +543,20 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_hair_guides": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_guides": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_strand_aa", "label": "Strand hair edge resolve",
+     "description": "Experimental: how on-screen strand edges enter Ray Reconstruction. The game's hair dither resolve no longer mixes strands by the hair cards' dither pattern; with analytic coverage, thin strands at the edges are blended with their background by their exact pixel coverage instead of flickering. Appearance and cost are unqualified.",
+     "apply": "live", "apply_note": "live; needs RTX Hair and RR before post", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: how on-screen strand edges enter Ray Reconstruction. The game's hair dither resolve no longer mixes strands by the hair cards' dither pattern; with analytic coverage, thin strands at the edges are blended with their background by their exact pixel coverage instead of flickering. Appearance and cost are unqualified.",
+     "details": "5n: compare strand edges against the background in Test Dialogue1 (hair silhouette, flyaway strands): dithering at the edges should be gone with Analytic coverage.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_hair_strand_aa": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "untag", "label": "Strands unresolved", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_strand_aa": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "coverage", "label": "Analytic coverage", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_strand_aa": "2"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_pool_trim", "label": "Retire unused hair snapshots",
      "description": "Reclaims unused hair capture memory.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": true,

@@ -1,0 +1,22 @@
+{
+ "_rule": "Prepared BEFORE the run (AGENTS.md). One Test Dialogue1 launch, RTX Hair bundle on throughout (docs/RTX_HAIR_PRIMARY.md 5l), rr_post=1. Windows a-off/c-off: rr_hair_strand_aa=0; b-aa/d-aa: 2; e-untag: 1. Flicker = py -3 tools/hair_groom/temporal_burst.py <burst-off dir> <burst-aa dir> --labels off,aa (hair region = class 5 in half the frames). Energy = float mean of the pre-post scene colour (dumps.json), character ROI by tools/live_batches/dialogue_shadows/char_energy.py, on the a/b/c/d traces; spread = |a - c| and |b - d|. Cost = '[rrpost] gpu: render-res chain' ms of the aa windows minus the off windows.",
+ "stencil (startup lines '[hair primary] ... hair pipeline stencil:')": {
+  "predicted": "the native prepass or G-buffer hair pipelines write stencil (test 1, write mask with bit 5 = 0x20 set): the strand footprint carries the game's dither-resolve tags. If no hair pipeline writes bit 5, mode 1 is a no-op (e-untag equals a/c within spread) and the mismatched-tag mechanism is ruled out; mode 2 is then judged on its own.",
+  "invalid_if": "no stencil line"
+ },
+ "flicker (burst-aa vs burst-off)": {
+  "predicted": "motion-compensated frame difference 'mc' of the final image on the hair region 10-30% lower with the key (offline edge model: accumulated edge flicker 0.0178 -> 0.0086 on edge pixels, which are a minority of the hair region); rr_color (RR input) hf lower on the hair region; no new trail",
+  "kept_if": "mc final lower with aa than off and the user sees no dithering on strand silhouettes in the d-aa PNG vs c-off"
+ },
+ "energy (a/c vs b/d character ROI)": {
+  "predicted": "within +-1% (coverage model change; offline whole-image bias +0.9%, edge band +1.3% against the area reference, the game's resolve on card tags -0.8% / -4.2%); the off pair spread sets the noise",
+  "rejected_if": "|mean(b, d) - mean(a, c)| > 2% of the ROI mean"
+ },
+ "untag (e-untag vs a/c)": {
+  "predicted": "same energy within spread; strand edges sharper and noisier in the PNG than a/c if the tags mismatch (offline raw edge flicker 0.0178 vs card-tag resolve 0.0117)"
+ },
+ "cost": {
+  "predicted": "render-res chain +0.05 to +0.3 ms (16 stencil and 16 entry loads per pixel in the resolve bounds, the coverage of up to 9 found strands per strand-footprint pixel)",
+  "note": "report only; quality before frame rate (AGENTS.md)"
+ }
+}
