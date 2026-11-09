@@ -17,7 +17,7 @@
 //   Math twin: tools/hair_groom/edge_stability.py (box_strand_coverage, found probability), CTest hair_groom_test.
 // The strand data come from strand_snapshot, dispatched at the end of the scene's G-buffer pass of the same frame (the
 // strand fragments have just sealed the pixel record; at the post chain it no longer holds this frame's seal, he1
-// 2026-11-09 f-debug), into a frame-parity image; strand_resolve reads only that image, the colours and the stencil.
+// 2026-11-09 f-debug), into one image; strand_resolve reads it (when it is its frame's), the colours and the stencil.
 // A separate request: rr_post.hlsl and every other request keep their preprocessed text.
 #include "rt/hair_primary_rebase.hlsli"
 
@@ -169,7 +169,7 @@ float strand_coverage(Frame f, int2 p, float4x4 inv, float2 jit, out uint hits) 
 // ---- snapshot (he1 2026-11-09 02:04: at the post chain the pixel record no longer carried this frame's seal: the
 // f-debug Xr showed no strand footprint on any pixel, header usable). Dispatched at the scene G-buffer's end of the same
 // frame (layer/rrpost.cpp rrpost_pass_end -> strand_snapshot): per pixel (c, strand pixel, strand
-// footprint, 0) into a frame-parity image that the resolve reads. bmax = the render size - 1; header and camera set.
+// footprint, 0) into the snapshot image that the resolve reads. bmax = the render size - 1; header and camera set.
 // bmin bits 0-1: the hook site (0 G-buffer end, 1 decal end, 2 lighting); bit 2: merge (a later site of the same frame:
 // write only the pixels where this site finds a strand footprint, keep the earlier site's elsewhere).
 // Counters (he1 03:38: the G-buffer-end snapshot changed no hair pixel): per site 4 words, footprint, strand and
@@ -206,8 +206,15 @@ void strand_snapshot(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex, ui
 }
 
 // ---- the resolve, at the post chain: the snapshot in In2 (x coverage, y strand pixel, z footprint) ----
+// Read only when it is this frame's: PairFlags (binding 12 of this entry: the host-visible pairing flags, layer/rrpost.cpp
+// g_strand_flags; read only, no atomics) word sp.jitter holds this resolve's token (in sp.vp[0][0]) when, at
+// vkQueueSubmit, this frame's snapshot was the one submitted last (common/strand_snapshot.h Pairing); else no snapshot:
+// exactly the game's resolve.
 [[vk::binding(2, 0)]] Texture2D<float4> In2;
-float4 snap(int2 q, uint2 bmin, uint2 bmax) { return In2.Load(int3(clamp(q, int2(bmin), int2(bmax)), 0)); }
+[[vk::binding(12, 0)]] StructuredBuffer<uint> PairFlags;
+static bool g_own;
+float4 snap_at(int2 q) { return g_own ? In2.Load(int3(q, 0)) : 0.0.xxxx; }
+float4 snap(int2 q, uint2 bmin, uint2 bmax) { return snap_at(clamp(q, int2(bmin), int2(bmax))); }
 
 [numthreads(16, 16, 1)]
 void strand_resolve(uint3 id : SV_DispatchThreadID) {
@@ -215,6 +222,7 @@ void strand_resolve(uint3 id : SV_DispatchThreadID) {
   const uint mode = sp.bmin >> 30;
   const uint2 p = id.xy + bmin;
   if (!(all(p >= bmin) && all(p <= bmax))) return;
+  g_own = PairFlags[sp.jitter] == asuint(sp.vp[0][0]);
   const float3 xc = In1.Load(int3(p, 0)).rgb;
   const float4 u = In0.Load(int3(p, 0));
   const float4 ac = AC[p];
@@ -236,7 +244,7 @@ void strand_resolve(uint3 id : SV_DispatchThreadID) {
         q = clamp(q, bmin, bmax);
         const uint s = Stencil.Load(int3(q, 0)).y;
         n0 += 1u - ((s >> 4u) & 1u);
-        const uint b5 = ((s >> 5u) & 1u) != 0u && In2.Load(int3(q, 0)).z == 0.0 ? 1u : 0u;
+        const uint b5 = ((s >> 5u) & 1u) != 0u && snap_at(int2(q)).z == 0.0 ? 1u : 0u;
         n5 += b5;
         if ((i != 3 && j != 3) || acc1.w == 0.0 || acc0.w == 0.0) {
           const float3 col = In1.Load(int3(q, 0)).rgb;
@@ -266,7 +274,7 @@ void strand_resolve(uint3 id : SV_DispatchThreadID) {
     [unroll] for (int k = 0; k < 25; ++k) {
       const int2 q = int2(p) + int2(k % 5 - 2, k / 5 - 2);
       if (any(q < int2(bmin)) || any(q > int2(bmax))) continue;
-      const float4 sq = In2.Load(int3(q, 0));
+      const float4 sq = snap_at(q);
       const float3 col = In1.Load(int3(q, 0)).rgb;
       if (sq.y != 0.0) {
         if (abs(k % 5 - 2) <= 1 && abs(k / 5 - 2) <= 1) { lh += col; ++hits; }   // strand colours of the 3 x 3

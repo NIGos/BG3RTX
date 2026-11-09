@@ -131,8 +131,12 @@ struct Chain {
 std::mutex g_mu;
 Chain g_ch;
 Img g_xs, g_xr, g_ac, g_eb, g_check, g_cbt, g_z, g_sss_before, g_sss;
-Img g_strand[2];               // rr_hair_strand_aa: the strand snapshot per recorded-frame parity (rr_strand_aa.hlsl strand_snapshot)
-strand_snapshot::Ring g_strand_ring;   // which recorded frame each image holds (recording order, not frame_index)
+Img g_strand;                  // rr_hair_strand_aa: the strand snapshot (rr_strand_aa.hlsl strand_snapshot), one image:
+                               // at its GPU time it holds the snapshot submitted last (common/strand_snapshot.h)
+strand_snapshot::Pairing g_strand_pair;   // which resolve reads its own frame's snapshot, decided at vkQueueSubmit
+VkBuffer g_strand_flags = VK_NULL_HANDLE; // host-visible: per resolve its token when valid, else 0 (Pairing::kSlots words)
+VkDeviceMemory g_strand_flags_mem = VK_NULL_HANDLE;
+uint32_t* g_strand_flags_map = nullptr;
 // Fillers for every binding a step does not use: a reused ring set must never
 // keep a stale descriptor of a game image or buffer (see run()).
 Img g_dummy2d, g_dummy3d;
@@ -859,7 +863,8 @@ uint32_t half_bits(float v) {
   if (e >= 31) return sign | 0x7BFFu;
   return sign | (uint32_t(e) << 10) | ((f >> 13) & 0x3FFu);
 }
-uint64_t g_strand_frames = 0, g_strand_missing = 0, g_strand_logged_at = 0, g_snap_frames = 0, g_snap_missing = 0;
+uint64_t g_strand_missing = 0, g_strand_logged_at = 0, g_snap_frames = 0, g_snap_missing = 0;
+uint64_t g_strand_own_logged = 0, g_strand_refused_logged = 0, g_strand_resyncs_logged = 0;
 
 // rr_hair_strand_aa: at the end of the scene's G-buffer pass (the strand fragments have just sealed the pixel record;
 // ngx_note_pass has just read this frame's camera there), the strand snapshot of this frame (coverage, strand pixel,
@@ -952,22 +957,22 @@ void record_strand_snapshot(DeviceData* dd, VkCommandBuffer cmd, const SnapCamer
   if (mode <= 0 || !w || !h || site > 2) return;
   const int pick = cfg_int("rr_hair_strand_snap_site", 0);
   if (pick != 3 && uint32_t(pick) != site) return;
-  // At most one snapshot per site and frame (the decal pass can match more than once); the frame is the recorded one
-  // the next resolve reads (common/strand_snapshot.h), not frame_index().
-  const strand_snapshot::Ring::Begin at = g_strand_ring.begin(site);
-  if (at.skip) return;
-  Img& img = g_strand[at.slot];
+  // The anchor site (the G-buffer end, or the one picked site) is one snapshot of the pairing, written or refused, so the
+  // snapshots follow the same frames as the resolves (common/strand_snapshot.h); with every site (3) the later ones
+  // merge into the same image (on the GPU they run after the G-buffer end of their frame, whatever the recording order).
+  const bool anchor = pick == 3 ? site == 0 : true;
+  const uint64_t ordinal = anchor ? g_strand_pair.snapshot(cmd_recording(cmd)) : 0;
+  Img& img = g_strand;
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
   StrandPush sp{};
   if (!hp || !hp->header || w > 32768u || h > 32768u || !cam.ok || !snap_counters(dd) ||
-      !img_ensure(dd, img, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, at.slot ? "strand snapshot B" : "strand snapshot A") ||
-      img.w != w || img.h != h) {
+      !img_ensure(dd, img, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, "strand snapshot") || img.w != w || img.h != h) {
     ++g_snap_missing;
     return;
   }
   snap_counters_period(dd, cmd);
-  // The frame's first snapshot rewrites the whole image (UNDEFINED -> GENERAL); a later site merges over it.
-  const bool merge = at.merge;
+  // The anchor rewrites the whole image (UNDEFINED -> GENERAL); a later site merges over it.
+  const bool merge = !anchor;
   memcpy(sp.vp, cam.vp, sizeof sp.vp);
   memcpy(sp.cam, cam.pos, sizeof sp.cam);
   sp.jitter = half_bits(cam.jit_unit[0] * float(w)) | (half_bits(cam.jit_unit[1] * float(h)) << 16);
@@ -982,13 +987,22 @@ void record_strand_snapshot(DeviceData* dd, VkCommandBuffer cmd, const SnapCamer
   b.out16 = img.view;
   b.probe_out = VkDescriptorBufferInfo{g_snap_cnt, 0, VK_WHOLE_SIZE};
   if (run(dd, cmd, P_SNAP, b, raw, (w + 7) / 8, (h + 7) / 8)) {
-    g_strand_ring.wrote();
+    if (anchor) g_strand_pair.wrote(ordinal);
     ++g_snap_frames;
   } else {
     ++g_snap_missing;
   }
-}int g_strand_mode_logged = -1;
-bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const Push& pc, const uint32_t ext[2]) {
+}
+
+int g_strand_mode_logged = -1;
+// Every 7401d785 while the key is on is one resolve of the pairing (also when the chain broke before it), so the resolves
+// follow the same frames as the snapshots. take.raw 0: the key is off.
+strand_snapshot::Pairing::Take strand_note_resolve(VkCommandBuffer cmd) {
+  if (cfg_int("rr_hair_strand_aa", 0) <= 0) return {0, 0, 0};
+  return g_strand_pair.resolve(cmd_recording(cmd));
+}
+bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const Push& pc, const uint32_t ext[2],
+                    const strand_snapshot::Pairing::Take& take) {
   const int mode = std::min(cfg_int("rr_hair_strand_aa", 0), 3);
   if (mode != g_strand_mode_logged) {
     g_strand_mode_logged = mode;
@@ -996,40 +1010,55 @@ bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const P
         mode == 1 ? "dither resolve with the strand footprint untagged" : mode == 2 ? "strand footprint untagged + analytic strand coverage" :
         "debug view in Xr: red strand footprint, green strand pixel, blue coverage; magenta no usable header");
   }
-  if (mode <= 0) return false;
+  if (mode <= 0 || !take.raw) return false;
   const auto* hp = static_cast<const hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
-  StrandPush sp{};   // the resolve reads only the bounds, the mode and the snapshot (no camera: no ngx call under g_mu)
+  StrandPush sp{};   // the resolve reads the bounds, the mode, the snapshot and its flag (no camera: no ngx call under g_mu)
   // The snapshot of this frame (written at its G-buffer end): the pixel record no longer holds this frame's seal at the
-  // post chain (he1 2026-11-09 02:04, f-debug). The one recorded since the last resolve, never by frame_index(): a
-  // present between the G-buffer end and this resolve moved it and made 145-395 of 600 frames fall back (2026-11-09).
-  uint32_t slot = 0;
-  const bool have = g_strand_ring.take(&slot);
-  const Img& snap = g_strand[slot];
-  const bool ok = hp && hp->header && pc.bmax[0] < 32768u && pc.bmax[1] < 32768u && snap.image && have &&
+  // post chain (he1 2026-11-09 02:04, f-debug). Which frame the image holds at this resolve's GPU time is known only at
+  // vkQueueSubmit (rrpost_submit_begin): the flag word says whether it is this frame's, else the shader ignores it.
+  if (!g_strand_flags &&
+      !alloc_host_buffer(strand_snapshot::Pairing::kSlots * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &g_strand_flags,
+                         &g_strand_flags_mem, reinterpret_cast<void**>(&g_strand_flags_map)))
+    g_strand_flags_map = nullptr;
+  const Img& snap = g_strand;
+  const bool ok = hp && hp->header && pc.bmax[0] < 32768u && pc.bmax[1] < 32768u && snap.image && g_strand_flags_map &&
                   pc.bmax[0] < snap.w && pc.bmax[1] < snap.h;
   if (ok) {
+    g_strand_flags_map[take.slot] = 0u;   // invalid until its submit finds this frame's snapshot submitted last
     sp.bmin = pc.bmin[0] | (pc.bmin[1] << 15) | (uint32_t(mode) << 30);
     sp.bmax = pc.bmax[0] | (pc.bmax[1] << 15);
     sp.header[0] = uint32_t(hp->header);
     sp.header[1] = uint32_t(hp->header >> 32);
+    sp.jitter = take.slot;                 // the resolve has no jitter: its flag word and token instead
+    memcpy(&sp.vp[0], &take.token, 4);
     Push raw;
     memcpy(&raw, &sp, sizeof raw);
     Binds bs = b;
     bs.in[2] = snap.view;
     bs.in_l[2] = VK_IMAGE_LAYOUT_GENERAL;
+    bs.probe_out = VkDescriptorBufferInfo{g_strand_flags, 0, VK_WHOLE_SIZE};
     if (!run(dd, cmd, P_STRAND, bs, raw, (ext[0] + 15) / 16, (ext[1] + 15) / 16)) return false;   // not built yet: the game's
-    ++g_strand_frames;
+    g_strand_pair.ran(take.raw);
   } else {
     ++g_strand_missing;
   }
   if (frame_index() >= g_strand_logged_at + 600) {
     g_strand_logged_at = frame_index();
-    log("[rrpost] strand resolve (rr_hair_strand_aa=%d): %llu frames, %llu fell back to the game's resolve (no snapshot of the frame)",
-        mode, (unsigned long long)g_strand_frames, (unsigned long long)g_strand_missing);
+    // frames: decided at submit with this frame's snapshot; fell back: none at recording, or at submit another frame's
+    // (or a refused one) was submitted last (the shader then runs the game's resolve).
+    const uint64_t own = g_strand_pair.own - g_strand_own_logged, refused = g_strand_pair.refused - g_strand_refused_logged;
+    log("[rrpost] strand resolve (rr_hair_strand_aa=%d): %llu frames, %llu fell back to the game's resolve (no snapshot of the frame: "
+        "%llu at recording, %llu at submit); pairing: %llu resyncs, snapshots recorded up to %u ahead of their resolve",
+        mode, (unsigned long long)own, (unsigned long long)(g_strand_missing + refused), (unsigned long long)g_strand_missing,
+        (unsigned long long)refused, (unsigned long long)(g_strand_pair.resyncs - g_strand_resyncs_logged), g_strand_pair.ahead_max);
     log("[rrpost] strand snapshots (rr_hair_strand_aa=%d): %llu at the G-buffer end, %llu refused", mode,
         (unsigned long long)g_snap_frames, (unsigned long long)g_snap_missing);
     g_snap_frames = g_snap_missing = 0;
-    g_strand_frames = g_strand_missing = 0;
+    g_strand_missing = 0;
+    g_strand_own_logged = g_strand_pair.own;
+    g_strand_refused_logged = g_strand_pair.refused;
+    g_strand_resyncs_logged = g_strand_pair.resyncs;
+    g_strand_pair.ahead_max = 0;
   }
   return ok;
 }
@@ -1037,6 +1066,7 @@ bool strand_resolve(DeviceData* dd, VkCommandBuffer cmd, const Binds& b, const P
 void on_resolve(DeviceData* dd, VkCommandBuffer cmd) {
   g_step = "resolve (U)";
   touch(cmd);
+  const strand_snapshot::Pairing::Take take = strand_note_resolve(cmd);
   if (g_ch.broken) return;
   VkImageView u;
   VkImageLayout ul;
@@ -1062,7 +1092,7 @@ void on_resolve(DeviceData* dd, VkCommandBuffer cmd) {
   b.out11 = g_xr.view;
   to_general(dd, cmd, {&g_xr});
   uint32_t ext[2] = {pc.bmax[0] - pc.bmin[0] + 1, pc.bmax[1] - pc.bmin[1] + 1};
-  if (strand_resolve(dd, cmd, b, pc, ext)) { g_ch.stage = 3; return; }
+  if (strand_resolve(dd, cmd, b, pc, ext, take)) { g_ch.stage = 3; return; }
   if (!run(dd, cmd, P_RESOLVE, b, pc, (ext[0] + 15) / 16, (ext[1] + 15) / 16)) return breaks("resolve pipeline");
   g_ch.stage = 3;
 }
@@ -1269,8 +1299,10 @@ void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLay
       SnapCamera cam;
       uint32_t gw = 0, gh = 0;
       ngx_gbuffer_size(&gw, &gh);   // only the scene's G-buffer (and its same-size decal pass), never a portrait pass
-      cam.ok = gw == p.width && gh == p.height && ngx_gbuffer_camera(cam.vp, cam.pos, cam.jit_unit, 1u, 1u);
-      if (cam.ok)
+      // The scene's pass without a camera is still its frame's snapshot (refused): the pairing counts every frame.
+      const bool scene = gw == p.width && gh == p.height;
+      cam.ok = scene && ngx_gbuffer_camera(cam.vp, cam.pos, cam.jit_unit, 1u, 1u);
+      if (scene)
         if (DeviceData* dd = device_of(cmd)) {
           std::lock_guard<std::mutex> lock(g_mu);
           if (ensure_layout(dd)) record_strand_snapshot(dd, cmd, cam, p.width, p.height, p.color_count >= 5 ? 0u : 1u);
@@ -1310,7 +1342,7 @@ void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs) {
         ngx_gbuffer_size(&gw, &gh);
         cam.ok = gw && gh && ngx_gbuffer_camera(cam.vp, cam.pos, cam.jit_unit, 1u, 1u);
         std::lock_guard<std::mutex> lock(g_mu);
-        if (cam.ok && ensure_layout(dd)) record_strand_snapshot(dd, cmd, cam, gw, gh, 2u);
+        if (gw && gh && ensure_layout(dd)) record_strand_snapshot(dd, cmd, cam, gw, gh, 2u);
       }
   }
   if (!cfg_int("rr", 1) || !cfg_int("rr_post", 1)) return;
@@ -1641,5 +1673,21 @@ void rrpost_discard_recording(uint64_t recording) {
 void rrpost_submit_recording(uint64_t recording) {
   std::lock_guard lock(g_mu);
   for (auto& history : g_history) history.producer.submit(recording);
+}
+// rr_hair_strand_aa: before the batch goes down, in submission order, which resolves read their own frame's snapshot
+// (common/strand_snapshot.h Pairing): their flag words (host-coherent, written before vkQueueSubmit) get their tokens.
+void rrpost_submit_begin(const std::vector<VkCommandBuffer>& cmds) {
+  if (cfg_int("rr_hair_strand_aa", 0) <= 0) return;   // key off: no lock on the submit path
+  std::lock_guard lock(g_mu);
+  if (!g_strand_pair.n_snap && !g_strand_pair.n_res) return;
+  auto set = [](uint32_t slot, uint32_t value) { if (g_strand_flags_map) g_strand_flags_map[slot] = value; };
+  for (auto cmd : cmds) {
+    CmdState* s = cmd_state(cmd);
+    if (!s) continue;
+    for (auto recording : s->post_secondaries) g_strand_pair.submit_snapshots(recording);
+    g_strand_pair.submit_snapshots(s->recording);
+    for (auto recording : s->post_secondaries) g_strand_pair.submit_resolves(recording, set);
+    g_strand_pair.submit_resolves(s->recording, set);
+  }
 }
 }

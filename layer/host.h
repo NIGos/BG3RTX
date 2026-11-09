@@ -451,6 +451,7 @@ void ngx_discard_recording(uint64_t recording);
 void post_submit_recordings(const std::vector<VkCommandBuffer>& cmds);
 void rrpost_discard_recording(uint64_t recording);
 void rrpost_submit_recording(uint64_t recording);
+void rrpost_submit_begin(const std::vector<VkCommandBuffer>& cmds);   // rr_hair_strand_aa pairing, before the submit
 void sl_preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& motion, const Bg3Binding& depth);
 VkImageLayout sl_input_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout fallback);
 bool sl_note_image_destroyed(VkImage image, bool wait = true);
