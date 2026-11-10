@@ -1632,6 +1632,12 @@ User: strand hair at isometric distance trails / blurs when characters or the ca
   equivalent with 1049 frozen to 0 (tools/release_shader_equivalence.py); variants delta 0; spirv-val passes.
 - Live (staged, not queued): tools/live_batches_staged/hair_mv, hm1-s8-hair-mv: the counter line at 0/1/2 and four K8
   edge bursts (strands at 0, 1, 2; cards) in one S8 run, about 0.4 GB; predictions in predicted.json.
+- Live hm1 201105 (INVALID for the bursts): the counter line shows every keyed row with previous points (780 of 780 per
+  60 frames, every publish with the previous camera) at the idle S8 camera, so missing previous points are disproved and
+  mode 1 (kFlagMvCardFallback) changes nothing; mode 2 is the test. All four edge bursts were refused ("edge capture
+  REFUSED") because with pan_inputs=1 the display-size FG inputs (fg_hudless, fg_ui, fg_final, 3840 px) met the
+  2560 px extent budget before the edge name filter. Fixed on claude/hair-mv-burst: images an edge burst does not keep
+  (`EdgePanSamples::kept`) are skipped before the budget (layer/dump.cpp pan_capture, pan_epoch_test); hm1 unchanged.
 - User check (once qualified): S8 or the camp with the party walking; the hair should move with the heads instead of
   leaving a smear behind them. Not in the launcher yet.
 ## 6. Open items

@@ -589,14 +589,12 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   const int serial = cfg_hot(CfgHot::pan_capture);
   const bool water_mode=cfg_int("pan_water",0)!=0;
   const bool edge_mode=cfg_int("pan_edge",0)!=0;
+  // Images an edge burst does not keep are skipped first: only kept ones count against the extent budget.
+  if (edge_mode && !EdgePanSamples::kept(name, cfg_int("pan_post",0)!=0, cfg_int("pan_mvec",0)!=0)) return false;
   if (edge_mode && (water_mode || r->width > (std::strcmp(name,"final")==0 ? 3840u : 2560u) ||
                     r->height > (std::strcmp(name,"final")==0 ? 1600u : 1067u))) {
     pan_invalid=true; log("[pan] edge capture REFUSED: incompatible mode or extent budget"); return false;
   }
-  if (edge_mode && std::strcmp(name,"depth")!=0 && std::strcmp(name,"final")!=0 &&
-      std::strcmp(name,"material")!=0 && std::strcmp(name,"albedo")!=0 &&
-      !(cfg_int("pan_post",0) && (std::strcmp(name,"rr_post_ac")==0 || std::strcmp(name,"rr_post_eb")==0)) &&
-      !(cfg_int("pan_mvec",0) && std::strcmp(name,"rr_mvec")==0)) return false;
   if (water_mode && std::strcmp(name,"depth")!=0 && std::strncmp(name,"water_",6)!=0) return false;
   if (water_mode && uint64_t(r->width)*r->height > uint64_t(2560)*1440) {
     if (!pan_invalid) log("[pan] water capture REFUSED: render exceeds 2560x1440 pixel budget");

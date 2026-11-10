@@ -72,6 +72,13 @@ struct EdgePanSamples {
   std::array<uint64_t,8> lighting_recordings{};
   bool invalid=false;
   bool retained(uint64_t f) const { return f>warmup && f-warmup<=8; }
+  // The images an edge burst keeps at all (any frame). Everything else is skipped before the extent budget is checked:
+  // with pan_inputs=1 the display-size FG inputs (fg_hudless, fg_ui, fg_final, 3840 px) are offered too, and refusing
+  // them invalidated every hm1 burst (2026-11-10 201105).
+  static bool kept(std::string_view name, bool post = false, bool mvec = false) {
+    return name=="depth" || name=="final" || name=="material" || name=="albedo" ||
+      (post && (name=="rr_post_ac" || name=="rr_post_eb")) || (mvec && name=="rr_mvec");
+  }
   static bool wanted(std::string_view name, uint64_t index, bool post = false, bool mvec = false) {
     return (post && (name=="rr_post_ac" || name=="rr_post_eb")) || (mvec && name=="rr_mvec") || name=="depth" || name=="final" ||
       ((index==1 || index==8) && (name=="material" || name=="albedo"));

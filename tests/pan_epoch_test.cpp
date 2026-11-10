@@ -63,6 +63,13 @@ int main() {
   if(!check(mv.complete() && !EdgePanSamples::wanted("rr_mvec",3) && EdgePanSamples::wanted("rr_mvec",3,false,true)))return 1;
   auto missing_mv=mv;missing_mv.masks[5]&=~64;
   if(!check(!missing_mv.complete()))return 1;
+  // hm1 201105: the display-size FG inputs are not kept (skipped before the extent check), rr_mvec only with pan_mvec.
+  if(!check(!EdgePanSamples::kept("fg_hudless",true,true) && !EdgePanSamples::kept("fg_ui",true,true) &&
+            !EdgePanSamples::kept("fg_final",true,true) && !EdgePanSamples::kept("rr_color",true,true) &&
+            !EdgePanSamples::kept("rr_mvec") && EdgePanSamples::kept("rr_mvec",false,true) &&
+            EdgePanSamples::kept("final") && EdgePanSamples::kept("material") && !EdgePanSamples::kept("rr_post_ac")))return 1;
+  for(auto name:{"depth","final","material","albedo","rr_mvec","rr_post_ac","rr_post_eb"})
+    for(uint64_t i=1;i<=8;++i)if(!check(!EdgePanSamples::wanted(name,i,true,true) || EdgePanSamples::kept(name,true,true)))return 1;
   auto edge_without_mv=edge;edge_without_mv.mvec=true;
   if(!check(!edge_without_mv.complete()))return 1;
   std::puts("pan epoch and explicit warmup/K16 completeness checks passed");
