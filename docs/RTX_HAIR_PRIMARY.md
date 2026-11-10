@@ -1318,6 +1318,32 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
   bad/good every frame is never refused (holes on every other frame); with slot_stable, groups without a readable
   placement fall back to draw order (as today).
 
+**Per-groom coverage table (2026-11-10, branch claude/hair-groom-coverage, offline; replaces item 5's open point).**
+- Source: the native converter on the whole catalogue (`bg3rtx_hairconv --all`, LSLib 1.20.4 granny2.dll from the
+  user's folder, never copied): 20 styles in 6 s (220/min), all 1,217 rows in 406 s with --export-hcap (4 jobs x 4
+  threads): 898 pass, 282 needs-review, 37 reject. The converter's validation already renders strands and cards in
+  three views at 2 mm pixels with the bound's own composited opacities (tools/hairconv/validate.cpp: sum_g, sum_c); it
+  now also writes their ratio per view, `coverage_ratio` (it wrote only the difference `coverage_delta`). That is U/C,
+  the quantity rt_hair_coverage_union judges, at the near footprint; U/C does not change with the footprint (5u).
+- U/C: every written groom (898 pass) lies inside the gate's bounds in all 3 views: 0.907 (BEARD_BUGBEAR_Short_A LOD1)
+  to 1.075 (BEARD_HUM_M_Short_C) against [0.8913, 1.0945]; 3 have a view under 0.92, 1 over 1.07. Outside the bounds
+  are 72 rows, none written: 37 rejects (headwear braids with an empty view, corpse hair 0.11-0.20, Afro_Short_C LOD1
+  0.45, ...) and 44 needs-review (the Watcher headwear hair 0.882-0.888, stuffed bugbear heads 0.882, Minthara LOD0
+  0.881-0.894). With --accept-review those 44 would flicker at the lower bound: keep them unwritten.
+- S/C by footprint (tools/hair_groom/coverage_audit.py, the test card on each style's real card mesh and mask in
+  texture space, 898 grooms, 35 min at 6 jobs, cached): median S/C relative to 1 texel per pixel 0.947 / 0.855 /
+  0.763 / 0.694 at 2 / 4 / 8 / 16; with each groom's 3-D ratio, the old count falls under the bound for 15% / 81% /
+  99% / 100% of the grooms at 2 / 4 / 8 / 16 texels per pixel (cause A, every style). Texture space has no view term:
+  its U/C (median 1.176) overestimates the 3-D ratio (median 0.988), so only the relative S/C fall is taken from it.
+  Strand points sit on mask alpha 0.944 (median; p5 0.894): the barycentric placement is right.
+- Not in any catalogue row: index counts 3399 and 7086 (the two S8 draws on cards in every hs1 period). They use the
+  static CHAR_Hair shader but are no LOD 0/1 CHAR_Hair row with an MSKA mask, so the converter never sees them;
+  naming them needs a GR2 index-count scan. 1623 and 4077 are LOD1 beards (BEARD_HUM_M_Short_H/I/J) left as
+  needs-review (no file). The user's other unmatched counts (4578, 4800, 7224, 9384, 14073, 78216, 123912) all have a
+  passing groom (9384: DWR passes, the HUM variant needs review): only conversion on the user's PC is missing.
+- 2 mm radius cap: 124 of 898 grooms have points at it, at most 0.17% of their points (OGRE dreads), median 0.003%,
+  medians 0.13-0.23 mm. No visible effect: a few clumps on near-degenerate LOD1 UV triangles are clamped.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

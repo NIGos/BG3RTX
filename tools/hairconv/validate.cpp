@@ -729,7 +729,7 @@ void render_full(const FragList<LFrag>& lf, const FragList<Frag>& fr, const View
   });
 }
 
-struct ViewResult { double iou = 0, coverage = 0, radiance = 0; };
+struct ViewResult { double iou = 0, coverage = 0, radiance = 0, ratio = 0; };
 
 ViewResult validate_view(const Mesh& m, const CardTex& tex_view, const CardTex& tex_light, const Groom& g,
                          const Head& head, const View& view, const double light[3]) {
@@ -772,6 +772,7 @@ ViewResult validate_view(const Mesh& m, const CardTex& tex_view, const CardTex& 
   ViewResult r;
   r.iou = double(inter) / double(std::max<long long>(uni, 1));
   r.coverage = n ? sum_g / double(n) - sum_c / double(n) : 0.0;
+  r.ratio = sum_c > 0 ? sum_g / sum_c : 0.0;   // strand over card opacity: the coverage bound's own quantity (RTX_HAIR_PRIMARY 5u)
   r.radiance = nr ? (sum_ig / double(3 * nr)) / std::max(sum_ic / double(3 * nr), 1e-9) - 1 : 0.0;
   return r;
 }
@@ -815,6 +816,7 @@ Validation validate_full(const Mesh& m, const Mask& mask, const Groom& g, const 
   for (const ViewResult& r : res) {
     out.iou.push_back(r.iou);
     out.coverage.push_back(r.coverage);
+    out.ratio.push_back(r.ratio);
     out.radiance.push_back(r.radiance);
   }
   return out;

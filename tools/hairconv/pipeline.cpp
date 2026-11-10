@@ -162,7 +162,10 @@ Rec process(const std::string& name, const Input& in_arg, const Mesh* grid_ref, 
     for (size_t i = 0; i < v.size(); ++i) j += (i ? ", " : "") + num(round3(v[i]));
     j += "]";
   };
-  if (o.full) { arr("iou", val.iou); arr("coverage_delta", val.coverage); arr("radiance_delta", val.radiance); }
+  if (o.full) {
+    arr("iou", val.iou); arr("coverage_delta", val.coverage); arr("radiance_delta", val.radiance);
+    arr("coverage_ratio", val.ratio);   // 5u: sum of strand opacity / sum of card opacity, the gate bound's quantity
+  }
   if (!rec.asset.empty()) j += ", \"asset\": \"" + rec.asset + "\", \"asset_bits\": " + std::to_string(bits);
   j += extra_json;
   j += ", \"seconds\": {";

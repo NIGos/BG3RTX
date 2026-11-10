@@ -105,7 +105,7 @@ Groom reorient(const Groom& g, const double centre[3], int* flipped);
 Head head_from_roots(const Groom& g);   // capture.head_from_roots
 
 // ---- validation (render.py, batch.process; tools/hairconv/validate.cpp) ----
-struct Validation { std::vector<double> iou, coverage, radiance; };
+struct Validation { std::vector<double> iou, coverage, radiance, ratio; };   // ratio: strand / card opacity per view
 Validation validate_full(const Mesh& m, const Mask& mask, const Groom& g, const Head& head, int threads);
 
 // ---- output (asset.py / storage.py) ----
