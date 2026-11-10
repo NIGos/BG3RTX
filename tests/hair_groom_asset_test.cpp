@@ -453,6 +453,38 @@ static void test_vp_eye() {
   c.note(102, p1);
   CHECK(c.find(102)->eye < 0);                     // not read
 }
+// 6a rt_hair_stale_publish: the submit-time camera check, with hl1 210357's trip frames as the moved case.
+static void test_stale_publish() {
+  using namespace hair_primary;
+  // The trips: G-buffer frame 2618 applied build frame 2617's publish, header camera 0.524 m from the frame's.
+  CHECK(stale_publish(2617, 2618, 0.524f) == Stale::Moved);
+  CHECK(stale_publish(2621, 2622, 0.342f) == Stale::Moved);
+  // A still camera: the older publish traces exactly as before (hp_rebase gives org 0).
+  CHECK(stale_publish(2617, 2618, 0.0f) == Stale::SameCamera);
+  CHECK(stale_publish(2617, 2618, kStaleCameraTol) == Stale::SameCamera);   // inside the card band's fixed term
+  CHECK(stale_publish(2617, 2618, 0.0101f) == Stale::Moved);
+  // Its own build frame: same camera, or moved (a camera that differs from its own publish is checked by camera too).
+  CHECK(stale_publish(2618, 2618, 0.0f) == Stale::Own);
+  CHECK(stale_publish(2618, 2618, 0.5f) == Stale::Moved);
+  // Unknown camera: own frame keeps the old behaviour, an older publish or no publish camera fails closed.
+  CHECK(stale_publish(2618, 2618, -1.0f) == Stale::Own);
+  CHECK(stale_publish(2617, 2618, -1.0f) == Stale::Unknown);
+  CHECK(stale_publish(0, 2618, 0.0f) == Stale::Unknown);
+  CHECK(stale_publish(2617, 2618, std::nanf("")) == Stale::Unknown);
+  DrawSlots slots;
+  slots.keys[0] = 0x8424ull << 48; slots.keys[3] = 0x3efaull << 48; slots.keys[15] = 0xad91ull << 48;
+  const uint32_t recorded = (1u << 0) | (1u << 3) | (1u << 15);
+  CHECK(stale_card_slots(true, Stale::Moved, slots) == recorded);
+  CHECK(stale_card_slots(true, Stale::Unknown, slots) == recorded);
+  CHECK(stale_card_slots(true, Stale::Own, slots) == 0 && stale_card_slots(true, Stale::SameCamera, slots) == 0);
+  CHECK(stale_card_slots(false, Stale::Moved, slots) == 0);   // key off: no behaviour change in any frame
+  // The masks the shader reads: the card slots leave the swap bits and enter bits 16-31.
+  const uint32_t m = slot_masks(recorded & ~stale_card_slots(true, Stale::Moved, slots), recorded);
+  CHECK((m & 0xFFFFu) == 0 && (m >> 16) == recorded);
+  const float a[3] = {-217.835f, 15.327f, -197.319f}, b[3] = {-217.835f, 15.327f, -196.795f};
+  CHECK(std::fabs(camera_distance(a, b) - 0.524f) < 1e-3f && camera_distance(a, a) == 0.0f);
+  CHECK(std::string(stale_name(Stale::Moved)) == "camera moved since the publish");
+}
 static void test_coverage_union() {
   using namespace hair_primary;
   uint32_t seed = 12345;
@@ -1249,7 +1281,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_stale_publish();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
