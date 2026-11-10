@@ -1726,6 +1726,30 @@ VP eye 0.000 m at both; every dropout "rejected after the hit"; no trip in a sta
 - Next after the live: if Y is about 0 and trips are 0, the rebase with org != 0 is the remaining defect (strands for
   those frames instead of cards); if Y is about one step, +208 of the build UBO is not the G-buffer's camera.
 
+## 6b. 6a carded every frame in hf2 (offline 2026-11-10, branch claude/hair-stale-camera: rt_hair_stale_publish fixed, off)
+
+Live hf2 225504 (rt_hair_stale_publish=1 with rt_hair_mv_card=2, rt_hair_row_stable=1, rt_hair_pixel_lod=1): every
+period line "camera not known 60; drawn as cards 60", every G-buffer by label applied build frame N - 1, still camera
+included. So strands were cards in every frame and its 0 watchdog trips mean nothing.
+- k = 1 is the normal label pairing, not a fault. The G-buffer frame is frame_index + 1 at its recording, the build frame
+  frame_index at the build; in all 60 submits of every period the build labelled N was not yet noted at G-buffer N's
+  submit. 210357's trip lines (k = 1) therefore did not single out the trips, and "header camera X m from build frame
+  F's" there compared with a build that may be the next game frame. 6a's cause claim is withdrawn: the trips are not
+  explained by k.
+- Why "not known": the camera came from the gCam UBO only after a swapped G-buffer draw, matched by command buffer; the
+  first frame drew no strand (no lookup) and every carded frame after it gave no coverage evidence, so no draw swapped
+  again (a lock-in). The label fallback (build camera of frame N) is never there at the submit (above).
+- Fix: the gCam UBO (set 0 binding 2) is looked up at any main-view G-buffer hair draw, swapped or not, matched by the
+  G-buffer frame (not the command buffer), at most 4 tries per header; the label fallback is gone from the decision.
+  Only a measured move over 1 cm cards a frame; an unknown camera always traces as before. Period line: "not measured:
+  no hair draw, no binding, not mapped, VP eye off". The first 4 checks of a session are logged whatever the verdict, so
+  a live shows whether the G-buffer's camera equals the k = 1 publish's (then the key never acts on a still camera).
+- rt_hair_mv_card, rt_hair_pixel_lod and rt_hair_row_stable do not change the submit order: mv_card selects a velocity
+  specialization and header flags; the other two are read inside the build (bvhsplit.cpp 2310, 2314: row order and LOD),
+  which is recorded where it always was (rt_after_capture after the prepass).
+- CTest hair_groom_asset_test test_stale_publish (unknown never cards, the label lookup is empty at the submit, the
+  reasons, the bounded lookup).
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU
