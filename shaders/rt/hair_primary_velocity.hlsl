@@ -12,6 +12,12 @@
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
 static const uint hair_primary_slot_mask_offset = 3504u;   // common/hair_primary.h kSlotMaskOffset
 static const uint hair_primary_marker_card = 0x40u;        // common/hair_primary.h kMarkerCard
+// rt_hair_mv_card (common/shader_variant.h kSpecIdHairMvCard, docs/RTX_HAIR_PRIMARY.md 5x): compiled in at 1, header
+// flags switch it live. kFlagMvCardFallback: a strand pixel without valid previous points writes the card's own skinned
+// motion (b70cadc5 from location 1) instead of camera-only motion; kFlagMvCardAll: every strand pixel does. 0: as before.
+[[vk::constant_id(1049)]] const uint kHairMvCard = 0u;
+static const uint hair_primary_flag_mv_card_fallback = 128u;   // common/hair_primary.h kFlagMvCardFallback
+static const uint hair_primary_flag_mv_card_all = 256u;        // common/hair_primary.h kFlagMvCardAll
 
 struct Camera {               // set 0 binding 2
   row_major float4x4 view, proj, vp;
@@ -128,7 +134,19 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   // published pose moved with the camera only.
   float3 prev_build;
   float3 prev;
-  if (row.w != 0u && hp_prev_build_camera(rec, prev_build)) {
+  const bool have_prev = row.w != 0u && hp_prev_build_camera(rec, prev_build);
+  if (kHairMvCard != 0u) {
+    const uint mv_flags = ld(rec + 60u);
+    if ((mv_flags & hair_primary_flag_mv_card_all) != 0u || (!have_prev && (mv_flags & hair_primary_flag_mv_card_fallback) != 0u)) {
+      const float2 card_prev_px = ((prev_clip.xy / prev_clip.w) * float2(0.5, -0.5) + 0.5) * gScreen.scale + gScreen.offset;
+      Out k;
+      k.mv = (pos.xy + float2(gPrev.jitter.x, -gPrev.jitter.y)) -
+             (card_prev_px * float2(gSize.m0, gSize.m1) + float2(gPrev.prev_jitter.x, -gPrev.prev_jitter.y));
+      k.depth = asfloat(e.z);
+      return k;
+    }
+  }
+  if (have_prev) {
     prev = lerp(ldf3(hp_at(pool, row.w, i0, 12u)), ldf3(hp_at(pool, row.w, i0 + 1u, 12u)), v) + prev_build - gPrev.position;
   } else {
     const float3 cur = lerp(ldf3(hp_at(pool, row.x, i0, 12u)), ldf3(hp_at(pool, row.x, i0 + 1u, 12u)), v);

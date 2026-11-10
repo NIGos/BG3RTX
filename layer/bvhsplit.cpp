@@ -1044,7 +1044,9 @@ std::unordered_set<uint64_t> g_groom_logged_unmatched;
 std::unordered_set<uint32_t> g_groom_uv_seen;
 uint64_t g_groom_first_seen = 0;
 uint64_t g_groom_prev_keys[hair_primary::kMaxGrooms] = {};
-hair_primary::GroomRows g_groom_rows;   // rt_hair_row_stable: each groom's row while it is live
+hair_primary::GroomRows g_groom_rows;
+// 5x (rt_hair_mv_card): published groom rows per window by previous-points state (hair_primary::PrevRow).
+uint64_t g_prev_rows[size_t(hair_primary::PrevRow::Count)] = {};   // rt_hair_row_stable: each groom's row while it is live
 bool g_row_stable = false;
 bool g_pixel_lod = false;   // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): this capture's camera BLAS and TLAS
 uint32_t g_groom_prev_n = 0;   // (index count, verdict) of unmatched hair draws, logged once
@@ -2881,6 +2883,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
                      uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; uint32_t prims = 0;
                      bool prev_ok = false; uint32_t stride = 0;   // round 3 M1: the slot's last update was the previous build frame
+                     uint64_t prev_last = 0;   // 5x counter line: the slot's previous update frame (hair_primary::prev_row_state)
                      const GroomAsset::Cam* cam = nullptr; bool cam_refit = false; };   // rt_hair_pixel_lod: its camera BLAS
   const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
@@ -3379,6 +3382,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         g.rec = rec;
         // M1: prev points are last frame's, not an older update's (prev_frames is checked at the row, after this update)
         w.prev_ok = hair_primary::groom_prev_points(2u, g.last_update, now);
+        w.prev_last = g.last_update;
         g.last_update = now;
         // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): the camera level (hair_groom::pixel_lod_level, then the 30-frame
         // vote) and the camera BLAS on this slot's points; level 0: the camera rays trace the groom BLAS, as without it.
@@ -4305,6 +4309,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           // rt_hair_pixel_lod: the segment starts of the BLAS the camera rays trace (the pixel record's segment indexes it).
           hp_rows[k] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(ci && w.cam ? w.cam->seg : w.l->seg),
                                   w.prev_ok && w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};   // M1: last frame's
+          if (primary_key) ++g_prev_rows[size_t(hair_primary::prev_row_state(w.g->prev_frames, w.prev_last, now))];
           // No UVs yet, or a points range in its first update (new LOD or upload: its BLAS and points exist on the
           // GPU only from this build on): its draw keeps the card.
           // H2: a slot that published its key keeps it through a LOD switch (primary_key above).
@@ -4468,6 +4473,19 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->groom_first = n;
   g_groom_st.max_instances = (std::max)(g_groom_st.max_instances, groom_count);
   if (g_groom_on && (cfg_int("rt_stats_period_frames", 0) <= 0 ? now % 300 == 0 : now > g_groom_stats_start && (now - g_groom_stats_start) % stats_period(300) == 0)) {
+    {   // 5x (rt_hair_mv_card): the rows the velocity variant reads, with and without previous points, and why
+      const uint64_t* r = g_prev_rows;
+      uint64_t pubs = 0, no_cam_gap = 0, no_cam_gpu = 0;
+      hair_primary_prev_camera_stats(&pubs, &no_cam_gap, &no_cam_gpu);
+      log_stats("[hair groom] strand motion (last %u frames): keyed groom rows %llu, with previous points %llu, without %llu "
+                "(first update %llu, two updates in one build frame %llu, skipped build frames %llu); publishes %llu, without "
+                "the previous camera %llu (previous publish not one frame back %llu, GPU slot %llu); rt_hair_mv_card %d",
+                stats_period(300), (unsigned long long)(r[0] + r[1] + r[2] + r[3]), (unsigned long long)r[0],
+                (unsigned long long)(r[1] + r[2] + r[3]), (unsigned long long)r[1], (unsigned long long)r[2],
+                (unsigned long long)r[3], (unsigned long long)pubs, (unsigned long long)(no_cam_gap + no_cam_gpu),
+                (unsigned long long)no_cam_gap, (unsigned long long)no_cam_gpu, cfg_int("rt_hair_mv_card", 0));
+      for (uint64_t& v : g_prev_rows) v = 0;
+    }
     log_stats("[hair groom] frame %llu: %u groom instances; last %u frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
         "refits %llu, LOD switches waiting for upload %llu (kept) / %llu (groom dropped), compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
         "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB; shared-key rows withheld %llu (rt_hair_shared_key)",

@@ -56,6 +56,9 @@ constexpr uint32_t kFlagMacroNormal = 1u << 4, kFlagTangentWorld = 1u << 5;
 // 5u rt_hair_groom_nearest: the candidate-filtered nearest-strand trace (shaders/rt/hair_primary_nearest.hlsli), read only by
 // a G-buffer variant built with specialization kSpecIdHairGroomNearest = 1 (the live off-switch, as kFlagCoverage).
 constexpr uint32_t kFlagNearest = 1u << 6;
+// 5x rt_hair_mv_card: the strand motion vector from the card's own skinned motion, read only by a velocity variant built
+// with specialization kSpecIdHairMvCard = 1. Fallback: only where the row has no valid previous points; All: every pixel.
+constexpr uint32_t kFlagMvCardFallback = 1u << 7, kFlagMvCardAll = 1u << 8;
 constexpr uint32_t kHeaderWords = 16;
 constexpr uint32_t kDrawSlots = 16;
 constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
@@ -1086,6 +1089,16 @@ struct GroomRows {
 // with points from an older frame. last_update: the build frame of the slot's last update before this one.
 inline bool groom_prev_points(uint32_t prev_frames_after, uint64_t last_update, uint64_t now) {
   return prev_frames_after > 1 && last_update && last_update + 1 == now;
+}
+// 5x (rt_hair_mv_card counter line): why a published groom row carries no previous points (row.w 0: the velocity variant
+// then writes camera-only motion, or with kFlagMvCardFallback the card's). prev_frames_after: the points range's updates
+// including this one; last_update: the build frame of the slot's update before this one (0: none); now: this build frame.
+enum class PrevRow : uint32_t { Valid = 0, FirstUpdate, SameFrame, Skipped, Count };
+inline PrevRow prev_row_state(uint32_t prev_frames_after, uint64_t last_update, uint64_t now) {
+  if (prev_frames_after <= 1 || !last_update) return PrevRow::FirstUpdate;   // new LOD, upload, reallocated points, first match
+  if (last_update >= now) return PrevRow::SameFrame;                         // two updates under one build frame
+  if (last_update + 1 != now) return PrevRow::Skipped;                       // held, refused or card frames in between
+  return PrevRow::Valid;
 }
 
 // Diagnostic (docs/RTX_HAIR_PRIMARY.md 5q): a groom slot whose points left their own bounds between two consecutive

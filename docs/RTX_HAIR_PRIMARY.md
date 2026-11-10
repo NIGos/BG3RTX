@@ -1554,6 +1554,33 @@ hit"). Before and after, the row order was constant for hundreds of frames with 
 - User check: Advanced, "Strand hair: stable strand rows" On, S8 with several characters in view, zoom with the wheel:
   no holes in the hair at the start of the zoom.
 
+## 5x. Strand motion vectors (offline 2026-11-10, branch claude/hair-mv: key rt_hair_mv_card, off)
+User: strand hair at isometric distance trails / blurs when characters or the camera move (as before).
+- Measured on the hs1-s8-static-hair bursts (static camera, idle party; `tools/hair_groom/mv_ratio.py`): 73-86% of
+  class-5 pixels carry the camera-only motion vector (within 0.02 px of the static background) with strands, 5-7% with
+  cards; hair / 6 px ring median |mv| 0.05-0.23 with strands, 0.52-1.08 with cards. Most strand pixels show 1e-4 px while
+  the head next to them moves 0.1-0.4 px: RR fetches their history from where the hair was (a trail).
+- Two paths give camera-only motion: (a) the row has no previous points (`hair_primary_velocity.hlsl` fallback; row.w 0
+  unless `prev_ok && prev_frames > 1`, layer/bvhsplit.cpp hp_rows; prev_ok needs the slot updated in the previous build
+  frame) or the header has no previous camera; (b) the velocity variant does not write (a discard: seal/tag, accepted
+  marker, ownership; or the GEQUAL depth test), and the game's full-screen camera pass value stays. The logs favour (b):
+  one publish per frame, "recovered 0", so (a) should be rare at an idle camera. The bursts cannot separate them.
+- Built (off by default): `rt_hair_mv_card` (dev key, pinned 0 in data/release.ini). Specialization 1049
+  (`kSpecIdHairMvCard`) compiled into the velocity variant when the key is non-zero at pipeline creation; header flags
+  kFlagMvCardFallback (1: the card's own skinned motion, b70cadc5 from location 1, only where the row has no valid
+  previous points) and kFlagMvCardAll (2: every strand pixel) switch it live. Strand points are barycentric on their
+  card triangles, so the card's motion is the strand's up to the card-to-strand offset.
+- Counter line (detailed logging): `[hair groom] strand motion (last N frames): keyed groom rows R, with previous points
+  P, without W (first update, two updates in one build frame, skipped build frames); publishes, without the previous
+  camera (previous publish not one frame back, GPU slot); rt_hair_mv_card` (`hair_primary::prev_row_state`, unit test in
+  hair_groom_asset_test).
+- Key off: 225/227 requests byte-identical to main b29a9d3b; rt/hair_primary_velocity.hlsl (file and manifest entry)
+  equivalent with 1049 frozen to 0 (tools/release_shader_equivalence.py); variants delta 0; spirv-val passes.
+- Live (staged, not queued): tools/live_batches_staged/hair_mv, hm1-s8-hair-mv: the counter line at 0/1/2 and two
+  RR-input bursts (0, 2) in one S8 run; predictions in predicted.json. If 2 leaves the camera-only share high, (b) is the
+  cause and the next step is a velocity discard counter, not another motion formula.
+- User check (once qualified): S8 or the camp with the party walking; the hair should move with the heads instead of
+  leaving a smear behind them. Not in the launcher yet.
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

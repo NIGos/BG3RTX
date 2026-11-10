@@ -1,0 +1,28 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch with the user's set (release Ultra, fg=3, the RTX Hair bundle as hs1) plus rt_hair_mv_card=1 at startup (specialization 1049 compiled into the velocity variant), the hs1 lowered view, then a static camera with the party idling (hs1 2026-11-10 bursts show the idle motion: hair-adjacent pixels 0.08-0.33 px/frame). Two 16-frame bursts with the RR inputs: strands with rt_hair_mv_card=0, strands with rt_hair_mv_card=2 (live header flags). Analysis: py -3 tools/hair_groom/mv_ratio.py <pan mv0> <pan mv2> --labels mv0,mv2, then tools/hair_groom/temporal_burst.py on the same two.",
+  "observable": "Do strand pixels get the motion of the hair they show? Share of class-5 pixels whose motion vector equals the camera-only motion (|mv - static background mv| < 0.02 px) and the hair / 6 px ring median |mv| ratio.",
+  "mechanism (counter line, every window)": {
+    "line": "[hair groom] strand motion (last N frames): keyed groom rows R, with previous points P, without W (first update, two updates in one build frame, skipped build frames); publishes, without the previous camera ...",
+    "predicted": "W / R under 5% and publishes without the previous camera 0 at the idle static camera (hl1/hs1: one publish per frame, 'recovered 0'); then row.w 0 is NOT the main cause and mv_card=1 changes nothing measurable",
+    "decides_rows_if": "W / R >= 50% in the static windows: the previous points are missing (M1 gate), mv_card=1 is the fix; report the dominant reason"
+  },
+  "motion vectors": {
+    "predicted_mv0": "camera-only share 0.75-0.98, hair/ring ratio 0-0.55 (hs1 16 bursts: 0.83-0.86 within 0.02 px, ratio 0-0.54)",
+    "predicted_mv2": "camera-only share <= 0.15 and hair/ring ratio 0.6-1.1 (the cards of hs1: 0.055-0.068, 0.56-1.02)",
+    "decides_fix_if": "mv2 within the cards' range on both numbers",
+    "if_mv2_unchanged": "the velocity variant does not reach the motion path for most strand pixels (a discard before it: seal/tag, accepted marker, ownership test, or the GEQUAL depth test): next is a velocity discard counter, not another MV formula"
+  },
+  "temporal": {
+    "predicted": "temporal_burst.py mc-diff (motion-compensated frame difference) of rr_color and final in the hair region lower with mv2 than mv0 by more than the half-burst spread; final flicker not higher",
+    "energy": "final mean in the hair region mv2 within 1% of mv0 (a motion-vector change is reconstruction: it must not change mean brightness)"
+  },
+  "invalid_if": [
+    "either burst without '[pan] burst <serial> complete: ... transport ok'",
+    "no '[hair groom] strand motion' line in a static window",
+    "hair region < 2000 render px in a burst",
+    "background median |mv| > 0.05 px (the camera moved)",
+    "ring median |mv| < 0.05 px in both bursts (the party did not move: no signal; rerun later in the session, not a new tool)"
+  ],
+  "cost": "report only: '[hair primary] strand G-buffer draws GPU' ms in the mv0 and mv2 windows (the card path skips two point loads: equal or lower)",
+  "disk": "2 bursts x ~4.9 GB (hs1 burst size with pan_inputs) = ~9.8 GB transient, above the ~2 GB guide: no smaller RR-input capture exists (pan_edge drops the motion vectors). Deleted right after mv_ratio.py and temporal_burst.py; summaries kept."
+}

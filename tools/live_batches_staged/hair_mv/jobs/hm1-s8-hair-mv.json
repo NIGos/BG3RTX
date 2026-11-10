@@ -1,0 +1,143 @@
+{
+  "name": "hm1-s8-hair-mv",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "timeout": 1460,
+  "max_minutes": 5,
+  "repeat": 1,
+  "live_batch": "hair-mv",
+  "tree": ".claude/worktrees/test-main",
+  "window_mode": "visible_unfocused_fg",
+  "fail_fast": true,
+  "stop_on_dump": false,
+  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,rt_hair_mv_card=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rr_hair_strand_aa=2,detailed_logging=1,rt_stats_period_frames=60",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches_staged/hair_mv/plans/hm1-s8-hair-mv.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[watch\\]",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[pan\\]",
+    "\\[rrpost\\]",
+    "\\[hair primary\\] frame",
+    "\\[hair groom\\] strand motion",
+    "\\[hair primary\\] strand G-buffer draws GPU",
+    "\\[rt\\] scene wait",
+    "rt passes: GPU cost",
+    "\\[sl\\] DLSS-G frame",
+    "\\[sl\\] warn",
+    "VK_ERROR",
+    "\\[log\\]"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[cfg\\] settings read",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+    "\\[hair primary\\] frame \\d+: \\d+ grooms published; .*main G-buffer [1-9]\\d*/\\d+",
+    "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\)",
+    "\\[pan\\] burst 99400 complete: \\d+ frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99401 complete: \\d+ frames, \\d+ samples, transport ok"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "\\[log\\] reached \\d+ MB",
+    "\\[sl\\] .*eWarnOutOfVRAM",
+    "\\[rrpost\\] rr_post\\.hlsl:strand_resolve pipeline creation failed"
+  ],
+  "expect_every": [
+    {
+      "name": "render-res chain GPU ms in every settle window (cost, report only)",
+      "select": "\\[rrpost\\] gpu: render-res chain",
+      "match": "render-res chain [0-9.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "settle-mv0",
+        "settle-mv1",
+        "settle-mv2"
+      ],
+      "period_frames": 60
+    },
+    {
+      "name": "scene wait: 0 timeouts in every settle window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "settle-mv0",
+        "settle-mv1",
+        "settle-mv2"
+      ]
+    },
+    {
+      "name": "strand motion counter line in every settle window (rows with and without previous points)",
+      "select": "\\[hair groom\\] strand motion",
+      "match": "keyed groom rows [1-9]\\d*, with previous points \\d+",
+      "min": 1,
+      "windows": [
+        "settle-mv0",
+        "settle-mv1",
+        "settle-mv2"
+      ]
+    }
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "\\[wheel-input\\] phase=2 notches=10\\b",
+    "\\[motion-plan\\] complete phases=12\\b",
+    "^Run ended: done"
+  ],
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 3,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 20.463847203269342,
+        "windows": 140,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.164930.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.005103.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.015416.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.085153.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.095322.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.103633.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.125217.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.133243.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv3-s8-mesh-cache-budget.1.203607.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv3-s8-mesh-cache-budget.1.220145.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv5-s8-blas-cap-occupied.1.204140.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv5-s8-blas-cap-occupied.1.220726.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.35799999999289867,
+      "quantile": 0.95,
+      "samples": 43,
+      "maximum": 0.4969999999993888
+    }
+  },
+  "estimated_phase_seconds": 75.7,
+  "purpose": "RTX Hair strand motion vectors at S8 (user set, fg=3, static camera, idle party): the counter line at rt_hair_mv_card 0/1/2 and 16-frame RR-input bursts at 0 and 2 in one run; mv_ratio.py (camera-only share, hair/ring ratio) and temporal_burst.py (mc-diff, energy). STAGED, not authorized."
+}

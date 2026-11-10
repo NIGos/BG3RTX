@@ -1030,6 +1030,14 @@ static void test_round3() {
   // M1: previous points only when the slot's last update was the previous build frame.
   CHECK(groom_prev_points(2, 99, 100) && !groom_prev_points(2, 97, 100) && !groom_prev_points(2, 0, 100));
   CHECK(!groom_prev_points(1, 99, 100));
+  // 5x: why a keyed row has no previous points (the counter line); Valid exactly when groom_prev_points holds.
+  CHECK(prev_row_state(2, 99, 100) == PrevRow::Valid);
+  CHECK(prev_row_state(1, 99, 100) == PrevRow::FirstUpdate && prev_row_state(5, 0, 100) == PrevRow::FirstUpdate);
+  CHECK(prev_row_state(3, 100, 100) == PrevRow::SameFrame && prev_row_state(3, 101, 100) == PrevRow::SameFrame);
+  CHECK(prev_row_state(3, 97, 100) == PrevRow::Skipped);
+  for (uint32_t pf = 0; pf < 4; ++pf)
+    for (uint64_t last = 0; last < 104; last += 1)
+      CHECK((prev_row_state(pf, last, 100) == PrevRow::Valid) == groom_prev_points(pf, last, 100));
   // L4: the composed decision. Record-time header tag 1000 (keys A, B), this frame's publish 1001 without B, built in
   // this submit before the G-buffer: applied, B's slot cards, the swap mask without B.
   const uint64_t A = 0xA0, B = 0xB0;
