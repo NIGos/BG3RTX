@@ -1640,6 +1640,38 @@ User: strand hair at isometric distance trails / blurs when characters or the ca
   (`EdgePanSamples::kept`) are skipped before the budget (layer/dump.cpp pan_capture, pan_epoch_test); hm1 unchanged.
 - User check (once qualified): S8 or the camp with the party walking; the hair should move with the heads instead of
   leaving a smear behind them. Not in the launcher yet.
+## 5z. Holes under a fast camera step: where a camera mismatch could hide (offline 2026-11-10, branch claude/hair-cam-step: diagnostic, no key)
+
+Live hl1 200821 (VALID) confirmed 5x's prediction: 6 frame watchdog trips at G-buffer frames 2064, 2065, 2067-2070, each
+with a build camera step of 0.34-1.81 m (1.813 m at 2068: a 130 ms frame while 16fa158c decoded on the render thread;
+the wheel dolly runs at about 15 m/s), none in the static windows. Frame 2066 (step about 0.4 m) did not trip.
+
+- Read for a build-camera / render-camera mismatch (one frame of a 0.5 m step moves every strand 0.5 m):
+  - Groom points: rt/hair_groom_update.hlsl reads this build's soup, which rt/xfb_to_world.hlsl converted with the
+    capture UBO's VP (+128): camera-relative to that VP's origin. Groom TLAS instances are identity (bvhsplit.cpp
+    groom TLAS build). The header camera is the same UBO's +208 (rtscene.cpp rt_after_capture), re-read at the build's
+    submit with 0 differences (item 11). So points and header camera describe one frame.
+  - G-buffer: the header is decided at vkQueueSubmit (hair_primary.cpp hair_primary_submit_begin); in the trip period
+    58 of 61 G-buffers applied this frame's publish (org = 0), TLAS check 0, header/BLAS mismatch 0, build after the
+    G-buffer 0. Card point, ray direction, hit depth and the card band (hp_on_card) all use the G-buffer's own gCam.vp.
+    rt_hair_header_cam_gpu (GPU copy of the camera) did not change the turn trips in hc1.
+  - Moving-camera mode (bvhsplit.cpp:2626 `moving`): no holds of absent draws (:2813), no hold snapshots (:3459), the
+    dynamic list in draw order (rows fixed by 5w). A held hair draw never updates its groom (soup_update_ok), so an
+    absent draw loses its own key only; the trips are frame-wide.
+  - Left unproven: the rays start at the VP origin (hp_rebase org; dir from inv(gCam.vp) of the near-plane point), which
+    is right only while the eye sits at that origin. If BG3's camera-relative origin lags the eye in motion, every ray
+    starts one step off. Also possible: a G-buffer that applied an older publish in exactly the trip frames.
+- Diagnostic (CPU only, no shader, no ABI, variants delta 0): `hair_primary::vp_eye` (the projection centre of the
+  build UBO's VP, kept per build frame in CameraSteps) and GbFrame::pub_frame (the publish applied at submit). The frame
+  watchdog line now ends `applied the publish of build frame B (k frames before), header camera X m from build frame F's;
+  VP eye E1 m from the origin at that publish, E2 m at build frame F`. CTest hair_groom_asset_test test_vp_eye.
+- hl1 regenerated (every trip line must carry these fields; predicted.json camera_mismatch_5z): eye about one step at
+  the trips and 0 when still -> the fix is a ray from the near-plane point along the pixel line (shader, spec constant);
+  eye 0 and k > 0 -> a stale header under motion (submit pick); eye 0, k 0 -> no camera mismatch in the header, next the
+  per-reason reject counters (owner, card band, tips) of the strand G-buffer.
+- hl1 wheel expect: 200821 was VALID (results.md shows no INVALID for it; its job had `phase=2`). The `phase=1` misses are
+  180301 and 180949, which ran the job from before 5x.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

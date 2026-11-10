@@ -425,6 +425,34 @@ static void test_camera_steps() {
   c.note(0, a);                                       // frame 0 is never kept
   CHECK(c.step(14 + CameraSteps::kKeep - 1) == 0.0f);
 }
+// 5z: the eye of a camera-relative VP (the strand rays start at the origin) and the publish/camera lookups the frame
+// watchdog line prints.
+static void test_vp_eye() {
+  using namespace hair_primary;
+  // Row-vector convention as rt/xfb_to_world.hlsl: clip_j = sum_k p_k vp[4k + j] + vp[12 + j]. A perspective camera at E.
+  const float E[3] = {0.4f, -0.3f, 1.8f}, a = 1.2f, b = 1.9f;
+  float vp[16] = {};
+  vp[0] = a; vp[12] = -a * E[0];
+  vp[5] = b; vp[13] = -b * E[1];
+  vp[11] = -1.0f; vp[15] = E[2];
+  vp[10] = 0.0f; vp[14] = 0.1f;   // reversed-Z infinite: clip z = near
+  float eye[3];
+  const float d = vp_eye(vp, eye);
+  CHECK(std::fabs(eye[0] - E[0]) < 1e-5f && std::fabs(eye[1] - E[1]) < 1e-5f && std::fabs(eye[2] - E[2]) < 1e-5f);
+  CHECK(std::fabs(d - std::sqrt(0.16f + 0.09f + 3.24f)) < 1e-5f);
+  vp[12] = vp[13] = vp[15] = 0.0f;                // the eye at the origin (BG3's still camera)
+  CHECK(vp_eye(vp, eye) < 1e-6f);
+  float ortho[16] = {};                            // orthographic: w row (0, 0, 0, 1) says nothing about the eye
+  ortho[0] = ortho[5] = 1.0f; ortho[10] = 1.0f; ortho[15] = 1.0f;
+  CHECK(vp_eye(ortho, eye) < 0.0f);
+  CameraSteps c;
+  const float p0[3] = {0, 0, 0}, p1[3] = {0, 0, 0.5f};
+  c.note(100, p0, 0.0f); c.note(101, p1, 0.5f);
+  CHECK(std::fabs(c.between(100, 101) - 0.5f) < 1e-6f && c.between(100, 99) < 0);
+  CHECK(c.find(101) && c.find(101)->eye == 0.5f && !c.find(99));
+  c.note(102, p1);
+  CHECK(c.find(102)->eye < 0);                     // not read
+}
 static void test_coverage_union() {
   using namespace hair_primary;
   uint32_t seed = 12345;
@@ -1221,7 +1249,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

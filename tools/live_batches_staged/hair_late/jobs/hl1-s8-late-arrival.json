@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 543,
+  "timeout": 560,
   "max_minutes": 4,
   "repeat": 1,
   "live_batch": "hair-late",
@@ -76,7 +76,7 @@
     {
       "name": "every frame watchdog line in lower and watch names the build camera step",
       "select": "\\[hair primary\\] watchdog: G-buffer frame",
-      "match": "build camera step -?[0-9.]+ m at that frame",
+      "match": "build camera step -?[0-9.]+ m at that frame.*applied the publish of build frame \\d+ .*VP eye -?[0-9.]+ m",
       "windows": [
         "lower",
         "watch"
@@ -145,10 +145,11 @@
           0,
           0
         ],
-        "fps": 20.463847203269342,
-        "windows": 140,
+        "fps": 8.826125330967004,
+        "windows": 149,
         "logs": [
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.164930.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.200821.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.005103.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.015416.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.085153.log",
@@ -170,6 +171,6 @@
       "maximum": 0.4969999999993888
     }
   },
-  "estimated_phase_seconds": 62.2,
+  "estimated_phase_seconds": 80.0,
   "purpose": "Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the groom TLAS check and the first-seen frame lines: which candidate breaks the existing keys' strands. Then, same launch, rt_hair_pixel_lod off/on/off at the static zoomed-out camera: period line, strand G-buffer GPU ms, PNG bursts of the heads. STAGED, not authorized."
 }
