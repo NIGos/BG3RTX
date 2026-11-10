@@ -210,6 +210,7 @@ uint64_t g_watchdog_spared_mark = 0;   // rt_hair_watchdog_one_key: g_watchdog.s
 // count runs the union request and the gate and both watchdogs judge every accepted strand pixel instead of only those
 // inside the card markers. The pipeline of each request ([0] default, [1] union) and its shader generation.
 hair_primary::FootprintStats g_footprint;
+hair_primary::LateArrival g_late;   // rt_hair_debug_late_arrival (dev only)
 bool g_cfg_union = false;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
 float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
@@ -1368,6 +1369,7 @@ void live_tick() {
     g_live_ever.store(true, std::memory_order_release);
     // rt_hair_live_warmup (5u audit): every groom slot rebuilds now (UVs), votes its LOD and re-joins: the level-load
     // warm-up window (ended by rt_hair_warmup's settled signal, at most kLoadQuietFrames).
+    g_late.switch_on(now);   // rt_hair_debug_late_arrival: re-armed at every switch-on
     const bool warm = cfg_int("rt_hair_live_warmup", 0) != 0;
     if (warm) g_load.restart(now);
     log("[hair primary] live: strands ON at frame %llu (switch %u): swaps resume after %s",
@@ -1397,6 +1399,24 @@ bool strands_on() {
   return g_live_on.load(std::memory_order_acquire) && g_header.b != VK_NULL_HANDLE;
 }
 }  // namespace
+
+bool hair_primary_late_hold(uint32_t index_count) {
+  const int want = cfg_int("rt_hair_debug_late_arrival", 0);
+  if (want <= 0 || index_count != uint32_t(want)) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  const uint64_t now = frame_index();
+  bool start, release;
+  const bool hold = g_late.draw(now, &start, &release);
+  if (start)
+    log("[hair primary] late arrival: groom of the %u-index hair draws held from frame %llu for %llu frames after the "
+        "switch-on at frame %llu (rt_hair_debug_late_arrival)", index_count, (unsigned long long)now,
+        (unsigned long long)(g_late.on + hair_primary::kLateArrivalFrames - now), (unsigned long long)g_late.on);
+  if (release)
+    log("[hair primary] late arrival: groom of the %u-index hair draws released at frame %llu, %llu frames after the "
+        "switch-on (%u draw frames held)", index_count, (unsigned long long)now, (unsigned long long)(now - g_late.on),
+        g_late.held);
+  return hold;
+}
 
 bool hair_primary_wanted() {
   live_tick();

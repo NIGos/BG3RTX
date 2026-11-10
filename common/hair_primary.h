@@ -807,6 +807,27 @@ struct LoadGuard {
   }
 };
 
+// rt_hair_debug_late_arrival (dev only, off: 0; docs/RTX_HAIR_PRIMARY.md 5u): reproduces a groom that arrives while the
+// other keys already swap (hs1 125217: three characters joined 41 frames after a live switch-on, after the warm-up had
+// ended). After every live strands switch-on the hair draws with the key's index count get no groom (no join, no
+// instance, not counted by the warm-up) for kLateArrivalFrames: one frame more than the longest warm-up window
+// (kLoadQuietFrames), so the release always falls after the warm-up's end, whatever its settled signal did.
+constexpr uint64_t kLateArrivalFrames = kLoadQuietFrames + 1;
+struct LateArrival {
+  bool armed = false, released = true;
+  uint64_t on = 0;
+  uint32_t held = 0;   // draws held in the current window (one per frame and draw)
+  void switch_on(uint64_t now) { armed = true; released = false; on = now; held = 0; }
+  bool holding(uint64_t now) const { return armed && now >= on && now - on < kLateArrivalFrames; }
+  // One draw with the selected index count in frame `now`: true to hold its groom. *start / *release: log once each.
+  bool draw(uint64_t now, bool* start, bool* release) {
+    *start = *release = false;
+    if (holding(now)) { *start = held++ == 0; return true; }
+    if (armed && !released && held) { released = true; *release = true; }
+    return false;
+  }
+};
+
 inline uint32_t key(uint32_t groom, uint32_t segment) {
   return groom < 255u && segment <= kMaxSegment ? (groom << 24) | segment : kNoStrand;
 }

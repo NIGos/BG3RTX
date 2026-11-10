@@ -360,6 +360,26 @@ static void test_coverage_audit() {
   for (uint64_t f = 531; f <= 531 + kWarmupSettledFrames; ++f) lg.settle(f, true);
   CHECK(!lg.quiet(531 + kWarmupSettledFrames + 1) && lg.early);
 }
+// rt_hair_debug_late_arrival: the hold after every switch-on, its length, the logs once each, re-armed by the next.
+static void test_late_arrival() {
+  using namespace hair_primary;
+  static_assert(kLateArrivalFrames == kLoadQuietFrames + 1, "one frame past the longest warm-up window");
+  LateArrival l;
+  bool start = false, release = false;
+  CHECK(!l.draw(5, &start, &release) && !start && !release);   // never switched on: nothing held
+  l.switch_on(2219);
+  CHECK(l.draw(2219, &start, &release) && start && !release);
+  CHECK(l.draw(2220, &start, &release) && !start);
+  CHECK(l.draw(2219 + kLateArrivalFrames - 1, &start, &release) && !start && !release);
+  CHECK(!l.draw(2219 + kLateArrivalFrames, &start, &release) && release && l.held == 3);
+  CHECK(!l.draw(2219 + kLateArrivalFrames + 1, &start, &release) && !release);   // released once
+  l.switch_on(3299);   // the next switch-on re-arms
+  CHECK(l.draw(3300, &start, &release) && start && l.held == 1);
+  CHECK(!l.draw(3299 + kLateArrivalFrames + 5, &start, &release) && release);
+  LateArrival unseen;   // a window in which the draw never came: no release line
+  unseen.switch_on(10);
+  CHECK(!unseen.draw(10 + kLateArrivalFrames, &start, &release) && !start && !release);
+}
 static void test_coverage_union() {
   using namespace hair_primary;
   uint32_t seed = 12345;
@@ -1086,7 +1106,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

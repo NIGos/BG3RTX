@@ -1423,6 +1423,27 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
 - In the RTX Hair On bundle since this run (branch claude/hair-nearest-default; code default 0). It is compiled into the
   strand pipelines at their creation: a game started with RTX Hair off keeps the restart loop until a restart.
 
+**Late arrival on demand (branch claude/hair-late-arrival, offline, staged job, 2026-11-10).**
+- `rt_hair_debug_late_arrival` (developer only, an index count, 0 off, pinned 0 in data/release.ini, in no preset or
+  bundle; CPU only, no shader, no ABI change): after every live strands switch-on the hair draws with that index count
+  get no groom for kLateArrivalFrames = kLoadQuietFrames + 1 = 301 frames (bvhsplit: no groom work, no UV join, not
+  counted as unsettled by the warm-up, as if the character were not in the scene). 301 is one past the longest
+  warm-up window, so the release falls after the warm-up's end whatever its settled signal does (133243: it ended 93
+  frames after the switch). Re-armed by every switch-on (hair_primary::LateArrival). Lines: `[hair primary] late
+  arrival: groom of the N-index hair draws held from frame F ...` and `... released at frame F, D frames after the
+  switch-on (H draw frames held)`. CTest hair_groom_asset_test test_late_arrival.
+- Selection: 45252, the draw whose groom (16fa158c, LOD 0 889,639 points) was the first upload of the 125217 transient
+  (trip at 2171, one frame after it). One count keeps the key an int; the other two arrivals are not held.
+- Job (STAGED, not queued): tools/live_batches_staged/hair_late/jobs/hl1-s8-late-arrival.json (plan in plans/,
+  generator make_job.py, predicted.json). One S8 launch, the RTX Hair bundle with rt_hair_groom_nearest=1 at startup,
+  static camera lowered 10 notches; warm-loop (nearest 0, live: header flag off), off-a, arrival-a (481 frames, nearest
+  0), off-b, arrival-b (481 frames, nearest 1). 481 = 301 + 3 periods of 60. live_flow lint (live and frozen corpus):
+  0 failing; 4 readiness queries added to lint_corpus_snapshot.json (extend_readiness, nothing else changed).
+- Predicted (predicted.json): both windows hold the release line (301-399 frames after the switch-on). arrival-a: at
+  least one period with frame watchdog trips >= 1 or dropouts >= 1 (125217: 6 trips, 55 dropouts); arrival-b: every
+  period line with frame watchdog trips 0, key watchdog trips 0 and dropouts 0-2. If A shows no holes, the test does
+  not reproduce 125217 with 45252 alone (the fix stays proven by the GPU case only); the period lines then say why.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
