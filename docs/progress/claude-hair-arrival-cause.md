@@ -25,3 +25,11 @@
   messages, input) decides it; not decidable offline. A player's settings change writes only the ini.
 - No fix landed (the cause is not established). Left: the observable above, then the fix at the cause; the hl1 job
   should gate the natural arrival in its first phase change instead of holding one groom.
+- Added (2026-11-10, same branch): the observable and the job. With detailed logging: a groom TLAS check at every strand
+  G-buffer submit (hair_primary::TlasCheck: the newest build of the header's TLAS address against the header's own
+  build; a line when another, already submitted build is traced, with instance counts and the first differing key, and
+  a period line), and for the 6 frames after a hair draw is first seen waiting for its UV join a line with the groom
+  rows (vs the previous publish), keyed rows whose row index now holds another key, and full BLAS builds. CTest
+  hair_groom_asset_test test_tlas_check. hl1 rewritten to gate the natural arrival (warm-up 20 s, "lower" as in 161106,
+  watch 360 frames; no hold, no fail-fast; predicted.json names what candidates A-D print). No shader or ABI change,
+  variants delta 0.

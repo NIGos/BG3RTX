@@ -807,6 +807,50 @@ struct LoadGuard {
   }
 };
 
+// 5u observable (hl1 161106: existing keys lost their strands at the frame a new hair draw first appeared, before any
+// groom of it existed): the groom TLAS a strand G-buffer really traces against the header applied to it. Each groom
+// TLAS build records its address, its build (recording id), frame and the key of each instance in instance order
+// (layer/bvhsplit.cpp: instance k is header row k by construction). At the G-buffer's submit the applied header names a
+// TLAS address and its own build; when the newest build of that address is another one and is already submitted (one
+// queue: it runs before this G-buffer), the G-buffer traces that TLAS under the header's rows and key map. Diagnostic,
+// CPU only, with detailed logging.
+struct TlasCheck {
+  struct Build { uint64_t rec = 0, frame = 0; uint32_t n = 0; uint64_t keys[kMaxGrooms] = {}; };
+  struct Result {
+    bool other = false;          // the TLAS at the header's address is another build's, already submitted
+    uint32_t n_tlas = 0, n_header = 0;
+    int first_diff = -1;         // first instance whose key differs from the header row's (-1: none, counts equal)
+    uint64_t key_tlas = 0, key_header = 0, frame_tlas = 0;
+  };
+  std::unordered_map<uint64_t, Build> built;
+  uint64_t checked = 0, other = 0, differ = 0;
+  void build(uint64_t address, uint64_t rec, uint64_t frame, const uint64_t* keys, uint32_t n) {
+    if (!address) return;
+    Build& b = built[address];
+    b.rec = rec; b.frame = frame; b.n = (std::min)(n, kMaxGrooms);
+    for (uint32_t i = 0; i < kMaxGrooms; ++i) b.keys[i] = i < b.n ? keys[i] : 0;
+  }
+  template <class Submitted>
+  Result check(uint64_t address, uint64_t header_rec, const uint64_t* header_keys, uint32_t header_n, Submitted submitted) {
+    Result r;
+    const auto it = built.find(address);
+    if (!address || it == built.end()) return r;
+    ++checked;
+    const Build& b = it->second;
+    if (b.rec == header_rec || !submitted(b.rec)) return r;   // the header's own build is what this G-buffer traces
+    r.other = true;
+    ++other;
+    r.n_tlas = b.n; r.n_header = (std::min)(header_n, kMaxGrooms); r.frame_tlas = b.frame;
+    for (uint32_t i = 0; i < (std::max)(r.n_tlas, r.n_header); ++i) {
+      const uint64_t t = i < r.n_tlas ? b.keys[i] : 0, h = i < r.n_header ? header_keys[i] : 0;
+      if (t != h) { r.first_diff = int(i); r.key_tlas = t; r.key_header = h; break; }
+    }
+    if (r.first_diff >= 0) ++differ;
+    return r;
+  }
+  void reset_period() { checked = other = differ = 0; }
+};
+
 // rt_hair_debug_late_arrival (dev only, off: 0; docs/RTX_HAIR_PRIMARY.md 5u): reproduces a groom that arrives while the
 // other keys already swap (hs1 125217: three characters joined 41 frames after a live switch-on, after the warm-up had
 // ended). After every live strands switch-on the hair draws with the key's index count get no groom (no join, no

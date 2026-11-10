@@ -1013,7 +1013,12 @@ struct GroomStats {
 } g_groom_st;
 uint64_t g_groom_stats_start = 0;
 std::unordered_set<uint32_t> g_groom_logged_counts;
-std::unordered_set<uint64_t> g_groom_logged_unmatched;   // (index count, verdict) of unmatched hair draws, logged once
+std::unordered_set<uint64_t> g_groom_logged_unmatched;
+// 5u observable: index counts seen waiting for a UV join, the last frame one was first seen, the previous publish's rows.
+std::unordered_set<uint32_t> g_groom_uv_seen;
+uint64_t g_groom_first_seen = 0;
+uint64_t g_groom_prev_keys[hair_primary::kMaxGrooms] = {};
+uint32_t g_groom_prev_n = 0;   // (index count, verdict) of unmatched hair draws, logged once
 
 bool ensure_groom_pipeline() {
   Bg3ShaderBlob blob{};
@@ -2734,7 +2739,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     log("[hair groom] level load: %zu join verdicts, %zu UV joins and %u UV readbacks in flight dropped",
         g_groom_join.size(), g_groom_uv.size(), pending);
     g_groom_join.clear();
-    g_groom_uv.clear();
+    g_groom_uv.clear(); g_groom_uv_seen.clear(); g_groom_first_seen = 0;
     g_groom_logged_unmatched.clear();
     hair_groom::flush_seen();   // the previous level's styles without a groom (one small file write per level load)
     hair_groom::rescan();       // grooms converted since (bg3rtx_hairconv): usable from this level on, never mid-level
@@ -3055,6 +3060,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       ++g_groom_st.unmatched;
       ++g_groom_st.miss[size_t(fd.groom_miss)];
       const uint64_t what = (uint64_t(fd.groom_indices) << 8) | uint64_t(fd.groom_miss);
+      // 5u observable: the frame a hair draw is first seen waiting for its join (the hl1 161106 trigger).
+      if (fd.groom_miss == hair_groom::JoinMiss::UvPending && !g_groom_uv_seen.count(fd.groom_indices)) {
+        g_groom_uv_seen.insert(fd.groom_indices);
+        g_groom_first_seen = now;
+      }
       if (g_groom_logged_unmatched.size() < 64 && g_groom_logged_unmatched.insert(what).second) {
         log("[hair groom] unmatched hair draw: %u indices (%u triangles): %s", fd.groom_indices, fd.prims,
             hair_groom::join_miss_name(fd.groom_miss));
@@ -4020,6 +4030,26 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         ai.accelerationStructure = g_groom_tlas[slot].as;
         groom_tlas_address = dd->vk.GetAccelerationStructureDeviceAddressKHR(dd->device, &ai);
         if (hp_on) {
+          // 5u observable (detailed logging): this TLAS's instances, and in the frames after a hair draw was first seen
+          // what changed for the existing rows (count, rows whose key moved, full builds).
+          hair_primary_groom_tlas_built(groom_tlas_address, rec, hp_keys, groom_count);
+          if (g_groom_first_seen && now >= g_groom_first_seen && now - g_groom_first_seen <= 6 &&
+              logging::stats_enabled(cfg_int)) {
+            uint32_t moved = 0, builds = 0;
+            int first = -1;
+            for (uint32_t r = 0; r < groom_count && r < hair_primary::kMaxGrooms; ++r)
+              if (hp_keys[r] && g_groom_prev_n > r && g_groom_prev_keys[r] != hp_keys[r]) { if (first < 0) first = int(r); ++moved; }
+            for (const GroomWork& w : groom_work) builds += w.refit ? 0u : 1u;
+            log_stats("[hair groom] frame %llu (a hair draw first seen at %llu): groom rows %u (previous publish %u), keyed "
+                      "rows whose row index now holds another key than before %u (first row %d: %04llx -> %04llx), full "
+                      "BLAS builds %u of %zu, groom TLAS scene slot %u at 0x%llx (full TLAS build)",
+                      (unsigned long long)now, (unsigned long long)g_groom_first_seen, groom_count, g_groom_prev_n, moved,
+                      first, first >= 0 ? (unsigned long long)(g_groom_prev_keys[first] >> 48) : 0ull,
+                      first >= 0 ? (unsigned long long)(hp_keys[first] >> 48) : 0ull, builds, groom_work.size(), slot,
+                      (unsigned long long)groom_tlas_address);
+          }
+          g_groom_prev_n = (std::min)(groom_count, hair_primary::kMaxGrooms);
+          std::memcpy(g_groom_prev_keys, hp_keys, sizeof g_groom_prev_keys);
           uint32_t w = 0, h = 0;
           float viewport[4];
           geo_render_size(&w, &h);
