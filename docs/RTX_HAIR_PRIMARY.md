@@ -1024,6 +1024,21 @@ Root cause NOT established. Verified facts, then the one hypothesis left and the
   fibre keys).
 - Fixture: hair_groom_asset_test (groom_bounds_jump: idle animation, another character, not consecutive, no bounds).
 
+## 5r. Release policy made the toggle inert in 0.9.5-beta (offline 2026-11-10, branch claude/hair-release-policy: no key)
+- 0.9.5-beta shipped with RTX Hair On doing nothing in release (dev=0): no strands were drawn. The user's session had
+  the whole 5l set at 1 in bg3rtx_user.ini, but `[cfg] keys` showed rt_hair_groom, shadow_t, ao_t, cascade_drop, fibre,
+  fibre_gi, fibre_spec, fibre_mapped, rr_hair_guides and rt_hair_physical_origin at 0.
+- Cause: `enforce_release_policy` (common/settings.h) resets every developer-only knob to its first choice. Ten keys of
+  the On choice are also owned by developer-only knobs (exp_hair_groom, exp_hair_groom_shadow_t, exp_hair_groom_ao_t,
+  exp_hair_groom_cascade_drop, exp_hair_fibre, _gi, _spec, _mapped, exp_rr_hair_guides, exp_hair_physical_origin), so
+  the reset undid the release control. The launcher still showed On (its `mark`, rt_hair_groom_primary, stayed 1).
+- Fix: the selected choice of a release control keeps the file's values of the keys it writes through that reset.
+  Only RTX Hair On overlaps a developer reset today (settings_test `test_release_rtx_hair` pins the list). Off, or a
+  stale raw rt_hair_groom=1 without the control On, is reset as before; dev=1 is unchanged. `rt_hair`
+  (Ctrl+Shift+F7) still gates the whole On list (layer/util.cpp `hair_gated`).
+- Consequence: release players who turn RTX Hair on now really get strands, and with them the open strand flicker
+  (5n, 5p: not fixed, hs1 staged). Until 0.9.5-beta is replaced, its RTX Hair toggle shows cards only.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

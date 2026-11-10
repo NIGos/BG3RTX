@@ -1179,8 +1179,9 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 // (launcher: "Show experimental options", Experimental page). Rejected candidates
 // (compact hit state, alpha metadata cache, empty water tiles), perf_* keys, diagnostics and
 // knobs owned by an automatic release policy are not listed and stay developer only.
-// Release 2026-11: Water surface reflections, FG pacing tests and the strand edge resolve. Other strand hair (exp_hair_*) is a post-release
-// update and returns to this list with it; until then release resets its keys.
+// Release 2026-11: Water surface reflections, FG pacing tests and the strand edge resolve. The other strand knobs
+// (exp_hair_*) stay developer only: release resets their keys, except the ones the release control RTX Hair
+// (exp_hair_groom_primary, 2026-11-08) writes while it is On (enforce_release_policy).
 inline constexpr const char* kOptInKnobs[] = {
   "water_surface_fresnel", "fg_destroy_wait_exact", "fg_present_metering",
   // 5n: lets players judge the strand edge resolve live themselves (RTX Hair dithering).
@@ -1405,7 +1406,17 @@ inline void enforce_release_policy(Map& m) {
   // experimental_options=1: the player opted into the unqualified kOptInKnobs; 0 restores them.
   const bool opt_in = map_int(m, "experimental_options", 0) == 1;
   const bool omm_enabled = map_int(m, "rt_omm", 1) != 0;
+  // The selected choice of a release control wins over the reset below for the keys that choice writes: RTX Hair On
+  // (exp_hair_groom_primary) writes keys the developer-only exp_hair_* knobs also own, and 0.9.5-beta shipped with the
+  // toggle inert because their reset undid it. Only that choice overlaps today (settings_test pins the list).
+  KVList keep;
+  for (const auto& k : kKnobs) {
+    const int c = k.dev_only || k.kind != Kind::Choice ? -1 : knob_value(k, m);
+    if (c < 0 || k.choices[c].dev) continue;
+    for (const KV& kv : k.choices[c].kv) if (kv.key) keep.emplace_back(kv.key, lookup(m, kv.key));
+  }
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
+  for (const auto& kv : keep) m[kv.first] = kv.second;
   // Player files can override the packaged defaults. Keep diagnostic pins
   // effective after layering too. geo_capture is an RT input, not a capture
   // dump; Detailed logging permits support statistics, not reference passes.

@@ -1340,6 +1340,64 @@ static void test_release_migration() {
   for (const auto& kv : stale) CHECK_EQ(get(m, kv.first.c_str()), kv.second);
 }
 
+// 0.9.5-beta shipped with the release control RTX Hair inert: the reset of the developer-only exp_hair_* knobs undid
+// the keys its On choice writes (rt_hair_groom and nine more). The selected choice of a release control now wins.
+static void test_release_rtx_hair() {
+  const Knob& hair = *find_knob("exp_hair_groom_primary");
+  CHECK(!hair.dev_only && knob_visible(hair, false));
+  // Keys a developer-only knob's reset writes, with the knob.
+  Map owner;
+  for (const auto& k : kKnobs) if (k.dev_only) {
+    KVList kvs; knob_kvs(k, 0, kvs);
+    for (const auto& kv : kvs) owner[kv.first] = k.id;
+  }
+  std::string zeroed;
+  for (const KV& kv : hair.choices[1].kv) if (kv.key && owner.count(kv.key)) zeroed += std::string(kv.key) + "<" + owner[kv.key] + " ";
+  CHECK_EQ(zeroed, "rt_hair_groom<exp_hair_groom rt_hair_groom_shadow_t<exp_hair_groom_shadow_t rt_hair_groom_ao_t<exp_hair_groom_ao_t "
+    "rt_hair_groom_cascade_drop<exp_hair_groom_cascade_drop rt_hair_fibre<exp_hair_fibre rt_hair_fibre_gi<exp_hair_fibre_gi "
+    "rt_hair_fibre_spec<exp_hair_fibre_spec rt_hair_fibre_mapped<exp_hair_fibre_mapped rr_hair_guides<exp_rr_hair_guides "
+    "rt_hair_physical_origin<exp_hair_physical_origin ");
+  // The rule's footprint: the only choice of a release control that writes a developer-reset key to another value.
+  std::string touched;
+  for (const auto& k : kKnobs) if (!k.dev_only && k.kind == Kind::Choice)
+    for (int c = 0; c < choice_count(k); ++c) {
+      bool differs = false;
+      for (const KV& kv : k.choices[c].kv) if (kv.key && owner.count(kv.key)) {
+        KVList off; knob_kvs(*find_knob(owner[kv.key].c_str()), 0, off);
+        for (const auto& o : off) if (o.first == kv.key && !same_value(o.second, kv.value)) differs = true;
+      }
+      if (differs) touched += std::string(k.id) + ":" + k.choices[c].id + " ";
+    }
+  CHECK_EQ(touched, "exp_hair_groom_primary:on ");
+
+  const Map release = parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini") + read_file(BG3RTX_SOURCE_DIR "/data/release.ini"));
+  auto merged = [&](Map user, bool dev = false) {
+    user["preset"] = "ultra"; user["experimental_options"] = "1";
+    if (dev) user["dev"] = "1";
+    Map m = code_defaults(); apply_layer(m, release); apply_layer(m, user);
+    Map again = m; enforce_release_policy(again); CHECK(again == m);
+    return m;
+  };
+  // On (the user's 0.9.5-beta file): the whole bundle survives; strand keys outside it are still reset.
+  Map on = on_map(hair, 1); on["rt_hair_groom_tips"] = "1"; on["rt_hair_watchdog_draw"] = "1";
+  Map m = merged(on);
+  CHECK_EQ(get(m, "dev"), "0"); CHECK(knob_value(hair, m) == 1);
+  for (const KV& kv : hair.choices[1].kv) if (kv.key) CHECK_EQ(std::string(kv.key) + "=" + get(m, kv.key), std::string(kv.key) + "=" + kv.value);
+  CHECK_EQ(get(m, "rt_hair_groom_tips"), "0"); CHECK_EQ(get(m, "rt_hair_watchdog_draw"), "0");
+  CHECK_EQ(get(m, "rt_hair"), "1");   // the Ctrl+Shift+F7 master is a separate key (layer/util.cpp hair_gated)
+  // Off with the rest of the bundle left at 1: every developer-owned key is reset, as before.
+  Map off = on; off["rt_hair_groom_primary"] = "0"; off["rt_hair_capture"] = "0";
+  m = merged(off);
+  CHECK(knob_value(hair, m) == 0);
+  for (const KV& kv : hair.choices[1].kv) if (kv.key && owner.count(kv.key)) CHECK_EQ(std::string(kv.key) + "=" + get(m, kv.key), std::string(kv.key) + "=0");
+  // A stale raw key without the release control: still reset.
+  { Map stale; stale["rt_hair_groom"] = "1"; m = merged(stale); }
+  CHECK_EQ(get(m, "rt_hair_groom"), "0"); CHECK(knob_value(hair, m) == 0);
+  // dev=1: the policy does not run.
+  m = merged(off, true);
+  CHECK_EQ(get(m, "rt_hair_groom"), "1"); CHECK_EQ(get(m, "rt_hair_fibre"), "1");
+}
+
 static void test_stats_window() {
   int period = 0, token = 0, seen = 0;
   const auto cfg = [&](const char* key, int) { return std::string(key) == "rt_stats_period_frames" ? period : token; };
@@ -1559,6 +1617,7 @@ int main(int argc, char** argv) {
     CHECK(key_change_needs_restart("fg_present_metering","1","0"));
   }
   test_strand_bundle();
+  test_release_rtx_hair();
   test_dlss5_native_setting();
   test_detailed_logging();
   test_release_fg_diagnostics();
