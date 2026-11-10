@@ -28,3 +28,10 @@
   tools.live_batches.lint_snapshot` on this PC shrinks the checked-in snapshot from 79 to 26 logs (needs a merge mode);
   the same CPU camera feeds the cascade caster rebase (rt_cascade_origin=0), the groom LOD bounds and rt_camera_moving.
 - User check (once qualified): S8, wheel zoom in fast: the hair keeps its strands, no pop to cards.
+- 2026-11-11, live hl1 000345 (key on): partial. Origin 0 in every sample, coverage in the zoom 50-70% (was 2-7%), still
+  7 trips; coverage falls with the step (1.31 m: 5%) and is all or nothing per draw. The 0-trip prediction was wrong.
+- Second defect, best candidate (not proven): the header's TLAS and rows are one publish older than the in-place BLASes
+  (stale instance boxes: whole grooms missed). Added the build stamp (layer only, no shader, detailed logging): trip
+  lines and a period line say whether the points were of the applied publish's build, a newer or an older one. CTest
+  test_build_stamp. GbFrame::pub_frame now reset per G-buffer. Sampler unchanged (needs a shader change; next if the
+  stamp says "same"). hl1 regenerated, predicted.json second_defect_6d; lint 0 failing. Details: 6d.

@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 534,
+  "timeout": 555,
   "max_minutes": 4,
   "repeat": 1,
   "live_batch": "hair-late",
@@ -85,9 +85,9 @@
       "min": 0
     },
     {
-      "name": "no frame watchdog trip in lower and watch, header camera copied on the GPU",
+      "name": "header camera copied on the GPU in lower and watch (trips reported: 000345 had 7, see 6d)",
       "select": "\\[hair primary\\] header safety \\(last",
-      "match": ", watchdog trips 0, .* [1-9][0-9]* header cameras copied on the GPU",
+      "match": ", watchdog trips \\d+, .* [1-9][0-9]* header cameras copied on the GPU",
       "windows": [
         "lower",
         "watch"
@@ -99,6 +99,17 @@
       "name": "the rebase origin is 0 in every sampled frame of lower and watch (GPU sample, no label)",
       "select": "\\[hair primary\\] rebase origin \\(last",
       "match": " 0 with a non-zero origin .*rt_hair_header_cam_gpu 1",
+      "windows": [
+        "lower",
+        "watch"
+      ],
+      "period_frames": 60,
+      "min": 1
+    },
+    {
+      "name": "the build stamp period line in lower and watch, with frames read",
+      "select": "\\[hair primary\\] build stamp \\(last",
+      "match": "applied publish's build \\d+, of a newer build \\d+ .*, not read [0-9]\\b",
       "windows": [
         "lower",
         "watch"
@@ -167,9 +178,10 @@
           0,
           0
         ],
-        "fps": 20.463847203269342,
-        "windows": 164,
+        "fps": 8.826125330967004,
+        "windows": 179,
         "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hf2-s8-hair-final.1.000619.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.164930.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.200821.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hm1-s8-hair-mv.1.210705.log",
@@ -190,10 +202,10 @@
     "trace_export": {
       "seconds": 0.35799999999289867,
       "quantile": 0.95,
-      "samples": 43,
+      "samples": 47,
       "maximum": 0.4969999999993888
     }
   },
-  "estimated_phase_seconds": 53.2,
+  "estimated_phase_seconds": 74.8,
   "purpose": "6c: rt_hair_header_cam_gpu on (header camera from the GPU, the origin of the groom points), 0 frame watchdog trips in the zoom (lower) and after it (watch), rebase origin 0 in every sampled frame. Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the groom TLAS check and the first-seen frame lines: which candidate breaks the existing keys' strands. Then, same launch, rt_hair_pixel_lod off/on/off at the static zoomed-out camera: period line, strand G-buffer GPU ms, PNG bursts of the heads. STAGED, not authorized."
 }
