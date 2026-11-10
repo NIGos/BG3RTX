@@ -11,3 +11,18 @@
   BLAS memory, ~10-30% more groom refit ms, a cheaper strand trace. Cross-fade needs a shader change (open).
 - Details and the pick rule (k = 1.0 px, no pixel LOD under 60 px, quarter-octave hysteresis + vote):
   docs/RTX_HAIR_PRIMARY.md 5v.
+- (a) built and pushed (2a43c06b): keys rt_hair_pixel_lod (dev, 0, pinned in release.ini) and rt_hair_pixel_lod_k
+  (1.0); pixel_lod_level (common/hair_groom_budget.h): finest lod_keep / 2^j reaching k px, 1/32 floor, level 0 under
+  60 px, quarter-octave hysteresis; unit tests. Correction to the design: the camera subset needs no decode-time keep;
+  it is the groom's current LOD strands whose nested hash passes keep_lod / 2^j (original strand index recovered by
+  enumerating the hash over LOD 0's strand count = table points - segments), radii x 2^j.
+- (b)-(e) not started in this session (agent context exhausted). Plan with pointers for the next agent:
+  GroomSlot (layer/bvhsplit.cpp:524) gains the camera level, camera radius / index pool offsets (static per LOD and
+  level, computed on the CPU from the slot's LOD arrays, uploaded through the groom_lod staging path, freed in
+  groom_release and on a LOD switch with kGroomFreeLag) and a camera AsAlloc (LSS SUCCESSIVE on pos_off with the camera
+  radius and index buffers; full build when the level or LOD changes, refit with the groom BLAS after the points
+  update, bvhsplit.cpp ~3480); g_cam_tlas[kSceneSlots] / g_cam_inst beside g_groom_tlas (bvhsplit.cpp:995), built at
+  ~3930 in the same instance order; hair_primary_publish gets the camera TLAS address and rows with row.z = the camera
+  index offset; hair_primary_groom_tlas_built is called for the camera TLAS too (the 7f10d62b check). Cross-fade: a
+  per-strand stable hash test between levels j and j+1 in hp_nearest's candidate loop behind a new kSpecId (1048);
+  it needs both levels' segments in the camera BLAS: design it on the GPU fixture first.
