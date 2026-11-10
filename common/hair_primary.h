@@ -1512,6 +1512,23 @@ inline RebaseSample rebase_sample(const float ray[16], uint32_t tag) {
   r.hit_m = ray[7] != 0.0f ? ray[8] : -1.0f;
   return r;
 }
+// 6d: which build's groom points and BLASes a G-buffer traced, measured on the GPU. Every publish's build fills a stamp
+// cell with its header tag in its own command buffer (next to its in-place point update); the G-buffer's command buffer
+// copies the cell into a ring entry right after its header copy. applied: the tag of the publish whose header (TLAS,
+// rows, key map) that G-buffer read. Newer: a later build ran before the G-buffer, so it traced an older publish's TLAS
+// over refit BLASes (stale instance boxes: rays miss, more with a larger camera step). Older: its build ran after it.
+constexpr uint32_t kStampRing = 64, kStampRingOffset = 64, kStampBytes = kStampRingOffset + kStampRing * 8;
+enum class Stamp : uint8_t { Unread, Same, Newer, Older, Count };
+inline const char* stamp_name(Stamp s) {
+  static const char* const names[] = {"not read", "the applied publish's build", "a newer build", "an older build"};
+  return s < Stamp::Count ? names[size_t(s)] : "?";
+}
+inline uint32_t stamp_entry(uint32_t frame_tag) { return kStampRingOffset + (frame_tag % kStampRing) * 8; }
+// entry: the ring entry's two words (the copied stamp, the frame tag written at the G-buffer's recording).
+inline Stamp build_stamp(const uint32_t entry[2], uint32_t frame_tag, uint32_t applied) {
+  if (!frame_tag || !applied || entry[1] != frame_tag || !entry[0]) return Stamp::Unread;
+  return entry[0] == applied ? Stamp::Same : entry[0] > applied ? Stamp::Newer : Stamp::Older;
+}
 struct RebaseStats {
   uint64_t sampled = 0, moved = 0;
   float max_m = 0.0f;

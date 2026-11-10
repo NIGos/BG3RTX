@@ -128,7 +128,8 @@ struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] =
                    uint32_t traced = 0, hit = 0, tag = 0, evidence_tag = 0, tag_totals[hair_primary::kCountTags] = {}, accepted_totals[hair_primary::kCountTags] = {};
                    uint64_t evidence_frame = 0;
                    float ray[16] = {};
-                   hair_primary::RebaseSample rebase; };   // 6c: the judged frame's sampled ray (fresh: its own tag)
+                   hair_primary::RebaseSample rebase;
+                   hair_primary::Stamp stamp = hair_primary::Stamp::Unread; uint32_t stamp_tag = 0; };   // 6d   // 6c: the judged frame's sampled ray (fresh: its own tag)
 CountSeen g_seen;
 hair_primary::RebaseStats g_rebase;   // 6c, per period
 // C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
@@ -159,6 +160,9 @@ struct StagedHeader {
 // rt_hair_header_cam_gpu: the build's camera UBO copied on the GPU (geo_copy_camera, 256 bytes; position at byte 208).
 // Each publish first moves the previous publish's position from here to kPrevCameraOffset, then writes its own.
 HpBuf g_cam_gpu;
+// 6d (detailed logging only): the build stamp cell and its per-G-buffer ring (common/hair_primary.h build_stamp).
+HpBuf g_stamp;
+uint64_t g_stamp_n[size_t(hair_primary::Stamp::Count)] = {};
 uint64_t g_cam_gpu_pub = 0;   // publish frame + 1 of the last GPU camera copy (0: the slot holds none)
 // Item 11 (period line "header safety"): publishes whose camera UBO was re-read at the submit of their build, those whose
 // re-read differs from the record-time read st.cam (the GPU's xfb_to_world reads the UBO after the submit), and the
@@ -402,6 +406,15 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
     std::memcpy(g_seen.ray, s.map + hair_primary::kRaySampleOffset / 4, sizeof g_seen.ray);
     g_seen.rebase = hair_primary::rebase_sample(g_seen.ray, gf ? gf->tag : 0u);
     g_rebase.add(g_seen.rebase);
+    g_seen.stamp = hair_primary::Stamp::Unread;
+    g_seen.stamp_tag = 0;
+    if (gf && g_stamp.map) {   // 6d: the build whose points the judged G-buffer traced against the publish it applied
+      uint32_t entry[2];
+      std::memcpy(entry, static_cast<const uint8_t*>(g_stamp.map) + hair_primary::stamp_entry(gf->tag), sizeof entry);
+      g_seen.stamp = hair_primary::build_stamp(entry, gf->tag, uint32_t(gf->pub_frame + 1));
+      g_seen.stamp_tag = entry[0];
+      ++g_stamp_n[size_t(g_seen.stamp)];
+    }
     if (gf) g_mask_holes += s.map[hair_primary::kMaskHoleOffset / 4 + j];
     for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
       g_seen.keys[k] = row_keys[k];
@@ -488,13 +501,15 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
               "(-1: not kept); applied the publish of build frame %llu (%lld frames before), header camera %.3f m from "
               "build frame %llu's; VP eye %.3f m from the origin at that publish, %.3f m at build frame %llu; sampled "
               "strand ray of that frame on the GPU: rebase origin %.3f m (%.3f m along the ray; -1: no sample; not 0: the "
-              "header camera is not the groom points' origin), card distance %.3f m, hit distance %.3f m (-1: miss)",
+              "header camera is not the groom points' origin), card distance %.3f m, hit distance %.3f m (-1: miss); groom "
+              "points and BLASes on the GPU at that G-buffer: of %s (build stamp %lld, applied publish %llu; frame + 1)",
               (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
               (unsigned long long)g_watchdog.card, g_watchdog.bound(), (unsigned long long)hair_primary::kWatchdogFrames,
               g_cam_steps.step(gf->frame), g_cam_steps.step(gf->frame - 1), (unsigned long long)gf->pub_frame,
               (long long)gf->frame - (long long)gf->pub_frame, g_cam_steps.between(gf->pub_frame, gf->frame),
               (unsigned long long)gf->frame, eye_of(gf->pub_frame), eye_of(gf->frame), (unsigned long long)gf->frame,
-              g_seen.rebase.origin_m, g_seen.rebase.along_m, g_seen.rebase.card_m, g_seen.rebase.hit_m);
+              g_seen.rebase.origin_m, g_seen.rebase.along_m, g_seen.rebase.card_m, g_seen.rebase.hit_m,
+              hair_primary::stamp_name(g_seen.stamp), (long long)g_seen.stamp_tag, (unsigned long long)(gf->pub_frame + 1));
       }
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
@@ -709,6 +724,16 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot, uint32_
                             VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  if (g_stamp.b && g_stamp.map && slot >= 0) {   // 6d: the last executed build's stamp, as this G-buffer finds it
+    const uint32_t at = hair_primary::stamp_entry(tag), words[2] = {0u, tag};
+    std::memcpy(static_cast<uint8_t*>(g_stamp.map) + at, words, sizeof words);
+    VkMemoryBarrier sb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    sb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    sb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &sb, 0, nullptr, 0, nullptr);
+    const VkBufferCopy c{0, at, 4};
+    dd->vk.CmdCopyBuffer(cmd, g_stamp.b, g_stamp.b, 1, &c);
+  }
   g_last_tag = tag;
   // The tag this recording's strand passes seal with: the count recorded later in the same recording (the scene build
   // follows the G-buffer pass) counts that frame's entries, not a newer publish applied by another recording.
@@ -935,7 +960,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_last_tag = 0;
   if (g_qp) dd->vk.DestroyQueryPool(dd->device, g_qp, nullptr);
   g_qp = VK_NULL_HANDLE;
-  for (HpBuf* b : {&g_header, &g_pixels, &g_crumbs, &g_hdr_slots, &g_cam_gpu}) {
+  for (HpBuf* b : {&g_header, &g_pixels, &g_crumbs, &g_hdr_slots, &g_cam_gpu, &g_stamp}) {
     if (b->b) dd->vk.DestroyBuffer(dd->device, b->b, nullptr);
     if (b->m) dd->vk.FreeMemory(dd->device, b->m, nullptr);
     *b = HpBuf{};
@@ -1662,6 +1687,7 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
   gf.swapped_slots = 0;
 
   gf.tag = seal;
+  gf.pub_frame = g_staged[i].pick.tag ? g_staged[i].pick.tag - 1u : 0u;   // the record-time publish until a submit upgrade
   // A tag applied by two G-buffer frames: with a submit-time header the final tag is known only then (the check runs
   // there, hair_primary_submit_begin).
   if (slot < 0)
@@ -2014,6 +2040,15 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   const uint64_t pub = cam_ok ? build_frame : now;
   h.tag = uint32_t(pub + 1);
+  if (logging::stats_enabled(cfg_int) &&   // 6d: this build's stamp, in the command buffer that rewrites the points
+      (g_stamp.b || make(g_stamp, hair_primary::kStampBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                         "hair primary build stamp", true))) {
+    VkMemoryBarrier sb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    sb.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    sb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &sb, 0, nullptr, 0, nullptr);
+    dd->vk.CmdFillBuffer(cmd, g_stamp.b, 0, 4, h.tag);
+  }
   h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
   if (cfg_int("rt_hair_groom_coverage", 0) != 0) h.flags |= hair_primary::kFlagCoverage;   // M3.2, live off-switch
   if (cfg_int("rt_hair_groom_nearest", 0) != 0) h.flags |= hair_primary::kFlagNearest;     // 5u, live off-switch
@@ -2228,6 +2263,11 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         "rt_hair_header_cam_gpu %d", stats_period(300), (unsigned long long)g_rebase.sampled,
         (unsigned long long)g_rebase.moved, g_rebase.max_m, cfg_int("rt_hair_header_cam_gpu", 0) != 0 ? 1 : 0);
     g_rebase = hair_primary::RebaseStats{};
+    log_stats("[hair primary] build stamp (last %u frames): counted G-buffer frames whose groom points and BLASes were of "
+        "the applied publish's build %llu, of a newer build %llu (older TLAS and rows over refit BLASes), of an older "
+        "build %llu, not read %llu", stats_period(300), (unsigned long long)g_stamp_n[1], (unsigned long long)g_stamp_n[2],
+        (unsigned long long)g_stamp_n[3], (unsigned long long)g_stamp_n[0]);
+    for (uint64_t& n : g_stamp_n) n = 0;
     log_stats("[hair primary] stale publish check (last %u frames): G-buffer submits with the same camera "
         "as the publish, same label %llu, older label %llu, camera moved since the publish %llu, camera not known "
         "%llu; drawn as cards %llu (rt_hair_stale_publish %d); G-buffer camera from its UBO %llu, not measured: no hair "

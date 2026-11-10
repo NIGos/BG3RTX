@@ -1802,6 +1802,43 @@ Cause, from logs already on disk (no new live):
   attach_cascade, `prev->pos`), the groom bounds for the screen-size LOD (bvhsplit.cpp `bounds_cam`), geocapture.cpp:1629,
   rt_camera_moving. If the lag is general they are one step off for a frame when the camera accelerates.
 
+## 6d. After the GPU camera: whole grooms missed under a fast dolly (offline 2026-11-11, branch claude/hair-holes-root: diagnostic, no key; READY_FOR_LIVE)
+
+Live hl1 000345 (`rt_hair_header_cam_gpu=1`): rebase origin 0 in every sample; strand coverage in the zoom 50-70% instead
+of 2-7% (hf2 000619, key off); still 7 frame watchdog trips (G-buffer 2173-2179). 6c's prediction of 0 trips was wrong:
+the camera was the dominant error, not the only one.
+- What the run shows about the rest: coverage falls with the camera step of the frame (0.39 m: 64%, 0.50 m: 51%, 0.74 m:
+  48%, 1.31 m: 5%) and is all or nothing per draw (2173: e297 87/0 and b166 132/0 next to draws near their bound).
+- Read: inside one build the order is right (point update, barrier, BLAS refits, barrier, full groom TLAS build:
+  bvhsplit.cpp groom work, the BLAS batch and the groom TLAS build after it), so a TLAS of the same build has the boxes of
+  its BLASes.
+- Best candidate (not proven): the header the G-buffer reads (groom TLAS, rows, key map) is one publish older than the
+  points and BLASes on the GPU. Every build refits the BLASes in place; the older TLAS keeps the instance boxes of the
+  previous camera-relative positions. With the right camera a ray then misses a groom whose box moved off it, sideways by
+  about step x tan(angle from the view axis): small and off-centre heads lose everything, more with a larger step. The
+  CPU camera of 6c would be the same lag seen from the camera side. Against it: the submit pick counts "this frame's
+  publish 58-60 of 60"; why it would be one behind is not found.
+- Other candidates, by fit: LSS refit after a 0.4-1.3 m translation (bounds or quality; full builds 0 in the trip frames);
+  the screen-size LOD vote changing a row during the zoom (lod_keep holds the built LOD, and the loss is frame-wide);
+  card prepass depth against strand depth (ruled out: the markers are written in the shader before the depth test).
+- Instrument (layer only; no shader, no ABI, no key, variants delta 0; runs with detailed logging): the build stamp. Each
+  publish's build fills its header tag into a cell of a small host-visible buffer in its own command buffer
+  (hair_primary_publish); the G-buffer's command buffer copies the cell into a ring entry after its header copy
+  (apply_header); the count compares it with the publish applied (`hair_primary::build_stamp`: same / newer / older / not
+  read). Trip lines end with "groom points and BLASes on the GPU at that G-buffer: of ... (build stamp S, applied
+  publish A)"; period line `[hair primary] build stamp (last N frames)`. CTest test_build_stamp.
+  Cost: one 4-byte fill and one 4-byte copy per frame, two barriers.
+- Small fix: GbFrame::pub_frame is set to the record-time publish at each G-buffer (it kept the value of 16 frames
+  before when the submit took no upgrade).
+- Sampler: not changed (it needs the strand G-buffer shader: a specialization constant and an identity run). The stamp
+  answers the question a denser sampler would be asked first; if the stamp says "same", the sampler is next (only
+  card-marked pixels, several per frame, the reject reason per sample).
+- hl1 regenerated (predicted.json result_000345, second_defect_6d first): the build stamp line must be there with frames
+  read in lower and watch; the trip count is reported, not gated (7 known). Lint 0 failing (live and frozen).
+- Next live decides: "of a newer build" on the trip lines -> fix the header to follow the last executed build (the pick,
+  or TLAS/rows/key map written on the GPU by the build as the camera is); "the applied publish's build" -> the loss is
+  inside the build (refit or LOD), test full rebuilds while moving.
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU

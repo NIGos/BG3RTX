@@ -139,13 +139,19 @@ def make_job(plan):
              "min": 0},
             # 6c (rt_hair_header_cam_gpu=1): no frame watchdog trip in the zoom or after it (the six runs without the key
             # had 4-6 in lower), judged on every complete 'header safety' period line (frame windows reset the stats).
-            {"name": "no frame watchdog trip in lower and watch, header camera copied on the GPU",
+            {"name": "header camera copied on the GPU in lower and watch (trips reported: 000345 had 7, see 6d)",
              "select": "\\[hair primary\\] header safety \\(last",
-             "match": ", watchdog trips 0, .* [1-9][0-9]* header cameras copied on the GPU",
+             "match": ", watchdog trips \\d+, .* [1-9][0-9]* header cameras copied on the GPU",
              "windows": ["lower", "watch"], "period_frames": 60, "min": 1},
             {"name": "the rebase origin is 0 in every sampled frame of lower and watch (GPU sample, no label)",
              "select": "\\[hair primary\\] rebase origin \\(last",
              "match": " 0 with a non-zero origin .*rt_hair_header_cam_gpu 1",
+             "windows": ["lower", "watch"], "period_frames": 60, "min": 1},
+            # 6d: which build's points each counted G-buffer traced against the publish it applied (predicted.json
+            # second_defect_6d: 'of a newer build' >= 1 in lower). The line must be there with counted frames.
+            {"name": "the build stamp period line in lower and watch, with frames read",
+             "select": "\\[hair primary\\] build stamp \\(last",
+             "match": "applied publish's build \\d+, of a newer build \\d+ .*, not read [0-9]\\b",
              "windows": ["lower", "watch"], "period_frames": 60, "min": 1},
             {"name": "the groom TLAS check period line in both windows",
              "select": "\\[hair primary\\] groom TLAS check \\(last", "match": "G-buffer submits checked",

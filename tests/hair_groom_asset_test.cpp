@@ -476,6 +476,19 @@ static void test_rebase_sample() {
   st.add(s);
   CHECK(st.sampled == 2 && st.moved == 1 && std::fabs(st.max_m - 0.4957f) < 1e-3f);
 }
+// 6d: the build stamp a G-buffer found against the publish it applied.
+static void test_build_stamp() {
+  using namespace hair_primary;
+  const uint32_t same[2] = {2174, 2173}, newer[2] = {2175, 2173}, older[2] = {2173, 2173}, none[2] = {0, 2173};
+  CHECK(build_stamp(same, 2173, 2174) == Stamp::Same);
+  CHECK(build_stamp(newer, 2173, 2174) == Stamp::Newer);     // a later build ran first: older TLAS over refit BLASes
+  CHECK(build_stamp(older, 2173, 2174) == Stamp::Older);
+  CHECK(build_stamp(none, 2173, 2174) == Stamp::Unread);     // the copy has not run
+  CHECK(build_stamp(same, 2173 + kStampRing, 2174) == Stamp::Unread);   // the ring entry is another frame's
+  CHECK(build_stamp(same, 2173, 0) == Stamp::Unread && build_stamp(same, 0, 2174) == Stamp::Unread);
+  CHECK(stamp_entry(2173) == kStampRingOffset + (2173 % kStampRing) * 8 && stamp_entry(2173) + 8 <= kStampBytes);
+  CHECK(stamp_entry(2173 + kStampRing) == stamp_entry(2173));
+}
 // 6a/6b rt_hair_stale_publish: the submit-time camera check. hl1 210357's trip frames are the moved case; hf2 225504's
 // policy bug (every frame "camera not known", drawn as cards) is the unknown case, which must trace as before.
 static void test_stale_publish() {
@@ -1319,7 +1332,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_stale_publish();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_stale_publish();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

@@ -72,5 +72,19 @@
       "the GPU copy does not run": "header cameras copied on the GPU 0 or origin not 0 with the key on: the copy failed (rt_copy_build_camera) or the record-time header had cam_gpu off"
     },
     "not_predicted": "single-key trips from newcomers (LOD 0 upload frames 2622/2624 in 210357 wrote 72% and 56%): they may remain as trips of the frame watchdog; they are a different, smaller defect (report their count)."
+  },
+  "result_000345": {
+    "run": "hl1 000345, rt_hair_header_cam_gpu=1",
+    "result": "partial. Rebase origin 0 in every sample; strand coverage in the zoom 50-70% instead of 2-7% (hf2 000619, key off), still 7 trips (2173-2179). Coverage falls with the camera step of the frame (0.39 m: 64%, 0.50 m: 51%, 0.74 m: 48%, 1.31 m: 5%), and per draw it is all or nothing (2173: e297 87/0, b166 132/0 next to draws near their bound).",
+    "prediction_missed": "0 trips. The camera was the dominant error, not the only one."
+  },
+  "second_defect_6d": {
+    "candidate": "the header a G-buffer reads (groom TLAS, rows, key map) is one publish older than the points and BLASes the GPU holds: every build refits the BLASes in place, the older TLAS keeps the instance boxes of the previous camera-relative positions. With the right camera the rays then miss whole grooms whose box moved off the ray: sideways by step x tan(angle from the view axis), so small and off-centre heads lose everything, more with a larger step. This is what 6c's CPU camera lag looked like from the camera side.",
+    "instrument": "build stamp (no shader): each build fills its header tag into a cell in its own command buffer; the G-buffer's command buffer copies the cell after its header copy; the count compares it with the publish applied. Trip lines end with 'groom points and BLASes on the GPU at that G-buffer: of ...', period line '[hair primary] build stamp (last N frames)'.",
+    "signatures": {
+      "older header over newer BLASes (expected)": "trip lines say 'of a newer build' (stamp = applied + 1); period line in lower: newer >= the trip count; still windows may say newer too (harmless when still). Fix then: the submit-time pick must take that build's publish (find why ordered_publish does not see it), or the G-buffer must read the TLAS, rows and key map the last build wrote on the GPU, as rt_hair_header_cam_gpu does for the camera.",
+      "header and points agree": "'of the applied publish's build' on the trip lines: the TLAS is this build's. Then the per-groom loss is inside the build: LSS refit bounds after a large translation (test: rt_hair_groom full rebuilds in a moving window), or the LOD vote switching rows during the zoom (trip frames against 'LOD switches waiting' in the [hair groom] line).",
+      "build after the G-buffer": "'of an older build': the header is ahead of the points; the pick took a publish whose build had not run."
+    }
   }
 }
