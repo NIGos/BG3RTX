@@ -433,7 +433,7 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 1);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 20));   // 20 release controls: RTX Hair joined (user, 0.9.5 release, 2026-11-08)
+  CHECK(dev.size() == size_t(kKnobCount - 21));   // 21 release controls: RTX Hair joined (user, 0.9.5 release, 2026-11-08), then its distance detail (2026-11-10)
   {  // SER (user decision 2026-11-08): on in every preset; choosing it in release raises the ray tracing pipeline trace.
     const int rt = knob_index("exp_gi_rt_pipeline"), ser = knob_index("exp_gi_rt_pipeline_reorder");
     for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[rt] == 1 && preset_values(p)[ser] == 1);
@@ -1212,6 +1212,7 @@ static void test_release_migration() {
     "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water", "dlss5_nr",
     "exp_hidden_surface", "exp_gi_rt_pipeline", "exp_gi_rt_pipeline_reorder", "box_lights", "rr_post_temporal", "exp_native_coverage",
     "exp_hair_groom_primary",   // RTX Hair: a release Lighting control since 0.9.5 (user request, 2026-11-08)
+    "hair_distant_detail",   // RTX Hair detail at distance (user request, 2026-11-10)
     "detailed_logging"};
   std::vector<std::string> visible;
   for (const auto& k : kKnobs) {
@@ -1338,6 +1339,50 @@ static void test_release_migration() {
   }
   stale["dev"] = "1"; m = code_defaults(); apply_layer(m, stale);
   for (const auto& kv : stale) CHECK_EQ(get(m, kv.first.c_str()), kv.second);
+}
+
+// RTX Hair detail at distance (hair_distant_detail, user request 2026-11-10): one release control for the pixel LOD keys
+// (docs/RTX_HAIR_PRIMARY.md 5v). Off / 1/4 / 1/8 write rt_hair_pixel_lod and rt_hair_pixel_lod_small_keep; live; Off in
+// every preset and in data/release.ini, but a selected 1/4 or 1/8 survives the release policy.
+static void test_hair_distant_detail() {
+  const Knob* k = find_knob("hair_distant_detail");
+  CHECK(k && !k->dev_only && !k->experimental && k->kind == Kind::Choice && knob_visible(*k, false));
+  if (!k) return;
+  CHECK_EQ(k->category, "Lighting");
+  CHECK(choice_count(*k) == 3);
+  const char* labels[3] = {"Off", "1/4 (Standard)", "1/8 (Sharper)"};
+  const char* want[3] = {"rt_hair_pixel_lod=0 ", "rt_hair_pixel_lod=1 rt_hair_pixel_lod_small_keep=0.25 ",
+                         "rt_hair_pixel_lod=1 rt_hair_pixel_lod_small_keep=0.125 "};
+  for (int c = 0; c < 3; ++c) {
+    CHECK_EQ(k->choices[c].label, labels[c]);
+    KVList kvs; knob_kvs(*k, c, kvs);
+    std::string s; for (const auto& kv : kvs) s += kv.first + "=" + kv.second + " ";
+    CHECK_EQ(s, want[c]);
+    CHECK(transition_apply(*k, (c + 1) % 3, c) == Apply::Live);
+    CHECK_EQ(choice_maturity(*k, c), "qualified");
+  }
+  // The 1/4 choice is the layer's own default keep (common/hair_groom_budget.h kPixelLodSmallKeep).
+  CHECK_EQ(code_default("rt_hair_pixel_lod_small_keep"), "0.25");
+  for (const char* key : {"rt_hair_pixel_lod", "rt_hair_pixel_lod_small_keep"})
+    CHECK(!key_change_needs_restart(key, "0", "1") && !key_change_needs_restart(key, "0.25", "0.125"));
+  for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[knob_index("hair_distant_detail")] == 0);
+  CHECK(knob_value(*k, code_defaults()) == 0);
+
+  // Release: the packaged files read Off; each selection reads back after the policy (rt_hair_pixel_lod is not pinned).
+  const Map release = parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini") + read_file(BG3RTX_SOURCE_DIR "/data/release.ini"));
+  for (int c = 0; c < 3; ++c) {
+    Map user = parse_ini("preset=ultra\n");
+    KVList kvs; knob_kvs(*k, c, kvs); for (const auto& kv : kvs) user[kv.first] = kv.second;
+    Map m = code_defaults(); apply_layer(m, release); apply_layer(m, user);
+    CHECK_EQ(get(m, "dev"), "0");
+    CHECK(knob_value(*k, m) == c);
+    Map again = m; enforce_release_policy(again); CHECK(again == m);
+  }
+  Map m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini("preset=high\n"));
+  CHECK(knob_value(*k, m) == 0);
+  // A file with only the on key (no keep) reads 1/4, the code default keep.
+  m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini("rt_hair_pixel_lod=1\n"));
+  CHECK(knob_value(*k, m) == 1);
 }
 
 // 0.9.5-beta shipped with the release control RTX Hair inert: the reset of the developer-only exp_hair_* knobs undid
@@ -1658,6 +1703,7 @@ int main(int argc, char** argv) {
   }
   test_strand_bundle();
   test_release_rtx_hair();
+  test_hair_distant_detail();
   test_dlss5_native_setting();
   test_detailed_logging();
   test_release_fg_diagnostics();
