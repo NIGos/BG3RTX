@@ -1031,6 +1031,9 @@ struct GroomStats {
   uint64_t slot_resolved = 0, slot_swaps = 0, slot_count = 0, slot_no_pos = 0;
   struct Jump { uint64_t frame, key; } jump_first[6] = {};
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
+  // rt_hair_pixel_lod (5v): groom frames per camera level, the pick's inputs (render px) and the camera BLAS builds.
+  uint64_t cam_level[hair_groom::kPixelLodMaxLevel + 1] = {}, cam_builds = 0, cam_refits = 0, cam_no_proj = 0;
+  float cam_d0_min = 0, cam_d0_max = 0, cam_head_min = 0, cam_head_max = 0, cam_ppr = 0;
   uint32_t lod[kGroomLods] = {};
   uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
 } g_groom_st;
@@ -3418,6 +3421,20 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           w.cam_refit = g.cam_built && rec_submitted(g.cam_rec) && dyn_refit_ok;
           if (!w.cam_refit) g.cam_built = false;
           g.cam_rec = rec;
+          w.cam_refit ? ++g_groom_st.cam_refits : ++g_groom_st.cam_builds;
+        }
+        if (g_pixel_lod && hp_on) {
+          GroomStats& st = g_groom_st;
+          ++st.cam_level[cam ? g.cam_level : 0];
+          st.cam_ppr = groom_ppr;
+          if (!(groom_ppr > 0)) ++st.cam_no_proj;
+          else if (g.measured) {
+            const bool first = st.cam_head_max == 0;
+            st.cam_d0_min = first ? g.cam_d0_px : (std::min)(st.cam_d0_min, g.cam_d0_px);
+            st.cam_d0_max = (std::max)(st.cam_d0_max, g.cam_d0_px);
+            st.cam_head_min = first ? g.cam_head_px : (std::min)(st.cam_head_min, g.cam_head_px);
+            st.cam_head_max = (std::max)(st.cam_head_max, g.cam_head_px);
+          }
         }
         groom_of_key[key] = groom_work.size();
         groom_work.push_back(w);
@@ -4486,6 +4503,23 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                 stats_period(300), (unsigned long long)g_groom_st.keyed_new,
                 double(g_groom_st.key_wait_sum) / double(g_groom_st.keyed_new), (unsigned long long)g_groom_st.key_wait_max,
                 cfg_int("rt_hair_warmup", 0));
+    if (g_pixel_lod) {   // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v)
+      const auto& c = g_groom_st.cam_level;
+      VkDeviceSize arrays = 0, blas = 0;
+      for (const auto& [id, a] : g_groom_assets)
+        for (const auto& l : a.lods) arrays += l.cam_bytes;
+      for (const auto& [k, s] : g_dyn)
+        if (s.groom) blas += s.groom->cam_as.size;
+      log_stats("[hair groom] pixel LOD (last %u frames): groom frames per camera level 0/1/2/3/4/5 %llu/%llu/%llu/%llu/%llu/%llu; "
+                "LOD 0 strand diameter %.2f-%.2f px, head %.0f-%.0f px (%.0f px per radian, %llu groom frames without a "
+                "projection); camera BLAS full builds %llu, refits %llu; camera arrays %.1f MB, camera BLAS %.1f MB (k %.2f)",
+                stats_period(300), (unsigned long long)c[0], (unsigned long long)c[1], (unsigned long long)c[2],
+                (unsigned long long)c[3], (unsigned long long)c[4], (unsigned long long)c[5], g_groom_st.cam_d0_min,
+                g_groom_st.cam_d0_max, g_groom_st.cam_head_min, g_groom_st.cam_head_max, g_groom_st.cam_ppr,
+                (unsigned long long)g_groom_st.cam_no_proj, (unsigned long long)g_groom_st.cam_builds,
+                (unsigned long long)g_groom_st.cam_refits, double(arrays) / 1048576.0, double(blas) / 1048576.0,
+                cfg_float("rt_hair_pixel_lod_k", 1.0f));
+    }
     g_groom_st = GroomStats{};
   }
   out->pool = g_pool.b;
