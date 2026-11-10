@@ -80375,6 +80375,14 @@
     "\\[sl\\] presented frame 11 -> .*\\(ok\\)": [
       0,
       null
+    ],
+    "\\[hair primary\\] late arrival: groom of the 45252-index hair draws held": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] late arrival: groom of the 45252-index hair draws released": [
+      0,
+      null
     ]
   }
 }
