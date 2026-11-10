@@ -2,6 +2,7 @@
 // rt_hair_groom mesh-pool budget (layer/bvhsplit.cpp groom_*): groom arrays share the mesh pool with the cached
 // meshes, so they get at most a quarter of its capacity, and unused LODs are evicted oldest first to make room.
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -63,6 +64,32 @@ inline int lod_vote(int lod, int want, int& votes, bool first_measure) {
   if (first_measure) { votes = 0; return want; }
   return ++votes >= kLodVoteFrames ? (votes = 0, want) : lod;
 }
+
+// rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): the camera strand trace's keep for one groom, as steps below the
+// groom's own LOD keep: level j traces the strands kept at lod_keep / 2^j with radii x 2^j (a subset of the groom's
+// strands: the keep hash is nested). Level 0 is today's groom. The finest level whose strands are at least k render px
+// wide: d0_px / (lod_keep / 2^j) >= k (d0_px: the LOD 0 median strand diameter in render px at the groom's distance),
+// never coarser than 1/32 of the full groom (the decode-time ladder, hair_groom_v3.h kV3ExtraKeeps). A head under
+// kPixelLodMinHeadPx render px keeps level 0: the study (docs/progress/claude-hair-pixel-lod-study.md) measured silhouette
+// growth of +12 to +23% at 40 px and +3 to +6% at 80 px for k 1.0; 60 is the midpoint of the failing and the passing
+// size. Hysteresis: a quarter octave of the diameter around the level's bounds (prev: the level the groom traces, -1
+// none); the 30-frame lod_vote runs on the result in the layer.
+constexpr float kPixelLodMinHeadPx = 60.0f, kPixelLodMinKeep = 1.0f / 32, kPixelLodHysteresis = 0.25f;
+constexpr int kPixelLodMaxLevel = 5;   // 1 -> 1/32
+inline int pixel_lod_level(float d0_px, float head_px, float lod_keep, float k, int prev) {
+  if (!(d0_px > 0) || !(k > 0) || !(lod_keep > 0) || !(head_px >= kPixelLodMinHeadPx)) return 0;
+  // x: the level that just reaches k, as a real number: lod_keep / 2^x = d0_px / k.
+  const float x = std::log2(lod_keep * k / d0_px);
+  int top = 0;   // the deepest level the ladder allows for this groom
+  while (top < kPixelLodMaxLevel && lod_keep / float(1 << (top + 1)) >= kPixelLodMinKeep * 0.999f) ++top;
+  auto clampl = [&](int j) { return j < 0 ? 0 : j > top ? top : j; };
+  const int want = clampl(int(std::ceil(x - 1e-6f)));
+  if (prev < 0 || prev > top) return want;
+  // Keep the previous level while x stays within a quarter octave of the interval (prev - 1, prev] it was picked for.
+  if (x > float(prev - 1) - kPixelLodHysteresis && x <= float(prev) + kPixelLodHysteresis) return clampl(prev);
+  return want;
+}
+inline float pixel_lod_keep(float lod_keep, int level) { return lod_keep / float(1 << (level < 0 ? 0 : level)); }
 
 // Crowd plan (rt_hair_groom_crowd_ksegments, docs/RTX_HAIR_PRIMARY.md increment 5): the groom instances of a frame
 // share a budget of LSS segments (refit time and BLAS memory scale with segments; trace time scales with the hair
