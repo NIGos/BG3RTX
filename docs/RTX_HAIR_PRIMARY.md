@@ -1504,6 +1504,16 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
   - Key off: no allocation, no camera TLAS, header and rows as before. Shaders unchanged: tools/shader_identity.py
     227/227 byte-identical to e5f62b50; variants delta 0. Test: hair_groom_v3_test, on the fixture every table LOD x
     levels 1-5 equals decode_v3_lod's extra keep keep_lod / 2^j strand for strand and radius for radius (14 pairs).
+- (d) Period line (detailed logging, with the key on): `[hair groom] pixel LOD (last N frames): groom frames per camera
+  level 0/1/2/3/4/5 ...; LOD 0 strand diameter A-B px, head C-D px (P px per radian, n groom frames without a projection);
+  camera BLAS full builds, refits; camera arrays MB, camera BLAS MB (k)`. Pool MB, BLAS MB and refit ms are not measured
+  offline (no layer BLAS fixture); the live part below reads them (refit cost: the existing `gpu` lines of the build).
+- (e) Live, staged not queued: part 2 of tools/live_batches_staged/hair_late (hl1-s8-late-arrival, one S8 launch with the
+  arrival part unchanged and rt_hair_row_stable=1): static zoomed-out camera, rt_hair_pixel_lod off / on / off in one run
+  (60-frame windows with stats_reset), PNG bursts 99310 (off) and 99311 (on), the period line and the strand G-buffer GPU
+  ms per window; predictions in its predicted.json (part2_rt_hair_pixel_lod). live_flow --frozen: 0 failing.
+- Not built: (c) the cross-fade between two adjacent levels (spec constant 1048); without it a level change pops.
+- User check: Advanced, strand pixel LOD On, S8 zoomed out: strand hair about 1 px wide, less grain next to the cards.
 ## 5w. Stable groom rows (offline 2026-11-10, branch claude/hair-row-stable: key rt_hair_row_stable, off)
 
 Live hl1 164930 (natural arrival, camera wheel zoom): of the 5u candidates A (another build's TLAS traced: 75 submits

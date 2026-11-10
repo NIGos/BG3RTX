@@ -16,5 +16,17 @@
     "gate": "every first-seen frame line in the lower window says 'holds another key than before 0' (expect_every)",
     "predicted": "moved rows 0 in every line (164930: up to 11). If the row moves were the whole cause: 0 frame watchdog trips and 0 dropouts 'rejected after the hit' in the period after the 'lower' start (164930: 5 trips, 28). The groom row count may be 1 higher than the live grooms for 8 frames after a groom leaves (its row stays empty).",
     "if_holes_remain": "rows 0 moved and the watchdog still trips: the row order was not the cause (D); the next observable is the per-groom points check at those frames"
+  },
+  "part2_rt_hair_pixel_lod": {
+    "branch": "claude/hair-pixel-lod (docs/RTX_HAIR_PRIMARY.md 5v); same launch after 'watch', static zoomed-out camera",
+    "windows": "warmup 20 s with the key on and the pan pipelines prepared (live_flow warm-up lint), warm-off 4 s (key 0) before part 1 as before; after watch: pl-settle, pl-off (60 frames after live_flow tightening, key 0), PNG burst 99310, pl-on-settle (~1 s), pl-on (60 frames, key 1), PNG burst 99311, pl-off2 (60 frames, key 0); about 62 s of phases after load",
+    "observable": "camera strand LOD at isometric distance: does the strand G-buffer show strands about 1 render px wide (HF like the cards) at no loss of coverage, and at what cost",
+    "period_line": "'[hair groom] pixel LOD (last 60 frames)' in pl-on: a projection read (px per radian > 0, 0 groom frames without a projection); heads of 60-150 px; LOD 0 strand diameter about 0.05-0.2 px; most groom frames at camera levels 2-4 (1/4..1/16 of the groom's LOD keep), heads under 60 px at level 0; camera BLAS full builds only in the first period after the switch (one per groom, about 13), refits after; camera arrays about 10-20 MB (4 B per LOD point + 4 B per kept segment), camera BLAS about 5-15% of the groom BLAS memory",
+    "gpu_ms": "strand G-buffer draws GPU ms in pl-on lower than in pl-off and pl-off2 (fewer, wider segments: about 10-40% less); pl-off2 within noise of pl-off",
+    "images": "burst 99311 (on) vs 99310 (off): strand hair at the heads less grainy, strands about 1 px wide; mean brightness of the hair pixels within noise (coverage +3 to +6% at 80-150 px heads, study); no holes, no card fallback",
+    "correctness": "no frame watchdog trip, no 'rejected after the hit' dropouts and 0 pool-bound refusals in pl-on (the pixel record's segments resolve through the camera index buffer); no device loss",
+    "if_level_0_everywhere": "the projection or the median radius was not read (period line: groom frames without a projection, or diameter 0): the pick inputs are wrong, not the BLAS; fix the input offline before any rerun",
+    "if_holes_in_pl_on": "a segment reader resolves the camera primitive with the groom's own table: check the refusal counters and the strand G-buffer header TLAS check; the key stays off",
+    "first_on_period": "the 30-frame level vote takes ~1 s: the pl-on period may still count some groom frames at level 0 and the camera BLAS full builds; burst 99311 (6 s later) is at the settled levels"
   }
 }

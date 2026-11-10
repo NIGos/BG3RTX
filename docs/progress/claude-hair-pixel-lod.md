@@ -37,3 +37,12 @@
   points the strand shaders at it (row.z = camera index buffer); details 5v "Step 2 (b) built". Segment readers checked:
   all resolve through the header row. Key off: no allocation. Shader identity 227/227 vs e5f62b50, variants 0.
   hair_groom_v3_test: 14 LOD x level pairs equal to the decode-time keeps. Not measured: pool MB, BLAS MB, refit ms (live).
+- (d) built (3b501d8e): the pixel LOD period line (levels, diameter and head px, px per radian, camera builds, arrays and
+  BLAS MB). No offline BLAS fixture: MB and refit ms come from the live run.
+- (e) per the coordinator: no separate job; hl1-s8-late-arrival (hair_late) gains part 2 after its arrival part: pl-off,
+  pl-on, pl-off2 frame windows (60 frames after tightening), PNG bursts 99310/99311, the period line and the strand
+  G-buffer GPU ms per window; warm-up runs the key on once (warm-up lint), off again before "lower". Predictions in
+  predicted.json part2_rt_hair_pixel_lod. live_flow --frozen 0 failing (readiness entries and never-seen patterns frozen
+  in lint_corpus_snapshot.json). Not queued.
+- (c) not started (cross-fade, spec constant 1048): next agent; design it on the GPU hair fixture first. Without it a level
+  change pops (about 2x a LOD step, study).
