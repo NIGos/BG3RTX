@@ -29,18 +29,28 @@ HAIR = ("rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,r
         "rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,"
         "rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,"
         # the fix under test (branch claude/hair-row-stable, 5w): not in the bundle
-        "rt_hair_row_stable=1")
+        "rt_hair_row_stable=1,"
+        # part 2 (branch claude/hair-pixel-lod, 5v): off until its windows
+        "rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0")
 SET = ("preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,"
        "rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,"
-       "rt_primary_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,"
+       "rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,"
+       "pan_prepare=0,sharc=0,"
        "qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,"
        "rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60," + HAIR)
 
 
-def phase(label, seconds, wheel=None, frames=None):
+# Part 2, rt_hair_pixel_lod (5v): PNG bursts of the heads (scene colour, no RR inputs) with the key off and on.
+SERIALS = {"pl-off-png": 99310, "pl-on-png": 99311}
+
+
+def phase(label, seconds, wheel=None, frames=None, pixel_lod=None, serial=0, capture_at=0):
     p = {"label": label, "kind": "static", "speed": "static", "seconds": seconds, "repeat_ms": 0, "scan": 16,
-         "capture_at": 0, "serial": 0, "motion_start": seconds, "motion_end": seconds, "pixels_per_second": 0,
-         "direction": 0, "set": "rt_hair_groom_primary=1,rt_hair_groom_nearest=1"}
+         "capture_at": capture_at, "serial": serial, "motion_start": seconds, "motion_end": seconds,
+         "pixels_per_second": 0, "direction": 0, "set": "rt_hair_groom_primary=1,rt_hair_groom_nearest=1"}
+    if pixel_lod is not None:   # part 2: the pan pipelines prepared before the bursts (hs1: compiled inside one)
+        p["set"] += f",rt_hair_pixel_lod={pixel_lod},pan_prepare=1,pan_inputs=0,pan_edge=0,pan_delay_ms=0"
+        p["set"] += f",pan_capture={serial}" if serial else ",pan_capture=0"
     if wheel:
         p["wheel"] = wheel
     if frames:   # a frame window keeps its length through live_flow's tightening (camera-plan: needs stats_reset)
@@ -51,10 +61,26 @@ def phase(label, seconds, wheel=None, frames=None):
 def make_plan():
     # 161106's first 28 s: warm-up 20 s, then "lower" (its phase start triggered the arrivals 0.06 s later), then 12 s
     # to watch the transient settle (161106: trips at frames 1992-1998, strands back after the 28-frame hold).
+    # Part 2 (rt_hair_pixel_lod, 5v): the same zoomed-out (isometric) static camera after "watch": off, on, off again,
+    # toggled in this run; each frame window resets the stats (the period line and the strand G-buffer gpu line per
+    # 60-frame period); a PNG burst of the heads in a timed window after the off and the on window. The on settle covers
+    # the 30-frame level vote, the camera array upload and the first full camera BLAS builds (~2 s at 30 fps).
+    warm_off = phase("warm-off", 4)   # part 1 runs with the key off and no pan preparation, as before
+    warm_off["set"] += ",rt_hair_pixel_lod=0,pan_prepare=0"
     return [
-        phase("warmup", 20),
+        # every value the part 2 windows use, before the first measured window (live_flow warm-up lint): the key on and
+        # the pan pipelines prepared during the warm-up, then off again before "lower"
+        phase("warmup", 20, pixel_lod=1),
+        warm_off,
         phase("lower", 8, wheel=10, frames=240),
         phase("watch", 12, frames=360),
+        phase("pl-settle", 4, pixel_lod=0),
+        phase("pl-off", 6, frames=180, pixel_lod=0),
+        phase("pl-off-png", 6, pixel_lod=0, serial=SERIALS["pl-off-png"], capture_at=1.0),
+        phase("pl-on-settle", 4, pixel_lod=1),
+        phase("pl-on", 6, frames=180, pixel_lod=1),
+        phase("pl-on-png", 6, pixel_lod=1, serial=SERIALS["pl-on-png"], capture_at=1.0),
+        phase("pl-off2", 6, frames=180, pixel_lod=0),
     ]
 
 
@@ -66,7 +92,7 @@ def make_job(plan):
         "traces": 0,
         "hold": 120,
         "timeout": 420,
-        "max_minutes": 3,
+        "max_minutes": 4,
         "repeat": 1,
         "live_batch": "hair-late",
         "tree": ".claude/worktrees/test-main",
@@ -76,7 +102,8 @@ def make_job(plan):
         "set": SET,
         "args": ["-RealPresent", "-Move", "-MovePlan", PLAN],
         "patterns": ["\\[auto\\]", "\\[cfg\\]", "\\[hot\\]", "\\[watch\\]", "\\[crash\\]", "FAILED",
-                     "\\[hair primary\\]", "\\[hair groom\\]", "\\[rt\\] scene wait", "VK_ERROR", "\\[log\\]"],
+                     "\\[hair primary\\]", "\\[hair groom\\]", "\\[rt\\] scene wait", "VK_ERROR", "\\[log\\]",
+                     "\\[pan\\]"],
         "expect": [
             "\\[auto\\] scene ready",
             "\\[hot\\] core generation \\d+ loaded",
@@ -84,7 +111,7 @@ def make_job(plan):
             # Q1: the nearest-strand trace compiled in and its header flag on
             "\\[hair primary\\] G-buffer hair pipeline: .*nearest-strand trace compiled in \\(specialization 1047\\) 1",
             "\\[hair primary\\] nearest-strand trace: header flag 1 .*specialization 1047 in the strand G-buffer pipelines 1",
-        ],
+        ] + [rf"\[pan\] burst {s} complete: \d+ frames, \d+ samples, transport ok" for s in SERIALS.values()],
         # The observables, as events in their windows (not startup producers: the arrival is what the phase change
         # triggers): the first-seen lines in "lower", the TLAS check period line in "lower" and "watch".
         "expect_every": [
@@ -101,6 +128,13 @@ def make_job(plan):
             {"name": "the groom TLAS check period line in both windows",
              "select": "\\[hair primary\\] groom TLAS check \\(last", "match": "G-buffer submits checked",
              "windows": ["watch"], "event": True, "min": 1},
+            # Part 2 (rt_hair_pixel_lod): the strand G-buffer cost in each toggle window, the period line while on.
+            {"name": "strand G-buffer GPU ms in the off, on and off-again windows (cost, report only)",
+             "select": "\\[hair primary\\] strand G-buffer draws GPU", "match": "GPU [0-9.]+ ms/frame",
+             "windows": ["pl-off", "pl-on", "pl-off2"], "period_frames": 60, "min": 1},
+            {"name": "the pixel LOD period line in the on window, with a projection read",
+             "select": "\\[hair groom\\] pixel LOD \\(last", "match": "\\([1-9][0-9]* px per radian, 0 groom frames without",
+             "windows": ["pl-on"], "period_frames": 60, "min": 1},
         ],
         "forbid": [
             "\\[crash\\] exception 0x", "VK_ERROR_DEVICE_LOST", "\\[hot\\] core (rejected|faulted)",
@@ -116,7 +150,8 @@ def make_job(plan):
         "estimated_phase_seconds": sum(p["seconds"] for p in plan),
         "purpose": "Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the "
                    "groom TLAS check and the first-seen frame lines: which candidate breaks the existing keys' strands. "
-                   "STAGED, not authorized.",
+                   "Then, same launch, rt_hair_pixel_lod off/on/off at the static zoomed-out camera: period line, strand "
+                   "G-buffer GPU ms, PNG bursts of the heads. STAGED, not authorized.",
     }
 
 

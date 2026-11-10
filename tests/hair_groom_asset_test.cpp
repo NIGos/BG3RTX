@@ -361,6 +361,7 @@ static void test_coverage_audit() {
   CHECK(!lg.quiet(531 + kWarmupSettledFrames + 1) && lg.early);
 }
 // rt_hair_debug_late_arrival: the hold after every switch-on, its length, the logs once each, re-armed by the next.
+static bool pixel_keep_ok(float q) { return q >= kPixelLodMinKeep * 0.999f; }
 static void test_late_arrival() {
   using namespace hair_primary;
   static_assert(kLateArrivalFrames == kLoadQuietFrames + 1, "one frame past the longest warm-up window");
@@ -1498,6 +1499,26 @@ int main() {  test_round3();
     CHECK(lod_vote(0, 2, votes, true) == 2 && votes == 0);   // warm-up: the first measurement is taken at once
     CHECK(lod_vote(2, 2, votes, true) == 2 && votes == 0);   // first measurement at the default: no change
     CHECK(lod_vote(2, 1, votes, false) == 2 && votes == 1);   // later measurements vote as before
+  }
+  {   // rt_hair_pixel_lod pick (common/hair_groom_budget.h pixel_lod_level)
+    // The study's groom: median diameter 0.186 mm; a 150 px head draws its LOD 0 strands 0.11 px wide, an 80 px head
+    // LOD 1 (keep 0.5) strands 0.06 px wide (x2 radius: 0.12 px).
+    CHECK(pixel_lod_level(0.11f, 150, 1.0f, 1.0f, -1) == 4);   // 1/16: 1.76 px >= 1; 1/8: 0.88 px < 1
+    CHECK(pixel_lod_level(0.06f, 80, 0.5f, 1.0f, -1) == 4);    // 0.5/16: 1.92 px; 0.5/8: 0.96 px < 1
+    CHECK(pixel_lod_level(0.06f, 80, 0.5f, 1.4f, -1) == 4);    // k 1.4 would want 0.5/32 = 1/64: clamped to the ladder
+    CHECK(pixel_keep_ok(pixel_lod_keep(0.5f, pixel_lod_level(0.06f, 80, 0.5f, 1.4f, -1))));
+    CHECK(pixel_lod_level(0.06f, 59, 0.5f, 1.0f, -1) == 0);    // under 60 px: today's LOD
+    CHECK(pixel_lod_level(2.0f, 300, 1.0f, 1.0f, -1) == 0);    // already wider than k: never coarser than needed
+    CHECK(pixel_lod_level(0.0f, 300, 1.0f, 1.0f, -1) == 0 && pixel_lod_level(0.1f, 300, 1.0f, 0.0f, -1) == 0);
+    // Hysteresis: level 4 at x = log2(1 / 0.11) = 3.18; it stays down to x > 2.75 and up to x <= 4.25.
+    CHECK(pixel_lod_level(1.0f / 7.0f, 150, 1.0f, 1.0f, 4) == 4);   // x 2.81: still 4 (a fresh pick says 3)
+    CHECK(pixel_lod_level(1.0f / 7.0f, 150, 1.0f, 1.0f, -1) == 3);
+    CHECK(pixel_lod_level(1.0f / 6.5f, 150, 1.0f, 1.0f, 4) == 3);   // x 2.70: left
+    CHECK(pixel_lod_level(1.0f / 18.0f, 150, 1.0f, 1.0f, 4) == 4);  // x 4.17: still 4 (fresh: 5)
+    CHECK(pixel_lod_level(1.0f / 20.0f, 150, 1.0f, 1.0f, 4) == 5);  // x 4.32: left
+    // The ladder never goes below 1/32 of the full groom; a groom already at keep 0.25 has 3 levels.
+    CHECK(pixel_lod_level(0.001f, 300, 0.25f, 1.0f, -1) == 3 && pixel_lod_keep(0.25f, 3) == 1.0f / 32);
+    CHECK(pixel_lod_level(0.001f, 300, 1.0f, 1.0f, 9) == 5);         // a stale level above the ladder: a fresh pick
   }
   { // Per-draw coverage evidence: neither publication nor an unavailable/newer pair proves coverage.
     using namespace hair_primary;

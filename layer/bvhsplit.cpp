@@ -10,6 +10,7 @@
 #include "hair_groom.h"
 #include "hair_capture.h"
 #include "../common/hair_groom_budget.h"
+#include "../common/hair_groom_v3.h"
 #include "../common/hair_primary.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
@@ -554,6 +555,14 @@ struct GroomSlot {
   int compact = 0;             // 0 none, 1 size queried (query, query_frame), 2 compacted
   uint32_t query = 0;
   uint64_t query_frame = 0, query_rec = 0;
+  // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): the camera strand BLAS on this slot's points (camera level cam_level
+  // of LOD cam_lod; 0: none, the camera rays trace the groom BLAS), its voted level and the pick's inputs (diagnostics).
+  AsAlloc cam_as;
+  int cam_level = 0, cam_lod = -1, cam_pick = -1, cam_votes = 0;
+  VkDeviceSize cam_build_scratch = 0, cam_update_scratch = 0;
+  bool cam_built = false;
+  uint64_t cam_rec = 0;
+  float cam_d0_px = 0, cam_head_px = 0;
 };
 struct DynSlot {
   AsAlloc as;
@@ -972,8 +981,17 @@ hair_primary::LoadGuard g_groom_load;   // level-load boundary for the join cach
 struct GroomAsset {
   // One LOD's arrays in the mesh pool [base, base + size): uploaded when a slot first selects it, evicted
   // (oldest first) when the groom budget needs room.
+  // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): camera level j's arrays on this LOD's points (hair_groom::
+  // camera_subset): the widened radius of every point and the kept strands' segment starts, [base, base + size).
+  struct Cam { VkDeviceSize radius = 0, seg = 0, base = 0, size = 0; uint32_t segments = 0; bool ready = false, failed = false;
+               uint64_t upload_frame = 0, upload_rec = 0; };
   struct Lod { VkDeviceSize tri = 0, bary = 0, radius = 0, seg = 0, segtri = 0, base = 0, size = 0; uint32_t points = 0, segments = 0;
-               float keep = 1; bool ready = false; uint64_t last_used = 0, upload_frame = 0, upload_rec = 0; };
+               float keep = 1; bool ready = false; uint64_t last_used = 0, upload_frame = 0, upload_rec = 0;
+               Cam cam[hair_groom::kPixelLodMaxLevel + 1];   // [1..5]
+               VkDeviceSize cam_bytes = 0;                    // pool bytes of its camera arrays
+               std::vector<uint32_t> host_seg;                // its segment starts and radii on the host (camera arrays;
+               std::vector<float> host_radius;                // kept only while rt_hair_pixel_lod uses this LOD)
+               float r_median = 0; };                         // median radius (0: not computed)
   std::vector<Lod> lods;
   uint32_t indices = 0;
   bool failed = false;
@@ -984,7 +1002,7 @@ uint64_t g_groom_budget_refusals = 0;
 uint64_t g_groom_soup_refused = 0;
 std::vector<std::shared_ptr<GroomSlot>> g_groom_seen;   // this frame's groom slots (next frame's crowd plan)   // matched draws without a live soup range this frame (held, not captured)
 std::unordered_map<uint64_t, GroomAsset> g_groom_assets;
-struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; GroomAsset::Lod* lod = nullptr; };
+struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; uint64_t* upload_rec = nullptr; uint64_t* upload_frame = nullptr; };
 std::vector<GroomUpload> g_groom_uploads;   // recorded at the start of this build's GPU section
 VkDescriptorSetLayout g_groom_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_groom_pl = VK_NULL_HANDLE;
@@ -995,6 +1013,11 @@ std::vector<uint32_t> g_groom_free_queries;
 TlasSlot g_groom_tlas[kSceneSlots];
 Buf g_groom_inst[kSceneSlots];
 Buf g_groom_scratch;
+// rt_hair_pixel_lod: the camera groom TLAS per scene slot (the strand G-buffer, velocity and count shaders' header TLAS):
+// the same rows as the groom TLAS, each row the groom's camera BLAS (or its groom BLAS at camera level 0).
+TlasSlot g_cam_tlas[kSceneSlots];
+Buf g_cam_inst[kSceneSlots];
+Buf g_cam_scratch;
 struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off, prev_off, pad[3]; };
 static_assert(sizeof(GroomPush) == 48);
 struct GroomStats {
@@ -1008,6 +1031,9 @@ struct GroomStats {
   uint64_t slot_resolved = 0, slot_swaps = 0, slot_count = 0, slot_no_pos = 0;
   struct Jump { uint64_t frame, key; } jump_first[6] = {};
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
+  // rt_hair_pixel_lod (5v): groom frames per camera level, the pick's inputs (render px) and the camera BLAS builds.
+  uint64_t cam_level[hair_groom::kPixelLodMaxLevel + 1] = {}, cam_builds = 0, cam_refits = 0, cam_no_proj = 0;
+  float cam_d0_min = 0, cam_d0_max = 0, cam_head_min = 0, cam_head_max = 0, cam_ppr = 0;
   uint32_t lod[kGroomLods] = {};
   uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
 } g_groom_st;
@@ -1020,6 +1046,7 @@ uint64_t g_groom_first_seen = 0;
 uint64_t g_groom_prev_keys[hair_primary::kMaxGrooms] = {};
 hair_primary::GroomRows g_groom_rows;   // rt_hair_row_stable: each groom's row while it is live
 bool g_row_stable = false;
+bool g_pixel_lod = false;   // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): this capture's camera BLAS and TLAS
 uint32_t g_groom_prev_n = 0;   // (index count, verdict) of unmatched hair draws, logged once
 
 bool ensure_groom_pipeline() {
@@ -1066,9 +1093,58 @@ void groom_release(GroomSlot& g, uint64_t now) {
     g_groom_pool_used -= (std::min)(g_groom_pool_used, g.pos_size);
   }
   as_destroy(g.as, kGroomFreeLag);
+  as_destroy(g.cam_as, kGroomFreeLag);
   if (g.readback.b) free_buf(g.readback);
   if (g.compact == 1) g_groom_free_queries.push_back(g.query);
   g = GroomSlot{};
+}
+
+// rt_hair_pixel_lod: a LOD's camera arrays leave the pool (after the strand passes' lag, as the LOD's own); a copy staged
+// this frame and not yet recorded is dropped with them. Returns the bytes freed.
+VkDeviceSize groom_cams_free(GroomAsset::Lod& l, uint64_t now) {
+  VkDeviceSize freed = 0;
+  for (GroomAsset::Cam& c : l.cam) {
+    if (c.size) {
+      for (size_t i = g_groom_uploads.size(); i-- > 0;)
+        if (g_groom_uploads[i].upload_rec == &c.upload_rec) {
+          free_buf(g_groom_uploads[i].staging);
+          g_groom_uploads.erase(g_groom_uploads.begin() + std::ptrdiff_t(i));
+        }
+      g_pending_free.push_back({now + kGroomFreeLag, -1, c.base, c.size});
+      g_groom_pool_used -= (std::min)(g_groom_pool_used, c.size);
+      freed += c.size;
+    }
+    c = {};
+  }
+  l.cam_bytes = 0;
+  l.host_seg = {};
+  l.host_radius = {};
+  return freed;
+}
+
+// rt_hair_pixel_lod: render px per radian at the view centre, (render height / 2) x cot(fov_y / 2), from the build's camera
+// UBO (projection at float 16, row-major: P[1][1] is float 21, as layer/streamline.cpp reads it) through an existing host
+// mapping. 0 when it cannot be read or is not a perspective projection.
+float groom_px_per_radian() {
+  uint32_t w = 0, h = 0;
+  geo_render_size(&w, &h);
+  VkBuffer ubo = VK_NULL_HANDLE;
+  VkDeviceSize off = 0;
+  if (!h || !rt_current_build_ubo(&ubo, &off)) return 0.0f;
+  float p11 = 0.0f;
+  {
+    std::shared_lock lock(tracker().mu);
+    const auto bm = tracker().buffer_mem.find(ubo);
+    if (bm == tracker().buffer_mem.end()) return 0.0f;
+    const auto mp = tracker().mapped.find(bm->second.first);
+    const auto range = tracker().mapped_ranges.find(bm->second.first);
+    if (mp == tracker().mapped.end() || !mp->second || range == tracker().mapped_ranges.end()) return 0.0f;
+    const VkDeviceSize start = bm->second.second + off + 21 * 4;
+    if (start < range->second.first || start + 4 > range->second.second) return 0.0f;
+    std::memcpy(&p11, mp->second + start, 4);
+  }
+  p11 = std::fabs(p11);
+  return p11 > 0.1f && p11 < 100.0f ? 0.5f * float(h) * p11 : 0.0f;
 }
 
 // The mesh pool's largest capacity (pool_alloc's cap: configured maximum and the device-budget share).
@@ -1085,7 +1161,7 @@ bool groom_make_room(VkDeviceSize need, uint64_t now) {
   for (auto& [id, a] : g_groom_assets)
     for (size_t i = 0; i < a.lods.size(); ++i)
       if (a.lods[i].ready) {
-        residents.push_back({refs.size(), a.lods[i].size, a.lods[i].last_used, a.lods[i].last_used == now});
+        residents.push_back({refs.size(), a.lods[i].size + a.lods[i].cam_bytes, a.lods[i].last_used, a.lods[i].last_used == now});
         refs.push_back(&a.lods[i]);
       }
   std::vector<uint64_t> evict;
@@ -1100,6 +1176,7 @@ bool groom_make_room(VkDeviceSize need, uint64_t now) {
     GroomAsset::Lod& l = *refs[size_t(key)];
     g_pending_free.push_back({now + kGroomFreeLag, -1, l.base, l.size});
     g_groom_pool_used -= (std::min)(g_groom_pool_used, l.size);
+    groom_cams_free(l, now);
     l = {}; // clear upload proof too: an evicted range must never become ready again
   }
   return true;
@@ -1117,6 +1194,14 @@ GroomAsset* groom_asset(uint64_t id, uint32_t indices) {
   return &a;
 }
 
+// rt_hair_pixel_lod: one LOD's segment starts and radii on the host (from the decoded LOD).
+void groom_keep_host(GroomAsset::Lod& d, const hair_groom::Lod& l) {
+  d.host_seg.resize(l.segments);
+  d.host_radius.resize(l.points);
+  std::memcpy(d.host_seg.data(), l.segment, size_t(l.segments) * 4);
+  std::memcpy(d.host_radius.data(), l.radius, size_t(l.points) * 4);
+}
+
 // One LOD's arrays in the mesh pool, uploaded by this build's GPU section on first use (the file is read from
 // disk then and dropped after staging). nullptr: over budget or no pool room now (card path; retried later),
 // or the file changed (never retried).
@@ -1131,6 +1216,7 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
     // Discarded upload: retire its range and stage a fresh copy, never build from it.
     g_pending_free.push_back({now + kGroomFreeLag, -1, d.base, d.size});
     g_groom_pool_used -= (std::min)(g_groom_pool_used, d.size);
+    groom_cams_free(d, now);
     d = {};
   }
   const hair_groom::Loaded* src = hair_groom::find(id, a.indices);
@@ -1171,7 +1257,8 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   n.tri += base; n.bary += base; n.radius += base; n.seg += base; n.segtri += base;
   n.base = base; n.size = total; n.last_used = now;
   d = n;
-  u.dst = base; u.bytes = total; u.lod = &d;
+  if (g_pixel_lod) groom_keep_host(d, l);   // rt_hair_pixel_lod: its camera arrays are built from these
+  u.dst = base; u.bytes = total; u.upload_rec = &d.upload_rec; u.upload_frame = &d.upload_frame;
   g_groom_uploads.push_back(u);
   g_groom_pool_used += total;
   log("[hair groom] %016llx LOD %d uploaded: %.1f MB in the mesh pool at %llu (grooms %.0f of %.0f MB)", (unsigned long long)id,
@@ -1180,17 +1267,89 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   return nullptr; // usable only after this upload recording was submitted and completed
 }
 
-VkAccelerationStructureGeometryKHR groom_geometry(const GroomAsset::Lod& l, VkDeviceSize pos_off,
-                                                  VkAccelerationStructureGeometryLinearSweptSpheresDataNV& d) {
+// rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): camera level `level` of a resident LOD: the kept strands' segment starts
+// and the widened radii (hair_groom::camera_subset), uploaded once into the mesh pool like the LOD's own arrays and freed
+// with them. nullptr until that upload completed (or never: no strand kept, or the LOD's strands do not follow the hash).
+const GroomAsset::Cam* groom_cam(VkCommandBuffer cmd, uint64_t id, GroomAsset& a, int lod, int level, uint64_t now) {
+  GroomAsset::Lod& d = a.lods[size_t(lod)];
+  if (!d.ready || level <= 0 || level > hair_groom::kPixelLodMaxLevel) return nullptr;
+  GroomAsset::Cam& c = d.cam[level];
+  if (c.ready) return &c;
+  if (c.failed) return nullptr;
+  if (c.size) {
+    if (!c.upload_rec) return nullptr;
+    const auto state = hair_primary::readback_state(c.upload_frame, life_gpu_done(), rec_submitted(c.upload_rec));
+    if (state == hair_primary::ReadbackState::Wait) return nullptr;
+    if (state == hair_primary::ReadbackState::Ready) { c.ready = true; return &c; }
+    g_pending_free.push_back({now + kGroomFreeLag, -1, c.base, c.size});
+    g_groom_pool_used -= (std::min)(g_groom_pool_used, c.size);
+    d.cam_bytes -= (std::min)(d.cam_bytes, c.size);
+    c = {};
+  }
+  const hair_groom::Loaded* src = hair_groom::find(id, a.indices);
+  if (!src) { c.failed = true; return nullptr; }
+  if (d.host_seg.empty()) {   // the key went on after this LOD's upload: decode it once more
+    std::vector<uint8_t> bytes;
+    hair_groom::Lod l;
+    if (!hair_groom::read_lod(*src, uint32_t(lod), bytes, l) || l.points != d.points || l.segments != d.segments) {
+      c.failed = true;
+      return nullptr;
+    }
+    groom_keep_host(d, l);
+  }
+  const uint32_t strands0 = src->asset.lod_points[0] > src->asset.lod_segments[0]
+                                ? src->asset.lod_points[0] - src->asset.lod_segments[0] : 0u;
+  std::vector<uint32_t> seg;
+  std::vector<float> radius;
+  if (!hair_groom::camera_subset(d.host_seg.data(), d.segments, d.host_radius.data(), d.points, strands0, d.keep, level,
+                                 seg, radius)) {
+    log("[hair groom] %016llx LOD %d: no camera level %d (no strand kept, or the strands do not follow the thinning hash)",
+        (unsigned long long)id, lod, level);
+    c.failed = true;
+    return nullptr;
+  }
+  auto up = [](VkDeviceSize v) { return (v + 15) / 16 * 16; };
+  const VkDeviceSize rbytes = up(VkDeviceSize(d.points) * 4), total = rbytes + up(VkDeviceSize(seg.size()) * 4);
+  if (!groom_make_room(total, now)) return nullptr;
+  VkDeviceSize base = 0;
+  if (!pool_alloc(cmd, total, &base)) return nullptr;
+  GroomUpload u{};
+  if (!make_buf(u.staging, total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, "hair groom camera upload")) {
+    g_pending_free.push_back({now + kGroomFreeLag, -1, base, total});
+    return nullptr;
+  }
+  std::memcpy(u.staging.map, radius.data(), radius.size() * 4);
+  std::memcpy(u.staging.map + rbytes, seg.data(), seg.size() * 4);
+  c.radius = base; c.seg = base + rbytes; c.base = base; c.size = total; c.segments = uint32_t(seg.size());
+  u.dst = base; u.bytes = total; u.upload_rec = &c.upload_rec; u.upload_frame = &c.upload_frame;
+  g_groom_uploads.push_back(u);
+  g_groom_pool_used += total;
+  d.cam_bytes += total;
+  log("[hair groom] %016llx LOD %d camera level %d uploaded: %u of %u segments, %.2f MB (grooms %.0f MB)", (unsigned long long)id,
+      lod, level, c.segments, d.segments, double(total) / 1048576.0, double(g_groom_pool_used) / 1048576.0);
+  return nullptr;
+}
+
+// The LOD's median strand radius (pixel LOD's diameter), from its host radii; 0 without them.
+float groom_r_median(GroomAsset::Lod& d) {
+  if (d.r_median > 0 || d.host_radius.empty()) return d.r_median;
+  std::vector<float> r = d.host_radius;
+  std::nth_element(r.begin(), r.begin() + std::ptrdiff_t(r.size() / 2), r.end());
+  d.r_median = r[r.size() / 2];
+  return d.r_median;
+}
+
+VkAccelerationStructureGeometryKHR lss_geometry(VkDeviceSize pos_off, VkDeviceSize radius_off, VkDeviceSize seg_off,
+                                                VkAccelerationStructureGeometryLinearSweptSpheresDataNV& d) {
   d = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV};
   d.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
   d.vertexData.deviceAddress = g_pool.addr + pos_off;
   d.vertexStride = 12;
   d.radiusFormat = VK_FORMAT_R32_SFLOAT;
-  d.radiusData.deviceAddress = g_pool.addr + l.radius;
+  d.radiusData.deviceAddress = g_pool.addr + radius_off;
   d.radiusStride = 4;
   d.indexType = VK_INDEX_TYPE_UINT32;
-  d.indexData.deviceAddress = g_pool.addr + l.seg;
+  d.indexData.deviceAddress = g_pool.addr + seg_off;
   d.indexStride = 4;
   d.indexingMode = VK_RAY_TRACING_LSS_INDEXING_MODE_SUCCESSIVE_NV;
   d.endCapsMode = VK_RAY_TRACING_LSS_PRIMITIVE_END_CAPS_MODE_CHAINED_NV;
@@ -1199,6 +1358,10 @@ VkAccelerationStructureGeometryKHR groom_geometry(const GroomAsset::Lod& l, VkDe
   g.geometryType = VK_GEOMETRY_TYPE_LINEAR_SWEPT_SPHERES_NV;
   g.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
   return g;
+}
+VkAccelerationStructureGeometryKHR groom_geometry(const GroomAsset::Lod& l, VkDeviceSize pos_off,
+                                                  VkAccelerationStructureGeometryLinearSweptSpheresDataNV& d) {
+  return lss_geometry(pos_off, l.radius, l.seg, d);
 }
 constexpr VkBuildAccelerationStructureFlagsKHR kGroomFlags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
                                                             VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
@@ -1213,6 +1376,21 @@ VkAccelerationStructureBuildSizesInfoKHR groom_sizes(const GroomAsset::Lod& l) {
   bi.pGeometries = &g;
   VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
   g_dd->vk.GetAccelerationStructureBuildSizesKHR(g_dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, &l.segments, &sz);
+  return sz;
+}
+// rt_hair_pixel_lod: the camera BLAS (refit every frame, never compacted: it is rebuilt at every level change).
+constexpr VkBuildAccelerationStructureFlagsKHR kCamFlags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+                                                          VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+VkAccelerationStructureBuildSizesInfoKHR cam_sizes(const GroomAsset::Cam& c) {
+  VkAccelerationStructureGeometryLinearSweptSpheresDataNV d;
+  VkAccelerationStructureGeometryKHR g = lss_geometry(0, c.radius, c.seg, d);
+  VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+  bi.flags = kCamFlags;
+  bi.geometryCount = 1;
+  bi.pGeometries = &g;
+  VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  g_dd->vk.GetAccelerationStructureBuildSizesKHR(g_dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, &c.segments, &sz);
   return sz;
 }
 
@@ -2004,6 +2182,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   for (auto& [k, s] : g_dyn) {
     as_destroy(s.as);
     if (s.groom) as_destroy(s.groom->as);
+    if (s.groom) as_destroy(s.groom->cam_as);
     if (s.groom && s.groom->readback.b) free_buf(s.groom->readback);
   }
   as_destroy(g_casc_as);
@@ -2061,8 +2240,12 @@ void bvh_device_destroyed(DeviceData* dd) {
     if (g_groom_tlas[i].as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_groom_tlas[i].as));
     for (Buf* b : {&g_groom_tlas[i].buf, &g_groom_inst[i]}) if (b->b) free_buf(*b);
     g_groom_tlas[i] = TlasSlot{};
+    if (g_cam_tlas[i].as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_cam_tlas[i].as));
+    for (Buf* b : {&g_cam_tlas[i].buf, &g_cam_inst[i]}) if (b->b) free_buf(*b);
+    g_cam_tlas[i] = TlasSlot{};
   }
   if (g_groom_scratch.b) free_buf(g_groom_scratch);
+  if (g_cam_scratch.b) free_buf(g_cam_scratch);
   for (auto& u : g_groom_uploads) if (u.staging.b) free_buf(u.staging);
   g_groom_uploads.clear(); g_groom_assets.clear(); g_groom_join.clear(); g_groom_logged_unmatched.clear(); g_groom_seen.clear();
   g_groom_pool_used = 0; g_groom_budget_refusals = 0;
@@ -2125,6 +2308,15 @@ void bvh_begin_capture(VkCommandBuffer) {
     const bool stable = cfg_int("rt_hair_row_stable", 0) != 0;
     if (stable != g_row_stable) g_groom_rows = {};
     g_row_stable = stable;
+    // rt_hair_pixel_lod off: the camera arrays leave the pool (slots drop their camera BLAS as their draws are built).
+    const bool pixel_lod = cfg_int("rt_hair_pixel_lod", 0) != 0;
+    if (!pixel_lod && g_pixel_lod) {
+      VkDeviceSize freed = 0;
+      for (auto& [id, a] : g_groom_assets)
+        for (auto& l : a.lods) freed += groom_cams_free(l, frame_index());
+      log("[hair groom] pixel LOD off: %.1f MB of camera arrays released from the mesh pool", double(freed) / 1048576.0);
+    }
+    g_pixel_lod = pixel_lod;
   }
   g_audits_this_frame = 0;
   g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
@@ -2142,7 +2334,7 @@ void bvh_begin_capture(VkCommandBuffer) {
         if (l.size && l.upload_rec) {
           g_pending_free.push_back({now + kGroomFreeLag, -1, l.base, l.size});
           g_groom_pool_used -= (std::min)(g_groom_pool_used, l.size);
-          freed += l.size;
+          freed += l.size + groom_cams_free(l, now);
           l = {};
         }
     if (freed) log("[hair groom] off: %.1f MB of groom LOD arrays released from the mesh pool", double(freed) / 1048576.0);
@@ -2688,9 +2880,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // rt_hair_groom: this frame's matched hair draws (groom_decide), in TLAS-instance order of their cards.
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
                      uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; uint32_t prims = 0;
-                     bool prev_ok = false; uint32_t stride = 0; };   // round 3 M1: the slot's last update was the previous build frame
+                     bool prev_ok = false; uint32_t stride = 0;   // round 3 M1: the slot's last update was the previous build frame
+                     const GroomAsset::Cam* cam = nullptr; bool cam_refit = false; };   // rt_hair_pixel_lod: its camera BLAS
   const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
+  // rt_hair_pixel_lod: render px per radian at the view centre (0: no projection read, every groom at camera level 0).
+  const float groom_ppr = g_pixel_lod && hp_on ? groom_px_per_radian() : 0.0f;
+  const float groom_pixel_k = cfg_float("rt_hair_pixel_lod_k", 1.0f);
   // rt_hair_warmup (docs/RTX_HAIR_PRIMARY.md 5o): hair draws and grooms of this frame not yet in their final state (join
   // pending, LOD uploading or voted, held soup, full build, key not yet published). 0 with grooms published: the groom
   // state is settled (hair_primary_warmup ends the level-load quiet window on that signal).
@@ -3136,6 +3332,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         as_destroy(g.as, kGroomFreeLag);
         if (g.compact == 1) g_groom_free_queries.push_back(g.query);
         g.pos_size = 0; g.uv_off = 0; g.prev_off = 0; g.prev_frames = 0; g.built = false; g.compact = 0; g.lod = lod;
+        // rt_hair_pixel_lod: the camera BLAS was built on the old points range and LOD (its level is relative to that LOD).
+        as_destroy(g.cam_as, kGroomFreeLag);
+        g.cam_level = 0; g.cam_lod = -1; g.cam_pick = -1; g.cam_votes = 0; g.cam_built = false;
       }
       if (ok && !g.pos_size) {
         const VkDeviceSize pos = (VkDeviceSize(l.points) * 12 + 15) / 16 * 16;
@@ -3181,6 +3380,62 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         // M1: prev points are last frame's, not an older update's (prev_frames is checked at the row, after this update)
         w.prev_ok = hair_primary::groom_prev_points(2u, g.last_update, now);
         g.last_update = now;
+        // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): the camera level (hair_groom::pixel_lod_level, then the 30-frame
+        // vote) and the camera BLAS on this slot's points; level 0: the camera rays trace the groom BLAS, as without it.
+        int cam_level = 0;
+        const GroomAsset::Cam* cam = nullptr;
+        if (g_pixel_lod && hp_on) {
+          int want = 0;
+          if (groom_ppr > 0 && g.measured) {
+            const float cx = g.centre[0], cy = g.centre[1], cz = g.centre[2];
+            const float dist = (std::max)(std::sqrt(cx * cx + cy * cy + cz * cz), 0.1f);
+            const float r0 = groom_r_median(groom_src->lods[size_t(lod)]) * l.keep;   // LOD 0's median radius (uncapped)
+            g.cam_head_px = g.size * groom_ppr;
+            g.cam_d0_px = 2.0f * r0 / dist * groom_ppr;
+            want = hair_groom::pixel_lod_level(g.cam_d0_px, g.cam_head_px, l.keep, groom_pixel_k, g.cam_level);
+          }
+          g.cam_pick = hair_groom::lod_vote(g.cam_pick, want, g.cam_votes, false);
+          cam_level = g.cam_pick;
+          if (cam_level > 0) cam = groom_cam(cmd, fd.groom_id, *groom_src, lod, cam_level, now);
+          if (cam_level > 0 && !cam && g.cam_level > 0 && g.cam_lod == lod) {   // the new level uploads: keep the built one
+            cam_level = g.cam_level;
+            cam = groom_src->lods[size_t(lod)].cam[cam_level].ready ? &groom_src->lods[size_t(lod)].cam[cam_level] : nullptr;
+          }
+          if (!cam) cam_level = 0;
+        }
+        if (cam_level != g.cam_level || (cam_level && g.cam_lod != lod)) {
+          as_destroy(g.cam_as, kGroomFreeLag);
+          g.cam_level = 0; g.cam_lod = -1; g.cam_built = false;
+        }
+        if (cam && !g.cam_as.as) {
+          const auto sz = cam_sizes(*cam);
+          g.cam_build_scratch = sz.buildScratchSize; g.cam_update_scratch = sz.updateScratchSize;
+          if (as_create(sz.accelerationStructureSize, g.cam_as, "hair groom camera BLAS", 1)) {
+            g.cam_level = cam_level; g.cam_lod = lod; g.cam_built = false;
+          } else {
+            cam = nullptr;
+          }
+        }
+        if (cam) {
+          w.cam = cam;
+          w.cam_refit = g.cam_built && rec_submitted(g.cam_rec) && dyn_refit_ok;
+          if (!w.cam_refit) g.cam_built = false;
+          g.cam_rec = rec;
+          w.cam_refit ? ++g_groom_st.cam_refits : ++g_groom_st.cam_builds;
+        }
+        if (g_pixel_lod && hp_on) {
+          GroomStats& st = g_groom_st;
+          ++st.cam_level[cam ? g.cam_level : 0];
+          st.cam_ppr = groom_ppr;
+          if (!(groom_ppr > 0)) ++st.cam_no_proj;
+          else if (g.measured) {
+            const bool first = st.cam_head_max == 0;
+            st.cam_d0_min = first ? g.cam_d0_px : (std::min)(st.cam_d0_min, g.cam_d0_px);
+            st.cam_d0_max = (std::max)(st.cam_d0_max, g.cam_d0_px);
+            st.cam_head_min = first ? g.cam_head_px : (std::min)(st.cam_head_min, g.cam_head_px);
+            st.cam_head_max = (std::max)(st.cam_head_max, g.cam_head_px);
+          }
+        }
         groom_of_key[key] = groom_work.size();
         groom_work.push_back(w);
         ++g_groom_st.matched;
@@ -3480,7 +3735,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // rt_hair_groom: groom arrays into the pool, compacted copies of last builds, then this frame's points.
     barrier(cmd, kCS | kXfer | kAS, VK_ACCESS_MEMORY_WRITE_BIT, kXfer | kAS, kRW);
     for (auto& u : g_groom_uploads) {
-      u.lod->upload_rec = rec; u.lod->upload_frame = now;
+      *u.upload_rec = rec; *u.upload_frame = now;
       const VkBufferCopy c{0, u.dst, u.bytes};
       dd->vk.CmdCopyBuffer(cmd, u.staging.b, g_pool.b, 1, &c);
       free_buf(u.staging);
@@ -3783,7 +4038,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       scratch_off.push_back(scratch);
       scratch += ((db.refit ? db.slot->update_scratch : db.slot->build_scratch) + al - 1) / al * al;
     }
-    std::vector<VkAccelerationStructureGeometryLinearSweptSpheresDataNV> groom_lss(groom_work.size());
+    std::vector<VkAccelerationStructureGeometryLinearSweptSpheresDataNV> groom_lss(groom_work.size() * 2);
     for (size_t k = 0; k < groom_work.size(); ++k) {
       GroomWork& w = groom_work[k];
       geo.push_back(groom_geometry(*w.l, w.g->pos_off, groom_lss[k]));
@@ -3798,6 +4053,20 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       infos.push_back(bi);
       scratch_off.push_back(scratch);
       scratch += ((w.refit ? w.g->update_scratch : w.g->build_scratch) + al - 1) / al * al;
+      if (!w.cam) continue;
+      // rt_hair_pixel_lod: the camera BLAS on the same points (this build's update), its kept segments and widened radii.
+      geo.push_back(lss_geometry(w.g->pos_off, w.cam->radius, w.cam->seg, groom_lss[groom_work.size() + k]));
+      ranges.push_back({w.cam->segments, 0, 0, 0});
+      VkAccelerationStructureBuildGeometryInfoKHR cbi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+      cbi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+      cbi.flags = kCamFlags;
+      cbi.mode = w.cam_refit ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+      cbi.srcAccelerationStructure = w.cam_refit ? w.g->cam_as.as : VK_NULL_HANDLE;
+      cbi.dstAccelerationStructure = w.g->cam_as.as;
+      cbi.geometryCount = 1;
+      infos.push_back(cbi);
+      scratch_off.push_back(scratch);
+      scratch += ((w.cam_refit ? w.g->cam_update_scratch : w.g->cam_build_scratch) + al - 1) / al * al;
     }
     if (casc_build) {   // rt_cascade_casters: converted in place after last frame's cascade pass
       geo.push_back(tri_geometry(rt_buffer_address(cap.cascade_xfb), cap.cascade_tris, cap.cascade_stride, false));
@@ -3889,7 +4158,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       w.g->compact = 1;
       w.g->query_frame = now; w.g->query_rec = rec;
     }
-    for (GroomWork& w : groom_work) w.g->built = true;
+    for (GroomWork& w : groom_work) {
+      w.g->built = true;
+      if (w.cam) w.g->cam_built = true;
+    }
     // All fallible build allocations have succeeded. A recorded relocation
     // must reach g_batches, even if an earlier scratch allocation would fail.
     if (ext.empty() && !n_cq) relocate_cached_blas(cmd, batch);
@@ -3975,6 +4247,15 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         }
         for (uint32_t j = 0; j < live_n; ++j) row_of[live_work[j]] = live_rows[j];
       }
+      // rt_hair_pixel_lod: the camera groom TLAS's instances at the same rows (inactive gaps included).
+      VkAccelerationStructureInstanceKHR* ci = nullptr;
+      if (g_pixel_lod && hp_on && ensure_tlas(slot, kGroomMax, &g_cam_tlas[slot]) &&
+          (g_cam_inst[slot].b || make_buf(g_cam_inst[slot], VkDeviceSize(kGroomMax) * sizeof(VkAccelerationStructureInstanceKHR),
+                                          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, true,
+                                          "hair groom camera instances"))) {
+        ci = reinterpret_cast<VkAccelerationStructureInstanceKHR*>(g_cam_inst[slot].map);
+        std::memset(ci, 0, size_t(rows) * sizeof(VkAccelerationStructureInstanceKHR));
+      }
       std::vector<uint64_t> row_key(rows, 0);
       for (size_t i = 0; i < groom_work.size(); ++i) {
         const GroomWork& w = groom_work[i];
@@ -4003,6 +4284,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
         in.accelerationStructureReference = w.g->as.addr;
         std::memcpy(gi + k, &in, sizeof in);
+        if (ci) {   // the same instance with the camera BLAS (camera level 0: the groom BLAS itself)
+          if (w.cam) in.accelerationStructureReference = w.g->cam_as.addr;
+          std::memcpy(ci + k, &in, sizeof in);
+        }
         // InstInfo row n + k: the card instance and the segment -> card triangle table (rt_common.hlsli rt_groom_trace).
         // Word 2: the strands' shadow transmittance (rt_hair_groom_shadow_t; 0: they block, as before).
         // Word 3: the segment start table (rt_common.hlsli rt_groom_links: chained segments share a joint).
@@ -4017,7 +4302,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
               (unsigned long long)w.g->pos_off, unsigned(w.l->segments));
         if (k < hair_primary::kMaxGrooms) {
           // Previous points: valid from the second update of this points range (the first copies stale bytes).
-          hp_rows[k] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
+          // rt_hair_pixel_lod: the segment starts of the BLAS the camera rays trace (the pixel record's segment indexes it).
+          hp_rows[k] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(ci && w.cam ? w.cam->seg : w.l->seg),
                                   w.prev_ok && w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};   // M1: last frame's
           // No UVs yet, or a points range in its first update (new LOD or upload: its BLAS and points exist on the
           // GPU only from this build on): its draw keeps the card.
@@ -4061,10 +4347,33 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
         ai.accelerationStructure = g_groom_tlas[slot].as;
         groom_tlas_address = dd->vk.GetAccelerationStructureDeviceAddressKHR(dd->device, &ai);
+        // rt_hair_pixel_lod: the camera groom TLAS (own scratch), the header's TLAS. Not built: the header names the groom
+        // TLAS and its rows the groom's own segment starts again.
+        uint64_t header_tlas = groom_tlas_address;
+        if (ci) {
+          gg.geometry.instances.data.deviceAddress = g_cam_inst[slot].addr;
+          gbi.dstAccelerationStructure = g_cam_tlas[slot].as;
+          uint32_t ccap = g_cam_tlas[slot].cap;
+          VkAccelerationStructureBuildSizesInfoKHR csz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+          dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &gbi, &ccap, &csz);
+          const VkDeviceSize cneed = csz.buildScratchSize + al;
+          if (g_cam_scratch.size >= cneed ||
+              ((g_cam_scratch.b ? (free_buf(g_cam_scratch), true) : true) &&
+               make_buf(g_cam_scratch, cneed, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "hair groom camera TLAS scratch"))) {
+            gbi.scratchData.deviceAddress = (g_cam_scratch.addr + al - 1) / al * al;
+            dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &gbi, &grp);
+            VkAccelerationStructureDeviceAddressInfoKHR cai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+            cai.accelerationStructure = g_cam_tlas[slot].as;
+            header_tlas = dd->vk.GetAccelerationStructureDeviceAddressKHR(dd->device, &cai);
+          }
+        }
+        if (header_tlas == groom_tlas_address)
+          for (size_t wi = 0; wi < groom_work.size(); ++wi)
+            if (row_of[wi] < rows && row_of[wi] < hair_primary::kMaxGrooms) hp_rows[row_of[wi]].starts = uint32_t(groom_work[wi].l->seg);
         if (hp_on) {
           // 5u observable (detailed logging): this TLAS's instances, and in the frames after a hair draw was first seen
           // what changed for the existing rows (count, rows whose key moved, full builds).
-          hair_primary_groom_tlas_built(groom_tlas_address, rec, hp_keys, groom_count);
+          hair_primary_groom_tlas_built(header_tlas, rec, hp_keys, groom_count);   // the TLAS the strand G-buffer traces
           if (g_groom_first_seen && now >= g_groom_first_seen && now - g_groom_first_seen <= 6 &&
               logging::stats_enabled(cfg_int)) {
             uint32_t moved = 0, builds = 0;
@@ -4078,7 +4387,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                       (unsigned long long)now, (unsigned long long)g_groom_first_seen, groom_count, g_groom_prev_n, moved,
                       first, first >= 0 ? (unsigned long long)(g_groom_prev_keys[first] >> 48) : 0ull,
                       first >= 0 ? (unsigned long long)(hp_keys[first] >> 48) : 0ull, builds, groom_work.size(), slot,
-                      (unsigned long long)groom_tlas_address);
+                      (unsigned long long)header_tlas);
           }
           g_groom_prev_n = (std::min)(groom_count, hair_primary::kMaxGrooms);
           std::memcpy(g_groom_prev_keys, hp_keys, sizeof g_groom_prev_keys);
@@ -4088,7 +4397,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           geo_gbuffer_viewport(viewport);
           // rt_hair_warmup: this frame's settled signal, before the publish (which observes a level-load boundary).
           if (warmup) hair_primary_warmup(groom_unsettled == 0);
-          hair_primary_publish(cmd, rec, groom_tlas_address, g_pool.addr, g_pool.size, hp_rows, hp_keys, hp_lods, groom_count, w, h, viewport);
+          hair_primary_publish(cmd, rec, header_tlas, g_pool.addr, g_pool.size, hp_rows, hp_keys, hp_lods, groom_count, w, h, viewport);
         }
       } else {
         groom_count = 0;
@@ -4194,6 +4503,23 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                 stats_period(300), (unsigned long long)g_groom_st.keyed_new,
                 double(g_groom_st.key_wait_sum) / double(g_groom_st.keyed_new), (unsigned long long)g_groom_st.key_wait_max,
                 cfg_int("rt_hair_warmup", 0));
+    if (g_pixel_lod) {   // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v)
+      const auto& c = g_groom_st.cam_level;
+      VkDeviceSize arrays = 0, blas = 0;
+      for (const auto& [id, a] : g_groom_assets)
+        for (const auto& l : a.lods) arrays += l.cam_bytes;
+      for (const auto& [k, s] : g_dyn)
+        if (s.groom) blas += s.groom->cam_as.size;
+      log_stats("[hair groom] pixel LOD (last %u frames): groom frames per camera level 0/1/2/3/4/5 %llu/%llu/%llu/%llu/%llu/%llu; "
+                "LOD 0 strand diameter %.2f-%.2f px, head %.0f-%.0f px (%.0f px per radian, %llu groom frames without a "
+                "projection); camera BLAS full builds %llu, refits %llu; camera arrays %.1f MB, camera BLAS %.1f MB (k %.2f)",
+                stats_period(300), (unsigned long long)c[0], (unsigned long long)c[1], (unsigned long long)c[2],
+                (unsigned long long)c[3], (unsigned long long)c[4], (unsigned long long)c[5], g_groom_st.cam_d0_min,
+                g_groom_st.cam_d0_max, g_groom_st.cam_head_min, g_groom_st.cam_head_max, g_groom_st.cam_ppr,
+                (unsigned long long)g_groom_st.cam_no_proj, (unsigned long long)g_groom_st.cam_builds,
+                (unsigned long long)g_groom_st.cam_refits, double(arrays) / 1048576.0, double(blas) / 1048576.0,
+                cfg_float("rt_hair_pixel_lod_k", 1.0f));
+    }
     g_groom_st = GroomStats{};
   }
   out->pool = g_pool.b;

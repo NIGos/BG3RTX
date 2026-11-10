@@ -55,9 +55,17 @@ inline uint64_t plane(const std::vector<uint8_t>& s, uint32_t width, uint64_t n,
 }
 }  // namespace v3detail
 
+// rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): keeps below the stored table, rebuilt at decode time the same nested
+// way as the table's thinned LODs (convert.thin: a strand kept at 1/8 is kept at 1/4, 1/2 and 1), radii widened by
+// 1 / keep under kMaxThinRadius. No file changes: the 888 v3 files are read as they are.
+constexpr float kV3ExtraKeeps[3] = {1.0f / 8, 1.0f / 16, 1.0f / 32};
+
 // LOD `index` of a whole v3 file as v2 LOD bytes (16-byte header + triangle, bary, radius, root, segment arrays).
 // False on anything malformed (sizes, codec, stream lengths, a strand length that does not add up).
-inline bool decode_v3_lod(const uint8_t* bytes, uint64_t size, uint32_t index, V3Inflate inflate, std::vector<uint8_t>& out) {
+// extra_keep > 0 (5v): instead of the table's LOD `index` (pass 0), the strands kept at that fraction; the table has no
+// counts for it, so only a non-empty result is required.
+inline bool decode_v3_lod(const uint8_t* bytes, uint64_t size, uint32_t index, V3Inflate inflate, std::vector<uint8_t>& out,
+                          float extra_keep = 0.0f) {
   using namespace v3detail;
   out.clear();
   Asset h;
@@ -65,6 +73,8 @@ inline bool decode_v3_lod(const uint8_t* bytes, uint64_t size, uint32_t index, V
   if (!inflate || !parse_header(bytes, size, h, &hb) || h.version != kV3 || hb != kV3HeaderBytes) return false;
   V3Table t;
   if (index >= h.lod_count || !v3_table(bytes, size, h.lod_count, t)) return false;
+  const bool extra = extra_keep > 0.0f;
+  if (extra && (index || !(extra_keep < 1.0f))) return false;
   uint64_t at = t.streams_at;
   if (size - at < 16) return false;
   uint32_t w[4];
@@ -132,9 +142,10 @@ inline bool decode_v3_lod(const uint8_t* bytes, uint64_t size, uint32_t index, V
     }
   }
   // The requested LOD: convert.thin's strand selection (nested, deterministic), radii widened by 1 / keep.
-  const float keep = t.keep[index];
+  const float keep = extra ? extra_keep : t.keep[index];
+  const bool thinned = index || extra;
   std::vector<uint8_t> sel(strands, 1);
-  if (index) {
+  if (thinned) {
     for (uint32_t i = 0; i < strands; ++i) {
       const uint64_t hsh = (uint64_t(i) * kThinSeed + kThinAdd) & 0xFFFFFFFFull;
       sel[i] = double(hsh) / 4294967296.0 < double(keep);
@@ -143,7 +154,7 @@ inline bool decode_v3_lod(const uint8_t* bytes, uint64_t size, uint32_t index, V
   uint64_t pts = 0, segs = 0;
   for (uint32_t i = 0; i < strands; ++i)
     if (sel[i]) { pts += len[i]; segs += len[i] - 1; }
-  if (pts != t.points[index] || segs != t.segments[index]) return false;
+  if (extra ? !segs : (pts != t.points[index] || segs != t.segments[index])) return false;
   out.resize(size_t(16 + pts * 17 + segs * 4));
   uint8_t* o = out.data();
   const uint32_t hdr[4] = {0, uint32_t(pts), uint32_t(segs), 0};
@@ -161,7 +172,7 @@ inline bool decode_v3_lod(const uint8_t* bytes, uint64_t size, uint32_t index, V
       std::memcpy(ot + q * 4, &tri[src], 4);
       std::memcpy(ob + q * 8, &bary[src * 2], 8);
       float r = rad[src];
-      if (index) r = std::fmin(r / keep, kMaxThinRadius);
+      if (thinned) r = std::fmin(r / keep, kMaxThinRadius);
       std::memcpy(orad + q * 4, &r, 4);
       oroot[q] = root[src];
       if (j + 1 < len[i]) {
@@ -171,6 +182,37 @@ inline bool decode_v3_lod(const uint8_t* bytes, uint64_t size, uint32_t index, V
       }
     }
   }
+  return true;
+}
+
+// rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v, layer/bvhsplit.cpp camera BLAS): the camera strand subset of one loaded
+// LOD, on that LOD's own points. A LOD keeps convert.thin's strands i (LOD 0 order) with hash(i) < keep_lod, in order,
+// so its n-th strand is the n-th such i (strands0: LOD 0's strand count, points - segments). Level j keeps those with
+// hash(i) < keep_lod / 2^j (the same nested hash: exactly decode_v3_lod's extra keep), radii x 2^j under kMaxThinRadius.
+// seg_out: the kept strands' segment starts (LOD point indices, in order); radius_out: every LOD point's widened radius.
+// False when the LOD's strands do not match the hash enumeration (another selection) or nothing is kept.
+inline bool camera_subset(const uint32_t* seg, uint32_t segments, const float* radius, uint32_t points, uint32_t strands0,
+                          float keep_lod, int level, std::vector<uint32_t>& seg_out, std::vector<float>& radius_out) {
+  seg_out.clear();
+  radius_out.clear();
+  if (level <= 0 || level > 16 || !seg || !radius || !segments || !points || !strands0 || !(keep_lod > 0.0f)) return false;
+  const float keep = keep_lod / float(1u << level);
+  auto pass = [](uint64_t i, float k) { return double((i * kThinSeed + kThinAdd) & 0xFFFFFFFFull) / 4294967296.0 < double(k); };
+  uint64_t next = 0;   // the next LOD 0 strand to test
+  for (uint32_t s = 0; s < segments;) {
+    uint32_t e = s + 1;
+    while (e < segments && seg[e] == seg[e - 1] + 1) ++e;   // one strand: consecutive segment starts
+    if (seg[e - 1] + 1 >= points) return seg_out.clear(), false;
+    while (next < strands0 && !pass(next, keep_lod)) ++next;
+    if (next >= strands0) return seg_out.clear(), false;   // more strands than the hash keeps
+    if (pass(next++, keep)) seg_out.insert(seg_out.end(), seg + s, seg + e);
+    s = e;
+  }
+  while (next < strands0 && !pass(next, keep_lod)) ++next;
+  if (next < strands0 || seg_out.empty()) return seg_out.clear(), false;   // fewer strands than the hash keeps
+  radius_out.resize(points);
+  const float scale = float(1u << level);
+  for (uint32_t p = 0; p < points; ++p) radius_out[p] = std::fmin(radius[p] * scale, kMaxThinRadius);
   return true;
 }
 

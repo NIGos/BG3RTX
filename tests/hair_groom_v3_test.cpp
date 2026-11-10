@@ -13,6 +13,8 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <map>
+#include <cstring>
 #include <string>
 #include <vector>
 using namespace bg3::hair_groom;
@@ -73,6 +75,86 @@ int main(int argc, char** argv) {
   const auto v3 = load(fx + "/groom.v3.hgrm"), ref = load(fx + "/groom.ref.hgrm");
   CHECK(!v3.empty() && !ref.empty());
   check_file(v3, ref, "fixture");
+  {   // 5v rt_hair_pixel_lod: decode-time keeps below the table, nested, radii x 1 / keep (capped), no file change.
+    Asset h;
+    CHECK(parse_header(v3.data(), v3.size(), h));
+    auto key = [](const Lod& l, uint32_t i) {
+      uint64_t b0, b1;
+      uint32_t x, y;
+      std::memcpy(&x, &l.bary[2 * i], 4); std::memcpy(&y, &l.bary[2 * i + 1], 4);
+      b0 = (uint64_t(l.triangle[i]) << 32) | x; b1 = y;
+      return std::make_pair(b0, b1);
+    };
+    std::vector<uint8_t> b0, bp, bk;
+    CHECK(decode_v3_lod(v3.data(), v3.size(), 0, lzms_inflate, b0));
+    Lod l0;
+    uint64_t at = 0;
+    CHECK(parse_lod(b0.data(), b0.size(), at, h.indices / 3, l0));
+    std::map<std::pair<uint64_t, uint64_t>, float> r0;
+    for (uint32_t i = 0; i < l0.points; ++i) r0[key(l0, i)] = l0.radius[i];
+    // The coarsest table LOD is the first parent.
+    CHECK(decode_v3_lod(v3.data(), v3.size(), h.lod_count - 1, lzms_inflate, bp));
+    std::vector<uint8_t> parent = bp;
+    uint32_t parent_points = 0;
+    { Lod lp; at = 0; CHECK(parse_lod(parent.data(), parent.size(), at, h.indices / 3, lp)); parent_points = lp.points; }
+    int decoded = 0;
+    for (float keep : kV3ExtraKeeps) {
+      if (!decode_v3_lod(v3.data(), v3.size(), 0, lzms_inflate, bk, keep)) continue;   // no strand kept: refused
+      ++decoded;
+      Lod lk, lp;
+      at = 0; CHECK(parse_lod(bk.data(), bk.size(), at, h.indices / 3, lk) && at == bk.size() && lk.keep == keep);
+      at = 0; CHECK(parse_lod(parent.data(), parent.size(), at, h.indices / 3, lp));
+      CHECK(lk.points <= lp.points && lk.points < parent_points + 1);
+      std::map<std::pair<uint64_t, uint64_t>, int> in_parent;
+      for (uint32_t i = 0; i < lp.points; ++i) in_parent[key(lp, i)] = 1;
+      for (uint32_t i = 0; i < lk.points; ++i) {
+        CHECK(in_parent.count(key(lk, i)));                       // nested in the coarser level
+        const float want = std::fmin(r0.at(key(lk, i)) / keep, kMaxThinRadius);
+        CHECK(std::fabs(double(lk.radius[i]) / want - 1) < 1e-6);  // LOD 0 radius widened by 1 / keep, capped
+      }
+      parent = bk;
+    }
+    CHECK(decoded >= 1);
+    CHECK(!decode_v3_lod(v3.data(), v3.size(), 1, lzms_inflate, bk, 0.125f));   // an extra keep names no table LOD
+    CHECK(!decode_v3_lod(v3.data(), v3.size(), 0, lzms_inflate, bk, 1.0f));     // not below the full groom
+    std::printf("hair_groom_v3_test: decode-time keeps 1/8..1/32: %d of 3 non-empty, nested, radii x 1/keep\n", decoded);
+    // camera_subset (layer camera BLAS): on every table LOD's own points, level j names exactly the strands of the
+    // decode-time keep keep_lod / 2^j, in order, with the same radii.
+    const uint32_t strands0 = l0.points - l0.segments;
+    int pairs = 0;
+    for (uint32_t li = 0; li < h.lod_count; ++li) {
+      std::vector<uint8_t> bl;
+      CHECK(decode_v3_lod(v3.data(), v3.size(), li, lzms_inflate, bl));
+      Lod ll;
+      at = 0; CHECK(parse_lod(bl.data(), bl.size(), at, h.indices / 3, ll));
+      for (int j = 1; j <= 5; ++j) {
+        std::vector<uint32_t> cs;
+        std::vector<float> cr;
+        const bool got = camera_subset(ll.segment, ll.segments, ll.radius, ll.points, strands0, ll.keep, j, cs, cr);
+        const float keep = ll.keep / float(1u << j);
+        const bool want = decode_v3_lod(v3.data(), v3.size(), 0, lzms_inflate, bk, keep);
+        CHECK(got == want);
+        if (!got) continue;
+        ++pairs;
+        Lod lk;
+        at = 0; CHECK(parse_lod(bk.data(), bk.size(), at, h.indices / 3, lk));
+        CHECK(cs.size() == lk.segments && cr.size() == ll.points);
+        for (uint32_t s = 0; s < lk.segments; ++s) {
+          const uint32_t a = cs[s], b = lk.segment[s];
+          CHECK(key(ll, a) == key(lk, b) && key(ll, a + 1) == key(lk, b + 1));
+          CHECK(std::fabs(double(cr[a]) / lk.radius[b] - 1) < 1e-6);
+        }
+      }
+      std::vector<uint32_t> cs;
+      std::vector<float> cr;
+      if (li == 0)   // one strand more than the LOD holds: the enumeration does not match, refused
+        CHECK(!camera_subset(ll.segment, ll.segments, ll.radius, ll.points, strands0 + 1, ll.keep, 1, cs, cr));
+      CHECK(!camera_subset(ll.segment, ll.segments, ll.radius, ll.points, strands0, ll.keep, 0, cs, cr));
+    }
+    CHECK(pairs >= 3);
+    std::printf("hair_groom_v3_test: camera subsets of %u LODs x 5 levels: %d equal to the decode-time keeps\n", h.lod_count,
+                pairs);
+  }
   // Malformed inputs are refused, never read out of range.
   std::vector<uint8_t> bytes;
   for (size_t cut : {size_t(40), size_t(300), v3.size() / 2, v3.size() - 1}) {

@@ -1444,6 +1444,77 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
   period line with frame watchdog trips 0, key watchdog trips 0 and dropouts 0-2. If A shows no holes, the test does
   not reproduce 125217 with 45252 alone (the fix stays proven by the GPU case only); the period lines then say why.
 
+## 5v. Pixel-footprint strand LOD for camera rays (branch claude/hair-pixel-lod, 2026-11-10: steps 1 and 2 (b) built, key rt_hair_pixel_lod off)
+Study: docs/progress/claude-hair-pixel-lod-study.md (eca698b9). Keeping fewer strands about 1 render pixel wide for the
+camera rays gives HF like the cards and 1.5-2.4x less coverage noise at heads of 80-150 px (coverage +3 to +6%); it
+fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop about 2x today's.
+- Step 1 (built, inert until step 2 uses it): `decode_v3_lod(..., extra_keep)` (common/hair_groom_v3.h) rebuilds keeps
+  1/8, 1/16, 1/32 (kV3ExtraKeeps) from the stored LOD 0 with the table's nested per-strand hash, radii x 1 / keep under
+  kMaxThinRadius (9 mm); no file changes, the 888 v3 files are read as they are; the table's count check is skipped
+  for these (no table entry), an empty result is refused. CTest hair_groom_v3_test: on the fixture all three keeps are
+  non-empty, each nested in the coarser level (1/32 in 1/16 in 1/8 in the coarsest table LOD), every radius = LOD 0's
+  / keep (capped) to 1e-6; an extra keep with a table index or keep >= 1 is refused.
+- Step 2 design (cheapest correct route found, not built):
+  - A camera-only BLAS per groom built on the groom's current points (no second points range, no second update
+    dispatch): LSS indexing SUCCESSIVE reads segment starts from an index buffer and radii from a radius buffer, so
+    a camera BLAS is the same vertex buffer with (a) the kept strands' segment starts (static per LOD/keep pair) and
+    (b) a widened radius buffer (static per pair: r_lod x keep_lod / keep_cam, capped 9 mm). Refit every frame with
+    the groom's BLAS (the points move).
+  - A camera groom TLAS per scene slot (same instance order as the groom TLAS); the header carries its address and
+    rows whose segment table (row.z) is the camera index buffer. Points, UVs and previous points are the groom's own,
+    so hp_segment, the velocity variant and the count shader read the right points: no shader change, the strand
+    shaders stay byte-identical, variants delta 0. Shadow, GI and fibre rays keep the groom TLAS (keep >= 0.25).
+  - The cheaper route asked for (camera rays rejecting non-kept strands in hp_nearest against a widened radius)
+    does not exist: an LSS intersection uses the radius in the BLAS, so a wider strand needs its own BLAS; a
+    candidate filter can only remove strands, not widen them.
+  - Pick: per groom, keep_cam = the finest of {lod keep, 1/8, 1/16, 1/32} whose projected median diameter is >= k
+    render px (k = rt_hair_pixel_lod_k, 0.7-1.4, default 1.0); px per metre from the build camera's projection and
+    the bounds distance; no pixel LOD for heads under 60 render px (the study's failure bound; today's LOD there);
+    hysteresis of one quarter octave on the diameter plus the existing 30-frame vote.
+  - Cross-fade between two keeps needs a per-candidate keep test in the strand trace (a shader change behind a
+    specialization constant); without it the step pops about 2x today's (open).
+  - Costs (estimates from the study's groom and today's sizes, to measure): mesh pool + radius buffer 4 B per point of
+    every camera-LOD groom (13 grooms at S8, about 4.5M points: about 18 MB) + index buffers 4 B per kept segment
+    (under 1 MB); BLAS memory about keep_cam / keep_lod of the groom BLAS (1/2-1/8: about 5-15% more BLAS); build
+    time one more refit per groom on 1/2-1/16 of its segments (about 10-30% of today's groom refit ms); one 13-instance
+    TLAS build per frame (negligible). The strand G-buffer trace gets cheaper (fewer, fatter segments).
+  - Checks to add with it: the coverage gate's upper side is judged on S <= C, so wider strands cannot trip "coverage
+    high"; hp_on_card's band uses hair_primary_max_radius (10 mm) >= the 9 mm cap; the tips test is per pixel (no
+    radius). A period line: grooms per camera keep, projected diameter range.
+- Step 2 (b) built (branch claude/hair-pixel-lod, offline; key rt_hair_pixel_lod, off): layer/bvhsplit.cpp.
+  - Camera arrays per (groom LOD, level j): `hair_groom::camera_subset` (common/hair_groom_v3.h) keeps the LOD's strands
+    whose LOD 0 index (the n-th strand of a LOD is the n-th index the hash keeps at keep_lod; strands0 = table points -
+    segments, `Asset::lod_points`) passes keep_lod / 2^j, radii x 2^j under 9 mm. Uploaded once into the mesh pool
+    (radius 4 B per LOD point + index 4 B per kept segment), counted in the groom budget, freed with the LOD (eviction,
+    discarded upload, grooms off) and when the key goes off. The LOD's segment starts and radii stay on the host while
+    the key is on (8 B per point; decoded again once if the key went on after the upload).
+  - Pick per slot: px per radian = render height / 2 x |P[1][1]| of the build's camera UBO (host mapping; 0: level 0),
+    head px = bounds diagonal / distance x that, d0 px = 2 x (median LOD radius x keep_lod) / distance x that;
+    `pixel_lod_level` (prev = the built level) then the 30-frame `lod_vote`. A level still uploading keeps the built one.
+  - Camera BLAS per slot on the groom's points range (LSS successive, kept-segment index + widened radius buffers, not
+    compacted), full build on a level or LOD change, refit with the groom BLAS in the same batch; destroyed with
+    kGroomFreeLag on a level/LOD change, slot release and key off.
+  - Camera groom TLAS per scene slot (`g_cam_tlas`, own scratch): the groom TLAS's instances at the same rows (inactive
+    gaps zero), each row's camera BLAS or, at level 0, its groom BLAS. The header publishes its address and row.z = the
+    camera index buffer; if it is not built the header falls back to the groom TLAS and the groom's segment table. The
+    TLAS check (`hair_primary_groom_tlas_built`) records the header's TLAS. Secondary rays (scene stamp) keep the groom TLAS.
+  - Readers of the pixel record's segment: the strand G-buffer, velocity, count, coverage, gi/hair_strand_pixel.hlsli,
+    rt/hair_fibre_gi.hlsli and rr_strand_aa.hlsl all resolve it through the header row (hp_segment): consistent.
+    InstInfo word 3 (rt_groom_links) and hf_groom only see primitives of their own groom TLAS traces: unaffected.
+  - Key off: no allocation, no camera TLAS, header and rows as before. Shaders unchanged: tools/shader_identity.py
+    227/227 byte-identical to e5f62b50; variants delta 0. Test: hair_groom_v3_test, on the fixture every table LOD x
+    levels 1-5 equals decode_v3_lod's extra keep keep_lod / 2^j strand for strand and radius for radius (14 pairs).
+- (d) Period line (detailed logging, with the key on): `[hair groom] pixel LOD (last N frames): groom frames per camera
+  level 0/1/2/3/4/5 ...; LOD 0 strand diameter A-B px, head C-D px (P px per radian, n groom frames without a projection);
+  camera BLAS full builds, refits; camera arrays MB, camera BLAS MB (k)`. Pool MB, BLAS MB and refit ms are not measured
+  offline (no layer BLAS fixture); the live part below reads them (refit cost: the existing `gpu` lines of the build).
+- (e) Live, staged not queued: part 2 of tools/live_batches_staged/hair_late (hl1-s8-late-arrival, one S8 launch with the
+  arrival part unchanged and rt_hair_row_stable=1): static zoomed-out camera, rt_hair_pixel_lod off / on / off in one run
+  (60-frame windows with stats_reset), PNG bursts 99310 (off) and 99311 (on), the period line and the strand G-buffer GPU
+  ms per window; predictions in its predicted.json (part2_rt_hair_pixel_lod). live_flow --frozen: 0 failing.
+- Not built: (c) the cross-fade between two adjacent levels (spec constant 1048); without it a level change pops.
+- User check: none yet (rt_hair_pixel_lod is a dev key, not in the launcher); the hl1 part 2 bursts show it (S8 zoomed out:
+  strand hair about 1 px wide, less grain next to the cards). A launcher toggle comes once the live part qualifies it.
 ## 5w. Stable groom rows (offline 2026-11-10, branch claude/hair-row-stable: key rt_hair_row_stable, off)
 
 Live hl1 164930 (natural arrival, camera wheel zoom): of the 5u candidates A (another build's TLAS traced: 75 submits
