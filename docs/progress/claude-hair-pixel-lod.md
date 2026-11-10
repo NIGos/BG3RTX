@@ -26,3 +26,10 @@
   index offset; hair_primary_groom_tlas_built is called for the camera TLAS too (the 7f10d62b check). Cross-fade: a
   per-strand stable hash test between levels j and j+1 in hp_nearest's candidate loop behind a new kSpecId (1048);
   it needs both levels' segments in the camera BLAS: design it on the GPU fixture first.
+- 2026-11-10, later: claude/hair-row-stable (a2646548, rt_hair_row_stable) merged into this branch. (b)-(e) still not
+  started: the agent stopped at this part boundary (context). Two additions to the plan above: the camera TLAS must
+  write its instances at the same rows as the groom TLAS (`row_of[]` in the groom instance loop of
+  layer/bvhsplit.cpp, including the inactive gap instances with rt_hair_row_stable); and with row.z = the camera
+  index buffer the pixel record's segment is a camera BLAS primitive, so before (b) check every reader of that
+  segment outside the header rows (InstInfo word 3 `w.l->seg` in rt_groom_links, core fibre shading): a reader that
+  resolves it through the groom's own segment table would name another strand.
