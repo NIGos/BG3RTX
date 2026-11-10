@@ -127,8 +127,10 @@ struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] =
                    uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {};
                    uint32_t traced = 0, hit = 0, tag = 0, evidence_tag = 0, tag_totals[hair_primary::kCountTags] = {}, accepted_totals[hair_primary::kCountTags] = {};
                    uint64_t evidence_frame = 0;
-                   float ray[16] = {}; };
+                   float ray[16] = {};
+                   hair_primary::RebaseSample rebase; };   // 6c: the judged frame's sampled ray (fresh: its own tag)
 CountSeen g_seen;
+hair_primary::RebaseStats g_rebase;   // 6c, per period
 // C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
 std::unordered_map<uint64_t, hair_primary::TransmitMean> g_transmit;
 uint64_t g_transmit_rows = 0;   // groom rows given a measured transmittance since the last 300-frame line
@@ -398,6 +400,8 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
     g_seen.hit = s.map[hair_primary::kTagTracedOffset / 4 + 2 * j + 1];
     g_seen.evidence_tag = gf ? gf->tag : 0;
     std::memcpy(g_seen.ray, s.map + hair_primary::kRaySampleOffset / 4, sizeof g_seen.ray);
+    g_seen.rebase = hair_primary::rebase_sample(g_seen.ray, gf ? gf->tag : 0u);
+    g_rebase.add(g_seen.rebase);
     if (gf) g_mask_holes += s.map[hair_primary::kMaskHoleOffset / 4 + j];
     for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
       g_seen.keys[k] = row_keys[k];
@@ -482,12 +486,15 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
           log("[hair primary] watchdog: G-buffer frame %llu swapped draws wrote %llu strand pixels of %llu card pixels "
               "(bound %.4f): cards for %llu frames; build camera step %.3f m at that frame, %.3f m the frame before "
               "(-1: not kept); applied the publish of build frame %llu (%lld frames before), header camera %.3f m from "
-              "build frame %llu's; VP eye %.3f m from the origin at that publish, %.3f m at build frame %llu",
+              "build frame %llu's; VP eye %.3f m from the origin at that publish, %.3f m at build frame %llu; sampled "
+              "strand ray of that frame on the GPU: rebase origin %.3f m (%.3f m along the ray; -1: no sample; not 0: the "
+              "header camera is not the groom points' origin), card distance %.3f m, hit distance %.3f m (-1: miss)",
               (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
               (unsigned long long)g_watchdog.card, g_watchdog.bound(), (unsigned long long)hair_primary::kWatchdogFrames,
               g_cam_steps.step(gf->frame), g_cam_steps.step(gf->frame - 1), (unsigned long long)gf->pub_frame,
               (long long)gf->frame - (long long)gf->pub_frame, g_cam_steps.between(gf->pub_frame, gf->frame),
-              (unsigned long long)gf->frame, eye_of(gf->pub_frame), eye_of(gf->frame), (unsigned long long)gf->frame);
+              (unsigned long long)gf->frame, eye_of(gf->pub_frame), eye_of(gf->frame), (unsigned long long)gf->frame,
+              g_seen.rebase.origin_m, g_seen.rebase.along_m, g_seen.rebase.card_m, g_seen.rebase.hit_m);
       }
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
@@ -2215,6 +2222,12 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         (unsigned long long)g_cam_check.differ, g_cam_check.max_m, (unsigned long long)g_cam_check.gpu,
         (unsigned long long)(g_watchdog.spared - g_watchdog_spared_mark), int(g_watchdog.one_key));
     g_watchdog_spared_mark = g_watchdog.spared;
+    // 6c: the header camera against the groom points' origin, measured on the GPU (no label, no CPU camera read).
+    log_stats("[hair primary] rebase origin (last %u frames): %llu counted frames with a sampled strand ray, %llu with a "
+        "non-zero origin (largest %.3f m): there the header camera was not the origin of the groom points traced; "
+        "rt_hair_header_cam_gpu %d", stats_period(300), (unsigned long long)g_rebase.sampled,
+        (unsigned long long)g_rebase.moved, g_rebase.max_m, cfg_int("rt_hair_header_cam_gpu", 0) != 0 ? 1 : 0);
+    g_rebase = hair_primary::RebaseStats{};
     log_stats("[hair primary] stale publish check (last %u frames): G-buffer submits with the same camera "
         "as the publish, same label %llu, older label %llu, camera moved since the publish %llu, camera not known "
         "%llu; drawn as cards %llu (rt_hair_stale_publish %d); G-buffer camera from its UBO %llu, not measured: no hair "

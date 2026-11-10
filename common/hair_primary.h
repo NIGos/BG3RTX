@@ -1492,6 +1492,37 @@ struct CameraSteps {
   }
 };
 
+// 6c: the strand ray one G-buffer fragment of a sparse grid stores in the header (kRayDebugOffset; the count copies it to
+// kRaySampleOffset): words 0-2 the origin hp_rebase gave (the G-buffer's camera minus the header camera, both as the
+// shader read them on the GPU), 3 the card distance, 4-6 the direction, 7 hit, 8 the hit distance, 11 the tag of the
+// frame that wrote it, 12-14 that camera, 15 one. A G-buffer traces the groom points of the last build executed before
+// it, converted on the GPU with the camera UBO its own draws read (hc1 234025: with the header camera copied on the GPU
+// by that build the origin was exactly 0 in 18 of 18 samples while turning). So a non-zero origin is a header camera
+// that is not the points' origin: every ray is displaced by it (along the view under a dolly: the hit is that much off
+// the card, hp_on_card rejects it). Exact: one camera block subtracts to 0, no tolerance. fresh: the sample was written
+// with the judged frame's tag (a frame with no hair pixel on the grid leaves an older sample).
+struct RebaseSample { bool fresh = false; float origin_m = -1.0f, along_m = 0.0f, card_m = -1.0f, hit_m = -1.0f; };
+inline RebaseSample rebase_sample(const float ray[16], uint32_t tag) {
+  RebaseSample r;
+  if (!tag || ray[15] != 1.0f || ray[11] != float(tag)) return r;
+  r.fresh = true;
+  r.origin_m = std::sqrt(ray[0] * ray[0] + ray[1] * ray[1] + ray[2] * ray[2]);
+  r.along_m = ray[0] * ray[4] + ray[1] * ray[5] + ray[2] * ray[6];   // along the pixel ray: the depth error of a hit
+  r.card_m = ray[3];
+  r.hit_m = ray[7] != 0.0f ? ray[8] : -1.0f;
+  return r;
+}
+struct RebaseStats {
+  uint64_t sampled = 0, moved = 0;
+  float max_m = 0.0f;
+  void add(const RebaseSample& s) {
+    if (!s.fresh) return;
+    ++sampled;
+    if (s.origin_m != 0.0f) ++moved;
+    if (s.origin_m > max_m) max_m = s.origin_m;
+  }
+};
+
 // 6a rt_hair_stale_publish (docs/RTX_HAIR_PRIMARY.md 6a, 6b). The submit-time check: the distance between the applied
 // publish's build camera and the G-buffer's own camera, measured from the G-buffer's camera UBO (+208, read at the
 // submit; -1 unknown). Over kStaleCameraTol the frame draws its cards (card mode of every recorded slot) instead of

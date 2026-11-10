@@ -62,7 +62,7 @@
       "\\[hair groom\\] unmatched hair draw: 45252 indices",
       "\\[hair groom\\] frame \\d+ \\(a hair draw first seen",
       "\\[hair primary\\] header safety \\(last",
-      "\\[hair primary\\] stale publish check \\(last"
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },
@@ -84,7 +84,8 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[hair primary\\] header safety \\(last"
+      "\\[hair primary\\] header safety \\(last",
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },

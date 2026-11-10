@@ -1752,6 +1752,56 @@ included. So strands were cards in every frame and its 0 watchdog trips mean not
 - CTest hair_groom_asset_test test_stale_publish (unknown never cards, the label lookup is empty at the submit, the
   reasons, the bounded lookup).
 
+## 6c. Holes under the wheel zoom: the header camera is a CPU read, the points are the GPU's (offline 2026-11-10, branch claude/hair-holes-root: fix is the existing key rt_hair_header_cam_gpu, off; READY_FOR_LIVE)
+
+Cause, from logs already on disk (no new live):
+- The strand shader starts its rays at `gCam.position - header camera` (hp_rebase). The header camera is a CPU read of the
+  mapped camera UBO at the build's recording (rtscene.cpp rt_after_capture, `g_this_build_cam`); the groom points are
+  converted on the GPU with that UBO at execution, the block the G-buffer's own draws read. The shader's own sample of the
+  origin (header kRayDebugOffset, printed per period as "sampled ray: origin") measures the difference without labels:
+  - hc1 234025 (continuous turns, sample tags fresh in every period): with `rt_hair_header_cam_gpu=1` (the build copies the
+    camera on the GPU) the origin is exactly 0 in 18 of 18 samples and the strand share is 0.93-0.98 in 15 of them; with
+    the CPU camera the origin is 1-12 cm in 13 samples, strand share 0.13-0.94 (origin 0 there: 0.90-0.98).
+  - hf1 073932, wheel zoom, G-buffer frame 2455: origin 0.496 m (0.445 m along the ray), strand share 0.029.
+  So with the CPU camera a moving frame can trace points that are already its own with rays started one camera step
+  away. A turn shifts the strands sideways (partly kept by hp_on_card); a dolly shifts them along the view: every hit is
+  one step off its card and is rejected ("rejected after the hit"), 1-3% survive, the frame watchdog trips.
+  hf2 233301 (trips at 2237-2241: 64, 50, 94, 145, 231 strand px while the step shrinks 0.524 -> 0.342 m) fits: the
+  smaller the step, the more hits fall inside the card band.
+- Not established: why the CPU read lags (one frame, and not in every moving frame: hc1 has moving periods with origin 0).
+  The fix and the live below do not depend on it. Not yet shown in the zoom itself with the GPU camera: that is the live.
+- Withdrawn or corrected:
+  - Item 11 "DISPROVED" (5i): its proof re-reads the same mapped memory at the submit (always "0 differ"), and its hc1
+    trips with the GPU camera were the shared-key dropouts found afterwards (5i shared draw key).
+  - 5z "points and header camera describe one frame" and "offset 0 in every frame": 0 only while still.
+  - 6a/6b `rt_hair_stale_publish`: both sides of its check are CPU reads of the same block at about the same time, so
+    "same camera 48/60, moved 0" in hf2 233301's trip window says nothing about what the GPU read. The key cannot act.
+  - The watchdog line's "build camera step at that frame / the frame before" and "header camera X m from build frame
+    F's" are CPU cameras paired by frame label; the label pairing changes with the present's timing (count lines show
+    the judged tag at tag - 1 or tag - 2 in still periods of one run).
+  - "rejected after the hit" is decided by one frame-wide count (any entry with a strand), not per draw: it does not say
+    that this draw's rays hit.
+  - "header/BLAS mismatch frames" is counted only with rt_hair_groom_primary_current=0: always 0 in the bundle.
+  - Frame numbers missing between trips (2621, 2623 in 210357; 2066 in 200821) are most likely frames never counted
+    (count_feedback returns while its readback slot is in flight), not frames that passed.
+- Added (CPU only; no shader, no ABI, no key, variants delta 0): `hair_primary::rebase_sample` / `RebaseStats`
+  (common/hair_primary.h): the judged frame's sampled ray when it carries that frame's tag. The frame watchdog line ends
+  with "sampled strand ray of that frame on the GPU: rebase origin X m (Y m along the ray), card distance, hit distance",
+  and a period line `[hair primary] rebase origin (last N frames): S counted frames with a sampled strand ray, M with a
+  non-zero origin (largest X m) ...; rt_hair_header_cam_gpu K`. Threshold: none (one camera block subtracts to exactly 0).
+  CTest hair_groom_asset_test test_rebase_sample.
+- hl1 regenerated with `rt_hair_header_cam_gpu=1`, `rt_hair_stale_publish=0` (predicted.json root_cause_6c,
+  fix_6c_header_cam_gpu, written first): expect_every in lower and watch: watchdog trips 0 with header cameras copied on
+  the GPU, and 0 sampled frames with a non-zero origin. Lint 0 failing (live and frozen; one readiness query appended to
+  lint_corpus_snapshot.json by hand).
+- Cost of the key: one 16-thread dispatch, two 12-byte copies, three barriers per publish (5i); read the strand
+  G-buffer GPU line of the live.
+- If the live confirms it: add the key to the RTX Hair On bundle (common/settings.h) and retire rt_hair_stale_publish.
+  User check then: S8, wheel zoom in fast: the hair keeps its strands, no pop to cards.
+- Same CPU camera elsewhere (not changed here): the cascade caster rebase with rt_cascade_origin=0 (rtscene.cpp
+  attach_cascade, `prev->pos`), the groom bounds for the screen-size LOD (bvhsplit.cpp `bounds_cam`), geocapture.cpp:1629,
+  rt_camera_moving. If the lag is general they are one step off for a frame when the camera accelerates.
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU
