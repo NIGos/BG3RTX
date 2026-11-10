@@ -163,7 +163,7 @@ uint64_t g_cam_gpu_pub = 0;   // publish frame + 1 of the last GPU camera copy (
 // largest distance between the two.
 // gpu: publishes whose header cameras the build wrote on the GPU (rt_hair_header_cam_gpu).
 struct CamCheck { uint64_t checked = 0, differ = 0, gpu = 0; double max_m = 0.0; } g_cam_check;
-// 5x (rt_hair_mv_card counter line): publishes with kFlagCamera, those without kFlagPrevCamera and why.
+// 5y (rt_hair_mv_card counter line): publishes with kFlagCamera, those without kFlagPrevCamera and why.
 struct PrevCamStats { uint64_t pubs = 0, gap = 0, gpu = 0; } g_prev_cam;
 constexpr int kStaged = 3;
 StagedHeader g_staged[kStaged];
@@ -215,6 +215,7 @@ hair_primary::FootprintStats g_footprint;
 hair_primary::LateArrival g_late;
 int g_nearest_compiled = -1, g_nearest_flag_logged = -1, g_nearest_compiled_logged = -2;
 hair_primary::TlasCheck g_tlas_check;   // 5u observable (detailed logging)
+hair_primary::CameraSteps g_cam_steps;   // 5x: build camera step per frame (frame watchdog line)
 uint64_t g_tlas_check_logged = 0;   // 5u: specialization 1047 at the last strand pipeline creation   // rt_hair_debug_late_arrival (dev only)
 bool g_cfg_union = false;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
@@ -462,8 +463,10 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
                                  g_watchdog.bad);
         if (!g_cfg_watchdog_draw && g_watchdog_logged++ < 8)
           log("[hair primary] watchdog: G-buffer frame %llu swapped draws wrote %llu strand pixels of %llu card pixels "
-              "(bound %.4f): cards for %llu frames", (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
-              (unsigned long long)g_watchdog.card, g_watchdog.bound(), (unsigned long long)hair_primary::kWatchdogFrames);
+              "(bound %.4f): cards for %llu frames; build camera step %.3f m at that frame, %.3f m the frame before "
+              "(-1: not kept)", (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
+              (unsigned long long)g_watchdog.card, g_watchdog.bound(), (unsigned long long)hair_primary::kWatchdogFrames,
+              g_cam_steps.step(gf->frame), g_cam_steps.step(gf->frame - 1));
       }
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
@@ -1060,7 +1063,7 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     // 5u rt_hair_groom_nearest: the candidate-filtered nearest-strand trace, compiled in when the key is on at pipeline
     // creation (header flag kFlagNearest then switches it live; the velocity FS has no constant 1047).
     const uint32_t nearest = cfg_int("rt_hair_groom_nearest", 0) != 0 ? 1u : 0u;
-    // 5x rt_hair_mv_card: the card-motion path of the velocity variant, compiled in when the key is on at pipeline
+    // 5y rt_hair_mv_card: the card-motion path of the velocity variant, compiled in when the key is on at pipeline
     // creation (header flags kFlagMvCardFallback / kFlagMvCardAll then switch it live); off: the specialization as before.
     const uint32_t mv_card = pass == Pass::Velocity && cfg_int("rt_hair_mv_card", 0) != 0 ? 1u : 0u;
     const uint32_t spec_words[6] = {uint32_t(header_addr), uint32_t(header_addr >> 32), coverage, shading_space, nearest, mv_card};
@@ -1897,6 +1900,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   const bool cam_ok = rt_current_build_camera(st.cam, &build_frame);
   if (!cam_ok) ++g_drop.no_camera;
   else if (build_frame != now) ++g_drop.recovered;
+  if (cam_ok) g_cam_steps.note(build_frame, st.cam);   // 5x diagnostic (the frame watchdog line)
   if (cam_ok && !rt_current_build_ubo(&st.ubo, &st.ubo_offset)) st.ubo = VK_NULL_HANDLE;
   const uint64_t pub = cam_ok ? build_frame : now;
   h.tag = uint32_t(pub + 1);
@@ -1915,7 +1919,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   if (cfg_int("rt_hair_macro_normal", 0) != 0) h.flags |= hair_primary::kFlagMacroNormal;   // 5g, live once compiled in
   if (cfg_int("rt_hair_tangent_world", 0) != 0) h.flags |= hair_primary::kFlagTangentWorld;
-  {   // 5x rt_hair_mv_card (live: 1 fallback only, 2 every strand pixel; the velocity variant needs specialization 1049)
+  {   // 5y rt_hair_mv_card (live: 1 fallback only, 2 every strand pixel; the velocity variant needs specialization 1049)
     const int mv_card = cfg_int("rt_hair_mv_card", 0);
     if (mv_card == 1) h.flags |= hair_primary::kFlagMvCardFallback;
     if (mv_card >= 2) h.flags |= hair_primary::kFlagMvCardAll;
@@ -1943,7 +1947,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     std::memcpy(st.cam + 4, g_last_pub_camera, sizeof g_last_pub_camera);
     h.flags |= hair_primary::kFlagPrevCamera;
   }
-  if (h.flags & hair_primary::kFlagCamera) {   // 5x counter line
+  if (h.flags & hair_primary::kFlagCamera) {   // 5y counter line
     ++g_prev_cam.pubs;
     if (!(h.flags & hair_primary::kFlagPrevCamera)) ++(prev_cpu ? g_prev_cam.gpu : g_prev_cam.gap);
   }

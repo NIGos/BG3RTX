@@ -32,4 +32,4 @@
   floor). (2) Where it acted, the predicted structure gain (accumulated HF up), no energy or coverage shift beyond noise.
   (3) Paused, key off. Crops: `.scratch/pixel_lod_live1/b4_*.png` (main checkout, not committed).
 - The trail / blur in motion found during this analysis (strand motion vectors camera-only on most strand pixels) is
-  followed up in docs/progress/claude-hair-mv.md and docs/RTX_HAIR_PRIMARY.md 5x.
+  followed up in docs/progress/claude-hair-mv.md and docs/RTX_HAIR_PRIMARY.md 5y.

@@ -76,6 +76,25 @@ inline int lod_vote(int lod, int want, int& votes, bool first_measure) {
 // none); the 30-frame lod_vote runs on the result in the layer.
 constexpr float kPixelLodMinHeadPx = 60.0f, kPixelLodMinKeep = 1.0f / 32, kPixelLodHysteresis = 0.25f;
 constexpr int kPixelLodMaxLevel = 5;   // 1 -> 1/32
+// The head size the floor is defined on (branch claude/hair-pixel-lod-fix): the study's head height, 0.25 m, at the groom's
+// distance, in render px (px per radian x 0.25 / distance). The groom bounds diagonal read 1.5-3x higher (177-180 px for a
+// 64 px head in hl1 180301), which applied the 60 px floor about 2x too low.
+constexpr float kPixelLodHeadM = 0.25f;
+inline float pixel_lod_head_px(float distance_m, float px_per_radian) {
+  return distance_m > 0 && px_per_radian > 0 ? kPixelLodHeadM / distance_m * px_per_radian : 0.0f;
+}
+// The LOD 0 strand diameter in render px at the groom's distance: 2 x (the LOD's median radius x its keep) / distance x ppr.
+inline float pixel_lod_d0_px(float lod_median_radius, float lod_keep, float distance_m, float px_per_radian) {
+  return distance_m > 0 ? 2.0f * lod_median_radius * lod_keep / distance_m * px_per_radian : 0.0f;
+}
+// A LOD's median strand radius, computed once at decode whatever rt_hair_pixel_lod is (the key may turn on after the
+// upload: hl1 180301/180949 left 12 of 13 grooms at d0 0, level 0). 0 for no points.
+inline float median_radius(const float* r, uint32_t n) {
+  if (!r || !n) return 0.0f;
+  std::vector<float> v(r, r + n);
+  std::nth_element(v.begin(), v.begin() + std::ptrdiff_t(n / 2), v.end());
+  return v[n / 2];
+}
 inline int pixel_lod_level(float d0_px, float head_px, float lod_keep, float k, int prev) {
   if (!(d0_px > 0) || !(k > 0) || !(lod_keep > 0) || !(head_px >= kPixelLodMinHeadPx)) return 0;
   // x: the level that just reaches k, as a real number: lod_keep / 2^x = d0_px / k.

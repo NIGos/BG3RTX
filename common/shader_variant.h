@@ -68,7 +68,7 @@ enum SpecId : unsigned {
   // 1 kind + instance, 2 kind; offline tools/gi_trace_rgen*.hlsl too).
   kSpecIdHairGroomNearest = 1047,    // 5u rt_hair_groom_nearest: candidate-filtered nearest strand (rt/hair_primary_gbuffer)
   // 1048 left to the hair streams (5v pixel LOD cross-fade).
-  kSpecIdHairMvCard = 1049,          // 5x rt_hair_mv_card: card motion for strand pixels (rt/hair_primary_velocity)
+  kSpecIdHairMvCard = 1049,          // 5y rt_hair_mv_card: card motion for strand pixels (rt/hair_primary_velocity)
   kSpecIdGiSer = 1050,
   // rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md 3.4): the scene TLAS by address from the scene stamp
   // (rt/rt_common.hlsli RT_TRACE_SCENE); added only when on, so key-off pipelines keep their specialization.

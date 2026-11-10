@@ -98,7 +98,7 @@ for key in CONSERVATIVE:
 TABLE["rt_hair_coverage_union"] = [GENERIC]
 # 5u: specialization 1047 of the strand G-buffer pipelines (created with the key at startup; live it is a header flag).
 TABLE["rt_hair_groom_nearest"] = []
-# 5x: specialization 1049 of the strand velocity pipelines (created with the key at startup; live it is a header flag).
+# 5y: specialization 1049 of the strand velocity pipelines (created with the key at startup; live it is a header flag).
 TABLE["rt_hair_mv_card"] = []
 
 # Settings which schedule observations or change CPU/log policy, without

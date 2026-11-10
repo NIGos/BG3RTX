@@ -1045,7 +1045,7 @@ std::unordered_set<uint32_t> g_groom_uv_seen;
 uint64_t g_groom_first_seen = 0;
 uint64_t g_groom_prev_keys[hair_primary::kMaxGrooms] = {};
 hair_primary::GroomRows g_groom_rows;
-// 5x (rt_hair_mv_card): published groom rows per window by previous-points state (hair_primary::PrevRow).
+// 5y (rt_hair_mv_card): published groom rows per window by previous-points state (hair_primary::PrevRow).
 uint64_t g_prev_rows[size_t(hair_primary::PrevRow::Count)] = {};   // rt_hair_row_stable: each groom's row while it is live
 bool g_row_stable = false;
 bool g_pixel_lod = false;   // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): this capture's camera BLAS and TLAS
@@ -1259,6 +1259,7 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   n.tri += base; n.bary += base; n.radius += base; n.seg += base; n.segtri += base;
   n.base = base; n.size = total; n.last_used = now;
   d = n;
+  d.r_median = hair_groom::median_radius(l.radius, l.points);   // whatever rt_hair_pixel_lod is (the key may go on later)
   if (g_pixel_lod) groom_keep_host(d, l);   // rt_hair_pixel_lod: its camera arrays are built from these
   u.dst = base; u.bytes = total; u.upload_rec = &d.upload_rec; u.upload_frame = &d.upload_frame;
   g_groom_uploads.push_back(u);
@@ -1332,12 +1333,11 @@ const GroomAsset::Cam* groom_cam(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   return nullptr;
 }
 
-// The LOD's median strand radius (pixel LOD's diameter), from its host radii; 0 without them.
+// The LOD's median strand radius (pixel LOD's diameter): set at upload whatever the key (groom_lod); the host radii are
+// only a fallback for a LOD staged before that rule.
 float groom_r_median(GroomAsset::Lod& d) {
   if (d.r_median > 0 || d.host_radius.empty()) return d.r_median;
-  std::vector<float> r = d.host_radius;
-  std::nth_element(r.begin(), r.begin() + std::ptrdiff_t(r.size() / 2), r.end());
-  d.r_median = r[r.size() / 2];
+  d.r_median = hair_groom::median_radius(d.host_radius.data(), uint32_t(d.host_radius.size()));
   return d.r_median;
 }
 
@@ -2883,7 +2883,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
                      uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; uint32_t prims = 0;
                      bool prev_ok = false; uint32_t stride = 0;   // round 3 M1: the slot's last update was the previous build frame
-                     uint64_t prev_last = 0;   // 5x counter line: the slot's previous update frame (hair_primary::prev_row_state)
+                     uint64_t prev_last = 0;   // 5y counter line: the slot's previous update frame (hair_primary::prev_row_state)
                      const GroomAsset::Cam* cam = nullptr; bool cam_refit = false; };   // rt_hair_pixel_lod: its camera BLAS
   const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
@@ -3393,9 +3393,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           if (groom_ppr > 0 && g.measured) {
             const float cx = g.centre[0], cy = g.centre[1], cz = g.centre[2];
             const float dist = (std::max)(std::sqrt(cx * cx + cy * cy + cz * cz), 0.1f);
-            const float r0 = groom_r_median(groom_src->lods[size_t(lod)]) * l.keep;   // LOD 0's median radius (uncapped)
-            g.cam_head_px = g.size * groom_ppr;
-            g.cam_d0_px = 2.0f * r0 / dist * groom_ppr;
+            // LOD 0's median diameter (the LOD's median radius x keep, uncapped) and the study's head height, in render px
+            g.cam_head_px = hair_groom::pixel_lod_head_px(dist, groom_ppr);
+            g.cam_d0_px = hair_groom::pixel_lod_d0_px(groom_r_median(groom_src->lods[size_t(lod)]), l.keep, dist, groom_ppr);
             want = hair_groom::pixel_lod_level(g.cam_d0_px, g.cam_head_px, l.keep, groom_pixel_k, g.cam_level);
           }
           g.cam_pick = hair_groom::lod_vote(g.cam_pick, want, g.cam_votes, false);
@@ -4473,7 +4473,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->groom_first = n;
   g_groom_st.max_instances = (std::max)(g_groom_st.max_instances, groom_count);
   if (g_groom_on && (cfg_int("rt_stats_period_frames", 0) <= 0 ? now % 300 == 0 : now > g_groom_stats_start && (now - g_groom_stats_start) % stats_period(300) == 0)) {
-    {   // 5x (rt_hair_mv_card): the rows the velocity variant reads, with and without previous points, and why
+    {   // 5y (rt_hair_mv_card): the rows the velocity variant reads, with and without previous points, and why
       const uint64_t* r = g_prev_rows;
       uint64_t pubs = 0, no_cam_gap = 0, no_cam_gpu = 0;
       hair_primary_prev_camera_stats(&pubs, &no_cam_gap, &no_cam_gpu);

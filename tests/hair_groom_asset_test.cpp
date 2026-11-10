@@ -406,6 +406,25 @@ static void test_tlas_check() {
   c.reset_period();
   CHECK(c.checked == 0 && c.other == 0 && c.differ == 0 && c.built.size() == 2);
 }
+// 5x: the build camera step the frame watchdog line prints (a G-buffer frame judged ~5 frames after it ran).
+static void test_camera_steps() {
+  using namespace hair_primary;
+  CameraSteps c;
+  const float a[3] = {-220.0f, 8.6f, -202.7f}, b[3] = {-220.0f, 8.3f, -202.3f};
+  CHECK(c.step(10) < 0);                              // nothing kept
+  c.note(10, a);
+  CHECK(c.step(10) < 0);                              // no earlier frame
+  c.note(11, a);
+  CHECK(c.step(11) == 0.0f);                          // still camera
+  c.note(13, b);                                      // frame 12 had no publish: the newest earlier one is 11
+  CHECK(std::fabs(c.step(13) - 0.5f) < 1e-4f);
+  CHECK(c.step(12) < 0);                              // never noted
+  for (uint64_t f = 14; f < 14 + CameraSteps::kKeep; ++f) c.note(f, b);
+  CHECK(c.step(13) < 0);                              // overwritten by the ring
+  CHECK(c.step(14 + CameraSteps::kKeep - 1) == 0.0f);
+  c.note(0, a);                                       // frame 0 is never kept
+  CHECK(c.step(14 + CameraSteps::kKeep - 1) == 0.0f);
+}
 static void test_coverage_union() {
   using namespace hair_primary;
   uint32_t seed = 12345;
@@ -1030,7 +1049,7 @@ static void test_round3() {
   // M1: previous points only when the slot's last update was the previous build frame.
   CHECK(groom_prev_points(2, 99, 100) && !groom_prev_points(2, 97, 100) && !groom_prev_points(2, 0, 100));
   CHECK(!groom_prev_points(1, 99, 100));
-  // 5x: why a keyed row has no previous points (the counter line); Valid exactly when groom_prev_points holds.
+  // 5y: why a keyed row has no previous points (the counter line); Valid exactly when groom_prev_points holds.
   CHECK(prev_row_state(2, 99, 100) == PrevRow::Valid);
   CHECK(prev_row_state(1, 99, 100) == PrevRow::FirstUpdate && prev_row_state(5, 0, 100) == PrevRow::FirstUpdate);
   CHECK(prev_row_state(3, 100, 100) == PrevRow::SameFrame && prev_row_state(3, 101, 100) == PrevRow::SameFrame);
@@ -1202,7 +1221,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
@@ -1526,6 +1545,23 @@ int main() {  test_round3();
     CHECK(pixel_lod_level(1.0f / 20.0f, 150, 1.0f, 1.0f, 4) == 5);  // x 4.32: left
     // The ladder never goes below 1/32 of the full groom; a groom already at keep 0.25 has 3 levels.
     CHECK(pixel_lod_level(0.001f, 300, 0.25f, 1.0f, -1) == 3 && pixel_lod_keep(0.25f, 3) == 1.0f / 32);
+    // claude/hair-pixel-lod-fix: the inputs as the layer forms them. The median radius comes from the decoded LOD alone
+    // (no host arrays: the key went on after the upload), the head size is the study's 0.25 m head height.
+    {
+      const float radii[5] = {0.000120f, 0.000093f, 0.000080f, 0.000200f, 0.000093f};   // median 0.093 mm (0.186 mm)
+      const float r = median_radius(radii, 5);
+      CHECK(std::fabs(r - 0.000093f) < 1e-9f && median_radius(nullptr, 0) == 0.0f);
+      const float ppr = 1025.0f;                        // hl1 180301: 1067 / 2 x P11 1.921
+      const float dist = kPixelLodHeadM * ppr / 64.0f;  // a 64 px head (180301's front head): 4.0 m
+      CHECK(std::fabs(pixel_lod_head_px(dist, ppr) - 64.0f) < 1e-3f);
+      const float d0 = pixel_lod_d0_px(r, 1.0f, dist, ppr);   // 0.0477 px
+      CHECK(d0 > 0.04f && d0 < 0.05f);
+      CHECK(pixel_lod_level(d0, pixel_lod_head_px(dist, ppr), 1.0f, 1.0f, -1) == 5);   // > 0 (was 0: d0 read 0)
+      // The 60 px floor applies at the head height: 59 px keeps level 0 although its bounds diagonal (x 1.5-3) is over 60.
+      const float far = kPixelLodHeadM * ppr / 59.0f;
+      CHECK(pixel_lod_level(pixel_lod_d0_px(r, 1.0f, far, ppr), pixel_lod_head_px(far, ppr), 1.0f, 1.0f, -1) == 0);
+      CHECK(pixel_lod_head_px(0.0f, ppr) == 0.0f && pixel_lod_d0_px(r, 1.0f, 0.0f, ppr) == 0.0f);
+    }
     CHECK(pixel_lod_level(0.001f, 300, 1.0f, 1.0f, 9) == 5);         // a stale level above the ladder: a fresh pick
   }
   { // Per-draw coverage evidence: neither publication nor an unavailable/newer pair proves coverage.

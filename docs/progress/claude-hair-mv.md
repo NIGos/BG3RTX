@@ -12,7 +12,7 @@
   centre instead (up to a strand radius), so the previous-points fallback (row.w 0) is not it.
 - Left open: one of the velocity discards (seal/tag, accepted marker slot, segment bounds) or the depth test (an
   unswapped draw, or the depth changed after the G-buffer). It reads the G-buffer's record on the same card triangles,
-  so neither re-trace nor coverage can explain whole heads. The full list is in docs/RTX_HAIR_PRIMARY.md 5x.
+  so neither re-trace nor coverage can explain whole heads. The full list is in docs/RTX_HAIR_PRIMARY.md 5y.
 - Built, off by default: `rt_hair_mv_card` (dev key, pinned 0 in data/release.ini), specialization 1049 in the velocity
   variant, with live header flags:
   - 1 = the card's skinned motion where the row lacks previous points;

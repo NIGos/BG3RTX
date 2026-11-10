@@ -12,7 +12,7 @@
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
 static const uint hair_primary_slot_mask_offset = 3504u;   // common/hair_primary.h kSlotMaskOffset
 static const uint hair_primary_marker_card = 0x40u;        // common/hair_primary.h kMarkerCard
-// rt_hair_mv_card (common/shader_variant.h kSpecIdHairMvCard, docs/RTX_HAIR_PRIMARY.md 5x): compiled in at 1, header
+// rt_hair_mv_card (common/shader_variant.h kSpecIdHairMvCard, docs/RTX_HAIR_PRIMARY.md 5y): compiled in at 1, header
 // flags switch it live. kFlagMvCardFallback: a strand pixel without valid previous points writes the card's own skinned
 // motion (b70cadc5 from location 1) instead of camera-only motion. kFlagMvCardAll: every card fragment of a swapped draw
 // writes the card's motion before any strand check (depth: this frame's sealed strand depth of the pixel, else the card's),

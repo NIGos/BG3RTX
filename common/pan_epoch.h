@@ -67,7 +67,7 @@ struct WaterPanSamples {
 struct EdgePanSamples {
   uint64_t warmup;
   bool post = false;
-  bool mvec = false;   // pan_mvec (docs/RTX_HAIR_PRIMARY.md 5x): RR's motion vectors in every frame (bit 64)
+  bool mvec = false;   // pan_mvec (docs/RTX_HAIR_PRIMARY.md 5y): RR's motion vectors in every frame (bit 64)
   std::array<uint8_t,8> masks{};
   std::array<uint64_t,8> lighting_recordings{};
   bool invalid=false;

@@ -1,4 +1,4 @@
-"""Strand motion vectors against their surroundings, from pan bursts with the RR inputs (docs/RTX_HAIR_PRIMARY.md 5x).
+"""Strand motion vectors against their surroundings, from pan bursts with the RR inputs (docs/RTX_HAIR_PRIMARY.md 5y).
 
   py -3 tools/hair_groom/mv_ratio.py <pan dir> [<pan dir> ...] [--labels a,b]
 

@@ -74,6 +74,17 @@
       "min": 1
     },
     {
+      "name": "every frame watchdog line in lower and watch names the build camera step",
+      "select": "\\[hair primary\\] watchdog: G-buffer frame",
+      "match": "build camera step -?[0-9.]+ m at that frame",
+      "windows": [
+        "lower",
+        "watch"
+      ],
+      "event": true,
+      "min": 0
+    },
+    {
       "name": "the groom TLAS check period line in both windows",
       "select": "\\[hair primary\\] groom TLAS check \\(last",
       "match": "G-buffer submits checked",
@@ -117,7 +128,7 @@
   ],
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
-    "\\[wheel-input\\] phase=1 notches=10\\b",
+    "\\[wheel-input\\] phase=2 notches=10\\b",
     "\\[motion-plan\\] complete phases=11\\b",
     "^Run ended: done"
   ],

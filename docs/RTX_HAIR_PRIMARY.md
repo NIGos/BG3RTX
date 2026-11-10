@@ -1489,7 +1489,10 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
     discarded upload, grooms off) and when the key goes off. The LOD's segment starts and radii stay on the host while
     the key is on (8 B per point; decoded again once if the key went on after the upload).
   - Pick per slot: px per radian = render height / 2 x |P[1][1]| of the build's camera UBO (host mapping; 0: level 0),
-    head px = bounds diagonal / distance x that, d0 px = 2 x (median LOD radius x keep_lod) / distance x that;
+    head px = 0.25 m (the study's head height, kPixelLodHeadM) / distance x that (fix 2026-11-10: was the bounds
+    diagonal, 1.5-3x high), d0 px = 2 x (median LOD radius x keep_lod) / distance x that; the median radius is set at
+    every LOD upload whatever the key (fix 2026-11-10: it was read from host radii kept only while the key was on, so a
+    LOD uploaded before the key went on gave d0 0 and level 0 for good: 12 of 13 grooms in hl1 180301/180949);
     `pixel_lod_level` (prev = the built level) then the 30-frame `lod_vote`. A level still uploading keeps the built one.
   - Camera BLAS per slot on the groom's points range (LSS successive, kept-segment index + widened radius buffers, not
     compacted), full build on a level or LOD change, refit with the groom BLAS in the same batch; destroyed with
@@ -1554,7 +1557,45 @@ hit"). Before and after, the row order was constant for hundreds of frames with 
 - User check: Advanced, "Strand hair: stable strand rows" On, S8 with several characters in view, zoom with the wheel:
   no holes in the hair at the start of the zoom.
 
-## 5x. Strand motion vectors (offline 2026-11-10, branch claude/hair-mv: key rt_hair_mv_card, off)
+## 5x. Holes at the zoom start: pool reuse disproved (offline 2026-11-10, branch claude/hair-pool-reuse: diagnostic, no key)
+
+Live hl1 180301 and 180949 (rt_hair_row_stable=1, VALID data, 180301 INVALID only for the runner expect below): moved rows
+0 in every first-seen line, groom TLAS check 0, full BLAS builds 0 at the trip frames, yet the frame watchdog tripped at
+G-buffer frames 2089, 2090, 2093-2095 (180301, down to 0 of 5715 strand px) and 2152, 2153, 2155-2158 (180949, 0 of
+5495). So A (164930), C (164930) and B (5w) are not the cause. Dropouts at the first trip frame: every swapped key,
+"rejected after the hit" (frame-wide elimination, 5q).
+
+- Candidate D (a newcomer upload, or the free/eviction/growth making room for it, writes pool memory an existing groom
+  still uses, or is unordered against its refit/trace) is DISPROVED:
+  - Timing: the first trips come before any upload. 180301: trip frame 2089 at 18:04:39.76, first upload (16fa158c LOD
+    0) staged in build 2093 at 18:04:40.020; 180949: 2152 at 18:11:18.75, upload in build 2156 at 18:11:18.987; 164930:
+    2125 at 16:51:06.78, upload at 16:51:06.995. A copy recorded in build N cannot touch frame N - 4's G-buffer.
+  - Control in the same run: 180301's warm-up (static camera, strands swapping in 420 of 460 G-buffer draws) staged five
+    LOD 0 uploads (53 MB, frames 1553-1560) and five more LODs (15 MB) with 0 dropouts and 0 watchdog trips.
+  - Code: no eviction below the groom budget (hair_groom_budget.h plan_evictions; used + need stayed under 512 MB);
+    freed ranges (kGroomFreeLag, bvhsplit.cpp:355) return to the allocator only 6 frames on, with the GPU 2 frames past
+    them and older than every live scene slot (bvh_on_present, as_chunk_alloc.h retired); uploads copy into such
+    ranges between barriers (bvhsplit.cpp:3736 and 3767) and a LOD is used only once its recording completed
+    (groom_lod, readback_state). The pool grew 30-40 s before the holes and never in a hole window; no repack.
+- What every hole run shares instead (125217, 164930, 180301, 180949): the trips start in the frame the runner's wheel
+  zoom starts (`[bg] dropped real input ... runner mouse passed 2` at frames 2167, 2124, 2088, 2151), and the card
+  pixels of the heads double in 6 frames (a fast dolly). The three "arrivals" are characters entering the lowered view:
+  a consequence of the zoom, not its cause. The hold runs of 161106 and 133243 had no swapping keys during a zoom. At
+  that frame the build itself changes mode (bvhsplit.cpp:2626 `moving`: no dynamic holds :2813, no hold snapshots
+  :3459, dynamic list in the game's draw order) and the strand passes trace a publish one frame and one camera step old
+  (hp_rebase). Which stage rejects the hits under motion is not decided offline; hk1/hc1 turns showed the same class
+  (rt_hair_header_cam_gpu did not remove it).
+- Diagnostic (CPU only, no key, no shader, no ABI change, variants delta 0): `hair_primary::CameraSteps`
+  (common/hair_primary.h) keeps 32 build frames' cameras; the frame watchdog line ends `build camera step X m at that
+  frame, Y m the frame before (-1: not kept)`. CTest hair_groom_asset_test test_camera_steps.
+- hl1 regenerated: expect `[wheel-input] phase=2` (warm-off had moved "lower" to index 2; phase=1 made 180301
+  INVALID), now derived from the plan; expect_every: every watchdog line in lower/watch carries the camera step
+  (min 0). predicted.json: candidate_D_pool_reuse (disproved) and candidate_E_zoom. Lint: 0 failing (live and frozen).
+- Predicted for the next hl1: trip lines in "lower" with a camera step >= 0.05 m and none in the static pl-* windows.
+  A trip with a step under 0.01 m puts the arrival back as the suspect. Next after that: the rejecting stage (owner,
+  card band or tips) under motion, then the fix there.
+
+## 5y. Strand motion vectors (offline 2026-11-10, branch claude/hair-mv: key rt_hair_mv_card, off)
 User: strand hair at isometric distance trails / blurs when characters or the camera move (as before).
 - Measured on the hs1-s8-static-hair bursts (static camera, idle party; `tools/hair_groom/mv_ratio.py`): 73-86% of
   class-5 pixels carry the camera-only motion vector (within 0.02 px of the static background) with strands, 5-7% with

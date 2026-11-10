@@ -1,4 +1,4 @@
-"""hair_mv (branch claude/hair-mv, docs/RTX_HAIR_PRIMARY.md 5x): STAGED, not queued, not authorized.
+"""hair_mv (branch claude/hair-mv, docs/RTX_HAIR_PRIMARY.md 5y): STAGED, not queued, not authorized.
 
     py -3 tools/live_batches_staged/hair_mv/make_job.py
 
@@ -44,7 +44,7 @@ def phase(label, seconds, aa=0, strands=1, hold=1, wheel=None, inputs=0, serial=
          "set": f"rr_hair_strand_aa={aa},rt_hair_groom_primary={strands},qa_exposure_hold={hold},rt_hair_mv_card={mv}"}
     if serial:
         # Full burst with the RR inputs (rr_color, rr_mvec, material every frame), as he1's (hair_edge/make_job.py).
-        # K8 edge burst with RR's motion vectors (pan_mvec, 5x): half-size depth, final and rr_mvec in 8 frames, material
+        # K8 edge burst with RR's motion vectors (pan_mvec, 5y): half-size depth, final and rr_mvec in 8 frames, material
         # and albedo in frames 1 and 8, about 0.1 GB per burst (a full RR-input burst is 4.9 GB).
         p["set"] += f",pan_prepare=1,pan_edge=1,pan_mvec=1,pan_post=0,pan_inputs=1,pan_capture={serial},pan_delay_ms=0"
     else:

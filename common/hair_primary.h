@@ -56,7 +56,7 @@ constexpr uint32_t kFlagMacroNormal = 1u << 4, kFlagTangentWorld = 1u << 5;
 // 5u rt_hair_groom_nearest: the candidate-filtered nearest-strand trace (shaders/rt/hair_primary_nearest.hlsli), read only by
 // a G-buffer variant built with specialization kSpecIdHairGroomNearest = 1 (the live off-switch, as kFlagCoverage).
 constexpr uint32_t kFlagNearest = 1u << 6;
-// 5x rt_hair_mv_card: the strand motion vector from the card's own skinned motion, read only by a velocity variant built
+// 5y rt_hair_mv_card: the strand motion vector from the card's own skinned motion, read only by a velocity variant built
 // with specialization kSpecIdHairMvCard = 1. Fallback: only where the row has no valid previous points; All: every pixel.
 constexpr uint32_t kFlagMvCardFallback = 1u << 7, kFlagMvCardAll = 1u << 8;
 constexpr uint32_t kHeaderWords = 16;
@@ -1090,7 +1090,7 @@ struct GroomRows {
 inline bool groom_prev_points(uint32_t prev_frames_after, uint64_t last_update, uint64_t now) {
   return prev_frames_after > 1 && last_update && last_update + 1 == now;
 }
-// 5x (rt_hair_mv_card counter line): why a published groom row carries no previous points (row.w 0: the velocity variant
+// 5y (rt_hair_mv_card counter line): why a published groom row carries no previous points (row.w 0: the velocity variant
 // then writes camera-only motion, or with kFlagMvCardFallback the card's). prev_frames_after: the points range's updates
 // including this one; last_update: the build frame of the slot's update before this one (0: none); now: this build frame.
 enum class PrevRow : uint32_t { Valid = 0, FirstUpdate, SameFrame, Skipped, Count };
@@ -1421,6 +1421,35 @@ struct Participation {
     uint32_t n = instanced != 0;
     for (uint32_t k = 0; k < kKinds; ++k) n += (main_total[k] && !main_swapped[k]) + (other_total[k] != 0);
     return n;
+  }
+};
+
+// 5x diagnostic (branch claude/hair-pool-reuse): the build camera's step per frame, kept for the frame watchdog, which
+// judges a G-buffer frame about 5 frames after it ran. note() records a publish's build frame and camera; step(F) is the
+// distance from frame F's camera to the camera of the newest earlier noted frame (-1: F or an earlier frame not kept).
+// Every hole of hl1 (125217, 164930, 180301, 180949) began the frame the runner's wheel zoom began.
+struct CameraSteps {
+  static constexpr uint32_t kKeep = 32;
+  struct Entry { uint64_t frame = 0; float pos[3] = {}; };
+  Entry e[kKeep] = {};
+  void note(uint64_t frame, const float pos[3]) {
+    if (!frame) return;
+    Entry& x = e[frame % kKeep];
+    x.frame = frame;
+    for (int i = 0; i < 3; ++i) x.pos[i] = pos[i];
+  }
+  float step(uint64_t frame) const {
+    const Entry* now = nullptr;
+    const Entry* prev = nullptr;
+    for (const Entry& x : e) {
+      if (!x.frame) continue;
+      if (x.frame == frame) now = &x;
+      else if (x.frame < frame && (!prev || x.frame > prev->frame)) prev = &x;
+    }
+    if (!now || !prev) return -1.0f;
+    float d2 = 0;
+    for (int i = 0; i < 3; ++i) d2 += (now->pos[i] - prev->pos[i]) * (now->pos[i] - prev->pos[i]);
+    return std::sqrt(d2);
   }
 };
 
