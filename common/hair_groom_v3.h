@@ -185,4 +185,35 @@ inline bool decode_v3_lod(const uint8_t* bytes, uint64_t size, uint32_t index, V
   return true;
 }
 
+// rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v, layer/bvhsplit.cpp camera BLAS): the camera strand subset of one loaded
+// LOD, on that LOD's own points. A LOD keeps convert.thin's strands i (LOD 0 order) with hash(i) < keep_lod, in order,
+// so its n-th strand is the n-th such i (strands0: LOD 0's strand count, points - segments). Level j keeps those with
+// hash(i) < keep_lod / 2^j (the same nested hash: exactly decode_v3_lod's extra keep), radii x 2^j under kMaxThinRadius.
+// seg_out: the kept strands' segment starts (LOD point indices, in order); radius_out: every LOD point's widened radius.
+// False when the LOD's strands do not match the hash enumeration (another selection) or nothing is kept.
+inline bool camera_subset(const uint32_t* seg, uint32_t segments, const float* radius, uint32_t points, uint32_t strands0,
+                          float keep_lod, int level, std::vector<uint32_t>& seg_out, std::vector<float>& radius_out) {
+  seg_out.clear();
+  radius_out.clear();
+  if (level <= 0 || level > 16 || !seg || !radius || !segments || !points || !strands0 || !(keep_lod > 0.0f)) return false;
+  const float keep = keep_lod / float(1u << level);
+  auto pass = [](uint64_t i, float k) { return double((i * kThinSeed + kThinAdd) & 0xFFFFFFFFull) / 4294967296.0 < double(k); };
+  uint64_t next = 0;   // the next LOD 0 strand to test
+  for (uint32_t s = 0; s < segments;) {
+    uint32_t e = s + 1;
+    while (e < segments && seg[e] == seg[e - 1] + 1) ++e;   // one strand: consecutive segment starts
+    if (seg[e - 1] + 1 >= points) return seg_out.clear(), false;
+    while (next < strands0 && !pass(next, keep_lod)) ++next;
+    if (next >= strands0) return seg_out.clear(), false;   // more strands than the hash keeps
+    if (pass(next++, keep)) seg_out.insert(seg_out.end(), seg + s, seg + e);
+    s = e;
+  }
+  while (next < strands0 && !pass(next, keep_lod)) ++next;
+  if (next < strands0 || seg_out.empty()) return seg_out.clear(), false;   // fewer strands than the hash keeps
+  radius_out.resize(points);
+  const float scale = float(1u << level);
+  for (uint32_t p = 0; p < points; ++p) radius_out[p] = std::fmin(radius[p] * scale, kMaxThinRadius);
+  return true;
+}
+
 }  // namespace bg3::hair_groom

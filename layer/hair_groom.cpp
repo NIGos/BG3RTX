@@ -65,7 +65,7 @@ uint32_t scan(bool initial) {
       lods_ok = _fseeki64(f, int64_t(kV3HeaderBytes), SEEK_SET) == 0 &&
                 fread(table.data() + kV3HeaderBytes, 1, table.size() - size_t(kV3HeaderBytes), f) == table.size() - kV3HeaderBytes &&
                 v3_table(table.data(), table.size(), l->asset.lod_count, t) && _fseeki64(f, 0, SEEK_END) == 0;
-      for (uint32_t k = 0; lods_ok && k < t.lods; ++k) l->asset.lod_segments[k] = t.segments[k];
+      for (uint32_t k = 0; lods_ok && k < t.lods; ++k) l->asset.lod_segments[k] = t.segments[k], l->asset.lod_points[k] = t.points[k];
       l->size = lods_ok ? uint64_t(_ftelli64(f)) : 0;
       lods_ok = lods_ok && l->size > t.streams_at;
       at = l->size;   // skips the v2 LOD walk below
@@ -78,6 +78,7 @@ uint32_t scan(bool initial) {
       l->lod_at[k] = at;
       lods_ok = _fseeki64(f, int64_t(at), SEEK_SET) == 0 && fread(h16, 1, 16, f) == 16 &&
                 lod_header(h16, at, &points, &l->asset.lod_segments[k], &at);
+      l->asset.lod_points[k] = points;
     }
     if (lods_ok && l->asset.version != kV3) {   // the LODs end exactly at the end of the file (as parse() requires)
       l->lod_at[l->asset.lod_count] = at;

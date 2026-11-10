@@ -118,6 +118,42 @@ int main(int argc, char** argv) {
     CHECK(!decode_v3_lod(v3.data(), v3.size(), 1, lzms_inflate, bk, 0.125f));   // an extra keep names no table LOD
     CHECK(!decode_v3_lod(v3.data(), v3.size(), 0, lzms_inflate, bk, 1.0f));     // not below the full groom
     std::printf("hair_groom_v3_test: decode-time keeps 1/8..1/32: %d of 3 non-empty, nested, radii x 1/keep\n", decoded);
+    // camera_subset (layer camera BLAS): on every table LOD's own points, level j names exactly the strands of the
+    // decode-time keep keep_lod / 2^j, in order, with the same radii.
+    const uint32_t strands0 = l0.points - l0.segments;
+    int pairs = 0;
+    for (uint32_t li = 0; li < h.lod_count; ++li) {
+      std::vector<uint8_t> bl;
+      CHECK(decode_v3_lod(v3.data(), v3.size(), li, lzms_inflate, bl));
+      Lod ll;
+      at = 0; CHECK(parse_lod(bl.data(), bl.size(), at, h.indices / 3, ll));
+      for (int j = 1; j <= 5; ++j) {
+        std::vector<uint32_t> cs;
+        std::vector<float> cr;
+        const bool got = camera_subset(ll.segment, ll.segments, ll.radius, ll.points, strands0, ll.keep, j, cs, cr);
+        const float keep = ll.keep / float(1u << j);
+        const bool want = decode_v3_lod(v3.data(), v3.size(), 0, lzms_inflate, bk, keep);
+        CHECK(got == want);
+        if (!got) continue;
+        ++pairs;
+        Lod lk;
+        at = 0; CHECK(parse_lod(bk.data(), bk.size(), at, h.indices / 3, lk));
+        CHECK(cs.size() == lk.segments && cr.size() == ll.points);
+        for (uint32_t s = 0; s < lk.segments; ++s) {
+          const uint32_t a = cs[s], b = lk.segment[s];
+          CHECK(key(ll, a) == key(lk, b) && key(ll, a + 1) == key(lk, b + 1));
+          CHECK(std::fabs(double(cr[a]) / lk.radius[b] - 1) < 1e-6);
+        }
+      }
+      std::vector<uint32_t> cs;
+      std::vector<float> cr;
+      if (li == 0)   // one strand more than the LOD holds: the enumeration does not match, refused
+        CHECK(!camera_subset(ll.segment, ll.segments, ll.radius, ll.points, strands0 + 1, ll.keep, 1, cs, cr));
+      CHECK(!camera_subset(ll.segment, ll.segments, ll.radius, ll.points, strands0, ll.keep, 0, cs, cr));
+    }
+    CHECK(pairs >= 3);
+    std::printf("hair_groom_v3_test: camera subsets of %u LODs x 5 levels: %d equal to the decode-time keeps\n", h.lod_count,
+                pairs);
   }
   // Malformed inputs are refused, never read out of range.
   std::vector<uint8_t> bytes;

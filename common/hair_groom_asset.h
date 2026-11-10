@@ -90,6 +90,7 @@ struct Asset {
   uint32_t version = 0;          // 1, 2 or 3 (3: compressed, common/hair_groom_v3.h)
   uint32_t lod_count = 0;        // from the header (parse_header leaves `lods` empty)
   uint32_t lod_segments[8] = {}; // per LOD, from lod_header (the crowd plan's costs before an upload)
+  uint32_t lod_points[8] = {};   // per LOD (rt_hair_pixel_lod: LOD 0's strands = points - segments)
   std::vector<Lod> lods;
 };
 

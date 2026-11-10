@@ -33,3 +33,7 @@
   index buffer the pixel record's segment is a camera BLAS primitive, so before (b) check every reader of that
   segment outside the header rows (InstInfo word 3 `w.l->seg` in rt_groom_links, core fibre shading): a reader that
   resolves it through the groom's own segment table would name another strand.
+- (b) built: camera arrays (hair_groom::camera_subset), camera BLAS per slot, camera groom TLAS per scene slot, header
+  points the strand shaders at it (row.z = camera index buffer); details 5v "Step 2 (b) built". Segment readers checked:
+  all resolve through the header row. Key off: no allocation. Shader identity 227/227 vs e5f62b50, variants 0.
+  hair_groom_v3_test: 14 LOD x level pairs equal to the decode-time keeps. Not measured: pool MB, BLAS MB, refit ms (live).
