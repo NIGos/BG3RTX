@@ -540,6 +540,27 @@ static void test_watchdog() {
     CHECK(!groom_bounds_jump(head_a, 100, head_b, 103, 0.4f));        // not consecutive: no verdict
     CHECK(!groom_bounds_jump(head_a, 0, head_b, 1, 0.4f));            // no previous measurement
     CHECK(!groom_bounds_jump(head_a, 100, head_b, 101, 0.0f));        // no bounds
+    // rt_hair_slot_stable: two characters with one hairstyle, 1.2 m apart; occurrences 0 (A) and 1 (B).
+    {
+      const SlotSeen seen[2] = {{0, {1.0, 1.6, 2.0}}, {1, {2.2, 1.6, 2.0}}};
+      uint32_t occ[3];
+      const double same[2][3] = {{1.02, 1.6, 2.01}, {2.2, 1.61, 2.0}};
+      CHECK(stable_occurrences(seen, 2, same, 2, occ) == 0 && occ[0] == 0 && occ[1] == 1);      // idle, same order
+      const double swapped[2][3] = {{2.2, 1.61, 2.0}, {1.02, 1.6, 2.01}};
+      CHECK(stable_occurrences(seen, 2, swapped, 2, occ) == 2 && occ[0] == 1 && occ[1] == 0);   // the game swapped them
+      const double moving[2][3] = {{2.5, 1.6, 2.3}, {1.3, 1.6, 2.3}};                           // both walk 0.42 m, swapped
+      CHECK(stable_occurrences(seen, 2, moving, 2, occ) == 2 && occ[0] == 1 && occ[1] == 0);
+      const double b_only[1][3] = {{2.21, 1.6, 2.0}};                                           // A left: B keeps slot 1
+      CHECK(stable_occurrences(seen, 2, b_only, 1, occ) == 1 && occ[0] == 1);
+      const double a_only[1][3] = {{1.0, 1.6, 2.0}};
+      CHECK(stable_occurrences(seen, 2, a_only, 1, occ) == 0 && occ[0] == 0);
+      const SlotSeen b_seen[1] = {{1, {2.2, 1.6, 2.0}}};                                        // A's slot expired, A returns first
+      const double back[2][3] = {{1.0, 1.6, 2.0}, {2.2, 1.6, 2.0}};
+      CHECK(stable_occurrences(b_seen, 1, back, 2, occ) == 0 && occ[0] == 0 && occ[1] == 1);
+      const double third[3][3] = {{5.0, 1.6, 2.0}, {2.2, 1.6, 2.0}, {1.0, 1.6, 2.0}};           // a third character drawn first
+      CHECK(stable_occurrences(seen, 2, third, 3, occ) == 2 && occ[0] == 2 && occ[1] == 1 && occ[2] == 0);
+      CHECK(stable_occurrences(nullptr, 0, third, 3, occ) == 0 && occ[0] == 0 && occ[1] == 1 && occ[2] == 2);   // no history
+    }
     uint64_t single[1] = {9};
     CHECK(shared_key_complete(single, 1, draws, 4) == 0 && single[0] == 9);
   }

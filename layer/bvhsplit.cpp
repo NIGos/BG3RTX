@@ -601,6 +601,8 @@ struct FrameDraw {
   uint32_t cap_ib_bytes = 0;
   uint64_t groom_identity = 0;  // the draw's identity without the per-frame occurrence (the join caches)
   uint64_t hp_key = 0;          // rt_hair_groom_primary: the index-range key its G-buffer draw is swapped by
+  double slot_pos[3] = {};      // rt_hair_slot_stable: the draw's world placement (its model matrix, bvh_classify)
+  bool slot_pos_ok = false;
   std::shared_ptr<mesh_content::Sample> content_sample;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
@@ -665,6 +667,28 @@ void content_sample(const BvhDraw& d, FrameDraw& fd) {
   fd.content_sample = std::make_shared<mesh_content::Sample>(sample);
 }
 std::unordered_map<uint64_t, uint32_t> g_dyn_seen;   // dyn key -> occurrences this capture
+// rt_hair_slot_stable (docs/RTX_HAIR_PRIMARY.md 5s): per mesh identity, the live occurrences and their last placement.
+bool g_slot_stable = false;
+std::unordered_map<uint64_t, std::vector<hair_primary::SlotSeen>> g_slot_seen;
+// The draw's world placement on the CPU: the translation of its per-draw model matrix (set 1 binding 0, class B of
+// docs/TRACK_D_SCENE_BUILD.md) plus the pass origin (camera block set 0 binding 2 at 208), as cascade_draw_id reads it.
+bool slot_draw_position(VkCommandBuffer cmd, const CmdState* s, double pos[3]) {
+  const CmdState* resolved = cfg_hot(CfgHot::perf_hook_state) ? s : nullptr;
+  Bg3Binding model{}, camera{};
+  float m[16], origin[3];
+  if (!query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 0, 0, &model, resolved) || !model.buffer ||
+      (model.range != VK_WHOLE_SIZE && model.range < sizeof m) || !geo_uniform_buffer_range(model.buffer, model.offset, sizeof m) ||
+      !read_mapped(model.buffer, model.offset, m, sizeof m) ||
+      !query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &camera, resolved) || !camera.buffer ||
+      (camera.range != VK_WHOLE_SIZE && camera.range < 224) || !geo_uniform_buffer_range(camera.buffer, camera.offset, 224) ||
+      !read_mapped(camera.buffer, camera.offset + 208, origin, sizeof origin))
+    return false;
+  for (int k = 0; k < 3; ++k) {
+    if (!std::isfinite(m[12 + k]) || !std::isfinite(origin[k])) return false;
+    pos[k] = double(m[12 + k]) + double(origin[k]);
+  }
+  return true;
+}
 uint32_t g_audits_this_frame = 0;
 bool g_capture_all_meshes = false;
 
@@ -979,6 +1003,9 @@ struct GroomStats {
   uint64_t shared_withheld = 0;   // rt_hair_shared_key: groom rows whose shared key was withheld (cards)
   // 5q diagnostic: slots whose points left their own bounds between consecutive builds, of the judged pairs of builds.
   uint64_t jumps = 0, jump_judged = 0;
+  // rt_hair_slot_stable: draws given another occurrence than their draw order, in captures where the order of the
+  // draws changed (swaps) or a draw of the mesh was missing or new (count), and groups left in draw order (no placement).
+  uint64_t slot_resolved = 0, slot_swaps = 0, slot_count = 0, slot_no_pos = 0;
   struct Jump { uint64_t frame, key; } jump_first[6] = {};
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
   uint32_t lod[kGroomLods] = {};
@@ -2086,6 +2113,7 @@ void bvh_begin_capture(VkCommandBuffer) {
   if (content_on) ++g_content_captures;
   g_draws.clear();
   g_dyn_seen.clear();
+  g_slot_stable = cfg_int("rt_hair_slot_stable", 0) != 0;
   g_audits_this_frame = 0;
   g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
   const bool groom_key = cfg_hot(CfgHot::rt_hair_groom) != 0, lss = hair_groom::lss_enabled(), native = geo_native_hair_enabled();
@@ -2146,6 +2174,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     if (!indexed) fd.groom_miss = hair_groom::JoinMiss::NotIndexed;
     else if (!hair_groom::count_known(d.args.count)) fd.groom_miss = hair_groom::JoinMiss::CountUnknown;
     else fd.groom_id = groom_join(d, dk, &fd.groom_miss);
+    if (g_slot_stable && fd.groom_id) fd.slot_pos_ok = slot_draw_position(cmd, s, fd.slot_pos);
   }
   if (hair_capture::enabled() && indexed && d.alpha && s->ib) {
     // rt_hair_capture: the index range as bound now (the build reads it later); without grooms on, the count filter
@@ -2325,10 +2354,52 @@ static NativeOmmVariant* native_omm_variant(VkCommandBuffer cmd,uint64_t record,
   mesh.omm->push_back(fresh);return &mesh.omm->back();
 }
 
+// rt_hair_slot_stable: the groom-joined hair draws of one mesh get their occurrence (and so their dynamic slot, BLAS,
+// groom and header row) by continuity of placement (hair_primary::stable_occurrences), before the build reads any
+// dyn_key. Without the key, or for a group without a placement, the draw order of bvh_classify stays.
+void slot_stable_assign() {
+  if (!g_slot_stable) { g_slot_seen.clear(); return; }
+  std::unordered_map<uint64_t, std::vector<uint32_t>> groups;
+  for (uint32_t i = 0; i < g_draws.size(); ++i)
+    if (g_draws[i].groom_id && !g_draws[i].held) groups[g_draws[i].groom_identity].push_back(i);
+  for (auto it = g_slot_seen.begin(); it != g_slot_seen.end();) {
+    auto& seen = it->second;
+    const uint64_t dk = it->first;
+    seen.erase(std::remove_if(seen.begin(), seen.end(), [&](const hair_primary::SlotSeen& e) {
+      return !g_dyn.count(mix(dk, e.occurrence)); }), seen.end());   // its slot expired: the occurrence is free again
+    it = seen.empty() && !groups.count(dk) ? g_slot_seen.erase(it) : std::next(it);
+  }
+  for (auto& [dk, draws] : groups) {
+    const uint32_t n = uint32_t(draws.size());
+    bool ok = n <= hair_primary::kSlotGroup;
+    for (uint32_t di : draws) ok = ok && g_draws[di].slot_pos_ok;
+    auto& seen = g_slot_seen[dk];
+    if (!ok || seen.size() > hair_primary::kSlotGroup) { ++g_groom_st.slot_no_pos; seen.clear(); continue; }
+    double cur[hair_primary::kSlotGroup][3];
+    uint32_t occ[hair_primary::kSlotGroup];
+    for (uint32_t i = 0; i < n; ++i) std::memcpy(cur[i], g_draws[draws[i]].slot_pos, sizeof cur[i]);
+    const uint32_t moved = hair_primary::stable_occurrences(seen.data(), uint32_t(seen.size()), cur, n, occ);
+    if (moved) {
+      g_groom_st.slot_resolved += moved;
+      ++(n == seen.size() ? g_groom_st.slot_swaps : g_groom_st.slot_count);
+    }
+    for (uint32_t i = 0; i < n; ++i) {
+      FrameDraw& fd = g_draws[draws[i]];
+      fd.dyn_key = mix(dk, occ[i]);
+      auto e = std::find_if(seen.begin(), seen.end(), [&](const hair_primary::SlotSeen& s) { return s.occurrence == occ[i]; });
+      if (e == seen.end()) { seen.push_back({occ[i], {}}); e = seen.end() - 1; }
+      std::memcpy(e->pos, fd.slot_pos, sizeof e->pos);
+    }
+    std::sort(seen.begin(), seen.end(), [](const hair_primary::SlotSeen& a, const hair_primary::SlotSeen& b) {
+      return a.occurrence < b.occurrence; });
+  }
+}
+
 bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkCommandBuffer, uint32_t), uint32_t slot,
                BvhResult* out) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_on || g_failed || slot >= kSceneSlots || !ensure_pipeline()) return false;
+  slot_stable_assign();
   const bool cpu_opt = cfg_hot(CfgHot::cpu_opt1) != 0;
   // No pointers or GPU state. Only capacity survives a build, including failures.
   struct CpuScratch {
@@ -4044,6 +4115,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                 stats_period(300), (unsigned long long)g_groom_st.jumps, (unsigned long long)g_groom_st.jump_judged,
                 fa ? first : " none");
     }
+    if (g_slot_stable)
+      log_stats("[hair groom] slot exchanges resolved (rt_hair_slot_stable, last %u frames): %llu draws kept their slot "
+                "against the draw order (%llu captures with the draws swapped, %llu with a draw of the mesh missing or "
+                "new); %llu groups left in draw order (no placement on the CPU)",
+                stats_period(300), (unsigned long long)g_groom_st.slot_resolved, (unsigned long long)g_groom_st.slot_swaps,
+                (unsigned long long)g_groom_st.slot_count, (unsigned long long)g_groom_st.slot_no_pos);
     // Warm-up (docs/RTX_HAIR_PRIMARY.md 5o): how long matched grooms waited for their first primary key (UV join, LOD
     // upload, full build, the second points update). Only in periods where a slot got its first key.
     if (g_groom_st.keyed_new)

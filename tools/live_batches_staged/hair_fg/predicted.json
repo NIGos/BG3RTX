@@ -1,0 +1,30 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch, the user's set (release Ultra, fg=3, the RTX Hair bundle, rr_hair_strand_aa=2), camera lowered 10 notches and then static. Five watch windows of 8 s, each followed by 4 s with 12 presented frames captured (fg_snap, rendered and generated frames in present order): A fg=3 strands, B fg=0 strands, C fg=3 strands again, D fg=3 with rr_hair_strand_aa=0, E fg=3 with cards (rt_hair_groom_primary=0). fg is toggled live (layer/streamline.cpp reads it every present; the game starts with fg=3, so Streamline is loaded; precedent ef1 'fg-off').",
+  "observable": "In which window does the fast on/off toggling of the heads (user eyewitness, hs1 and earlier lives) stop? The user watches the windows; the presented captures give the same answer as a number.",
+  "number": "hair region flicker of the presented frames: mean absolute difference between consecutive pNN.png in the head region, split by frame kind (at fg=3 the present order is one rendered frame and two generated ones; kind = index mod 3 once the phase is found from the lowest-difference grouping). Noise = the same number in window C against window A (same settings, two captures).",
+  "frame generation": {
+    "predicted": "A and C: generated frames differ from their rendered neighbours in the head region by >= 2x the rendered-to-rendered difference (the strand pixels' depth and motion vectors given to FG switch between strand and background with the jitter each rendered frame: shaders/rt/hair_primary_gbuffer.hlsl SV_Depth, hair_primary_velocity.hlsl discard), B: no generated frames, head difference at the rendered-to-rendered level, and the user sees the toggling stop in B and come back in C",
+    "decides_fg_if": "the user reports B stable and A, C toggling, and the generated-to-rendered difference in A and C is outside the A against C spread",
+    "next_if_fg": "stable FG inputs on hair: the card depth and card motion vector for FG at strand pixels (the hold layer, rt_hair_primary_hold), or the strand depth dilated over the card region, behind a key; then this job again"
+  },
+  "strand coverage or reconstruction": {
+    "predicted_if_not_fg": "the toggling persists in B (no generated frames) and stops only in E (cards)",
+    "next": "then it is in the rendered image after all: compare hs1's final bursts at full resolution in the head region (the 1.02 ratio was a mean over all hair pixels)"
+  },
+  "strand aa": {
+    "predicted": "D against C: no change the user can see (hs1: rr_color flicker within the half spread)",
+    "decides_aa_if": "the toggling stops in D and returns in a later strands window with rr_hair_strand_aa=2"
+  },
+  "cards": {
+    "predicted": "E: stable heads (the user's reference for 'no toggling')",
+    "note": "if E also toggles, the cause is not RTX Hair: report and stop"
+  },
+  "invalid_if": [
+    "no '[sl] FG decision ... want 0 requested 0; reason requested-off' in window B, or no return to 'want 3 requested 3' in window C",
+    "a snap window without '[sl] present capture done'",
+    "'[sl] DLSS-G frame' lines of A, C, D or E without 'presented per app frame 3' and displayed/rendered >= 2 (the generated frames were not shown: hs1 showed 1.00 for its first 60 s while the window was not yet presenting them)",
+    "no '[hair primary] frame N: RTX Hair off (live)' in window E"
+  ],
+  "cost": "none measured: no new code path; report the '[rrpost] gpu: render-res chain' line only",
+  "disk": "5 captures x 12 PNG at the presented size, about 0.3 GB; kept until the comparison is done, then deleted"
+}

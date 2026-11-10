@@ -1039,6 +1039,64 @@ Root cause NOT established. Verified facts, then the one hypothesis left and the
 - Consequence: release players who turn RTX Hair on now really get strands, and with them the open strand flicker
   (5n, 5p: not fixed, hs1 staged). Until 0.9.5-beta is replaced, its RTX Hair toggle shows cards only.
 
+## 5s. Stable character slots and the frame generation check (offline 2026-11-10, branch claude/hair-slot-identity: key rt_hair_slot_stable, off)
+- Live result for 5q (hs1 015416, S8 static, main 026202b7): the exchange holds for the one-frame holes. The two-row
+  key was 8c68; its dropout frames 2312, 2351, 2454, 2854, 2905, 3388 all lost both rows (`[2 rows: 0+0]`, 5645-5741
+  card pixels, 0 strand); slot jumps only on 8c68 and always in pairs; 5 of the 6 dropouts sit on a jump frame.
+- Why both rows are lost, and why it is not the owner test: both rows share one key and one draw slot, so the owner
+  test passes for either. `[2 rows: 0+0]` counts sealed strand entries per row: the trace wrote none for either row
+  while the card markers were written. The label "rejected after the hit" is by elimination from frame-wide totals; a
+  ray that finds no strand where the card is gives the same line. Reading: the dyn slot is the n-th draw of the mesh
+  in the capture, so when the order of the two draws changes, or only one of the two is in the capture (it then takes
+  occurrence 0 whoever it is), a slot holds the other character's skinned points for a frame. Both rows then sit at
+  one head or are exchanged against the cards' markers. Which of the two cases happens is not proven offline; the new
+  counter line separates them.
+- Jumps without a dropout (2289, 2778, 2928, 2967, 3061) and the dropout without a listed jump (2854): coverage of the
+  diagnostic, not a second mechanism as far as the code shows. A dropout is judged only in frames whose count readback
+  ran (`count_feedback` returns while one is in flight), a jump needs two consecutive bounds readbacks, and a period
+  lists the first 6 jumps and the first 4 dropouts. Unproven.
+- Fix (layer only, no shader variant, no ABI change): with `rt_hair_slot_stable=1` the occurrence index of a
+  groom-joined hair draw follows the character, not the draw order. At classify the draw's placement is read on the
+  CPU (the per-draw model matrix at set 1 binding 0 plus the camera block's origin, as `cascade_draw_id`); at the
+  start of `bvh_build` `slot_stable_assign` groups the draws by mesh identity and `hair_primary::stable_occurrences`
+  (common/hair_primary.h) pairs them nearest-first with the placements the occurrences had in the last capture. A
+  draw without a partner takes the lowest occurrence nobody holds, so a character alone keeps its slot when the other
+  one leaves the capture. Groups over 16 draws or without a readable placement stay in draw order.
+- Not verified offline: that hair draws carry a distinct per-character placement in that matrix. If the game gives
+  both the same matrix, the pairing falls back to draw order (no change, no harm) and the line shows 0 resolved.
+- Counter line (only with the key on): `[hair groom] slot exchanges resolved (rt_hair_slot_stable, last N frames): A
+  draws kept their slot against the draw order (B captures with the draws swapped, C with a draw of the mesh missing
+  or new); D groups left in draw order (no placement on the CPU)`.
+- Gate for the next authorized S8 static live (hs1 with the key toggled in one run): key on, A > 0 and the 8c68
+  dropouts and the "slot content jumps" pairs go to 0; key off in the same run reproduces them. D > 0 with A = 0 means
+  the placement is not readable: then the identity must come from the skinning buffer offset instead.
+- Cost: CPU only, two mapped reads of 64 and 24 bytes per hair draw at classify; no GPU pass changes.
+- Launcher: "Strand hair: stable character slots" (Advanced, experimental, off). Not in the RTX Hair On bundle until
+  the gate passes. In game: S8, two characters with the same hair style, camera still: the one-frame holes stop.
+- Test: hair_groom_asset_test (same order, swap, both moving and swapped, one leaving, one alone, return after the
+  slot expired, a third character drawn first, no history).
+- Frame generation, the user's eyewitness ("all heads switch on and off quickly", fast at a still camera): the
+  rendered-frame numbers are clean (strands drawn 1438-1440 of 1440, pre-RR flicker strands / cards 1.02), and with
+  fg=3 two of three presented frames are generated. What FG gets at strand pixels (layer/streamline.cpp: depth,
+  motion vectors, hudless colour, UI):
+  - Depth and motion vectors are per-frame binary there. `hair_primary_gbuffer.hlsl` writes the strand depth and
+    `hair_primary_velocity.hlsl` the strand motion vector only where this frame's jittered ray hit a strand; the
+    other pixels keep what is behind (scalp, background). A strand is about a pixel wide, so the set of strand
+    pixels changes with the jitter every rendered frame. RR integrates this for colour; FG gets the stable colour
+    with depth and motion that switch between strand and background from one rendered frame to the next.
+  - Cycles tied to the frame tag: the tip dither phase `(tag - 1) & 3` (4 frames), `hp_cov_pick(..., tag)`, the
+    jitter sequence. None alternates with plain frame parity in the rendered frames; the parity the user may see is
+    rendered against generated frames.
+  - hs1 also shows that FG presented nothing extra for its first 60 s (`presented per app frame 3` but
+    displayed/rendered 1.00 until frame 1621), then 3.00 for the bursts.
+  - `fg` is read every present: 3 -> 0 -> 3 works inside one launch when the game starts with fg >= 2 (the Restart
+    mark in settings.h is for crossing on/off at startup, when Streamline is not loaded). Precedent: ef1 `fg-off`.
+- Staged, not queued: `tools/live_batches_staged/hair_fg` job `hf1-s8-hair-fg` (S8, the user's set, 98 s of phases).
+  Watch windows of 8 s, each followed by 12 presented frames (`fg_snap`, rendered and generated): fg=3, fg=0, fg=3,
+  fg=3 with rr_hair_strand_aa=0, fg=3 with cards. The user says in which window the toggling stops; predicted.json
+  holds the reading per answer. If it stops at fg=0: stable FG depth and motion on hair (card depth and motion from
+  the hold layer at strand pixels) behind a key.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
