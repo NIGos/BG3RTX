@@ -31,9 +31,18 @@ groupshared uint gsTagPixels[256];
 groupshared uint gsTagRefused[256];
 groupshared uint gsTagTraced[8];    // per tag window: traced, hit
 groupshared uint gsHoles[4];
+#ifdef HP_COUNT_UNION
+// 5u, rt_hair_coverage_union (request rt/hair_primary_count.hlsl?HP_COUNT_UNION=1): per tag window and draw slot every
+// accepted strand pixel, whatever the card marker of the pixel holds (common/hair_primary.h kUnionCountOffset).
+static const uint hair_primary_union_count_offset = 6016u;
+groupshared uint gsUnion[256];
+#endif
 
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
+#ifdef HP_COUNT_UNION
+  gsUnion[gi] = 0u;
+#endif
   if (gi < 64u) gsCount[gi] = 0u, gsRefused[gi] = 0u, gsOther[gi] = 0u;
   if (gi == 0u) gsTraced = 0u, gsHit = 0u;
   if (gi < 8u) gsTagTraced[gi] = 0u;
@@ -58,6 +67,10 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
         if (mark.y == card_word) InterlockedAdd(gsTagCount[j * 64u + slot], 1u);
         if ((mark.x & hair_primary_marker_skipped) != 0u) InterlockedAdd(gsHoles[j], 1u);
       }
+#ifdef HP_COUNT_UNION
+      if ((tag & 0xFFFFFFu) != 0u && (mark.y & 0xF0u) == 0u && (mark.y >> 8u) == (tag & 0xFFFFFFu))
+        InterlockedAdd(gsUnion[j * 64u + (mark.y & 15u)], 1u);
+#endif
       // The entries of every tag window (the judged frame is the newest one with markers, often tag - 1).
       if (e.w == hp_seal(e.xyz, tag)) {
         InterlockedAdd(gsTagTraced[j * 2u], 1u);
@@ -107,6 +120,9 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   if (gsTagRefused[gi] != 0u) Counts.InterlockedAdd(hair_primary_tag_refused_offset + gi * 4u, gsTagRefused[gi]);
   if (gi < 8u && gsTagTraced[gi] != 0u) Counts.InterlockedAdd(hair_primary_tag_traced_offset + gi * 4u, gsTagTraced[gi]);
   if (gi < 4u && gsHoles[gi] != 0u) Counts.InterlockedAdd(hair_primary_mask_hole_offset + gi * 4u, gsHoles[gi]);
+#ifdef HP_COUNT_UNION
+  if (gsUnion[gi] != 0u) Counts.InterlockedAdd(hair_primary_union_count_offset + gi * 4u, gsUnion[gi]);
+#endif
   if (gi == 0u && gsTraced != 0u) Counts.InterlockedAdd(1792u, gsTraced);   // common/hair_primary.h kTracedOffset
   if (gi == 0u && gsHit != 0u) Counts.InterlockedAdd(1796u, gsHit);
   if (id.x == 0u && rec != 0u)   // the sampled ray (kRaySampleOffset 1808 <- header kRayDebugOffset 3168)

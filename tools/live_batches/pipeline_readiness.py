@@ -94,6 +94,8 @@ GENERIC = r"\[shaders\].*(?: compiled(?: in| \()|read from the cache|cache: pref
 CONSERVATIVE = set("rt_hair_fibre rt_hair_groom_primary_order rt_hair_primary_passes rt_hair_groom_tips rt_hair_groom_crowd_ksegments rt_water_geometry rr fg preset ab_off".split())
 for key in CONSERVATIVE:
     TABLE[key] = [GENERIC]
+# 5u: the count shader's HP_COUNT_UNION=1 request (layer/hair_primary.cpp count_pipeline), compiled at its first use.
+TABLE["rt_hair_coverage_union"] = [GENERIC]
 
 # Settings which schedule observations or change CPU/log policy, without
 # selecting pipelines. Unknown rendering keys require explicit completion evidence.
@@ -124,6 +126,8 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_hair_shared_key rt_hair_watchdog_one_key "
     # 5t: the coverage gate latch (hair_primary CoverageGate). CPU only.
     "rt_hair_swap_latch "
+    # 5u: two bad coverage measurements in a row (hair_primary CoverageGate::confirm). CPU only.
+    "rt_hair_coverage_confirm "
     # Elastic capture reserve policy (common/rt_capture_budget.h CaptureHeadroom, read per frame in layer/geocapture.cpp).
     "rt_capture_rise_reserve rt_alpha_floor_yield "
     # Mesh cache budget accounting (common/rt_capture_budget.h mesh_cache_charged_as, read per build/present in

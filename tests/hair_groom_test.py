@@ -940,6 +940,39 @@ def test_coverage_pair_gate_bias():
           ratio[32.0])
 
 
+def test_coverage_footprint_metric():
+    """5u (rt_hair_coverage_union): the gate's count S (accepted strand pixels inside the card markers) against U (every
+    accepted strand pixel) when the card is seen at growing pixel footprints. The card marker is the dithered native
+    alpha test of the mip-filtered mask, so with sub-texel strands seen over many texels per pixel the marker no longer
+    sits where the strands are: S/C falls with the footprint although the strands cover what the cards cover. U/C stays
+    at the opacity ratio the offline bound was derived for (coverage_bound.py: strand over card opacity)."""
+    rep = primary.footprint_report()
+    print(json.dumps({"coverage_footprint": rep}))
+    rows = rep["rows"]
+    kmin = 0.8913102349775665
+    for r in rows:
+        c = r["card_pixels"] * 16
+        u = r["union"] * c
+        # 4 sigma of the pooled counts (16 frames), independent per-count Bernoulli model (cover_sigma's, uncorrelated).
+        tol = 4 * np.sqrt(u + r["union"] ** 2 * c) / c
+        check(f"footprint {r['footprint']}: U/C {r['union']:.4f} = opacity ratio {rep['opacity_ratio']:.4f} within "
+              f"{tol:.4f}", abs(r["union"] - rep["opacity_ratio"]) <= tol)
+    check(f"near footprint: S/C {rows[0]['intersection']:.3f} passes the bound {kmin:.3f}", rows[0]["intersection"] >= kmin)
+    far = [r for r in rows if r["footprint"] >= 4]
+    check("footprint >= 4 texels per pixel: S/C under the bound although U/C is not",
+          all(r["intersection"] < kmin <= r["union"] for r in far), [(r["footprint"], r["intersection"]) for r in far])
+    check("S/C falls with the footprint", all(b["intersection"] < a["intersection"] for a, b in zip(rows[1:], rows[2:])))
+    count = (ROOT / "shaders/rt/hair_primary_count.hlsl").read_text()
+    union = count.split("#ifdef HP_COUNT_UNION")
+    check("union count only behind HP_COUNT_UNION (the default request's text unchanged outside it)",
+          len(union) == 5 and all("#endif" in u and "gsUnion" not in u.split("#endif", 1)[1] for u in union[1:])
+          and "gsUnion" not in union[0])
+    layer = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
+    check("layer: the union request only with rt_hair_coverage_union; the slot records which request ran",
+          '"rt/hair_primary_count.hlsl?HP_COUNT_UNION=1"' in layer and 'cfg_int("rt_hair_coverage_union", 0)' in layer and
+          "s.uni = cnt_v == 1;" in layer)
+
+
 def test_post_depth():
     """M3.4: the D24S8 (and the linear depth made from it) that fog, transparents, water, DoF and the camera motion pass
     read after the G-buffer pass shows the same surface as the colour on every pixel of a strand card."""
@@ -1543,7 +1576,7 @@ def test_burst_coverage_split():
     check("burst flicker: empty mask is nan", np.isnan(tb.flicker(L, np.zeros((1, 2), bool))))
 
 
-for t in (test_burst_coverage_split, test_strand_edge, test_coverage, test_coverage_pair_gate_bias, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_burst_coverage_split, test_strand_edge, test_coverage, test_coverage_pair_gate_bias, test_coverage_footprint_metric, test_post_depth, test_rr_hair_guides, test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_curves2d, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

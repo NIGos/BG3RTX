@@ -106,7 +106,8 @@ uint64_t g_logged_pipes = 0;
 // later. With them the keys and whether each one's G-buffer variant ran in the counted frame.
 constexpr uint32_t kCountSlots = 4;
 static_assert(kCountSlots == hair_primary::kHoldCountSlots, "the hold age counts one full readback ring");
-struct CountSlot { uint64_t frame = 0, gframe = 0, rec = 0; bool valid = false; uint32_t tag = 0; uint64_t keys[hair_primary::kMaxGrooms] = {};
+struct CountSlot { uint64_t frame = 0, gframe = 0, rec = 0; bool valid = false, uni = false; uint32_t tag = 0;
+                   uint64_t keys[hair_primary::kMaxGrooms] = {};
                    uint8_t lods[hair_primary::kMaxGrooms] = {};
                    bool drew[hair_primary::kMaxGrooms] = {}; VkBuffer rb = VK_NULL_HANDLE; VkDeviceMemory rb_mem = VK_NULL_HANDLE;
                    const uint32_t* map = nullptr; };
@@ -115,8 +116,8 @@ uint32_t g_cnt_next = 0;
 HpBuf g_counts;                          // device local: 64 uints
 VkDescriptorSetLayout g_cnt_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_cnt_pl = VK_NULL_HANDLE;
-VkPipeline g_cnt_pipe = VK_NULL_HANDLE;
-uint64_t g_cnt_gen = 0;
+VkPipeline g_cnt_pipes[2] = {};          // [0] rt/hair_primary_count.hlsl, [1] its HP_COUNT_UNION=1 request (5u)
+uint64_t g_cnt_gens[2] = {};
 uint32_t g_last_tag = 0, g_last_n = 0;   // the previous publish: its tag, pixel count and keys per groom k
 uint64_t g_last_keys[hair_primary::kMaxGrooms] = {};
 uint8_t g_last_lods[hair_primary::kMaxGrooms] = {};
@@ -205,6 +206,11 @@ hair_primary::DrawWatchdog g_draw_watchdog;
 bool g_cfg_watchdog_draw = false;
 uint64_t g_draw_watchdog_period = 0;
 uint64_t g_watchdog_spared_mark = 0;   // rt_hair_watchdog_one_key: g_watchdog.spared at the last period line
+// 5u: the coverage measurements by footprint (lean period line), and rt_hair_coverage_union (read once per publish): the
+// count runs the union request and the gate and both watchdogs judge every accepted strand pixel instead of only those
+// inside the card markers. The pipeline of each request ([0] default, [1] union) and its shader generation.
+hair_primary::FootprintStats g_footprint;
+bool g_cfg_union = false;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
 float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
 uint64_t g_last_pub_camera_frame = 0;
@@ -271,7 +277,7 @@ bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* w
 bool make_readback(CountSlot& s) {
   DeviceData* dd = g_dd;
   VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-  bci.size = hair_primary::kCountBytes;
+  bci.size = hair_primary::kCountBytesAll;
   bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   if (dd->vk.CreateBuffer(dd->device, &bci, nullptr, &s.rb) != VK_SUCCESS) return false;
   VkMemoryRequirements req;
@@ -293,10 +299,14 @@ bool make_readback(CountSlot& s) {
   return true;
 }
 
-// g_mu held. The counting pipeline (push descriptors: the pixel record, the counts; push: tag, pixel count).
-bool count_pipeline() {
+// g_mu held. The counting pipeline (push descriptors: the pixel record, the counts; push: tag, pixel count). v 1: the
+// union request (5u, rt_hair_coverage_union), which also writes kUnionCountOffset.
+bool count_pipeline(int v) {
   Bg3ShaderBlob blob{};
-  if (!shader_get("rt/hair_primary_count.hlsl", "main", "cs_6_6", &blob)) return false;
+  if (!shader_get(v ? "rt/hair_primary_count.hlsl?HP_COUNT_UNION=1" : "rt/hair_primary_count.hlsl", "main", "cs_6_6", &blob))
+    return false;
+  VkPipeline& g_cnt_pipe = g_cnt_pipes[v];
+  uint64_t& g_cnt_gen = g_cnt_gens[v];
   if (g_cnt_pipe && g_cnt_gen == blob.generation) return true;
   auto& vk = g_dd->vk;
   if (!g_cnt_dsl) {
@@ -384,12 +394,27 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
       for (const GbFrame& f : g_gb_frames) if (f.tag == s.tag - uint32_t(jn))
         for (uint64_t key : f.keys) if (key) g_coverage.invalidate(key, f.frame);
     }
+    // 5u: the strand count each decision judges. Today's: the accepted pixels inside the card markers (tc). With
+    // rt_hair_coverage_union and a count that ran the union request: every accepted pixel of the slot (uc), the bound's
+    // own quantity; the upper bound keeps the count inside the markers (CoverageGate::Evidence::inside).
+    const uint32_t* uc = s.uni ? s.map + hair_primary::kUnionCountOffset / 4 : nullptr;
+    const bool judge_union = g_cfg_union && uc;
+    auto judged = [&](uint32_t k) { return judge_union ? uc[j * 64 + k] : tc[j * 64 + k]; };
     if (gf) {
+      g_footprint.begin();
       for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) if (gf->draw_keys[k]) {
+        const uint64_t key = gf->draw_keys[k];
         const bool was_swapped = (gf->swapped_slots & (1u << k)) != 0;
-        g_coverage.observe(gf->draw_keys[k], gf->frame, cc[j * 64 + k], tc[j * 64 + k], was_swapped);
-        g_switches.measure(gf->draw_keys[k], cc[j * 64 + k], tc[j * 64 + k], was_swapped);
+        const uint32_t card = cc[j * 64 + k], inside = tc[j * 64 + k];
+        g_coverage.observe(key, gf->frame, card, judged(k), was_swapped, inside);
+        g_switches.measure(key, card, judged(k), was_swapped);
+        uint64_t traced = 0;   // the shared trace's hits on this key's groom rows in the judged window (5u H)
+        uint32_t rows = 0;
+        for (uint32_t r = 0; r < hair_primary::kMaxGrooms; ++r)
+          if (row_keys[r] == key) { traced += g_seen.pixels[r]; ++rows; }
+        g_footprint.draw(card, inside, traced, uc ? int64_t(uc[j * 64 + k]) : -1, judged(k), was_swapped, rows);
       }
+      g_footprint.end_frame();
       g_seen.evidence_frame = gf->frame;
       // 5h dropouts and the frame watchdog (item 19): the swapped draws of the judged frame against their card pixels
       // (same pass, same tag). The trace counts are of that frame's window too: always attributed (item 4).
@@ -412,8 +437,8 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
                 if (g_seen.keys[r] == key && f.rows++ < 2) f.row_pixels[f.rows - 1] = g_seen.pixels[r];
             }
           }
-          g_watchdog.draw(card, acc, last_card, key);
-          g_draw_watchdog.draw(key, card, acc, last_card);
+          g_watchdog.draw(card, judged(k), last_card, key);   // 5u: the judged count (acc unless union)
+          g_draw_watchdog.draw(key, card, judged(k), last_card);
         }
         if (card) g_last_card[key] = card;
       }
@@ -446,11 +471,13 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
   }
   if (!g_last_tag || g_pixels_fresh || g_last_n != g_px_w * g_px_h) return true;
   if (!s.rb && !make_readback(s)) return false;
-  if (!g_counts.b && !make(g_counts, hair_primary::kCountBytes,
+  if (!g_counts.b && !make(g_counts, hair_primary::kCountBytesAll,
                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                            "hair primary counts"))
     return false;
-  if (!count_pipeline()) return false;
+  // 5u: the union request when rt_hair_coverage_union is on and it builds; else today's (the slot then holds no union).
+  const int cnt_v = g_cfg_union && count_pipeline(1) ? 1 : 0;
+  if (!cnt_v && !count_pipeline(0)) return false;
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -470,7 +497,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
     wr[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     wr[i].pBufferInfo = bi + i;
   }
-  dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pipe);
+  dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pipes[cnt_v]);
   dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pl, 0, 2, wr);
   // The tag the counted G-buffer frame (this frame's) applied; without one (header order prepass, or no G-buffer pass
   // applied this frame) the newest applied tag, for the diagnostics only: no strand evidence from that count.
@@ -487,7 +514,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
   mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
   dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0,
                             nullptr);
-  const VkBufferCopy c{0, 0, hair_primary::kCountBytes};
+  const VkBufferCopy c{0, 0, hair_primary::kCountBytesAll};
   dd->vk.CmdCopyBuffer(cmd, g_counts.b, s.rb, 1, &c);
   s.gframe = counted ? gf.frame : 0;
   for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
@@ -497,6 +524,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
   }
   s.frame = now; s.rec = rec;
   s.tag = tag;
+  s.uni = cnt_v == 1;
   s.valid = true;
   g_cnt_next = (g_cnt_next + 1) % kCountSlots;
   // The compute shader's pixel reads before this frame's G-buffer writes them.
@@ -672,6 +700,7 @@ void observe_depth(uint64_t image, uint64_t now, uint64_t identity) {
   if (!g_load.observe(image, now, identity)) return;
   g_watchdog = hair_primary::Watchdog{};
   g_draw_watchdog = hair_primary::DrawWatchdog{};
+  g_footprint = hair_primary::FootprintStats{};
   g_switches = hair_primary::SwapTransitions{};
   g_gate.clear();
   g_coverage.clear(); g_last_swap_frame.clear();
@@ -721,6 +750,14 @@ void coverage_log(uint64_t now) {
     log("[hair primary] switches (last %u frames):%s", stats_period(300), sw);
   }
   g_switches.reset_period();
+  // 5u: the measurements by footprint (lean too, one line per period while any draw was measured).
+  if (g_footprint.frames) {
+    char fp[1600];
+    g_footprint.format(fp);
+    log("[hair primary] coverage by footprint (last %u frames, judged %s):%s", stats_period(300),
+        g_cfg_union ? "union (rt_hair_coverage_union)" : "inside the card markers", fp);
+  }
+  g_footprint.reset_period();
   char per[1200] = {};
   size_t at = 0;
   uint32_t shown = 0, probed = 0, swapped = 0, below = 0, below_own = 0;
@@ -843,10 +880,13 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   if (g_counts.b) dd->vk.DestroyBuffer(dd->device, g_counts.b, nullptr);
   if (g_counts.m) dd->vk.FreeMemory(dd->device, g_counts.m, nullptr);
   g_counts = HpBuf{};
-  if (g_cnt_pipe) dd->vk.DestroyPipeline(dd->device, g_cnt_pipe, nullptr);
+  for (VkPipeline& p : g_cnt_pipes) {
+    if (p) dd->vk.DestroyPipeline(dd->device, p, nullptr);
+    p = VK_NULL_HANDLE;
+  }
+  for (uint64_t& g : g_cnt_gens) g = 0;
   if (g_cnt_pl) dd->vk.DestroyPipelineLayout(dd->device, g_cnt_pl, nullptr);
   if (g_cnt_dsl) dd->vk.DestroyDescriptorSetLayout(dd->device, g_cnt_dsl, nullptr);
-  g_cnt_pipe = VK_NULL_HANDLE;
   g_cnt_pl = VK_NULL_HANDLE;
   g_cnt_dsl = VK_NULL_HANDLE;
   g_last_tag = 0;
@@ -1856,12 +1896,16 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     auto prune = [&](auto& map) { for (auto it = map.begin(); it != map.end();) it = unseen(it->first) ? map.erase(it) : std::next(it); };
     prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame); prune(g_first_pub); prune(g_draw_watchdog.keys);
     prune(g_coverage.latest); prune(g_coverage.incomplete); prune(g_coverage.swapping); prune(g_coverage.latched);
+    prune(g_coverage.bad_run);
     for (auto it = g_key_seen.begin(); it != g_key_seen.end();) it = it->second + kKeyForgetFrames < now ? g_key_seen.erase(it) : std::next(it);
   }
   g_coverage.hold = cfg_int("rt_hair_primary_hold", 0) != 0;   // once per publish (hysteresis, CoverageGate)
   g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint
   g_coverage.latch = cfg_int("rt_hair_swap_latch", 0) != 0;               // 5t: a failed key waits for a new footprint
   if (!g_coverage.latch) g_coverage.latched.clear();
+  g_cfg_union = cfg_int("rt_hair_coverage_union", 0) != 0;               // 5u: judge every accepted strand pixel
+  g_coverage.confirm = cfg_int("rt_hair_coverage_confirm", 0) != 0;       // 5u: two bad measurements in a row
+  if (!g_coverage.confirm) g_coverage.bad_run.clear();
   // Round 3 (aa98b960) had joined this statement into the comment above: the publish gate then refused every
   // strand swap (main-view hair stayed cards). Keep it on its own line.
   g_published = now + 1;
