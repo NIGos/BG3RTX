@@ -1,5 +1,5 @@
 {
-  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch, the user's set (release Ultra, fg=3, the RTX Hair bundle, rr_hair_strand_aa=2), camera lowered 10 notches and then static. Five watch windows of 8 s, each followed by 4 s with 12 presented frames captured (fg_snap, rendered and generated frames in present order): A fg=3 strands, B fg=0 strands, C fg=3 strands again, D fg=3 with rr_hair_strand_aa=0, E fg=3 with cards (rt_hair_groom_primary=0). fg is toggled live (layer/streamline.cpp reads it every present; the game starts with fg=3, so Streamline is loaded; precedent ef1 'fg-off').",
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch, the user's set (release Ultra, fg=3, the RTX Hair bundle, rr_hair_strand_aa=2), camera zoomed in 20 wheel notches (hf1 073932 with 10: heads about 30 px in the half-resolution captures) and then static. Five watch windows of 8 s, each fg=3 one starting only after a fresh '[sl] DLSS-G frame' line with displayed/rendered >= 2.5 (runner wait condition, 30 s, then 'pipeline readiness timed out: <label>; missing: ...'), each followed by 4 s with 12 presented frames captured (fg_snap, rendered and generated frames in present order): A fg=3 strands, B fg=0 strands, C fg=3 strands again, D fg=3 with rr_hair_strand_aa=0, E fg=3 with cards (rt_hair_groom_primary=0). fg is toggled live (layer/streamline.cpp reads it every present; the game starts with fg=3, so Streamline is loaded; precedent ef1 'fg-off').",
   "observable": "In which window does the fast on/off toggling of the heads (user eyewitness, hs1 and earlier lives) stop? The user watches the windows; the presented captures give the same answer as a number.",
   "number": "hair region flicker of the presented frames: mean absolute difference between consecutive pNN.png in the head region, split by frame kind (at fg=3 the present order is one rendered frame and two generated ones; kind = index mod 3 once the phase is found from the lowest-difference grouping). Noise = the same number in window C against window A (same settings, two captures).",
   "frame generation": {
@@ -21,8 +21,8 @@
   },
   "invalid_if": [
     "no '[sl] FG decision ... want 0 requested 0; reason requested-off' in window B, or no return to 'want 3 requested 3' in window C",
-    "a snap window without '[sl] present capture done'",
-    "'[sl] DLSS-G frame' lines of A, C, D or E without 'presented per app frame 3' and displayed/rendered >= 2 (the generated frames were not shown: hs1 showed 1.00 for its first 60 s while the window was not yet presenting them)",
+    "a snap window without '[sl] presented frame 11 -> ... (ok)' (the last PNG; 'present capture done' is logged 0.1 s after the request and fell before the window start in hf1 073932)",
+    "an fg=3 watch window that starts without its wait condition (runner: 'pipeline readiness timed out: survive-fg3-...': the generated frames were not shown within 30 s of the fg change). hf1 073932: 3.00 came 2.7 s after the live fg 0 -> 3; only the first enable after the load took 13 s on the layer's present counter (SDK cadence 3.00 after 2 s)",
     "no '[hair primary] frame N: RTX Hair off (live)' in window E"
   ],
   "cost": "none measured: no new code path; report the '[rrpost] gpu: render-res chain' line only",

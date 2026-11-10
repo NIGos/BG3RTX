@@ -69,6 +69,29 @@
     ]
   },
   {
+    "label": "zoom",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 4.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 4.1,
+    "motion_end": 4.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
+    "wheel": 20,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 2.0
+  },
+  {
     "label": "warm-fg0",
     "kind": "static",
     "speed": "static",
@@ -84,29 +107,9 @@
     "set": "fg=0,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation ",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "gi: gi/[^ ]+ generation "
     ],
-    "wait_log_timeout": 180.0,
-    "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ]
-  },
-  {
-    "label": "lower",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 2.6,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 2.6,
-    "motion_end": 2.6,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
-    "wheel": 10
+    "wait_log_timeout": 180.0
   },
   {
     "label": "survive-fg3-a",
@@ -121,29 +124,29 @@
     "motion_end": 8.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0"
+    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
+    "wait_log": [
+      "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+    ],
+    "wait_log_fresh": [
+      "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "snap-fg3-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.5,
+    "seconds": 4.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 4,
-    "motion_end": 4,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
-    "frames": 90,
-    "settle_frames": 30,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[sl\\] DLSS-G frame"
-    ],
-    "wait_log_timeout": 30
+    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0"
   },
   {
     "label": "survive-fg0",
@@ -164,13 +167,13 @@
     "label": "snap-fg0",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.5,
+    "seconds": 4.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 4.5,
-    "motion_end": 4.5,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "fg=0,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0"
@@ -188,29 +191,29 @@
     "motion_end": 8.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0"
+    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
+    "wait_log": [
+      "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+    ],
+    "wait_log_fresh": [
+      "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "snap-fg3-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.5,
+    "seconds": 4.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 4,
-    "motion_end": 4,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
-    "frames": 90,
-    "settle_frames": 30,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[sl\\] DLSS-G frame"
-    ],
-    "wait_log_timeout": 30
+    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=1,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0"
   },
   {
     "label": "survive-fg3-aa0",
@@ -227,34 +230,29 @@
     "direction": 0,
     "set": "fg=3,rr_hair_strand_aa=0,rt_hair_groom_primary=1,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
     "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 30
   },
   {
     "label": "snap-fg3-aa0",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.5,
+    "seconds": 4.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 4,
-    "motion_end": 4,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "fg=3,rr_hair_strand_aa=0,rt_hair_groom_primary=1,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
-    "frames": 90,
-    "settle_frames": 30,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[sl\\] DLSS-G frame"
-    ],
-    "wait_log_timeout": 30
+    "set": "fg=3,rr_hair_strand_aa=0,rt_hair_groom_primary=1,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0"
   },
   {
     "label": "survive-fg3-cards",
@@ -271,34 +269,29 @@
     "direction": 0,
     "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=0,fg_snap=0,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
     "wait_log": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
     ],
     "wait_log_fresh": [
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 30
   },
   {
     "label": "snap-fg3-cards",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.5,
+    "seconds": 4.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 4,
-    "motion_end": 4,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=0,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0",
-    "frames": 90,
-    "settle_frames": 30,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[sl\\] DLSS-G frame"
-    ],
-    "wait_log_timeout": 30
+    "set": "fg=3,rr_hair_strand_aa=2,rt_hair_groom_primary=0,fg_snap=12,qa_exposure_hold=0,pan_inputs=0,pan_prepare=0,pan_capture=0,pan_delay_ms=0"
   },
   {
     "label": "restore",

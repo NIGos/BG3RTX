@@ -77004,6 +77004,201 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rr_hair_strand_aa",
+          "2"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation "
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "fg",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "fresh": [
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "changed": [
+        [
+          "fg",
+          "3"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "changed": [
+        [
+          "rr_hair_strand_aa",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "changed": [
+        [
+          "rr_hair_strand_aa",
+          "2"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "fresh": [
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "changed": [
+        [
+          "fg",
+          "3"
+        ],
+        [
+          "fg_snap",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "changed": [
+        [
+          "fg_snap",
+          "0"
+        ],
+        [
+          "rr_hair_strand_aa",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:2\\.[5-9]\\d|[3-9]\\.\\d+)"
+      ],
+      "changed": [
+        [
+          "fg_snap",
+          "0"
+        ],
+        [
+          "rr_hair_strand_aa",
+          "2"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -79690,6 +79885,10 @@
       null
     ],
     "status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:[2-9]\\.\\d+).*api errors 0": [
+      0,
+      null
+    ],
+    "\\[sl\\] presented frame 11 -> .*\\(ok\\)": [
       0,
       null
     ]

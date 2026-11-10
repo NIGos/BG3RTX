@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 1301,
+  "timeout": 1287,
   "max_minutes": 5,
   "repeat": 1,
   "live_batch": "hair-fg",
@@ -35,6 +35,8 @@
     "\\[sl\\] slDLSSGSetOptions\\(mode",
     "\\[sl\\] capturing",
     "\\[sl\\] present",
+    "\\[sl\\] FG cadence",
+    "\\[sl\\] foreground change",
     "\\[sl\\] warn",
     "VK_ERROR",
     "\\[log\\]"
@@ -64,9 +66,9 @@
   ],
   "expect_every": [
     {
-      "name": "presented frames captured in every snap window",
-      "select": "\\[sl\\] present capture done",
-      "match": "\\[sl\\] present capture done",
+      "name": "12 presented frames written in every snap window",
+      "select": "\\[sl\\] presented frame 11 -> .*\\(ok\\)",
+      "match": "\\[sl\\] presented frame 11 -> .*\\(ok\\)",
       "min": 1,
       "windows": [
         "snap-fg3-a",
@@ -76,25 +78,11 @@
         "snap-fg3-cards"
       ],
       "event": true
-    },
-    {
-      "name": "generated frames shown in every fg=3 snap window",
-      "select": "\\[sl\\] DLSS-G frame",
-      "match": "status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames (?:[2-9]\\.\\d+).*api errors 0",
-      "min": 1,
-      "windows": [
-        "snap-fg3-a",
-        "snap-fg3-b",
-        "snap-fg3-aa0",
-        "snap-fg3-cards"
-      ],
-      "event": true,
-      "settle_s": 1
     }
   ],
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
-    "\\[wheel-input\\] phase=4 notches=10\\b",
+    "\\[wheel-input\\] phase=3 notches=20\\b",
     "\\[motion-plan\\] complete phases=16\\b",
     "^Run ended: done"
   ],
@@ -130,6 +118,6 @@
       "maximum": 0.4969999999993888
     }
   },
-  "estimated_phase_seconds": 98.2,
+  "estimated_phase_seconds": 82.7,
   "purpose": "User eyewitness: heads switch on and off quickly at a static camera while the rendered-frame numbers are clean. S8, user set: watch windows fg=3, fg=0, fg=3, fg=3 + rr_hair_strand_aa=0, fg=3 + cards, each 8 s plus 12 presented frames (fg_snap). The user says in which window the toggling stops; the presented captures give the generated-against-rendered difference in the head region. STAGED, not authorized."
 }
