@@ -1481,6 +1481,44 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
   - Checks to add with it: the coverage gate's upper side is judged on S <= C, so wider strands cannot trip "coverage
     high"; hp_on_card's band uses hair_primary_max_radius (10 mm) >= the 9 mm cap; the tips test is per pixel (no
     radius). A period line: grooms per camera keep, projected diameter range.
+## 5w. Stable groom rows (offline 2026-11-10, branch claude/hair-row-stable: key rt_hair_row_stable, off)
+
+Live hl1 164930 (natural arrival, camera wheel zoom): of the 5u candidates A (another build's TLAS traced: 75 submits
+checked, 0) and C (full BLAS builds: 0) are disproved, B is confirmed: in the first frame of the zoom 11 of 11 keyed
+rows held another key than in the previous publish (row 0: 8553 -> e769), then 7, 4, 4, 0, 7, 3, 5, 7, 4, 7, 6, 7, 0,
+7, 9; the frame watchdog tripped at G-buffer frames 2125, 2126, 2128, 2129, 2130 (39 dropouts, 28 "rejected after the
+hit"). Before and after, the row order was constant for hundreds of frames with 0 dropouts.
+
+- Cause of the changing order: a groom's row (groom TLAS instance index, header row, InstInfo row) is its position in
+  the build's dynamic draw list `dyn`. `layer/bvhsplit.cpp` sorts that list by slot key only inside
+  `if (hold_frames && !moving)` (the hold path); with a moving camera (`rt_camera_moving`: the wheel zoom) or
+  `rt_dyn_hold 0` it stays in the game's capture draw order, which the game changes from frame to frame (the "slot
+  exchanges resolved" line counts it). The rows then follow `groom_work` in that order. Nothing kept a key's row.
+- Which consumer pairs a row with another publish: not established. Every layer consumer read (strand G-buffer,
+  nearest trace, velocity, count attribution, draw slots, submit upgrade, points update) resolves instance, key map and
+  row from the one header applied to its frame, and the TLAS check sees no other build. The evidence (every key
+  rejected in the first reordered frame, none while the order is constant) says a TLAS and a header of different
+  orders meet on the GPU; the CPU checks cannot see where. Stable rows remove the exposure whatever the pairing: any
+  two publishes then name the same groom in every row both hold.
+- Fix (`rt_hair_row_stable`, host key, live, off by default because the consumer is not proven):
+  `hair_primary::GroomRows` (common/hair_primary.h) gives each groom (dynamic slot key) a row it keeps while it is
+  live. A row whose groom left is given to another groom only 8 build frames later (`kSceneSlots`: one groom TLAS per
+  scene slot, so no frame in flight still reads the old groom there); a groom that returns earlier takes its own row
+  back. Rows between live grooms are inactive TLAS instances (reference 0) with key 0 and zero header and InstInfo
+  rows; the row count is the highest live row + 1. More than 64 grooms inside 8 frames: the oldest freed row is reused
+  early and a stats line says so. Key off: the position in `groom_work`, as before (no state kept).
+- The first-seen diagnostic now counts a row only when it held a key before and holds another one now (a newcomer
+  taking an empty row is not a move).
+- Test: hair_groom_asset_test replays the arrival (12 grooms, one leaves at the camera move, draw order alternating
+  every frame, three newcomers, one late groom): 0 grooms change row, 0 rows name different grooms in consecutive
+  publishes, the freed row is reused only after the lag.
+- Cost: CPU only, a 64 x 64 compare per build (under 1 us); no GPU cost; up to 64 inactive instances in the groom TLAS.
+- Live (staged, not authorized): hl1-s8-late-arrival sets the key and requires `holds another key than before 0` in
+  every first-seen line of the "lower" window (expect_every). Predicted: 0 moved rows; if the order was the whole
+  cause, 0 frame watchdog trips and 0 "rejected after the hit" dropouts after the zoom starts. If holes remain with 0
+  moved rows, the order was not the cause (candidate D) and the next observable is the per-groom points check.
+- User check: Advanced, "Strand hair: stable strand rows" On, S8 with several characters in view, zoom with the wheel:
+  no holes in the hair at the start of the zoom.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is

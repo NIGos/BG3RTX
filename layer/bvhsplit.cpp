@@ -1018,6 +1018,8 @@ std::unordered_set<uint64_t> g_groom_logged_unmatched;
 std::unordered_set<uint32_t> g_groom_uv_seen;
 uint64_t g_groom_first_seen = 0;
 uint64_t g_groom_prev_keys[hair_primary::kMaxGrooms] = {};
+hair_primary::GroomRows g_groom_rows;   // rt_hair_row_stable: each groom's row while it is live
+bool g_row_stable = false;
 uint32_t g_groom_prev_n = 0;   // (index count, verdict) of unmatched hair draws, logged once
 
 bool ensure_groom_pipeline() {
@@ -2119,6 +2121,11 @@ void bvh_begin_capture(VkCommandBuffer) {
   g_draws.clear();
   g_dyn_seen.clear();
   g_slot_stable = cfg_int("rt_hair_slot_stable", 0) != 0;
+  {
+    const bool stable = cfg_int("rt_hair_row_stable", 0) != 0;
+    if (stable != g_row_stable) g_groom_rows = {};
+    g_row_stable = stable;
+  }
   g_audits_this_frame = 0;
   g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
   const bool groom_key = cfg_hot(CfgHot::rt_hair_groom) != 0, lss = hair_groom::lss_enabled(), native = geo_native_hair_enabled();
@@ -3944,53 +3951,78 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // Each written row's primary key (groom_primary_key below), decided before the instances: rt_hair_shared_key
       // clears a key that fewer rows than this capture's hair draws carry (two characters with one hairstyle, one of
       // their grooms out of this publish): both draws keep their cards and the rows their 0x01 mask this frame.
-      std::vector<uint64_t> row_key;
-      row_key.reserve(groom_work.size());
-      for (const GroomWork& w : groom_work) {
-        if (w.card == UINT32_MAX) continue;
-        row_key.push_back(row_key.size() < hair_primary::kMaxGrooms &&
-                          hair_primary::groom_primary_key(w.g->uv_off != 0, w.hp_key, w.g->prev_frames, w.g->keyed)
-                              ? w.hp_key : 0);
+      // rt_hair_row_stable: a groom keeps its row (instance index, header row, InstInfo row) while it is live, whatever
+      // the order of the dynamic draws (hair_primary::GroomRows); the rows between live grooms are inactive instances.
+      // Off: the position in groom_work, as before.
+      std::vector<uint32_t> row_of(groom_work.size(), UINT32_MAX);
+      uint32_t rows = 0;
+      {
+        uint64_t live[kGroomMax];
+        uint32_t live_work[kGroomMax], live_rows[kGroomMax], live_n = 0;
+        for (size_t i = 0; i < groom_work.size() && live_n < kGroomMax; ++i)
+          if (groom_work[i].card != UINT32_MAX) { live[live_n] = groom_work[i].key; live_work[live_n++] = uint32_t(i); }
+        if (g_row_stable) {
+          const uint32_t early = g_groom_rows.early;
+          rows = g_groom_rows.assign(live, live_n, now + 1, kSceneSlots, live_rows);
+          if (g_groom_rows.early != early && logging::stats_enabled(cfg_int))
+            log_stats("[hair groom] frame %llu: %u groom rows reused before %u build frames passed (every row taken)",
+                      (unsigned long long)now, g_groom_rows.early - early, kSceneSlots);
+          std::memset(gi, 0, size_t(rows) * sizeof(VkAccelerationStructureInstanceKHR));   // reference 0: inactive
+          std::memset(info_out + n * 4, 0, size_t(rows) * 16);
+        } else {
+          for (uint32_t j = 0; j < live_n; ++j) live_rows[j] = j;
+          rows = live_n;
+        }
+        for (uint32_t j = 0; j < live_n; ++j) row_of[live_work[j]] = live_rows[j];
+      }
+      std::vector<uint64_t> row_key(rows, 0);
+      for (size_t i = 0; i < groom_work.size(); ++i) {
+        const GroomWork& w = groom_work[i];
+        if (row_of[i] >= rows) continue;
+        row_key[row_of[i]] = hair_primary::groom_primary_key(w.g->uv_off != 0, w.hp_key, w.g->prev_frames, w.g->keyed)
+                                 ? w.hp_key : 0;
       }
       if (hp_on && cfg_int("rt_hair_shared_key", 0) != 0)
         g_groom_st.shared_withheld += hair_primary::shared_key_complete(row_key.data(), uint32_t(row_key.size()),
                                                                         groom_draw_keys.data(), uint32_t(groom_draw_keys.size()));
-      for (const GroomWork& w : groom_work) {
-        if (w.card == UINT32_MAX) continue;   // its card instance was not written (cannot happen; be safe)
+      for (size_t wi = 0; wi < groom_work.size(); ++wi) {
+        const GroomWork& w = groom_work[wi];
+        const uint32_t k = row_of[wi];   // its row
+        if (k >= rows) continue;   // its card instance was not written (cannot happen; be safe)
         VkAccelerationStructureInstanceKHR in{};
         in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
-        in.instanceCustomIndex = groom_count;
+        in.instanceCustomIndex = k;
         // 5i (review 6): a groom without a primary key (no UVs yet, first update of its points) keeps its cards in the
         // G-buffer, so the primary strand rays (mask 0xFE, hair_primary_gbuffer.hlsl) skip it: its strands would be the
         // closest hit over a swapped draw's own and be discarded there (a hole). Shadow and GI rays (0xFF) still see it.
         // Round 3 H2: a slot that already published its key keeps it on a LOD switch frame (prev_frames 1): the new
         // LOD's points, UVs and BLAS are all written by this build, before this TLAS. Dropping it freed the draw slot,
         // put the draw in card mode at submit and refused the next frames: a strand-card-strand flash per LOD change.
-        const bool primary_key = groom_count < row_key.size() && row_key[groom_count] != 0;
+        const bool primary_key = k < row_key.size() && row_key[k] != 0;
         in.mask = hp_on && !primary_key ? 0x01 : 0xFF;
         in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
         in.accelerationStructureReference = w.g->as.addr;
-        std::memcpy(gi + groom_count, &in, sizeof in);
+        std::memcpy(gi + k, &in, sizeof in);
         // InstInfo row n + k: the card instance and the segment -> card triangle table (rt_common.hlsli rt_groom_trace).
         // Word 2: the strands' shadow transmittance (rt_hair_groom_shadow_t; 0: they block, as before).
         // Word 3: the segment start table (rt_common.hlsli rt_groom_links: chained segments share a joint).
         const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), hair_primary_transmit(w.hp_key), uint32_t(w.l->seg)};
-        std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
-        if (frame_index() % 300 == 0 && groom_count < 6)
+        std::memcpy(info_out + (n + k) * 4, row, sizeof row);
+        if (frame_index() % 300 == 0 && k < 6)
           log("[hair groom] diag groom %u: camera-relative bounds centre (%.3f %.3f %.3f) of frame %.0f (now %llu), "
               "size %.3f, LOD %d (ready %d), BLAS 0x%llx, built %d, refit %d, points off %llu, segments %u",
-              groom_count, w.g->centre[0], w.g->centre[1], w.g->centre[2], w.g->bounds_frame_used,
+              k, w.g->centre[0], w.g->centre[1], w.g->centre[2], w.g->bounds_frame_used,
               (unsigned long long)frame_index(), w.g->size, w.g->lod, int(w.l->ready), (unsigned long long)w.g->as.addr,
               int(w.g->built), int(w.refit),
               (unsigned long long)w.g->pos_off, unsigned(w.l->segments));
-        if (groom_count < hair_primary::kMaxGrooms) {
+        if (k < hair_primary::kMaxGrooms) {
           // Previous points: valid from the second update of this points range (the first copies stale bytes).
-          hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
+          hp_rows[k] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
                                   w.prev_ok && w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};   // M1: last frame's
           // No UVs yet, or a points range in its first update (new LOD or upload: its BLAS and points exist on the
           // GPU only from this build on): its draw keeps the card.
           // H2: a slot that published its key keeps it through a LOD switch (primary_key above).
-          hp_keys[groom_count] = primary_key ? w.hp_key : 0;
+          hp_keys[k] = primary_key ? w.hp_key : 0;
           // Warm-up line: frames from the slot's first match to its first published key (join, upload, builds).
           if (primary_key && !w.g->keyed && w.g->first_seen && now >= w.g->first_seen) {
             const uint64_t waited = now - w.g->first_seen;
@@ -4000,10 +4032,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           }
           if (primary_key) w.g->keyed = true;
           else if (hp_on) ++groom_unsettled;   // rt_hair_warmup: its draw keeps the cards (no UVs, first update)
-          hp_lods[groom_count] = uint8_t(w.g->lod < 0 ? 0 : w.g->lod);
+          hp_lods[k] = uint8_t(w.g->lod < 0 ? 0 : w.g->lod);
         }
-        ++groom_count;
       }
+      groom_count = rows;
       VkAccelerationStructureGeometryKHR gg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
       gg.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
       gg.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
@@ -4038,7 +4070,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
             uint32_t moved = 0, builds = 0;
             int first = -1;
             for (uint32_t r = 0; r < groom_count && r < hair_primary::kMaxGrooms; ++r)
-              if (hp_keys[r] && g_groom_prev_n > r && g_groom_prev_keys[r] != hp_keys[r]) { if (first < 0) first = int(r); ++moved; }
+              if (hp_keys[r] && g_groom_prev_n > r && g_groom_prev_keys[r] && g_groom_prev_keys[r] != hp_keys[r]) { if (first < 0) first = int(r); ++moved; }
             for (const GroomWork& w : groom_work) builds += w.refit ? 0u : 1u;
             log_stats("[hair groom] frame %llu (a hair draw first seen at %llu): groom rows %u (previous publish %u), keyed "
                       "rows whose row index now holds another key than before %u (first row %d: %04llx -> %04llx), full "
