@@ -926,6 +926,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom_nearest", "0"},
     {"rt_hair_pixel_lod", "0"},
     {"rt_hair_pixel_lod_k", "1.0"},
+    {"rt_hair_pixel_lod_small_keep", "0.25"},
     {"rt_hair_primary_frame_tag", "0"},
     {"rt_hair_header_cam_gpu", "0"},
     {"rt_hair_mv_card", "0"},

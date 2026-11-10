@@ -1,0 +1,16 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch, release Ultra with fg=3, the RTX Hair bundle as hl1 (rt_hair_groom_nearest=1, rt_hair_row_stable=1), detailed logging; hl1's 'lower' wheel 10 to the zoomed-out view, then a static camera: rt_hair_pixel_lod off / on (rt_hair_pixel_lod_small_keep 0.25) / on (0.125) / off, 60-frame windows with stats_reset, one PNG trace per window.",
+  "observable": "At S8's zoomed-out view (hl1 200821: heads 6-53 px, every groom at camera level 0), do the heads of 35-60 px trace keep 1/4, with coverage within today's LOD step and more strand structure, and at what cost?",
+  "offline_basis": "tools/hair_groom/pixel_lod.py --ladder (study beard 16fa158c, heads 20-60 px, 32 jittered frames): keep 1/4 coverage bias +0.5 to +0.7%, silhouette +0.1 to +2.0% (today's LOD 1 -> 2 step), HF 0.051 -> 0.059 (40 px), 0.054 -> 0.068 (50 px), 0.054 -> 0.071 (60 px), coverage noise -1 to -5%; keep 1/8 coverage +1.8 to +2.9%, silhouette +3 to +7.5%, HF 0.075-0.087; nothing changes under 35 px.",
+  "period_line": {
+    "pl-off-a, pl-off-b": "no pixel LOD period line content beyond level 0 (key off: the line is not printed)",
+    "pl-on-q": "'[hair groom] pixel LOD (last 60 frames)': head 6-53 px, 1025 px per radian, 0 groom frames without a projection; groom frames at level 1 (LOD 1 grooms) plus level 2 (LOD 0 grooms) 60-360 per period (1-6 of 13 grooms over 35 px; hl1 had 5 grooms at LOD 0, 3 at LOD 1, 5 at LOD 2 there), the rest at level 0, nothing at levels 3-5; '(k 1.00, small keep 0.250)'; camera BLAS full builds only in the first period after the switch (one per changed groom), refits after; camera arrays under 10 MB",
+    "pl-on-e": "the same grooms one level deeper (LOD 1 grooms at level 2, LOD 0 grooms at level 3); '(k 1.00, small keep 0.125)'; a second set of full camera BLAS builds right after the switch"
+  },
+  "gpu_ms": "strand G-buffer draws GPU 0.28-0.33 ms/frame off (hl1 200821); on-q within +-0.03 ms of off (only 1-6 grooms trace half or a quarter of their strands); on-e at most 0.03 ms lower; off-b within noise of off-a",
+  "images": "shot-on-q vs shot-off-a: the near heads' strand hair a little more structured (HF +15 to +30% offline: subtle at 1280 px), same hair outline and brightness; shot-on-e: more visible strand structure, hair coverage about +2 to +3% (outline slightly fuller); shot-off-b matches shot-off-a (the noise reference); no holes and no card fallback in any on shot",
+  "correctness": "no device loss, no crash; no frame watchdog trip or 'rejected after the hit' dropouts in the static windows (pl-*)",
+  "decision": "on-q passes if the period line shows levels 1-2 with small keep 0.250 and the shots show no holes and no visible outline growth: rt_hair_pixel_lod_small_keep stays 0.25. on-e is the user's look decision (sharper, +2% coverage, physically fuller than the groom).",
+  "if_level_0_everywhere": "no head reached 35 px in the static view (period line head max under 35): the view is not hl1's; the pick is untested, not failed",
+  "disk": "4 PNG traces at 1280 px, dump_raw=0: under 1 GB"
+}

@@ -1469,7 +1469,8 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
     candidate filter can only remove strands, not widen them.
   - Pick: per groom, keep_cam = the finest of {lod keep, 1/8, 1/16, 1/32} whose projected median diameter is >= k
     render px (k = rt_hair_pixel_lod_k, 0.7-1.4, default 1.0); px per metre from the build camera's projection and
-    the bounds distance; no pixel LOD for heads under 60 render px (the study's failure bound; today's LOD there);
+    the bounds distance; no pixel LOD for heads under 60 render px (the study's failure bound; today's LOD there;
+    since (f): keep 1/4 at 35-60 px);
     hysteresis of one quarter octave on the diameter plus the existing 30-frame vote.
   - Cross-fade between two keeps needs a per-candidate keep test in the strand trace (a shader change behind a
     specialization constant); without it the step pops about 2x today's (open).
@@ -1515,6 +1516,14 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
   arrival part unchanged and rt_hair_row_stable=1): static zoomed-out camera, rt_hair_pixel_lod off / on / off in one run
   (60-frame windows with stats_reset), PNG bursts 99310 (off) and 99311 (on), the period line and the strand G-buffer GPU
   ms per window; predictions in its predicted.json (part2_rt_hair_pixel_lod). live_flow --frozen: 0 failing.
+- (f) Small heads (branch claude/hair-pixel-lod-small, offline): hl1 200821 had every S8 head at 6-53 px, all level 0.
+  The ladder sweep (`tools/hair_groom/pixel_lod.py --ladder`, heads 20-60 px) shows coverage and silhouette error
+  depend on the keep, not the head size (1/4 +0.5..+0.8%, 1/8 +1.8..+2.9%, 1/16 +5.5%, 1/32 +15% at every size);
+  gate: no worse than today's LOD step or the split-half noise, with an HF or coverage-noise gain. Only keep 1/4
+  passes, at 35-60 px (HF +15 to +32%); 1/8 fails everywhere, a coverage-conserving radius only at some sizes. Rule:
+  heads of 35-60 px run the k pick with the ladder stopped at keep 1/4 of the groom (`pixel_lod_level` small_keep,
+  dev knob rt_hair_pixel_lod_small_keep 0.25, 0 = before); under 35 px level 0. Numbers:
+  docs/progress/claude-hair-pixel-lod-small.md. Live staged: tools/live_batches_staged/hair_pixel_lod (pl1).
 - Not built: (c) the cross-fade between two adjacent levels (spec constant 1048); without it a level change pops.
 - User check: none yet (rt_hair_pixel_lod is a dev key, not in the launcher); the hl1 part 2 bursts show it (S8 zoomed out:
   strand hair about 1 px wide, less grain next to the cards). A launcher toggle comes once the live part qualifies it.

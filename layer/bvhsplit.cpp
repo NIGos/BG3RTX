@@ -2890,6 +2890,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // rt_hair_pixel_lod: render px per radian at the view centre (0: no projection read, every groom at camera level 0).
   const float groom_ppr = g_pixel_lod && hp_on ? groom_px_per_radian() : 0.0f;
   const float groom_pixel_k = cfg_float("rt_hair_pixel_lod_k", 1.0f);
+  // heads of 35-60 render px stop at this keep of the full groom (hair_groom::pixel_lod_level, 0: level 0 as before)
+  const float groom_small_keep = cfg_float("rt_hair_pixel_lod_small_keep", hair_groom::kPixelLodSmallKeep);
   // rt_hair_warmup (docs/RTX_HAIR_PRIMARY.md 5o): hair draws and grooms of this frame not yet in their final state (join
   // pending, LOD uploading or voted, held soup, full build, key not yet published). 0 with grooms published: the groom
   // state is settled (hair_primary_warmup ends the level-load quiet window on that signal).
@@ -3396,7 +3398,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
             // LOD 0's median diameter (the LOD's median radius x keep, uncapped) and the study's head height, in render px
             g.cam_head_px = hair_groom::pixel_lod_head_px(dist, groom_ppr);
             g.cam_d0_px = hair_groom::pixel_lod_d0_px(groom_r_median(groom_src->lods[size_t(lod)]), l.keep, dist, groom_ppr);
-            want = hair_groom::pixel_lod_level(g.cam_d0_px, g.cam_head_px, l.keep, groom_pixel_k, g.cam_level);
+            want = hair_groom::pixel_lod_level(g.cam_d0_px, g.cam_head_px, l.keep, groom_pixel_k, g.cam_level,
+                                               groom_small_keep);
           }
           g.cam_pick = hair_groom::lod_vote(g.cam_pick, want, g.cam_votes, false);
           cam_level = g.cam_pick;
@@ -4530,13 +4533,15 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         if (s.groom) blas += s.groom->cam_as.size;
       log_stats("[hair groom] pixel LOD (last %u frames): groom frames per camera level 0/1/2/3/4/5 %llu/%llu/%llu/%llu/%llu/%llu; "
                 "LOD 0 strand diameter %.2f-%.2f px, head %.0f-%.0f px (%.0f px per radian, %llu groom frames without a "
-                "projection); camera BLAS full builds %llu, refits %llu; camera arrays %.1f MB, camera BLAS %.1f MB (k %.2f)",
+                "projection); camera BLAS full builds %llu, refits %llu; camera arrays %.1f MB, camera BLAS %.1f MB (k %.2f, "
+                "small keep %.3f)",
                 stats_period(300), (unsigned long long)c[0], (unsigned long long)c[1], (unsigned long long)c[2],
                 (unsigned long long)c[3], (unsigned long long)c[4], (unsigned long long)c[5], g_groom_st.cam_d0_min,
                 g_groom_st.cam_d0_max, g_groom_st.cam_head_min, g_groom_st.cam_head_max, g_groom_st.cam_ppr,
                 (unsigned long long)g_groom_st.cam_no_proj, (unsigned long long)g_groom_st.cam_builds,
                 (unsigned long long)g_groom_st.cam_refits, double(arrays) / 1048576.0, double(blas) / 1048576.0,
-                cfg_float("rt_hair_pixel_lod_k", 1.0f));
+                cfg_float("rt_hair_pixel_lod_k", 1.0f),
+                cfg_float("rt_hair_pixel_lod_small_keep", hair_groom::kPixelLodSmallKeep));
     }
     g_groom_st = GroomStats{};
   }

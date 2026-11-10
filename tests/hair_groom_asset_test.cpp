@@ -1562,7 +1562,7 @@ int main() {  test_round3();
     CHECK(pixel_lod_level(0.06f, 80, 0.5f, 1.0f, -1) == 4);    // 0.5/16: 1.92 px; 0.5/8: 0.96 px < 1
     CHECK(pixel_lod_level(0.06f, 80, 0.5f, 1.4f, -1) == 4);    // k 1.4 would want 0.5/32 = 1/64: clamped to the ladder
     CHECK(pixel_keep_ok(pixel_lod_keep(0.5f, pixel_lod_level(0.06f, 80, 0.5f, 1.4f, -1))));
-    CHECK(pixel_lod_level(0.06f, 59, 0.5f, 1.0f, -1) == 0);    // under 60 px: today's LOD
+    CHECK(pixel_lod_level(0.06f, 59, 0.5f, 1.0f, -1, 0.0f) == 0);   // under 60 px, small keep 0: today's LOD
     CHECK(pixel_lod_level(2.0f, 300, 1.0f, 1.0f, -1) == 0);    // already wider than k: never coarser than needed
     CHECK(pixel_lod_level(0.0f, 300, 1.0f, 1.0f, -1) == 0 && pixel_lod_level(0.1f, 300, 1.0f, 0.0f, -1) == 0);
     // Hysteresis: level 4 at x = log2(1 / 0.11) = 3.18; it stays down to x > 2.75 and up to x <= 4.25.
@@ -1585,12 +1585,37 @@ int main() {  test_round3();
       const float d0 = pixel_lod_d0_px(r, 1.0f, dist, ppr);   // 0.0477 px
       CHECK(d0 > 0.04f && d0 < 0.05f);
       CHECK(pixel_lod_level(d0, pixel_lod_head_px(dist, ppr), 1.0f, 1.0f, -1) == 5);   // > 0 (was 0: d0 read 0)
-      // The 60 px floor applies at the head height: 59 px keeps level 0 although its bounds diagonal (x 1.5-3) is over 60.
+      // The 60 px floor applies at the head height: 59 px stops at keep 1/4 (level 2 of LOD 0) although its bounds
+      // diagonal (x 1.5-3) is over 60; with small keep 0 it keeps level 0.
       const float far = kPixelLodHeadM * ppr / 59.0f;
-      CHECK(pixel_lod_level(pixel_lod_d0_px(r, 1.0f, far, ppr), pixel_lod_head_px(far, ppr), 1.0f, 1.0f, -1) == 0);
+      CHECK(pixel_lod_level(pixel_lod_d0_px(r, 1.0f, far, ppr), pixel_lod_head_px(far, ppr), 1.0f, 1.0f, -1) == 2);
+      CHECK(pixel_lod_level(pixel_lod_d0_px(r, 1.0f, far, ppr), pixel_lod_head_px(far, ppr), 1.0f, 1.0f, -1, 0.0f) == 0);
       CHECK(pixel_lod_head_px(0.0f, ppr) == 0.0f && pixel_lod_d0_px(r, 1.0f, 0.0f, ppr) == 0.0f);
     }
     CHECK(pixel_lod_level(0.001f, 300, 1.0f, 1.0f, 9) == 5);         // a stale level above the ladder: a fresh pick
+    // claude/hair-pixel-lod-small: heads of 35-60 px (ladder sweep, tools/hair_groom/pixel_lod.py --ladder on the study's
+    // beard, d0 = 0.186 mm / pixel). Today's angle rule draws LOD 1 (keep 0.5) at 30-60 px and LOD 2 (0.25) at 20 px.
+    // Measured against the truth (coverage bias / silhouette growth): keep 1/4 +0.5..+0.7% / +0.1..+2.0% (today's LOD
+    // step), 1/8 +1.8..+2.9% / +3.0..+7.5%, 1/16 +5.3..+5.7% / +5.0..+7.5%, 1/32 +15% / +15..+17% at every size, so only
+    // 1/4 passes; it gains HF 0.051 -> 0.059 (40 px), 0.054 -> 0.068 (50 px), 0.054 -> 0.071 (60 px); at 30 px nothing.
+    {
+      const float d0_px[] = {0.0261f, 0.0298f, 0.0373f, 0.0447f};   // 35, 40, 50, 60 px heads
+      const float heads[] = {35.0f, 40.0f, 50.0f, 59.9f};
+      for (int i = 0; i < 4; ++i) {
+        const int j = pixel_lod_level(d0_px[i], heads[i], 0.5f, 1.0f, -1);
+        CHECK(j == 1 && pixel_lod_keep(0.5f, j) == 0.25f);              // LOD 1 -> keep 1/4, never 1/8 or finer
+        CHECK(pixel_lod_level(d0_px[i], heads[i], 1.0f, 1.0f, -1) == 2);  // from LOD 0 the same keep 1/4
+        CHECK(pixel_lod_level(d0_px[i], heads[i], 0.5f, 1.0f, -1, 0.125f) == 2);   // the dev knob at 1/8
+        CHECK(pixel_lod_level(d0_px[i], heads[i], 0.5f, 1.0f, j) == 1);   // stable under hysteresis
+      }
+      CHECK(pixel_lod_level(0.0224f, 30.0f, 0.5f, 1.0f, -1) == 0);   // 30 px: no gain beyond noise, today's LOD
+      CHECK(pixel_lod_level(0.0149f, 20.0f, 0.25f, 1.0f, -1) == 0);  // 20 px: LOD 2 is already keep 1/4
+      CHECK(pixel_lod_level(0.0261f, 35.0f, 0.25f, 1.0f, -1) == 0);  // a groom already at 1/4 stays
+      CHECK(pixel_lod_level(0.0261f, 35.0f, 0.5f, 1.0f, 3) == 1);    // a stale deeper level: a fresh pick
+      // 60 px and over: the k rule as before (keep 1/32 for this beard: width 1.43 px)
+      CHECK(pixel_lod_level(0.0447f, 60.0f, 0.5f, 1.0f, -1) == 4);
+      CHECK(pixel_lod_level(0.0447f, 60.0f, 0.5f, 1.0f, -1, 0.0f) == 4);
+    }
   }
   { // Per-draw coverage evidence: neither publication nor an unavailable/newer pair proves coverage.
     using namespace hair_primary;

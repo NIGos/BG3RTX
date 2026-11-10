@@ -1,0 +1,145 @@
+{
+  "name": "pl1-s8-small-heads",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "timeout": 749,
+  "max_minutes": 4,
+  "repeat": 1,
+  "live_batch": "hair-pixel-lod",
+  "tree": ".claude/worktrees/test-main",
+  "window_mode": "visible_unfocused_fg",
+  "fail_fast": false,
+  "stop_on_dump": false,
+  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_row_stable=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0,rt_hair_pixel_lod_small_keep=0.25",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches_staged/hair_pixel_lod/plans/pl1-s8-small-heads.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[watch\\]",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[hair primary\\]",
+    "\\[hair groom\\]",
+    "\\[rt\\] scene wait",
+    "VK_ERROR",
+    "\\[log\\]",
+    "\\[trace\\]"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[cfg\\] settings read",
+    "\\[trace\\] frame \\d+ written"
+  ],
+  "expect_every": [
+    {
+      "name": "strand G-buffer GPU ms in every toggle window (cost, report only)",
+      "select": "\\[hair primary\\] strand G-buffer draws GPU",
+      "match": "GPU [0-9.]+ ms/frame",
+      "windows": [
+        "pl-off-a",
+        "pl-on-q",
+        "pl-on-e",
+        "pl-off-b"
+      ],
+      "period_frames": 60,
+      "min": 1
+    },
+    {
+      "name": "small keep 1/4: the period line with a projection read and some groom at camera level 1 or 2",
+      "select": "\\[hair groom\\] pixel LOD \\(last",
+      "match": "level 0/1/2/3/4/5 \\d+/(?:[1-9]\\d*/\\d+|\\d+/[1-9]\\d*)/\\d+/\\d+/\\d+/\\d+;.*\\([1-9][0-9]* px per radian, 0 groom frames without.*small keep 0\\.250\\)",
+      "windows": [
+        "pl-on-q"
+      ],
+      "period_frames": 60,
+      "min": 1
+    },
+    {
+      "name": "small keep 1/8: the period line with some groom at camera level 1-3",
+      "select": "\\[hair groom\\] pixel LOD \\(last",
+      "match": "level 0/1/2/3/4/5 \\d+/(?:[1-9]\\d*/\\d+/\\d+|\\d+/[1-9]\\d*/\\d+|\\d+/\\d+/[1-9]\\d*)/\\d+/\\d+;.*small keep 0\\.125\\)",
+      "windows": [
+        "pl-on-e"
+      ],
+      "period_frames": 60,
+      "min": 1
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "\\[log\\] reached \\d+ MB",
+    "\\[sl\\] .*eWarnOutOfVRAM"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "\\[wheel-input\\] phase=3 notches=10\\b",
+    "\\[motion-trace\\] phase=7 label=shot-off-a repeat=0",
+    "\\[motion-trace\\] phase=10 label=shot-on-q repeat=0",
+    "\\[motion-trace\\] phase=13 label=shot-on-e repeat=0",
+    "\\[motion-trace\\] phase=16 label=shot-off-b repeat=0",
+    "\\[motion-plan\\] complete phases=17\\b",
+    "^Run ended: done"
+  ],
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 3,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 8.826125330967004,
+        "windows": 149,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.164930.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.200821.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.005103.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.015416.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.085153.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.095322.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.103633.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.125217.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.133243.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv3-s8-mesh-cache-budget.1.203607.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv3-s8-mesh-cache-budget.1.220145.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv5-s8-blas-cap-occupied.1.204140.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv5-s8-blas-cap-occupied.1.220726.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.35799999999289867,
+      "quantile": 0.95,
+      "samples": 43,
+      "maximum": 0.4969999999993888
+    },
+    "trace_capture_stall": {
+      "seconds": 2.98565,
+      "source": "hair1-dialogue.1.191025.log",
+      "quantile": 0.95,
+      "samples": 43,
+      "maximum": 3.1143,
+      "logs": 12
+    }
+  },
+  "estimated_phase_seconds": 88.1,
+  "purpose": "rt_hair_pixel_lod for heads of 35-60 px (claude/hair-pixel-lod-small) at S8's zoomed-out view: key off / on (small keep 1/4) / on (1/8, dev knob) / off in one launch, static camera; the period line (groom frames per camera level), the strand G-buffer GPU ms and one PNG trace per window. STAGED, not authorized."
+}
