@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 1460,
+  "timeout": 1493,
   "max_minutes": 5,
   "repeat": 1,
   "live_batch": "hair-mv",
@@ -45,8 +45,10 @@
     "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
     "\\[hair primary\\] frame \\d+: \\d+ grooms published; .*main G-buffer [1-9]\\d*/\\d+",
     "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\)",
-    "\\[pan\\] burst 99400 complete: \\d+ frames, \\d+ samples, transport ok",
-    "\\[pan\\] burst 99401 complete: \\d+ frames, \\d+ samples, transport ok"
+    "\\[pan\\] burst 99400 complete: 8 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99401 complete: 8 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99402 complete: 8 frames, \\d+ samples, transport ok",
+    "\\[pan\\] burst 99403 complete: 8 frames, \\d+ samples, transport ok"
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -97,7 +99,7 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "\\[wheel-input\\] phase=2 notches=10\\b",
-    "\\[motion-plan\\] complete phases=12\\b",
+    "\\[motion-plan\\] complete phases=15\\b",
     "^Run ended: done"
   ],
   "live_flow": {
@@ -138,6 +140,6 @@
       "maximum": 0.4969999999993888
     }
   },
-  "estimated_phase_seconds": 75.7,
-  "purpose": "RTX Hair strand motion vectors at S8 (user set, fg=3, static camera, idle party): the counter line at rt_hair_mv_card 0/1/2 and 16-frame RR-input bursts at 0 and 2 in one run; mv_ratio.py (camera-only share, hair/ring ratio) and temporal_burst.py (mc-diff, energy). STAGED, not authorized."
+  "estimated_phase_seconds": 106.3,
+  "purpose": "RTX Hair strand motion vectors at S8 (user set, fg=3, static camera, idle party): the counter line at rt_hair_mv_card 0/1/2 and K8 edge bursts with RR motion vectors at 0, 1, 2 and cards in one run; mv_ratio.py (camera-only share, hair/ring ratio). STAGED, not authorized."
 }

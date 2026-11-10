@@ -2,7 +2,8 @@
 
   py -3 tools/hair_groom/mv_ratio.py <pan dir> [<pan dir> ...] [--labels a,b]
 
-Per burst (every other frame, the burst.json reader of temporal_burst.py), in render pixels of `rr_mvec`:
+Per burst (every other frame, or each frame with material of a pan_edge + pan_mvec burst; the burst.json reader of
+temporal_burst.py), in render pixels of `rr_mvec` (edge bursts are half-size grids: the 6 and 60 px radii double):
   camera-only share = class-5 pixels (material alpha bits 0-2) whose motion vector is within 0.02 px of the static
                       background's median (non-hair pixels more than 60 px from any hair): the motion a strand pixel
                       gets when nothing wrote the strand's own motion;
@@ -27,7 +28,12 @@ CAMERA_ONLY_PX = 0.02
 def analyse(d: Path, step=2):
     _, F = frames(d)
     rows = []
-    for t in range(1, len(F), step):
+    # Full bursts: every other frame. Edge bursts (pan_edge=1, pan_mvec=1: half-size, material in frames 1 and 8 only):
+    # every frame with both buffers.
+    have = [t for t in range(len(F)) if "rr_mvec" in F[t] and "material" in F[t]]
+    if len(have) == len(F):
+        have = have[1::step]
+    for t in have:
         mv = load(d, F[t]["rr_mvec"])
         cls = load(d, F[t]["material"])[..., 3] & 7
         hair = cls == 5

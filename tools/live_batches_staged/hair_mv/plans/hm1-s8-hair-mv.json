@@ -80,7 +80,7 @@
     "motion_end": 8.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=0,rt_hair_mv_card=1,pan_inputs=1,pan_prepare=1,pan_capture=0,pan_delay_ms=0",
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=0,rt_hair_mv_card=1,pan_inputs=1,pan_prepare=1,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_mvec=1",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation "
@@ -172,7 +172,7 @@
     "motion_end": 14.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=1,rt_hair_mv_card=0,pan_prepare=1,pan_edge=0,pan_inputs=1,pan_capture=99400,pan_delay_ms=0"
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=1,rt_hair_mv_card=0,pan_prepare=1,pan_edge=1,pan_mvec=1,pan_post=0,pan_inputs=1,pan_capture=99400,pan_delay_ms=0"
   },
   {
     "label": "settle-mv1",
@@ -203,6 +203,21 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
+  },
+  {
+    "label": "burst-mv1",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 14.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 1.0,
+    "serial": 99401,
+    "motion_start": 14.0,
+    "motion_end": 14.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=1,rt_hair_mv_card=1,pan_prepare=1,pan_edge=1,pan_mvec=1,pan_post=0,pan_inputs=1,pan_capture=99401,pan_delay_ms=0"
   },
   {
     "label": "settle-mv2",
@@ -242,12 +257,53 @@
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 1.0,
-    "serial": 99401,
+    "serial": 99402,
     "motion_start": 14.0,
     "motion_end": 14.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=1,rt_hair_mv_card=2,pan_prepare=1,pan_edge=0,pan_inputs=1,pan_capture=99401,pan_delay_ms=0"
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=1,qa_exposure_hold=1,rt_hair_mv_card=2,pan_prepare=1,pan_edge=1,pan_mvec=1,pan_post=0,pan_inputs=1,pan_capture=99402,pan_delay_ms=0"
+  },
+  {
+    "label": "settle-cards",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 2.6,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 4,
+    "motion_end": 4,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=0,qa_exposure_hold=1,rt_hair_mv_card=0,pan_inputs=0,pan_prepare=1,pan_capture=0,pan_delay_ms=0",
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 180.0,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "burst-cards",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 14.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 1.0,
+    "serial": 99403,
+    "motion_start": 14.0,
+    "motion_end": 14.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rr_hair_strand_aa=0,rt_hair_groom_primary=0,qa_exposure_hold=1,rt_hair_mv_card=0,pan_prepare=1,pan_edge=1,pan_mvec=1,pan_post=0,pan_inputs=1,pan_capture=99403,pan_delay_ms=0"
   },
   {
     "label": "restore",
@@ -269,6 +325,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.033
   }
 ]

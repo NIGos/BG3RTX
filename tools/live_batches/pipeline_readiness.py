@@ -105,7 +105,7 @@ TABLE["rt_hair_mv_card"] = []
 # selecting pipelines. Unknown rendering keys require explicit completion evidence.
 # Alpha spill only selects the CPU capture allocator (layer/geocapture.cpp:2634);
 # its current-frame scene publication is checked by the job's scene-wait gates.
-CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_edge pan_inputs pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack replay_pack_pass rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())
+CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_mvec pan_edge pan_inputs pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack replay_pack_pass rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())
 
 # Explicit non-pipeline contracts, audited against core/gi.cpp refresh()/Push
 # and common/shader_variant.h. A cfg acknowledgement is sufficient: these

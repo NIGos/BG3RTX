@@ -5,9 +5,9 @@
 User report: strand hair at isometric distance trails / blurs when characters or the camera move. The hs1 static bursts
 show 73-86% of strand hair pixels with camera-only motion vectors (cards 5-7%). One Water Queens House (S8) launch with
 the hs1 set plus rt_hair_mv_card=1 at startup (specialization 1049 in the velocity variant), the hs1 lowered view, then
-a static camera with the party idling: the counter line in windows at rt_hair_mv_card 0, 1, 2 and two 16-frame
-RR-input bursts, strands at rt_hair_mv_card=0 and =2 (live header flags). Analysis: tools/hair_groom/mv_ratio.py and
-tools/hair_groom/temporal_burst.py. predicted.json precedes the job. The job lives outside every watched
+a static camera with the party idling: the counter line in windows at rt_hair_mv_card 0, 1, 2 and four K8 edge
+bursts with RR's motion vectors (pan_mvec, about 0.1 GB each): strands at rt_hair_mv_card 0, 1, 2 and cards.
+Analysis: tools/hair_groom/mv_ratio.py. predicted.json precedes the job. The job lives outside every watched
 captures/queue/pending inbox.
 """
 import json
@@ -34,7 +34,7 @@ SET = ("preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_
        "rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,"
        "pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,"
        "rt_capture_wide_split=1,rt_mesh_budget_own=0,rt_hair_mv_card=1," + HAIR)
-SERIALS = {"burst-mv0": 99400, "burst-mv2": 99401}
+SERIALS = {"burst-mv0": 99400, "burst-mv1": 99401, "burst-mv2": 99402, "burst-cards": 99403}
 
 
 def phase(label, seconds, aa=0, strands=1, hold=1, wheel=None, inputs=0, serial=0, capture_at=0, prepare=0, mv=0):
@@ -44,9 +44,13 @@ def phase(label, seconds, aa=0, strands=1, hold=1, wheel=None, inputs=0, serial=
          "set": f"rr_hair_strand_aa={aa},rt_hair_groom_primary={strands},qa_exposure_hold={hold},rt_hair_mv_card={mv}"}
     if serial:
         # Full burst with the RR inputs (rr_color, rr_mvec, material every frame), as he1's (hair_edge/make_job.py).
-        p["set"] += f",pan_prepare=1,pan_edge=0,pan_inputs=1,pan_capture={serial},pan_delay_ms=0"
+        # K8 edge burst with RR's motion vectors (pan_mvec, 5x): half-size depth, final and rr_mvec in 8 frames, material
+        # and albedo in frames 1 and 8, about 0.1 GB per burst (a full RR-input burst is 4.9 GB).
+        p["set"] += f",pan_prepare=1,pan_edge=1,pan_mvec=1,pan_post=0,pan_inputs=1,pan_capture={serial},pan_delay_ms=0"
     else:
         p["set"] += f",pan_inputs={inputs},pan_prepare={prepare},pan_capture=0,pan_delay_ms=0"
+        if inputs:   # the burst modes before the measured windows (live_flow warm-up lint); no capture without a serial
+            p["set"] += ",pan_edge=1,pan_mvec=1"
     if wheel:
         p["wheel"] = wheel
     return p
@@ -69,8 +73,11 @@ def make_plan():
         phase("settle-mv0", 4, prepare=1),
         phase("burst-mv0", 14, serial=SERIALS["burst-mv0"], capture_at=1.0),
         phase("settle-mv1", 4, prepare=1, mv=1),
+        phase("burst-mv1", 14, serial=SERIALS["burst-mv1"], capture_at=1.0, mv=1),
         phase("settle-mv2", 4, prepare=1, mv=2),
         phase("burst-mv2", 14, serial=SERIALS["burst-mv2"], capture_at=1.0, mv=2),
+        phase("settle-cards", 4, strands=0, prepare=1),
+        phase("burst-cards", 14, strands=0, serial=SERIALS["burst-cards"], capture_at=1.0),
         phase("restore", 2, hold=0),
     ]
 
@@ -111,7 +118,7 @@ def make_job(plan):
             # strands drawn in the main G-buffer (a 300-frame period inside the strand windows), then cards only
             "\\[hair primary\\] frame \\d+: \\d+ grooms published; .*main G-buffer [1-9]\\d*/\\d+",
             "\\[hair primary\\] frame \\d+: RTX Hair off \\(live\\)",
-        ] + [rf"\[pan\] burst {s} complete: \d+ frames, \d+ samples, transport ok" for s in SERIALS.values()],
+        ] + [rf"\[pan\] burst {s} complete: 8 frames, \d+ samples, transport ok" for s in SERIALS.values()],
         "forbid": [
             "\\[crash\\] exception 0x", "VK_ERROR_DEVICE_LOST", "\\[hot\\] core (rejected|faulted)",
             "FAILED, keeping previous", "compile call failed", "\\[log\\] reached \\d+ MB", "\\[sl\\] .*eWarnOutOfVRAM",
@@ -134,8 +141,8 @@ def make_job(plan):
         "live_flow": {"expected_fps": 30, "settings_latency_s": 1, "trace_stall_s": 3},
         "estimated_phase_seconds": sum(p["seconds"] for p in plan),
         "purpose": "RTX Hair strand motion vectors at S8 (user set, fg=3, static camera, idle party): the counter "
-                   "line at rt_hair_mv_card 0/1/2 and 16-frame RR-input bursts at 0 and 2 in one run; mv_ratio.py "
-                   "(camera-only share, hair/ring ratio) and temporal_burst.py (mc-diff, energy). STAGED, not authorized.",
+                   "line at rt_hair_mv_card 0/1/2 and K8 edge bursts with RR motion vectors at 0, 1, 2 and cards in one run; "
+                   "mv_ratio.py (camera-only share, hair/ring ratio). STAGED, not authorized.",
     }
 
 

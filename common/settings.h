@@ -826,6 +826,7 @@ inline constexpr KV kDefaults[] = {
     {"pan_water", "0"},
     {"pan_edge", "0"},
     {"pan_post", "0"},
+    {"pan_mvec", "0"},
     {"fg_snap_full", "0"},
     {"fg_snap", "0"},
     {"fg_snap_any", "0"},
