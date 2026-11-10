@@ -82198,6 +82198,10 @@
     "keyed groom rows [1-9]\\d*, with previous points \\d+": [
       0,
       null
+    ],
+    "\\[pan\\] burst 99500 complete: 8 frames, \\d+ samples, transport ok": [
+      0,
+      null
     ]
   }
 }
