@@ -163,6 +163,8 @@ uint64_t g_cam_gpu_pub = 0;   // publish frame + 1 of the last GPU camera copy (
 // largest distance between the two.
 // gpu: publishes whose header cameras the build wrote on the GPU (rt_hair_header_cam_gpu).
 struct CamCheck { uint64_t checked = 0, differ = 0, gpu = 0; double max_m = 0.0; } g_cam_check;
+// 5y (rt_hair_mv_card counter line): publishes with kFlagCamera, those without kFlagPrevCamera and why.
+struct PrevCamStats { uint64_t pubs = 0, gap = 0, gpu = 0; } g_prev_cam;
 constexpr int kStaged = 3;
 StagedHeader g_staged[kStaged];
 int g_staged_next = 0;
@@ -800,6 +802,12 @@ void coverage_log(uint64_t now) {
 
 }  // namespace
 
+void hair_primary_prev_camera_stats(uint64_t* publishes, uint64_t* no_prev_gap, uint64_t* no_prev_gpu) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  *publishes = g_prev_cam.pubs; *no_prev_gap = g_prev_cam.gap; *no_prev_gpu = g_prev_cam.gpu;
+  g_prev_cam = {};
+}
+
 void hair_primary_stats_reset() {
   std::lock_guard<std::mutex> lock(g_mu);
   g_stats_start = frame_index();
@@ -1055,12 +1063,18 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     // 5u rt_hair_groom_nearest: the candidate-filtered nearest-strand trace, compiled in when the key is on at pipeline
     // creation (header flag kFlagNearest then switches it live; the velocity FS has no constant 1047).
     const uint32_t nearest = cfg_int("rt_hair_groom_nearest", 0) != 0 ? 1u : 0u;
-    const uint32_t spec_words[5] = {uint32_t(header_addr), uint32_t(header_addr >> 32), coverage, shading_space, nearest};
-    const VkSpecializationMapEntry spec_map[5] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4},
-                                                  {shader_variant::kSpecIdHairGroomCoverage, 8, 4},
-                                                  {shader_variant::kSpecIdHairShadingSpace, 12, 4},
-                                                  {shader_variant::kSpecIdHairGroomNearest, 16, 4}};
-    const VkSpecializationInfo spec{nearest ? 5u : 4u, spec_map, sizeof spec_words, spec_words};
+    // 5y rt_hair_mv_card: the card-motion path of the velocity variant, compiled in when the key is on at pipeline
+    // creation (header flags kFlagMvCardFallback / kFlagMvCardAll then switch it live); off: the specialization as before.
+    const uint32_t mv_card = pass == Pass::Velocity && cfg_int("rt_hair_mv_card", 0) != 0 ? 1u : 0u;
+    const uint32_t spec_words[6] = {uint32_t(header_addr), uint32_t(header_addr >> 32), coverage, shading_space, nearest, mv_card};
+    VkSpecializationMapEntry spec_map[6] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4},
+                                            {shader_variant::kSpecIdHairGroomCoverage, 8, 4},
+                                            {shader_variant::kSpecIdHairShadingSpace, 12, 4},
+                                            {shader_variant::kSpecIdHairGroomNearest, 16, 4},
+                                            {shader_variant::kSpecIdHairMvCard, 20, 4}};
+    uint32_t spec_n = nearest ? 5u : 4u;
+    if (mv_card) spec_map[spec_n++] = {shader_variant::kSpecIdHairMvCard, 20, 4};
+    const VkSpecializationInfo spec{spec_n, spec_map, sizeof spec_words, spec_words};
     VkPipelineDepthStencilStateCreateInfo dsv = *ds;
     if (pass != Pass::Prepass) {
       Bg3ShaderBlob blob{};
@@ -1905,6 +1919,11 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   if (cfg_int("rt_hair_macro_normal", 0) != 0) h.flags |= hair_primary::kFlagMacroNormal;   // 5g, live once compiled in
   if (cfg_int("rt_hair_tangent_world", 0) != 0) h.flags |= hair_primary::kFlagTangentWorld;
+  {   // 5y rt_hair_mv_card (live: 1 fallback only, 2 every strand pixel; the velocity variant needs specialization 1049)
+    const int mv_card = cfg_int("rt_hair_mv_card", 0);
+    if (mv_card == 1) h.flags |= hair_primary::kFlagMvCardFallback;
+    if (mv_card >= 2) h.flags |= hair_primary::kFlagMvCardAll;
+  }
   h.width = width;
   h.height = height;
   h.tlas = tlas;
@@ -1927,6 +1946,10 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (prev_cpu && (!st.cam_gpu || prev_gpu)) {
     std::memcpy(st.cam + 4, g_last_pub_camera, sizeof g_last_pub_camera);
     h.flags |= hair_primary::kFlagPrevCamera;
+  }
+  if (h.flags & hair_primary::kFlagCamera) {   // 5y counter line
+    ++g_prev_cam.pubs;
+    if (!(h.flags & hair_primary::kFlagPrevCamera)) ++(prev_cpu ? g_prev_cam.gpu : g_prev_cam.gap);
   }
   g_last_pub_camera_frame = (h.flags & hair_primary::kFlagCamera) ? pub : 0;
   std::memcpy(g_last_pub_camera, st.cam, sizeof g_last_pub_camera);

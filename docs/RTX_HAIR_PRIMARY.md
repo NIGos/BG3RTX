@@ -1595,6 +1595,45 @@ G-buffer frames 2089, 2090, 2093-2095 (180301, down to 0 of 5715 strand px) and 
   A trip with a step under 0.01 m puts the arrival back as the suspect. Next after that: the rejecting stage (owner,
   card band or tips) under motion, then the fix there.
 
+## 5y. Strand motion vectors (offline 2026-11-10, branch claude/hair-mv: key rt_hair_mv_card, off)
+User: strand hair at isometric distance trails / blurs when characters or the camera move (as before).
+- Measured on the hs1-s8-static-hair bursts (static camera, idle party; `tools/hair_groom/mv_ratio.py`): 73-86% of
+  class-5 pixels carry the camera-only motion vector (within 0.02 px of the static background) with strands, 5-7% with
+  cards; hair / 6 px ring median |mv| 0.05-0.23 with strands, 0.52-1.08 with cards. Per head: strands 0-12% of the
+  pixels moved while the head next to them moved 0.1-0.7 px; cards 86-100%. RR fetches their history from where the
+  hair was (a trail).
+- The strand path never wrote these pixels. Its own result is never 1e-4 px: the motion of the axis point at the
+  recorded parameter is off the pixel centre by up to the strand's radius even with no previous points (camera-only
+  fallback) or previous = current points, while 95% of the strand pixels read 1e-4-3e-4 px, the game's full-screen camera
+  pass (background 1e-4). So the previous-points fallback (row.w 0) is not the cause; the velocity fragment
+  discards or fails its test.
+- Every way a strand pixel keeps the camera value (`shaders/rt/hair_primary_velocity.hlsl`): header tag 0; no grooms;
+  no build camera (hp_rebase); pixel record not sealed with the header tag (e.w) or no strand; groom row k out of range;
+  accepted marker (word +4) not this tag or its slot not the key-map slot of k; hp_segment out of bounds; the ownership
+  band (hp_on_card, 10 mm + half a segment: generous); tips (flag off in the user set); the clone's GREATER_OR_EQUAL
+  test of the exported strand depth against the stored one (equal by construction on D32S8, unless the depth image
+  changed between the G-buffer and 6b); the velocity draw not swapped (only FS b70cadc5 is replaced; the stats count
+  650-720 of 780 draws, and an unswapped card fails its native EQUAL test on the strand depth). The velocity reads the
+  G-buffer's record (no re-trace, no jitter or 1047 difference) and runs on the same card triangles, so coverage and
+  sub-pixel misses cannot explain whole heads at 0-12%. Which check it is cannot be read off the bursts.
+- Built (off by default): `rt_hair_mv_card` (dev key, pinned 0 in data/release.ini). Specialization 1049
+  (`kSpecIdHairMvCard`) compiled into the velocity variant when the key is non-zero at pipeline creation; header flags
+  switch it live: 1 (kFlagMvCardFallback) the card's own skinned motion (b70cadc5 from location 1) where the row has no
+  valid previous points; 2 (kFlagMvCardAll) the card's motion for every fragment of a swapped draw before any strand check,
+  with this frame's sealed strand depth (else the card's). Strand points are barycentric on their card triangles.
+  Mode 2 bypasses every discard; if it still leaves camera-only pixels, the depth test or the swap is the cause.
+- Counter line (detailed logging): `[hair groom] strand motion (last N frames): keyed groom rows R, with previous points
+  P, without W (first update, two updates in one build frame, skipped build frames); publishes, without the previous
+  camera (previous publish not one frame back, GPU slot); rt_hair_mv_card` (`hair_primary::prev_row_state`, unit test in
+  hair_groom_asset_test).
+- `pan_mvec=1` (with pan_edge=1, pan_inputs=1): K8 edge bursts also keep RR's motion vectors (half-size, every frame;
+  common/pan_epoch.h EdgePanSamples, pan_epoch_test): about 0.1 GB per burst instead of 4.9 GB.
+- Key off: 225/227 requests byte-identical to main b29a9d3b; rt/hair_primary_velocity.hlsl (file and manifest entry)
+  equivalent with 1049 frozen to 0 (tools/release_shader_equivalence.py); variants delta 0; spirv-val passes.
+- Live (staged, not queued): tools/live_batches_staged/hair_mv, hm1-s8-hair-mv: the counter line at 0/1/2 and four K8
+  edge bursts (strands at 0, 1, 2; cards) in one S8 run, about 0.4 GB; predictions in predicted.json.
+- User check (once qualified): S8 or the camp with the party walking; the hair should move with the heads instead of
+  leaving a smear behind them. Not in the launcher yet.
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

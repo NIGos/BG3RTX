@@ -574,6 +574,7 @@ bool pan_finished = true, pan_invalid = false;
 bool pan_water_mode=false, pan_water_debug=false;
 bool pan_edge_mode=false;
 bool pan_post_mode=false;
+bool pan_mvec_mode=false;   // pan_mvec: edge bursts also keep RR's motion vectors (needs pan_inputs=1)
 int pan_delay_serial=0;
 uint64_t pan_request_ms=0;
 std::string pan_dir;
@@ -594,7 +595,8 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   }
   if (edge_mode && std::strcmp(name,"depth")!=0 && std::strcmp(name,"final")!=0 &&
       std::strcmp(name,"material")!=0 && std::strcmp(name,"albedo")!=0 &&
-      !(cfg_int("pan_post",0) && (std::strcmp(name,"rr_post_ac")==0 || std::strcmp(name,"rr_post_eb")==0))) return false;
+      !(cfg_int("pan_post",0) && (std::strcmp(name,"rr_post_ac")==0 || std::strcmp(name,"rr_post_eb")==0)) &&
+      !(cfg_int("pan_mvec",0) && std::strcmp(name,"rr_mvec")==0)) return false;
   if (water_mode && std::strcmp(name,"depth")!=0 && std::strncmp(name,"water_",6)!=0) return false;
   if (water_mode && uint64_t(r->width)*r->height > uint64_t(2560)*1440) {
     if (!pan_invalid) log("[pan] water capture REFUSED: render exceeds 2560x1440 pixel budget");
@@ -609,6 +611,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
       pan_water_mode=water_mode;
       pan_edge_mode=edge_mode;
       pan_post_mode=edge_mode && cfg_int("pan_post",0);
+      pan_mvec_mode=edge_mode && cfg_int("pan_mvec",0);
       pan_water_debug=water_mode && cfg_int("rt_debug",0)==25;
       pan_frames = 0;
       // Native tonemap (even without pan_inputs) can precede depth on another
@@ -640,7 +643,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   const bool is_final = std::strcmp(name, "final") == 0 || std::strncmp(name, "rr_", 3) == 0 ||
                         std::strncmp(name, "fg_", 3) == 0 || std::strncmp(name,"water_",6)==0;
   if (pan_finished || !pan_frames || now < pan_first || (!is_final && now > pan_last)) return false;
-  if (edge_mode && (now<=pan_first || !EdgePanSamples::wanted(name,now-pan_first,pan_post_mode))) return false;
+  if (edge_mode && (now<=pan_first || !EdgePanSamples::wanted(name,now-pan_first,pan_post_mode,pan_mvec_mode))) return false;
   PanSample p;
   p.name = name;
   p.image = r->image;
@@ -777,7 +780,7 @@ void pan_on_present(VkQueue queue) {
   for(const auto& p:pan_samples)completeness.add(p.recorded,p.name,p.recording);
   WaterPanSamples water_complete{pan_first,pan_target-1,pan_water_debug};
   for(const auto& p:pan_samples)water_complete.add(p.recorded,p.name,p.recording);
-  EdgePanSamples edge_complete{pan_first,pan_post_mode};
+  EdgePanSamples edge_complete{pan_first,pan_post_mode,pan_mvec_mode};
   for(const auto& p:pan_samples)edge_complete.add(p.recorded,p.name,p.recording);
   if(pan_edge_mode ? !edge_complete.complete() : pan_water_mode ? !water_complete.complete() : !completeness.complete())pan_invalid=true;
   make_dirs(pan_dir);

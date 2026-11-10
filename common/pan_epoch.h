@@ -67,20 +67,21 @@ struct WaterPanSamples {
 struct EdgePanSamples {
   uint64_t warmup;
   bool post = false;
+  bool mvec = false;   // pan_mvec (docs/RTX_HAIR_PRIMARY.md 5y): RR's motion vectors in every frame (bit 64)
   std::array<uint8_t,8> masks{};
   std::array<uint64_t,8> lighting_recordings{};
   bool invalid=false;
   bool retained(uint64_t f) const { return f>warmup && f-warmup<=8; }
-  static bool wanted(std::string_view name, uint64_t index, bool post = false) {
-    return (post && (name=="rr_post_ac" || name=="rr_post_eb")) || name=="depth" || name=="final" ||
+  static bool wanted(std::string_view name, uint64_t index, bool post = false, bool mvec = false) {
+    return (post && (name=="rr_post_ac" || name=="rr_post_eb")) || (mvec && name=="rr_mvec") || name=="depth" || name=="final" ||
       ((index==1 || index==8) && (name=="material" || name=="albedo"));
   }
   void add(uint64_t f,std::string_view name,uint64_t recording) {
     if(!retained(f))return;
-    uint8_t bit=name=="depth"?1:name=="final"?2:name=="material"?4:name=="albedo"?8:post && name=="rr_post_ac"?16:post && name=="rr_post_eb"?32:0;
+    uint8_t bit=name=="depth"?1:name=="final"?2:name=="material"?4:name=="albedo"?8:post && name=="rr_post_ac"?16:post && name=="rr_post_eb"?32:mvec && name=="rr_mvec"?64:0;
     auto& mask=masks[f-warmup-1];
     if(!bit || !recording || (mask&bit))invalid=true;
-    if(bit!=2 && bit!=16 && bit!=32) {
+    if(bit!=2 && bit!=16 && bit!=32 && bit!=64) {   // final, post and RR inputs: other command buffers
       auto& lighting=lighting_recordings[f-warmup-1];
       if(lighting && lighting!=recording)invalid=true;
       lighting=recording;
@@ -89,7 +90,7 @@ struct EdgePanSamples {
   }
   bool complete() const {
     if(invalid)return false;
-    for(size_t i=0;i<masks.size();++i)if(masks[i]!=((i==0 || i==7 ? 15 : 3) | (post ? 48 : 0)))return false;
+    for(size_t i=0;i<masks.size();++i)if(masks[i]!=((i==0 || i==7 ? 15 : 3) | (post ? 48 : 0) | (mvec ? 64 : 0)))return false;
     return true;
   }
 };

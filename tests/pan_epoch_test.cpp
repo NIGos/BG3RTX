@@ -56,6 +56,15 @@ int main() {
   if(!check(!missing_post.complete()))return 1;
   auto duplicate_post=post;duplicate_post.add(102,"rr_post_ac",102);
   if(!check(!duplicate_post.complete()))return 1;
+  // pan_mvec: RR's motion vectors every frame, recorded in the RR command buffer (no lighting-recording check).
+  EdgePanSamples mv{100,false,true};
+  for(uint64_t f=101;f<=108;++f)for(auto name:{"depth","final","material","albedo","rr_mvec"})
+    if(EdgePanSamples::wanted(name,f-100,false,true))mv.add(f,name,name==std::string_view("rr_mvec")?f+2000:f);
+  if(!check(mv.complete() && !EdgePanSamples::wanted("rr_mvec",3) && EdgePanSamples::wanted("rr_mvec",3,false,true)))return 1;
+  auto missing_mv=mv;missing_mv.masks[5]&=~64;
+  if(!check(!missing_mv.complete()))return 1;
+  auto edge_without_mv=edge;edge_without_mv.mvec=true;
+  if(!check(!edge_without_mv.complete()))return 1;
   std::puts("pan epoch and explicit warmup/K16 completeness checks passed");
   return 0;
 }

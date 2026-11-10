@@ -894,6 +894,9 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
                                  const VkPipeline* out);
 void hair_primary_forget_pipeline(VkPipeline p);
 bool hair_primary_wanted();
+// 5y (rt_hair_mv_card counter line): publishes since the last call, and those without the previous publish's camera
+// (previous publish not one frame back; its GPU copy missing). Resets the counts.
+void hair_primary_prev_camera_stats(uint64_t* publishes, uint64_t* no_prev_gap, uint64_t* no_prev_gpu);
 // rt_hair_debug_late_arrival (dev only, 5u): true while the groom of a hair draw with this index count is held back after
 // the last live strands switch-on (logs the start and the release of each hold).
 bool hair_primary_late_hold(uint32_t index_count);

@@ -1,0 +1,26 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch with the hs1 set plus rt_hair_mv_card=1 at startup (specialization 1049 compiled into the velocity variant), the hs1 lowered view, then a static camera with the party idling (hs1 bursts: hair-adjacent pixels move 0.1-0.7 px/frame). Four K8 edge bursts with RR's motion vectors (pan_edge=1, pan_mvec=1: half-size depth, final, rr_mvec every frame, material frames 1 and 8): strands at rt_hair_mv_card 0, 1, 2 and cards. Analysis: py -3 tools/hair_groom/mv_ratio.py <mv0> <mv1> <mv2> <cards> --labels mv0,mv1,mv2,cards.",
+  "observable": "Which path leaves strand pixels with the camera-only motion: the share of class-5 pixels within 0.02 px of the static background motion and the hair / ring median |mv| ratio, per key value, against the cards of the same run.",
+  "mechanism (counter line, every window)": {
+    "line": "[hair groom] strand motion (last N frames): keyed groom rows R, with previous points P, without W (first update, two updates in one build frame, skipped build frames); publishes, without the previous camera ...",
+    "predicted": "W / R under 5% and publishes without the previous camera 0 at the idle static camera (hl1/hs1: one publish per frame, 'recovered 0'); then row.w 0 is NOT the main cause and mv_card=1 changes nothing measurable",
+    "decides_rows_if": "W / R >= 50% in the static windows: the previous points are missing (M1 gate), mv_card=1 is the fix; report the dominant reason"
+  },
+  "motion vectors": {
+    "predicted_mv0": "camera-only share 0.73-0.86, ratio 0.05-0.25 (hs1 strand bursts)",
+    "predicted_mv1": "as mv0 within 0.05 (the counter line shows rows without previous points under 5%: the M1 fallback is not the cause)",
+    "predicted_mv2": "camera-only share <= 0.15, ratio 0.5-1.1, as the cards (hs1 cards: 0.055-0.068, 0.52-1.08): mode 2 writes before every strand check",
+    "decides_discard_if": "mv2 near the cards while mv1 stays near mv0: a check of the strand path (seal/tag, accepted marker, ownership, segment) discards; mode 2 is the fix, the discard counter names the check",
+    "decides_depth_if": "mv2 also stays camera-only: the velocity fragment never passes (depth test against the stored strand depth, or the draw is not the swapped one); next: the velocity pipeline's depth/stencil state line and a depth readback at strand pixels"
+  },
+  "invalid_if": [
+    "any burst without '[pan] burst <serial> complete: 8 frames, ... transport ok'",
+    "no '[hair groom] strand motion' line in a settle window",
+    "hair region < 500 half-size px in a burst",
+    "background median |mv| > 0.05 px (the camera moved)",
+    "ring median |mv| < 0.05 px in every burst (the party did not move: no signal; rerun later in the session, not a new tool)"
+  ],
+  "cost": "report only: '[hair primary] strand G-buffer draws GPU' ms in the mv0 and mv2 windows (the card path skips two point loads: equal or lower)",
+  "disk": "4 K8 edge bursts x ~0.1 GB = ~0.4 GB; deleted after mv_ratio.py, summaries kept",
+  "energy": "final mean over the class-5 pixels of frames 1 and 8: mv2 within 1% of mv0 (reconstruction rule); the mean over 8 frames of the whole hair box too"
+}
