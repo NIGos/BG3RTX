@@ -210,7 +210,8 @@ uint64_t g_watchdog_spared_mark = 0;   // rt_hair_watchdog_one_key: g_watchdog.s
 // count runs the union request and the gate and both watchdogs judge every accepted strand pixel instead of only those
 // inside the card markers. The pipeline of each request ([0] default, [1] union) and its shader generation.
 hair_primary::FootprintStats g_footprint;
-hair_primary::LateArrival g_late;   // rt_hair_debug_late_arrival (dev only)
+hair_primary::LateArrival g_late;
+int g_nearest_compiled = -1, g_nearest_flag_logged = -1;   // 5u: specialization 1047 at the last strand pipeline creation   // rt_hair_debug_late_arrival (dev only)
 bool g_cfg_union = false;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
 float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
@@ -1076,8 +1077,10 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       // Velocity: the strand depth the G-buffer wrote passes, nearer geometry does not; no writes.
       char t[240];
       std::snprintf(t, sizeof t, "[hair primary] %s hair pipeline: native depth test %u write %u compare %d -> strands test 1 "
-                    "write %u compare GREATER_OR_EQUAL", pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable,
-                    ds->depthWriteEnable, int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer));
+                    "write %u compare GREATER_OR_EQUAL; nearest-strand trace compiled in (specialization 1047) %u",
+                    pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable, ds->depthWriteEnable,
+                    int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer), pass == Pass::Gbuffer ? nearest : 0u);
+      if (pass == Pass::Gbuffer) g_nearest_compiled = int(nearest);
       notes.push_back(std::string("pipe:") + t);
       dsv.depthTestEnable = VK_TRUE;
       dsv.depthWriteEnable = pass == Pass::Gbuffer ? VK_TRUE : VK_FALSE;
@@ -1867,6 +1870,15 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
   if (cfg_int("rt_hair_groom_coverage", 0) != 0) h.flags |= hair_primary::kFlagCoverage;   // M3.2, live off-switch
   if (cfg_int("rt_hair_groom_nearest", 0) != 0) h.flags |= hair_primary::kFlagNearest;     // 5u, live off-switch
+  {   // 5u: which trace the strand G-buffer runs, logged when it changes (the header flag needs specialization 1047)
+    const int now_flag = (h.flags & hair_primary::kFlagNearest) != 0 ? 1 : 0;
+    if (now_flag != g_nearest_flag_logged) {
+      g_nearest_flag_logged = now_flag;
+      log("[hair primary] nearest-strand trace: header flag %d at publish frame %llu; specialization 1047 in the strand "
+          "G-buffer pipelines %d (-1: none created yet): the %s trace runs", now_flag, (unsigned long long)frame_index(),
+          g_nearest_compiled, now_flag && g_nearest_compiled == 1 ? "nearest-strand" : "restart-loop");
+    }
+  }
   if (cfg_int("rt_hair_macro_normal", 0) != 0) h.flags |= hair_primary::kFlagMacroNormal;   // 5g, live once compiled in
   if (cfg_int("rt_hair_tangent_world", 0) != 0) h.flags |= hair_primary::kFlagTangentWorld;
   h.width = width;
