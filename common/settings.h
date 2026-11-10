@@ -944,6 +944,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_pixel_lod_small_keep", "0.25"},
     {"rt_hair_primary_frame_tag", "0"},
     {"rt_hair_header_cam_gpu", "0"},
+    {"rt_hair_stale_publish", "0"},
     {"rt_hair_mv_card", "0"},
     {"rt_hair_watchdog_draw", "0"},
     {"rt_hair_shared_key", "0"},

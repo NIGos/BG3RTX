@@ -1492,4 +1492,41 @@ struct CameraSteps {
   }
 };
 
+// 6a rt_hair_stale_publish (docs/RTX_HAIR_PRIMARY.md 6a). hl1 210357: all 5 frame watchdog trips were G-buffer frames
+// that applied the previous build frame's publish (k = 1) while the camera moved (header camera one step, 0.34-0.70 m,
+// from the frame's): the newest publish ordered before the G-buffer on the queue is all the GPU holds (the builds rewrite
+// the points and BLASes in place), and its rebased trace (hp_rebase) lost the strands in exactly those frames. The
+// submit-time check: the distance between the applied publish's build camera and the G-buffer's own camera (its camera
+// UBO +208 read at the submit, else the build camera noted for its frame; -1 unknown). Over kStaleCameraTol the frame
+// draws its cards (card mode of every recorded slot: card G-buffer and card depth, no coverage evidence, no watchdog
+// judgement) instead of tracing a publish of another camera. The tolerance is the card band's fixed term
+// (hair_primary_max_radius, hp_on_card): a strand displaced by less stays inside its card's band.
+constexpr float kStaleCameraTol = 0.01f;
+enum class Stale : uint8_t { Own, SameCamera, Moved, Unknown, Count };
+inline const char* stale_name(Stale s) {
+  static const char* const names[] = {"own build frame, same camera", "older publish, same camera",
+                                      "camera moved since the publish", "camera not known"};
+  return s < Stale::Count ? names[size_t(s)] : "?";
+}
+// pub_frame: the applied publish's build frame (0: none); gb_frame: the G-buffer frame; offset_m: the camera distance.
+inline Stale stale_publish(uint64_t pub_frame, uint64_t gb_frame, float offset_m) {
+  if (!pub_frame) return Stale::Unknown;
+  if (offset_m < 0.0f || !std::isfinite(offset_m)) return pub_frame == gb_frame ? Stale::Own : Stale::Unknown;
+  if (offset_m > kStaleCameraTol) return Stale::Moved;
+  return pub_frame == gb_frame ? Stale::Own : Stale::SameCamera;
+}
+// The card-mode slots the check adds: every recorded slot when the key is on and the camera moved or is unknown for an
+// older publish (a frame of its own publish with an unknown camera keeps the old behaviour: hp_rebase gives org 0).
+inline uint32_t stale_card_slots(bool enabled, Stale s, const DrawSlots& recorded) {
+  if (!enabled || (s != Stale::Moved && s != Stale::Unknown)) return 0u;
+  uint32_t m = 0;
+  for (uint32_t i = 0; i < kDrawSlots; ++i) if (recorded.keys[i]) m |= 1u << i;
+  return m;
+}
+inline float camera_distance(const float* a, const float* b) {
+  double d2 = 0;
+  for (int i = 0; i < 3; ++i) d2 += (double(a[i]) - b[i]) * (double(a[i]) - b[i]);
+  return std::isfinite(d2) ? float(std::sqrt(d2)) : -1.0f;
+}
+
 }  // namespace hair_primary
