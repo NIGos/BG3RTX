@@ -2987,8 +2987,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       s.hair_push=hp;hair_bounds_work.push_back({hp,false});
     }
     dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp, omm_want, omm_entry ? omm_entry->tris : 0u, stride});
+    // rt_hair_debug_late_arrival (dev only, docs/RTX_HAIR_PRIMARY.md 5u): after a live strands switch-on this draw's groom
+    // is held back (no groom, no UV join, not counted as unsettled: as if the character were not in the scene yet).
+    const bool groom_hair = hair && !hair_primary_late_hold(fd.groom_indices);
     // rt_hair_groom: the matched hair draw's groom (its card instance stays for primary queries).
-    GroomAsset* groom_src = hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
+    GroomAsset* groom_src = groom_hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
                                 ? groom_asset(fd.groom_id, fd.groom_indices) : nullptr;
     if (groom_src && fd.prims * 3u != groom_src->indices) groom_src = nullptr;   // a partial draw of the mesh
     // The point update reads this frame's soup at the draw's offset: only a draw captured into it this frame, inside
@@ -3005,7 +3008,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       groom_keep = true;
       ++groom_unsettled;   // rt_hair_warmup: its cards this frame
     }
-    if (hair && groom_ready && !fd.groom_id && fd.groom_miss == hair_groom::JoinMiss::NotHostMapped &&
+    if (groom_hair && groom_ready && !fd.groom_id && fd.groom_miss == hair_groom::JoinMiss::NotHostMapped &&
         !g_groom_uv.count(fd.groom_identity) && fd.captured && !fd.held && fd.groom_indices == fd.prims * 3u &&
         fd.soup_off + VkDeviceSize(fd.groom_indices) * stride <= cap.xfb_size) {
       // UV join: copy the 32 sampled corners' UVs (soup +16, untouched by the conversion) in this build.
@@ -3043,7 +3046,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         hair_capture_staged = hair_capture::want(g_dd, hd, now);
       }
     }
-    if (hair && groom_ready && !fd.groom_id) {
+    if (groom_hair && groom_ready && !fd.groom_id) {
       // rt_hair_warmup: a join not decided yet (UV readback in flight, or not issued: no free job, draw not captured this
       // frame). A partial draw of the mesh never joins (final, like count unknown or no file).
       if (fd.groom_miss == hair_groom::JoinMiss::UvPending ||

@@ -1,0 +1,14 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch, release Ultra with fg=3 and the RTX Hair bundle (rt_hair_groom_nearest=1 at startup, so specialization 1047 is compiled in), static camera lowered 10 notches. rt_hair_debug_late_arrival=45252 holds the groom of the 45252-index hair draws (groom 16fa158c, LOD 0 889,639 points: the first upload of the 125217 transient) for kLateArrivalFrames = 301 frames after every live strands switch-on, so it arrives after the warm-up ended (133243: 93 frames) while the other keys swap. Two cycles in the one launch: A with rt_hair_groom_nearest=0 live (header flag 64 off: the restart loop), B with it on.",
+  "observable": "Does a groom that arrives while the other keys swap leave holes with the restart loop (125217 reproduced), and none with the nearest-strand trace?",
+  "arrival-a (nearest off, restart loop)": {
+    "predicted": "release line 'late arrival ... released at frame F, 301 frames after the switch-on' inside the window; in the period(s) after F: frame watchdog trips 1-7 or dropouts 10-60 (125217: 6 trips, 55 dropouts, 6 frames under a tenth), passed-over (mask-hole) pixels > 30000",
+    "gate": "event gate: at least one switches line with frame watchdog trips >= 1 or one coverage-by-footprint line with dropouts >= 1 in arrival-a",
+    "if_not": "the test does not reproduce 125217 (45252 alone is not dense enough in front of the others, or its rows were not keyed before its probe measured it): report the period lines; the fix stays proven by the GPU case only"
+  },
+  "arrival-b (nearest on)": {
+    "predicted": "release line inside the window; every complete switches line: frame watchdog trips 0, key watchdog trips 0; every coverage-by-footprint line: dropouts 0-2; passed-over pixels similar to A (diagnostic)",
+    "gate": "expect_every on both period lines in arrival-b"
+  },
+  "cost": "strand G-buffer GPU line (report only): A and B within the 133243 range 0.118-0.320 ms/frame"
+}
