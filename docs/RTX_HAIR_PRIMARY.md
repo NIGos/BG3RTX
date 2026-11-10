@@ -1489,7 +1489,10 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
     discarded upload, grooms off) and when the key goes off. The LOD's segment starts and radii stay on the host while
     the key is on (8 B per point; decoded again once if the key went on after the upload).
   - Pick per slot: px per radian = render height / 2 x |P[1][1]| of the build's camera UBO (host mapping; 0: level 0),
-    head px = bounds diagonal / distance x that, d0 px = 2 x (median LOD radius x keep_lod) / distance x that;
+    head px = 0.25 m (the study's head height, kPixelLodHeadM) / distance x that (fix 2026-11-10: was the bounds
+    diagonal, 1.5-3x high), d0 px = 2 x (median LOD radius x keep_lod) / distance x that; the median radius is set at
+    every LOD upload whatever the key (fix 2026-11-10: it was read from host radii kept only while the key was on, so a
+    LOD uploaded before the key went on gave d0 0 and level 0 for good: 12 of 13 grooms in hl1 180301/180949);
     `pixel_lod_level` (prev = the built level) then the 30-frame `lod_vote`. A level still uploading keeps the built one.
   - Camera BLAS per slot on the groom's points range (LSS successive, kept-segment index + widened radius buffers, not
     compacted), full build on a level or LOD change, refit with the groom BLAS in the same batch; destroyed with

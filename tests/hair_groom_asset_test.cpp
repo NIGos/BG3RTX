@@ -1518,6 +1518,23 @@ int main() {  test_round3();
     CHECK(pixel_lod_level(1.0f / 20.0f, 150, 1.0f, 1.0f, 4) == 5);  // x 4.32: left
     // The ladder never goes below 1/32 of the full groom; a groom already at keep 0.25 has 3 levels.
     CHECK(pixel_lod_level(0.001f, 300, 0.25f, 1.0f, -1) == 3 && pixel_lod_keep(0.25f, 3) == 1.0f / 32);
+    // claude/hair-pixel-lod-fix: the inputs as the layer forms them. The median radius comes from the decoded LOD alone
+    // (no host arrays: the key went on after the upload), the head size is the study's 0.25 m head height.
+    {
+      const float radii[5] = {0.000120f, 0.000093f, 0.000080f, 0.000200f, 0.000093f};   // median 0.093 mm (0.186 mm)
+      const float r = median_radius(radii, 5);
+      CHECK(std::fabs(r - 0.000093f) < 1e-9f && median_radius(nullptr, 0) == 0.0f);
+      const float ppr = 1025.0f;                        // hl1 180301: 1067 / 2 x P11 1.921
+      const float dist = kPixelLodHeadM * ppr / 64.0f;  // a 64 px head (180301's front head): 4.0 m
+      CHECK(std::fabs(pixel_lod_head_px(dist, ppr) - 64.0f) < 1e-3f);
+      const float d0 = pixel_lod_d0_px(r, 1.0f, dist, ppr);   // 0.0477 px
+      CHECK(d0 > 0.04f && d0 < 0.05f);
+      CHECK(pixel_lod_level(d0, pixel_lod_head_px(dist, ppr), 1.0f, 1.0f, -1) == 5);   // > 0 (was 0: d0 read 0)
+      // The 60 px floor applies at the head height: 59 px keeps level 0 although its bounds diagonal (x 1.5-3) is over 60.
+      const float far = kPixelLodHeadM * ppr / 59.0f;
+      CHECK(pixel_lod_level(pixel_lod_d0_px(r, 1.0f, far, ppr), pixel_lod_head_px(far, ppr), 1.0f, 1.0f, -1) == 0);
+      CHECK(pixel_lod_head_px(0.0f, ppr) == 0.0f && pixel_lod_d0_px(r, 1.0f, 0.0f, ppr) == 0.0f);
+    }
     CHECK(pixel_lod_level(0.001f, 300, 1.0f, 1.0f, 9) == 5);         // a stale level above the ladder: a fresh pick
   }
   { // Per-draw coverage evidence: neither publication nor an unavailable/newer pair proves coverage.

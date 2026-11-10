@@ -1257,6 +1257,7 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   n.tri += base; n.bary += base; n.radius += base; n.seg += base; n.segtri += base;
   n.base = base; n.size = total; n.last_used = now;
   d = n;
+  d.r_median = hair_groom::median_radius(l.radius, l.points);   // whatever rt_hair_pixel_lod is (the key may go on later)
   if (g_pixel_lod) groom_keep_host(d, l);   // rt_hair_pixel_lod: its camera arrays are built from these
   u.dst = base; u.bytes = total; u.upload_rec = &d.upload_rec; u.upload_frame = &d.upload_frame;
   g_groom_uploads.push_back(u);
@@ -1330,12 +1331,11 @@ const GroomAsset::Cam* groom_cam(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   return nullptr;
 }
 
-// The LOD's median strand radius (pixel LOD's diameter), from its host radii; 0 without them.
+// The LOD's median strand radius (pixel LOD's diameter): set at upload whatever the key (groom_lod); the host radii are
+// only a fallback for a LOD staged before that rule.
 float groom_r_median(GroomAsset::Lod& d) {
   if (d.r_median > 0 || d.host_radius.empty()) return d.r_median;
-  std::vector<float> r = d.host_radius;
-  std::nth_element(r.begin(), r.begin() + std::ptrdiff_t(r.size() / 2), r.end());
-  d.r_median = r[r.size() / 2];
+  d.r_median = hair_groom::median_radius(d.host_radius.data(), uint32_t(d.host_radius.size()));
   return d.r_median;
 }
 
@@ -3389,9 +3389,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           if (groom_ppr > 0 && g.measured) {
             const float cx = g.centre[0], cy = g.centre[1], cz = g.centre[2];
             const float dist = (std::max)(std::sqrt(cx * cx + cy * cy + cz * cz), 0.1f);
-            const float r0 = groom_r_median(groom_src->lods[size_t(lod)]) * l.keep;   // LOD 0's median radius (uncapped)
-            g.cam_head_px = g.size * groom_ppr;
-            g.cam_d0_px = 2.0f * r0 / dist * groom_ppr;
+            // LOD 0's median diameter (the LOD's median radius x keep, uncapped) and the study's head height, in render px
+            g.cam_head_px = hair_groom::pixel_lod_head_px(dist, groom_ppr);
+            g.cam_d0_px = hair_groom::pixel_lod_d0_px(groom_r_median(groom_src->lods[size_t(lod)]), l.keep, dist, groom_ppr);
             want = hair_groom::pixel_lod_level(g.cam_d0_px, g.cam_head_px, l.keep, groom_pixel_k, g.cam_level);
           }
           g.cam_pick = hair_groom::lod_vote(g.cam_pick, want, g.cam_votes, false);
