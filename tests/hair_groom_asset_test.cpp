@@ -453,6 +453,29 @@ static void test_vp_eye() {
   c.note(102, p1);
   CHECK(c.find(102)->eye < 0);                     // not read
 }
+// 6c: the GPU-side sample of the rebase origin. hf1 073932 frame 2455 (wheel zoom, header camera read on the CPU): the
+// origin is one camera step, mostly along the ray; hc1 234025 with the header camera copied on the GPU: exactly 0.
+static void test_rebase_sample() {
+  using namespace hair_primary;
+  float ray[16] = {-0.1407f, -0.3244f, -0.3474f, 12.182f, -0.1548f, -0.2953f, -0.9428f, 0.0f, -1.0f, -1.0f, -1.0f, 2455.0f,
+                   -219.244f, 10.296f, -200.797f, 1.0f};
+  RebaseSample s = rebase_sample(ray, 2455);
+  CHECK(s.fresh && std::fabs(s.origin_m - 0.4957f) < 1e-3f && std::fabs(s.along_m - 0.4451f) < 1e-3f);
+  CHECK(s.card_m == 12.182f && s.hit_m == -1.0f);              // a miss has no hit distance
+  CHECK(!rebase_sample(ray, 2456).fresh && rebase_sample(ray, 2456).origin_m == -1.0f);   // another frame's sample
+  CHECK(!rebase_sample(ray, 0).fresh);                          // no judged frame
+  ray[15] = 0.0f;
+  CHECK(!rebase_sample(ray, 2455).fresh);                       // a zeroed block (no sample written yet)
+  ray[15] = 1.0f;
+  RebaseStats st;
+  st.add(s);
+  st.add(rebase_sample(ray, 2456));                             // stale: not counted
+  ray[0] = ray[1] = ray[2] = 0.0f; ray[7] = 1.0f; ray[8] = 12.2f;
+  s = rebase_sample(ray, 2455);
+  CHECK(s.fresh && s.origin_m == 0.0f && s.hit_m == 12.2f);    // one camera block: exactly 0, a hit
+  st.add(s);
+  CHECK(st.sampled == 2 && st.moved == 1 && std::fabs(st.max_m - 0.4957f) < 1e-3f);
+}
 // 6a/6b rt_hair_stale_publish: the submit-time camera check. hl1 210357's trip frames are the moved case; hf2 225504's
 // policy bug (every frame "camera not known", drawn as cards) is the unknown case, which must trace as before.
 static void test_stale_publish() {
@@ -1296,7 +1319,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_stale_publish();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_stale_publish();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
