@@ -1444,6 +1444,44 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
   period line with frame watchdog trips 0, key watchdog trips 0 and dropouts 0-2. If A shows no holes, the test does
   not reproduce 125217 with 45252 alone (the fix stays proven by the GPU case only); the period lines then say why.
 
+## 5v. Pixel-footprint strand LOD for camera rays (branch claude/hair-pixel-lod, 2026-11-10: step 1 built, step 2 designed, not built)
+Study: docs/progress/claude-hair-pixel-lod-study.md (eca698b9). Keeping fewer strands about 1 render pixel wide for the
+camera rays gives HF like the cards and 1.5-2.4x less coverage noise at heads of 80-150 px (coverage +3 to +6%); it
+fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop about 2x today's.
+- Step 1 (built, inert until step 2 uses it): `decode_v3_lod(..., extra_keep)` (common/hair_groom_v3.h) rebuilds keeps
+  1/8, 1/16, 1/32 (kV3ExtraKeeps) from the stored LOD 0 with the table's nested per-strand hash, radii x 1 / keep under
+  kMaxThinRadius (9 mm); no file changes, the 888 v3 files are read as they are; the table's count check is skipped
+  for these (no table entry), an empty result is refused. CTest hair_groom_v3_test: on the fixture all three keeps are
+  non-empty, each nested in the coarser level (1/32 in 1/16 in 1/8 in the coarsest table LOD), every radius = LOD 0's
+  / keep (capped) to 1e-6; an extra keep with a table index or keep >= 1 is refused.
+- Step 2 design (cheapest correct route found, not built):
+  - A camera-only BLAS per groom built on the groom's current points (no second points range, no second update
+    dispatch): LSS indexing SUCCESSIVE reads segment starts from an index buffer and radii from a radius buffer, so
+    a camera BLAS is the same vertex buffer with (a) the kept strands' segment starts (static per LOD/keep pair) and
+    (b) a widened radius buffer (static per pair: r_lod x keep_lod / keep_cam, capped 9 mm). Refit every frame with
+    the groom's BLAS (the points move).
+  - A camera groom TLAS per scene slot (same instance order as the groom TLAS); the header carries its address and
+    rows whose segment table (row.z) is the camera index buffer. Points, UVs and previous points are the groom's own,
+    so hp_segment, the velocity variant and the count shader read the right points: no shader change, the strand
+    shaders stay byte-identical, variants delta 0. Shadow, GI and fibre rays keep the groom TLAS (keep >= 0.25).
+  - The cheaper route asked for (camera rays rejecting non-kept strands in hp_nearest against a widened radius)
+    does not exist: an LSS intersection uses the radius in the BLAS, so a wider strand needs its own BLAS; a
+    candidate filter can only remove strands, not widen them.
+  - Pick: per groom, keep_cam = the finest of {lod keep, 1/8, 1/16, 1/32} whose projected median diameter is >= k
+    render px (k = rt_hair_pixel_lod_k, 0.7-1.4, default 1.0); px per metre from the build camera's projection and
+    the bounds distance; no pixel LOD for heads under 60 render px (the study's failure bound; today's LOD there);
+    hysteresis of one quarter octave on the diameter plus the existing 30-frame vote.
+  - Cross-fade between two keeps needs a per-candidate keep test in the strand trace (a shader change behind a
+    specialization constant); without it the step pops about 2x today's (open).
+  - Costs (estimates from the study's groom and today's sizes, to measure): mesh pool + radius buffer 4 B per point of
+    every camera-LOD groom (13 grooms at S8, about 4.5M points: about 18 MB) + index buffers 4 B per kept segment
+    (under 1 MB); BLAS memory about keep_cam / keep_lod of the groom BLAS (1/2-1/8: about 5-15% more BLAS); build
+    time one more refit per groom on 1/2-1/16 of its segments (about 10-30% of today's groom refit ms); one 13-instance
+    TLAS build per frame (negligible). The strand G-buffer trace gets cheaper (fewer, fatter segments).
+  - Checks to add with it: the coverage gate's upper side is judged on S <= C, so wider strands cannot trip "coverage
+    high"; hp_on_card's band uses hair_primary_max_radius (10 mm) >= the 9 mm cap; the tips test is per pixel (no
+    radius). A period line: grooms per camera keep, projected diameter range.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
