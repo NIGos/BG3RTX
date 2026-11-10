@@ -345,7 +345,8 @@ inline double cover_sigma(uint64_t strand, uint64_t card) {
 constexpr uint64_t kHoldCountSlots = 4, kHoldFrames = kFreshFrames + kHoldCountSlots * kCountTags;
 // A tag applied by two G-buffer frames cannot identify a measured frame.
 struct GbFrame { uint64_t frame = 0; uint32_t tag = 0; uint64_t keys[kMaxGrooms] = {}, draw_keys[kDrawSlots] = {};
-                 uint32_t swapped_slots = 0; };   // draw slots whose G-buffer draw this frame was swapped to strands
+                 uint32_t swapped_slots = 0;
+                 uint64_t pub_frame = 0; };   // 5z: the build frame of the publish applied at submit (0: not known)   // draw slots whose G-buffer draw this frame was swapped to strands
 inline const GbFrame* unique_frame(const GbFrame* frames, uint32_t n, uint32_t tag, bool& ambiguous) {
   const GbFrame* found = nullptr;
   ambiguous = false;
@@ -1428,15 +1429,53 @@ struct Participation {
 // judges a G-buffer frame about 5 frames after it ran. note() records a publish's build frame and camera; step(F) is the
 // distance from frame F's camera to the camera of the newest earlier noted frame (-1: F or an earlier frame not kept).
 // Every hole of hl1 (125217, 164930, 180301, 180949) began the frame the runner's wheel zoom began.
+// 5z diagnostic: the projection centre (eye) of a camera-relative view-projection, in that space. `vp` is the game's
+// camera UBO at +128 as the shaders read it (row-major, clip_j = sum_k p_k vp[4k + j] + vp[12 + j], rt/xfb_to_world.hlsl):
+// the point whose clip x, y and w are 0. Its distance from the origin is returned (the strand rays start at the origin);
+// -1 when the matrix is singular there (orthographic).
+inline float vp_eye(const float vp[16], float eye[3]) {
+  const double r0[3] = {vp[0], vp[4], vp[8]}, r1[3] = {vp[1], vp[5], vp[9]}, r2[3] = {vp[3], vp[7], vp[11]};
+  const double b[3] = {-double(vp[12]), -double(vp[13]), -double(vp[15])};
+  auto cross = [](const double* a, const double* c, double* o) {
+    o[0] = a[1] * c[2] - a[2] * c[1]; o[1] = a[2] * c[0] - a[0] * c[2]; o[2] = a[0] * c[1] - a[1] * c[0];
+  };
+  double c0[3], c1[3], c2[3];
+  cross(r1, r2, c0); cross(r2, r0, c1); cross(r0, r1, c2);
+  const double det = r0[0] * c0[0] + r0[1] * c0[1] + r0[2] * c0[2];
+  if (!(std::fabs(det) > 1e-30)) return -1.0f;
+  double d2 = 0;
+  for (int i = 0; i < 3; ++i) {
+    eye[i] = float((c0[i] * b[0] + c1[i] * b[1] + c2[i] * b[2]) / det);
+    d2 += double(eye[i]) * eye[i];
+  }
+  return std::isfinite(d2) ? float(std::sqrt(d2)) : -1.0f;
+}
+
 struct CameraSteps {
   static constexpr uint32_t kKeep = 32;
-  struct Entry { uint64_t frame = 0; float pos[3] = {}; };
+  // eye: 5z, the projection centre of the build's camera-relative VP (vp_eye; -1: not read). The strand passes start
+  // their rays at the origin of that space (hp_rebase), which is right only while the eye sits there.
+  struct Entry { uint64_t frame = 0; float pos[3] = {}; float eye = -1.0f; };
   Entry e[kKeep] = {};
-  void note(uint64_t frame, const float pos[3]) {
+  void note(uint64_t frame, const float pos[3], float eye = -1.0f) {
     if (!frame) return;
     Entry& x = e[frame % kKeep];
     x.frame = frame;
     for (int i = 0; i < 3; ++i) x.pos[i] = pos[i];
+    x.eye = eye;
+  }
+  const Entry* find(uint64_t frame) const {
+    const Entry& x = e[frame % kKeep];
+    return frame && x.frame == frame ? &x : nullptr;
+  }
+  // The distance between the build cameras of two frames (-1: either not kept).
+  float between(uint64_t a, uint64_t b) const {
+    const Entry* x = find(a);
+    const Entry* y = find(b);
+    if (!x || !y) return -1.0f;
+    float d2 = 0;
+    for (int i = 0; i < 3; ++i) d2 += (x->pos[i] - y->pos[i]) * (x->pos[i] - y->pos[i]);
+    return std::sqrt(d2);
   }
   float step(uint64_t frame) const {
     const Entry* now = nullptr;

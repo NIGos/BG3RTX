@@ -129,7 +129,9 @@ def make_job(plan):
             # names the build camera step of its frame (the zoom candidate). Trips are not required (min 0).
             {"name": "every frame watchdog line in lower and watch names the build camera step",
              "select": "\\[hair primary\\] watchdog: G-buffer frame",
-             "match": "build camera step -?[0-9.]+ m at that frame", "windows": ["lower", "watch"], "event": True,
+             # 5z (branch claude/hair-cam-step): and the publish it applied, with the VP eye offsets (predicted.json)
+             "match": "build camera step -?[0-9.]+ m at that frame.*applied the publish of build frame \\d+ .*VP eye -?[0-9.]+ m",
+             "windows": ["lower", "watch"], "event": True,
              "min": 0},
             {"name": "the groom TLAS check period line in both windows",
              "select": "\\[hair primary\\] groom TLAS check \\(last", "match": "G-buffer submits checked",

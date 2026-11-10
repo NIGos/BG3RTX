@@ -216,6 +216,7 @@ hair_primary::LateArrival g_late;
 int g_nearest_compiled = -1, g_nearest_flag_logged = -1, g_nearest_compiled_logged = -2;
 hair_primary::TlasCheck g_tlas_check;   // 5u observable (detailed logging)
 hair_primary::CameraSteps g_cam_steps;   // 5x: build camera step per frame (frame watchdog line)
+float eye_of(uint64_t frame) { const auto* x = g_cam_steps.find(frame); return x ? x->eye : -1.0f; }
 uint64_t g_tlas_check_logged = 0;   // 5u: specialization 1047 at the last strand pipeline creation   // rt_hair_debug_late_arrival (dev only)
 bool g_cfg_union = false;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
@@ -464,9 +465,13 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
         if (!g_cfg_watchdog_draw && g_watchdog_logged++ < 8)
           log("[hair primary] watchdog: G-buffer frame %llu swapped draws wrote %llu strand pixels of %llu card pixels "
               "(bound %.4f): cards for %llu frames; build camera step %.3f m at that frame, %.3f m the frame before "
-              "(-1: not kept)", (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
+              "(-1: not kept); applied the publish of build frame %llu (%lld frames before), header camera %.3f m from "
+              "build frame %llu's; VP eye %.3f m from the origin at that publish, %.3f m at build frame %llu",
+              (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
               (unsigned long long)g_watchdog.card, g_watchdog.bound(), (unsigned long long)hair_primary::kWatchdogFrames,
-              g_cam_steps.step(gf->frame), g_cam_steps.step(gf->frame - 1));
+              g_cam_steps.step(gf->frame), g_cam_steps.step(gf->frame - 1), (unsigned long long)gf->pub_frame,
+              (long long)gf->frame - (long long)gf->pub_frame, g_cam_steps.between(gf->pub_frame, gf->frame),
+              (unsigned long long)gf->frame, eye_of(gf->pub_frame), eye_of(gf->frame), (unsigned long long)gf->frame);
       }
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
@@ -1346,6 +1351,7 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
       }
       if (frame_known) {
         gf.tag = p.seal ? p.seal : c->pick.tag;
+        gf.pub_frame = c->pick.tag ? c->pick.tag - 1u : 0u;   // 5z: Header tag = publish frame + 1
         std::memcpy(gf.keys, c->keys, sizeof gf.keys);             // the rows the G-buffer now reads (count attribution)
         std::memcpy(gf.draw_keys, p.slots.keys, sizeof gf.draw_keys);   // markers carry the recorded slots
         for (uint32_t i = 0; i < hair_primary::kDrawSlots; ++i) if (card_slots & (1u << i)) gf.draw_keys[i] = 0;
@@ -1900,8 +1906,12 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   const bool cam_ok = rt_current_build_camera(st.cam, &build_frame);
   if (!cam_ok) ++g_drop.no_camera;
   else if (build_frame != now) ++g_drop.recovered;
-  if (cam_ok) g_cam_steps.note(build_frame, st.cam);   // 5x diagnostic (the frame watchdog line)
   if (cam_ok && !rt_current_build_ubo(&st.ubo, &st.ubo_offset)) st.ubo = VK_NULL_HANDLE;
+  if (cam_ok) {   // 5x/5z diagnostics (the frame watchdog line): the build camera and the eye of its camera-relative VP
+    float vp[16], eye[3];
+    const bool vp_ok = st.ubo && read_mapped(st.ubo, st.ubo_offset + 128, vp, sizeof vp);
+    g_cam_steps.note(build_frame, st.cam, vp_ok ? hair_primary::vp_eye(vp, eye) : -1.0f);
+  }
   const uint64_t pub = cam_ok ? build_frame : now;
   h.tag = uint32_t(pub + 1);
   h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
