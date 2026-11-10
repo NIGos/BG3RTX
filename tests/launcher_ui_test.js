@@ -168,7 +168,7 @@ ids.get('hotkey_rt_toggle').onkeydown(event('Delete'));assert.strictEqual(sent.a
 ids.get('nav-Lighting').onclick();
 assert.deepStrictEqual(all(ids.get('section-content')).filter(e=>e.tagName==='article'&&e.id).map(e=>e.id),
  // RTX Hair (exp_hair_groom_primary) is a release Lighting card since 0.9.5, after Hair shadows.
- ['rt_geometry','rr','sun_shadows','gi','exp_hidden_surface','local_shadows','box_lights','exp_native_coverage','exp_hair_groom_primary','hair_distant_detail','rt_intensity'].map(id=>'card-'+id));
+ ['rt_geometry','rr','sun_shadows','gi','exp_hidden_surface','local_shadows','box_lights','exp_native_coverage','exp_hair_groom_primary','hair_distant_detail','hair_motion_stability','rt_intensity'].map(id=>'card-'+id));
 assert(!ids.has('summary')&&!ids.has('report'),'duplicate summary or report entry');
 const rr=ids.get('control-rr-0');assert(rr.type==='checkbox'&&rr.attributes['aria-label']);
 rr.focus();render(fixture);assert.strictEqual(document.activeElement,ids.get(rr.id),'focus lost on bridge update');

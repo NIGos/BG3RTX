@@ -433,7 +433,7 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 1);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 21));   // 21 release controls: RTX Hair joined (user, 0.9.5 release, 2026-11-08), then its distance detail (2026-11-10)
+  CHECK(dev.size() == size_t(kKnobCount - 22));   // 22 release controls: RTX Hair joined (user, 0.9.5 release, 2026-11-08), then its distance detail and motion stability (2026-11-10)
   {  // SER (user decision 2026-11-08): on in every preset; choosing it in release raises the ray tracing pipeline trace.
     const int rt = knob_index("exp_gi_rt_pipeline"), ser = knob_index("exp_gi_rt_pipeline_reorder");
     for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[rt] == 1 && preset_values(p)[ser] == 1);
@@ -1213,6 +1213,7 @@ static void test_release_migration() {
     "exp_hidden_surface", "exp_gi_rt_pipeline", "exp_gi_rt_pipeline_reorder", "box_lights", "rr_post_temporal", "exp_native_coverage",
     "exp_hair_groom_primary",   // RTX Hair: a release Lighting control since 0.9.5 (user request, 2026-11-08)
     "hair_distant_detail",   // RTX Hair detail at distance (user request, 2026-11-10)
+    "hair_motion_stability",   // RTX Hair motion stability (user request, 2026-11-10)
     "detailed_logging"};
   std::vector<std::string> visible;
   for (const auto& k : kKnobs) {
@@ -1383,6 +1384,40 @@ static void test_hair_distant_detail() {
   // A file with only the on key (no keep) reads 1/4, the code default keep.
   m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini("rt_hair_pixel_lod=1\n"));
   CHECK(knob_value(*k, m) == 1);
+}
+
+// RTX Hair motion stability (hair_motion_stability, user request 2026-11-10): Off / On = rt_hair_mv_card 0 / 2 (5y; mode 1
+// disproved, not exposed). On needs a restart (specialization 1049 at pipeline creation), Off is live; Off in every preset
+// and in data/release.ini, but a selected On survives the release policy.
+static void test_hair_motion_stability() {
+  const Knob* k = find_knob("hair_motion_stability");
+  CHECK(k && !k->dev_only && !k->experimental && k->kind == Kind::Choice && knob_visible(*k, false));
+  if (!k) return;
+  CHECK_EQ(k->category, "Lighting");
+  CHECK(choice_count(*k) == 2);
+  const char* want[2] = {"rt_hair_mv_card=0 ", "rt_hair_mv_card=2 "};
+  for (int c = 0; c < 2; ++c) {
+    KVList kvs; knob_kvs(*k, c, kvs);
+    std::string s; for (const auto& kv : kvs) s += kv.first + "=" + kv.second + " ";
+    CHECK_EQ(s, want[c]);
+    CHECK_EQ(choice_maturity(*k, c), "qualified");
+  }
+  CHECK(transition_apply(*k, 0, 1) == Apply::Restart && transition_apply(*k, 1, 0) == Apply::Live);
+  CHECK(key_change_needs_restart("rt_hair_mv_card", "0", "2") && !key_change_needs_restart("rt_hair_mv_card", "2", "0"));
+  for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[knob_index("hair_motion_stability")] == 0);
+  CHECK(knob_value(*k, code_defaults()) == 0);
+  const Map release = parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini") + read_file(BG3RTX_SOURCE_DIR "/data/release.ini"));
+  for (int c = 0; c < 2; ++c) {
+    Map user = parse_ini("preset=ultra\n");
+    KVList kvs; knob_kvs(*k, c, kvs); for (const auto& kv : kvs) user[kv.first] = kv.second;
+    Map m = code_defaults(); apply_layer(m, release); apply_layer(m, user);
+    CHECK_EQ(get(m, "dev"), "0");
+    CHECK(knob_value(*k, m) == c);
+    Map again = m; enforce_release_policy(again); CHECK(again == m);
+  }
+  // Mode 1 (disproved) is not a choice: a file with it reads as custom.
+  Map m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini("rt_hair_mv_card=1\n"));
+  CHECK(knob_value(*k, m) == -1);
 }
 
 // 0.9.5-beta shipped with the release control RTX Hair inert: the reset of the developer-only exp_hair_* knobs undid
@@ -1704,6 +1739,7 @@ int main(int argc, char** argv) {
   test_strand_bundle();
   test_release_rtx_hair();
   test_hair_distant_detail();
+  test_hair_motion_stability();
   test_dlss5_native_setting();
   test_detailed_logging();
   test_release_fg_diagnostics();

@@ -384,6 +384,19 @@
        {"id": "quarter", "label": "1/4 (Standard)", "apply": "live", "caps": ["ray_query", "linear_swept_spheres"], "keys": {"rt_hair_pixel_lod": "1", "rt_hair_pixel_lod_small_keep": "0.25"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "eighth", "label": "1/8 (Sharper)", "apply": "live", "caps": ["ray_query", "linear_swept_spheres"], "keys": {"rt_hair_pixel_lod": "1", "rt_hair_pixel_lod_small_keep": "0.125"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "hair_motion_stability", "label": "RTX Hair motion stability",
+     "description": "Reduces RTX Hair smearing and trails when characters or the camera move.",
+     "apply": "restart", "apply_note": "Restart the game to turn on; turns off while playing", "advanced": false, "experimental": false, "developer": false,
+     "category": "Lighting", "summary": "Reduces RTX Hair smearing and trails when characters or the camera move.",
+     "details": "Only changes RTX Hair. Strand pixels take the motion of the hair they belong to, so the denoiser stops dragging old hair behind moving heads. Turning it on takes effect after a game restart (the hair motion shaders are prepared when the game starts); turning it off works while playing. Watch a character walk or turn the camera.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_mv_card": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "linear_swept_spheres"], "keys": {"rt_hair_mv_card": "2"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+     ]},
     {"id": "exp_hair_fibre", "label": "Physical strand shading",
      "description": "Experimental: gives on-screen hair brighter, warmer shading.",
      "apply": "live", "apply_note": "live; needs Strand hair on screen", "advanced": false, "experimental": true, "developer": true,
