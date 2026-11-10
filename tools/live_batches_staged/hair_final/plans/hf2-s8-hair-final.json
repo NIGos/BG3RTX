@@ -81,7 +81,7 @@
     "wait_stats": [
       "\\[hair primary\\] header safety \\(last",
       "\\[hair primary\\] stale publish check \\(last",
-      "\\[hair primary\\] strand G-buffer draws GPU",
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
       "rt passes: GPU cost",
       "\\[pace\\] rendered frame time over \\d+ frames"
     ],
@@ -106,7 +106,7 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[hair primary\\] header safety \\(last",
-      "\\[hair primary\\] strand G-buffer draws GPU",
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
       "rt passes: GPU cost",
       "\\[pace\\] rendered frame time over \\d+ frames"
     ],
@@ -130,7 +130,7 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[hair primary\\] strand G-buffer draws GPU",
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
       "rt passes: GPU cost",
       "\\[pace\\] rendered frame time over \\d+ frames"
     ],
@@ -154,7 +154,7 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[hair primary\\] strand G-buffer draws GPU",
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
       "rt passes: GPU cost",
       "\\[pace\\] rendered frame time over \\d+ frames"
     ],
@@ -211,7 +211,7 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[hair primary\\] strand G-buffer draws GPU",
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
       "rt passes: GPU cost",
       "\\[pace\\] rendered frame time over \\d+ frames"
     ],
@@ -254,7 +254,7 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[hair groom\\] pixel LOD \\(last",
-      "\\[hair primary\\] strand G-buffer draws GPU",
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
       "rt passes: GPU cost",
       "\\[pace\\] rendered frame time over \\d+ frames"
     ],
@@ -297,7 +297,7 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[hair groom\\] pixel LOD \\(last",
-      "\\[hair primary\\] strand G-buffer draws GPU",
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
       "rt passes: GPU cost",
       "\\[pace\\] rendered frame time over \\d+ frames"
     ],
@@ -339,7 +339,7 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[hair primary\\] strand G-buffer draws GPU",
+      "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
       "rt passes: GPU cost",
       "\\[pace\\] rendered frame time over \\d+ frames"
     ],
