@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 749,
+  "timeout": 730,
   "max_minutes": 4,
   "repeat": 1,
   "live_batch": "hair-pixel-lod",
@@ -12,7 +12,7 @@
   "window_mode": "visible_unfocused_fg",
   "fail_fast": false,
   "stop_on_dump": false,
-  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_row_stable=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0,rt_hair_pixel_lod_small_keep=0.25",
+  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_row_stable=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0,rt_hair_pixel_lod_small_keep=0.25",
   "args": [
     "-RealPresent",
     "-Move",
@@ -56,7 +56,7 @@
     {
       "name": "small keep 1/4: the period line with a projection read and some groom at camera level 1 or 2",
       "select": "\\[hair groom\\] pixel LOD \\(last",
-      "match": "level 0/1/2/3/4/5 \\d+/(?:[1-9]\\d*/\\d+|\\d+/[1-9]\\d*)/\\d+/\\d+/\\d+/\\d+;.*\\([1-9][0-9]* px per radian, 0 groom frames without.*small keep 0\\.250\\)",
+      "match": "level 0/1/2/3/4/5 \\d+/(?:[1-9]\\d*/\\d+|\\d+/[1-9]\\d*)/\\d+/\\d+/\\d+;.*\\([1-9][0-9]* px per radian, 0 groom frames without.*small keep 0\\.250\\)",
       "windows": [
         "pl-on-q"
       ],
@@ -106,11 +106,12 @@
           0,
           0
         ],
-        "fps": 8.826125330967004,
-        "windows": 149,
+        "fps": 20.463847203269342,
+        "windows": 164,
         "logs": [
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.164930.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.200821.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hm1-s8-hair-mv.1.210705.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.005103.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.015416.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.085153.log",
@@ -140,6 +141,6 @@
       "logs": 12
     }
   },
-  "estimated_phase_seconds": 88.1,
+  "estimated_phase_seconds": 70.0,
   "purpose": "rt_hair_pixel_lod for heads of 35-60 px (claude/hair-pixel-lod-small) at S8's zoomed-out view: key off / on (small keep 1/4) / on (1/8, dev knob) / off in one launch, static camera; the period line (groom frames per camera level), the strand G-buffer GPU ms and one PNG trace per window. STAGED, not authorized."
 }
