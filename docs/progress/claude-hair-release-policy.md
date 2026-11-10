@@ -8,7 +8,8 @@
   the test). Off, a stale raw rt_hair_groom=1 alone, and dev=1 behave as before. The developer knobs stay hidden.
 - No new key, no shader change (variants.txt delta 0), no ABI bump. The launcher already showed On and saved the whole
   set; `rt_hair` (Ctrl+Shift+F7) still gates the On list.
-- Tests: settings_test `test_release_rtx_hair` (10 FAIL lines without the fix, passes with it).
+- Tests: settings_test `test_release_rtx_hair` (10 FAIL lines without the fix, passes with it); `build.ps1 -Test`:
+  224 of 224 CTests passed (13 min 19 s).
 - Left: enabling the toggle exposes the open strand flicker (RTX_HAIR_PRIMARY 5n, 5p) to release players; decide
   whether the next package ships it On-capable or waits for hs1. A file with only rt_hair_groom_primary=1 (the mark)
   shows On in the launcher but runs the partial keys it has until saved (as before).
