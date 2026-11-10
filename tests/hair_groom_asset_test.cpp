@@ -196,6 +196,128 @@ static void test_coverage_hold() {
     CHECK(strict.why(8, 105) == CoverageGate::Why::Stale);
   }
 }
+// 5t: the strand/card switch counter of the lean period line, and rt_hair_swap_latch.
+static void test_swap_transitions() {
+  using namespace hair_primary;
+  CHECK(switch_cause(Refusal::Watchdog, false) == SwitchCause::FrameWatchdog);
+  CHECK(switch_cause(Refusal::Watchdog, true) == SwitchCause::KeyWatchdog);
+  CHECK(switch_cause(Refusal::CoverLow, false) == SwitchCause::CoverLow);
+  CHECK(switch_cause(Refusal::CoverInvalidated, false) == SwitchCause::CoverStale);
+  CHECK(switch_cause(Refusal::CoverLatched, false) == SwitchCause::Latched);
+  CHECK(switch_cause(Refusal::Applied, false) == SwitchCause::NotApplied);
+  CHECK(switch_cause(Refusal::NotDropped, false) == SwitchCause::Other);
+  const uint64_t a = 0x85b9ull << 48, b = 0x5eabull << 48, c = 0x7029ull << 48;
+  SwapTransitions t;
+  // The frame watchdog cycle: 6 strand frames (the verdict latency), kWatchdogFrames card frames, twice. Key b is
+  // drawn twice per frame (two characters, one key): one decision per frame counts.
+  uint64_t f = 100;
+  for (int cycle = 0; cycle < 2; ++cycle) {
+    for (int i = 0; i < 6; ++i, ++f) { t.gbuffer(a, f, true); t.gbuffer(b, f, true); t.gbuffer(b, f, false, SwitchCause::Other); }
+    for (uint64_t i = 0; i < kWatchdogFrames; ++i, ++f) {
+      t.gbuffer(a, f, false, SwitchCause::FrameWatchdog); t.gbuffer(b, f, false, SwitchCause::FrameWatchdog);
+    }
+  }
+  t.gbuffer(a, f, true); t.gbuffer(b, f, true);
+  CHECK(t.to_cards[size_t(SwitchCause::FrameWatchdog)] == 4 && t.to_strands == 4 && t.switches() == 8);
+  CHECK(t.runs[1].size() == 4 && t.runs[0].size() == 4);
+  uint32_t r[3];
+  SwapTransitions::run_stats(t.runs[1], r);
+  CHECK(r[0] == 6 && r[1] == 6 && r[2] == 6);
+  SwapTransitions::run_stats(t.runs[0], r);
+  CHECK(r[0] == kWatchdogFrames && r[2] == kWatchdogFrames);
+  t.close_frame();
+  CHECK(t.frames == 2 * (6 + kWatchdogFrames) + 1 && t.all_cards == 2 * kWatchdogFrames);
+  // A G-buffer draw refused only for its card depth takes the cause that refused its prepass; an old prepass does not.
+  t.gbuffer(c, f, true);
+  t.prepass_refused(c, f, SwitchCause::CoverLow);
+  t.gbuffer(c, f + 1, false, SwitchCause::Other, true);
+  CHECK(t.to_cards[size_t(SwitchCause::CoverLow)] == 1);
+  t.gbuffer(c, f + 2, true);
+  t.gbuffer(c, f + 6, false, SwitchCause::Other, true);   // not drawn for more than kSwitchGap frames: a new run
+  CHECK(t.to_cards[size_t(SwitchCause::Other)] == 0 && t.keys.at(c).to_cards == 1 && t.keys.at(c).to_strands == 1);
+  t.gbuffer(c, f + 7, true);
+  t.gbuffer(c, f + 8, false, SwitchCause::Other, true);   // the prepass refusal is 8 frames old
+  CHECK(t.to_cards[size_t(SwitchCause::Other)] == 1);
+  // The live switch: only a key on strands switches; an untracked draw adds nothing.
+  t.gbuffer(c, f + 9, true);
+  t.live_off(c, f + 10); t.live_off(c, f + 11); t.live_off(0x1234, f + 10);
+  CHECK(t.to_cards[size_t(SwitchCause::Live)] == 1 && !t.keys.count(0x1234));
+  // Measurements: ratios of strand frames and card (probe) frames apart, the footprint over both.
+  t.measure(a, 430, 260, true); t.measure(a, 455, 400, true); t.measure(a, 310, 290, false); t.measure(a, 0, 0, false);
+  const auto& ka = t.keys.at(a);
+  CHECK(ka.n[1] == 2 && ka.n[0] == 1 && ka.card_min == 310 && ka.card_max == 455);
+  CHECK(std::fabs(ka.r_min[1] - 260.0 / 430.0) < 1e-12 && std::fabs(ka.r_max[1] - 400.0 / 455.0) < 1e-12);
+  CHECK(std::fabs(ka.r_min[0] - 290.0 / 310.0) < 1e-12);
+  t.watchdog_trip(2777, 9009, 12670, 0.7993, 3, 1);
+  t.watchdog_trip(2860, 2, 4938, 0.8913, 0, 2);
+  CHECK(t.wd_trips == 2 && t.wd_bad == 3 && t.wd_good == 3 && t.wd_lost == 1 && t.wd_frame == 2860);
+  char line[2000];
+  t.format(line, 2);
+  const std::string s = line;
+  CHECK(s.find(" 7 strands->cards (frame watchdog 4, key watchdog 0, coverage low 1,") == 0);
+  CHECK(s.find("live toggle 1, other 1), 7 cards->strands;") != std::string::npos);
+  CHECK(s.find("strand runs 7: 1/6/6 frames (min/median/max), card runs 7: 1/28/28;") != std::string::npos);
+  CHECK(s.find("frame watchdog trips 2 (their draws under own bound 3, above 3; frames under a tenth of the card "
+               "pixels 1; last: frame 2860, 2/4938, bound 0.8913), key watchdog trips 0; latched keys 2;") != std::string::npos);
+  CHECK(s.find(" 7029: 6, ") < s.find(" 5eab: 4, ") && s.find(" 5eab: 4, ") < s.find(" 85b9: 4, 0.605..0.879 (2), 0.935..0.935 (1), 310..455;"));
+  char tiny[32];
+  t.format(tiny);   // a short buffer truncates, never overruns
+  CHECK(std::strlen(tiny) == 31);
+  // A new period keeps the current run: it is counted in the period it ends in.
+  t.reset_period();
+  CHECK(t.switches() == 0 && t.frames == 0 && t.wd_trips == 0 && t.runs[0].empty() && t.keys.at(a).n[1] == 0);
+  t.gbuffer(a, f + 1, true); t.gbuffer(a, f + 2, true); t.gbuffer(a, f + 3, false, SwitchCause::CoverHigh);
+  CHECK(t.runs[1].size() == 1 && t.runs[1][0] == 3 && t.to_cards[size_t(SwitchCause::CoverHigh)] == 1);
+  SwapTransitions empty;
+  empty.format(line);
+  CHECK(std::string(line).find(" 0 strands->cards (") == 0 && std::string(line).find("worst keys") != std::string::npos &&
+        std::string(line).rfind(" none") == std::strlen(line) - 5);
+}
+// rt_hair_swap_latch: a key whose own strands measured outside its bound is retried by the gate as soon as a card-frame
+// (probe) measurement passes; with the latch it keeps its cards until its footprint moves by more than the count noise.
+static void test_swap_latch() {
+  using namespace hair_primary;
+  CHECK(!CoverageGate::footprint_changed(440, 428) && !CoverageGate::footprint_changed(428, 440));   // 12 <= 20.98 + 20.69
+  CHECK(CoverageGate::footprint_changed(520, 428) && CoverageGate::footprint_changed(340, 428));
+  const uint64_t key = 0x9861;
+  for (bool latch : {false, true}) {
+    CoverageGate c;
+    c.hold = true;
+    c.latch = latch;
+    c.observe(key, 100, 430, 398, false);
+    CHECK(c.allow(key, 101));
+    c.swapped(key, 101);
+    c.observe(key, 101, 430, 372, true);   // 0.865: inside the bound of a swapping key (0.82): no latch
+    CHECK(c.allow(key, 102) && c.latched.empty());
+    c.swapped(key, 102);
+    c.observe(key, 102, 430, 260, true);   // 0.60: its strands failed
+    CHECK(c.why(key, 103) == (latch ? CoverageGate::Why::Latched : CoverageGate::Why::Low));
+    c.observe(key, 106, 428, 398, false);  // on cards, the probe passes the strict bound again
+    CHECK(c.allow(key, 107) == !latch);    // off: the retry (strands again, then the next verdict)
+    if (!latch) { CHECK(c.latched.empty() && c.latches == 0); continue; }
+    CHECK(c.latched.at(key) == 428 && c.latches == 1);
+    c.observe(key, 107, 440, 410, false);  // the same footprint within its count noise: still cards
+    CHECK(c.why(key, 108) == CoverageGate::Why::Latched);
+    c.observe(key, 108, 430, 250, true);   // a swapped frame still in flight fails again: one latch, a new reference
+    CHECK(c.latches == 1 && c.latched.at(key) == 0);
+    c.observe(key, 109, 428, 398, false);
+    c.observe(key, 110, 0, 0, false);      // not in view: no evidence
+    CHECK(c.why(key, 111) == CoverageGate::Why::Latched);
+    c.observe(key, 111, 520, 480, false);  // the character came closer: released, the gate judges the new measurement
+    CHECK(c.releases == 1 && c.latched.empty() && c.allow(key, 112));
+    c.observe(key, 112, 520, 300, true);
+    CHECK(!c.latched.empty());
+    c.clear();
+    CHECK(c.latched.empty());
+  }
+  CHECK(coverage_refusal(CoverageGate::Why::Latched) == Refusal::CoverLatched &&
+        std::string(refusal_name(Refusal::CoverLatched)) == "coverage latched");
+  // Without the hold or the footprint bound the failure is judged by the strict bound.
+  CoverageGate strict;
+  strict.latch = true;
+  strict.observe(key, 100, 430, 372, true);   // 0.865 < 0.891
+  CHECK(strict.why(key, 101) == CoverageGate::Why::Latched);
+}
 // rt_hair_coverage_footprint: every measurement, also a first swap, against the bound at its own footprint.
 // 2026-11-07 live draws: 9861 0.842 of 443, 23a3 0.792 of 610, 5381 0.314 of 51 and 0.674 of 46 (refused strictly).
 static void test_coverage_footprint() {
@@ -780,6 +902,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
+  test_swap_transitions(); test_swap_latch();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

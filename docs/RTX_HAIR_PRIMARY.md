@@ -1112,6 +1112,61 @@ Root cause NOT established. Verified facts, then the one hypothesis left and the
     window A (07:41:21.8 to 07:41:29.8) had generated frames throughout; the 1.00 lines up to 07:41:17 are the load,
     the warm-up and the warm-fg0 phase.
 
+## 5t. Strands and cards alternating with a still camera (offline 2026-11-10, branch claude/hair-swap-transitions: key rt_hair_swap_latch, off)
+- FG hypothesis disproved by the user's fg=0 observation 2026-11-10: in 0.9.6-hairtest1 the hair still toggles between
+  strands and cards with a static camera and fg=0, worse for distant characters. Zoomed in, the flicker has a constant
+  period: it flickers for a while, is stable for about 0.5 s, and repeats. The fps cap was 58: 28 frames are 0.48 s.
+- What the code does (user config: hold 1, frame tag 1, footprint 0, watchdog_draw 0, shared_key 0, slot_stable 0,
+  one_key 0). Two loops retry strands without any change in the scene:
+  1. Frame watchdog. A swapped frame whose strands sum to less than the bound of the card pixels puts every hair draw
+     on cards for `kWatchdogFrames` = 28 frames. Cards are steady during the hold (this is the stable phase, 0.48 s at
+     58 fps). Then the prepass drops, the G-buffer swaps 2 to 3 frames later, and the verdict on that first strand
+     frame arrives with the count readback 5 to 6 frames after it. If the fault is still there the cycle is 28 + 2..3
+     + 5..6 = about 35 to 37 frames, of which 6 to 9 show strands (with holes, since the verdict was a failure).
+  2. Coverage gate per key. With the hold a swapping key is judged against `kCoverRatioMin` minus 1 sigma of its count
+     noise, so a key whose true ratio sits at that minimum fails about 16% of its measurements by noise alone (the
+     smaller the footprint the larger sigma relative to the margin: far characters). A failed key shows cards, its
+     masked probe passes the strict 0.891 a few frames later, and it swaps again: card runs of about 3 frames at
+     irregular intervals. This is the frame-to-frame flicker of the strand phase.
+- Evidence in the user log (lean build, so only trips): trips at frames 2740 (1949 / 3082), 2741 (15 / 2316), 2746,
+  2777 (9009 / 12670, bound 0.7993), 2859 (8821 / 12875), 2860 to 2862 (2 to 3 strand pixels of 2660 to 4938).
+  2746 -> 2777 is 31 frames: the first strand frame after a hold tripped again, loop 1 seen once. 2777 -> 2859 is 82
+  frames: not strictly periodic there. Sums of 0.6 to 0.7 and the near-empty frames are one draw or the whole frame
+  without strands (the faults of 5q and 5s, whose keys were off), not count noise. The per-trip line is capped at 8
+  per run, so the log cannot show the period: the timing fits loop 1 (stable phase = the hold), it is not proven.
+- Tool (always on, lean too, CPU only): one line per 300 frames while hair draws are seen,
+  `[hair primary] switches (last 300 frames): N strands->cards (frame watchdog a, key watchdog b, coverage low c,
+  coverage high d, coverage stale/none/invalidated e, coverage latched f, header not applied (camera gate, order) g,
+  live toggle h, other i), M cards->strands; F frames with hair draws, A with every draw on cards; strand runs n:
+  min/median/max frames, card runs n: min/median/max; frame watchdog trips T (their draws under own bound, above;
+  frames under a tenth of the card pixels; last: frame, S/C, bound), key watchdog trips K; latched keys L; worst keys
+  (prefix: switches, ratio as strands min..max (frames), as cards min..max (frames), card pixels min..max)`.
+  A switch is a change of the G-buffer decision of one draw key between frames at most `kSwitchGap` = 2 apart (first
+  draw of the key per frame); a G-buffer draw refused only for its card depth takes the cause that refused its
+  prepass. `hair_primary::SwapTransitions` in common/hair_primary.h, fed from the existing decision in
+  `hair_primary_swap` and the existing count readback. The cap of 8 on the per-trip line stays: this line carries the
+  counts of every period.
+- Reading the line: card runs at 28 to 31 frames with "frame watchdog" as the cause and strand runs of 6 to 9 frames
+  confirm loop 1; "coverage low" with card runs of a few frames confirms loop 2; "ratio as strands" well under "as
+  cards" for a key is a draw whose strands are not where its cards are (5q / 5s), not noise; "frames under a tenth"
+  counts frame-wide misses; card pixels give the distance dependence.
+- Fix behind `rt_hair_swap_latch` (off, live 0/1): a key whose swapped-frame measurement is outside its own bound
+  (the bound the gate applies to a swapping key) is latched to cards. The first card-frame measurement after that is
+  its reference footprint C0; it is released when a card-frame measurement has C with |C - C0| > sqrt(C) + sqrt(C0),
+  1 sigma of each Poisson pixel count: a difference that the counts of an unchanged view do not explain. Until then
+  the gate answers "coverage latched" and the probe keeps measuring without showing strands. After a frame watchdog
+  hold only the keys that passed their own bound retry, so loop 1 ends as well when the fault belongs to some keys.
+- Limits: a key that failed once by noise alone stays on cards in a fully still scene until the footprint moves (a
+  steady card instead of a flicker); after a frame-wide miss every counted key latches; draws without a card marker
+  are not counted and not latched. The latch does not repair the faults of 5q / 5s, it stops their retries.
+- Default path: the latch code is behind `latch` (off); the gate tests of 5b pass unchanged and `test_swap_latch`
+  runs the same sequence with the key off and on (off gives the old answers, no latch entry). No shader, no ABI
+  change, variants.txt delta 0. Cost: one map lookup per hair draw decision and per counted slot; no GPU work.
+- Launcher: "Strand hair: no strand retries" (Advanced, experimental, off).
+- Not verified live. A user session (no job needed, the line is in the lean log) must show, key off: switches well
+  above 0 per period with the causes and run lengths above; key on in the same scene: switches near 0 after the first
+  period, "latched keys" > 0, strand runs no longer ending.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

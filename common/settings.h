@@ -540,6 +540,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_watchdog_one_key", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5i 2026-11-09: turn the camera in S8 with several characters in view: with On one style that flashes to cards no longer takes the others with it."},
 
+  {"exp_hair_swap_latch", "Strand hair: no strand retries",
+   "Experimental: a hair style whose strands failed the coverage check keeps its cards until its size on screen changes, instead of trying the strands again a moment later (hair that flickers between strands and cards with a still camera). Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_swap_latch", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_swap_latch", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5t 2026-11-10: still camera, characters at a distance whose hair flickers between strands and cards: with On each hair settles on strands or on cards and stays there until the camera or the character moves."},
+
   {"exp_rr_hair_guides", "RR hair guides",
    "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -872,6 +879,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_shared_key", "0"},
     {"rt_hair_slot_stable", "0"},
     {"rt_hair_watchdog_one_key", "0"},
+    {"rt_hair_swap_latch", "0"},
     {"rt_hair_groom_lod_keep", "0"},
     {"rt_hair_warmup", "1"},
     {"rt_hair_macro_normal", "0"},
