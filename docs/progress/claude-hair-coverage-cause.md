@@ -14,6 +14,11 @@
   the user log's near-empty frames sit in groom LOD uploads and a refused pool growth. No speculative fix.
 - Cause C (count noise): not independent; with U the per-frame spread is 3 to 4 times under the bound's sigma, fails
   0 down to 534 card pixels in the fixture.
+- Live hs1 085153 (S8 still, flicker seen): per-key one-frame card flashes, not the frame watchdog (2 of 30 periods).
+  "other" = the prepass handshake echo of the same coverage-low refusal (prepass "strike" = allow_prepass). be12's
+  zeros are real one-frame holes at its slot exchanges (dropouts [2 rows: 0+0] on the jump frames; slot_stable was 0).
+- Fix `rt_hair_coverage_confirm` (off, live, CPU only): a held key goes to cards only after 2 bad measurements in a
+  row (kWatchdogDrawBad's reason). Relaxation only; a real loss still refused on the second frame.
 - Lean line, always on, CPU only: `[hair primary] coverage by footprint` (S/C, judged, H/C from the existing shared
   trace counts, U/C, own-bound fails per card-pixel bin; dropouts frame-wide / nothing traced / rejected / two-row).
 - Gates: build.ps1 -Test all pass; hair_groom_asset_test test_coverage_union, hair_groom_test

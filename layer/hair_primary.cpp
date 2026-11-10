@@ -1896,6 +1896,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     auto prune = [&](auto& map) { for (auto it = map.begin(); it != map.end();) it = unseen(it->first) ? map.erase(it) : std::next(it); };
     prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame); prune(g_first_pub); prune(g_draw_watchdog.keys);
     prune(g_coverage.latest); prune(g_coverage.incomplete); prune(g_coverage.swapping); prune(g_coverage.latched);
+    prune(g_coverage.bad_run);
     for (auto it = g_key_seen.begin(); it != g_key_seen.end();) it = it->second + kKeyForgetFrames < now ? g_key_seen.erase(it) : std::next(it);
   }
   g_coverage.hold = cfg_int("rt_hair_primary_hold", 0) != 0;   // once per publish (hysteresis, CoverageGate)
@@ -1903,6 +1904,8 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   g_coverage.latch = cfg_int("rt_hair_swap_latch", 0) != 0;               // 5t: a failed key waits for a new footprint
   if (!g_coverage.latch) g_coverage.latched.clear();
   g_cfg_union = cfg_int("rt_hair_coverage_union", 0) != 0;               // 5u: judge every accepted strand pixel
+  g_coverage.confirm = cfg_int("rt_hair_coverage_confirm", 0) != 0;       // 5u: two bad measurements in a row
+  if (!g_coverage.confirm) g_coverage.bad_run.clear();
   // Round 3 (aa98b960) had joined this statement into the comment above: the publish gate then refused every
   // strand swap (main-view hair stayed cards). Keep it on its own line.
   g_published = now + 1;

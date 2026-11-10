@@ -422,6 +422,46 @@ static void test_coverage_union() {
     fs.reset_period();
     CHECK(fs.frames == 0 && fs.dropouts == 0);
   }
+  // 6. rt_hair_coverage_confirm: hs1 085153 be12 (two rows, ~5700 card pixels, 0.94-0.96 as strands): single frames
+  // with 0 strand pixels at its slot exchanges. Off: each one refuses the key for a frame (and the prepass handshake
+  // a second one). On: a single bad measurement keeps the strands, two in a row go to cards; a key on cards is unchanged.
+  for (bool confirm : {false, true}) {
+    CoverageGate g;
+    g.hold = true;
+    g.confirm = confirm;
+    g.observe(0xbe12, 100, 5700, 5480);
+    CHECK(g.allow(0xbe12, 101));
+    for (uint64_t f = 101; f < 105; ++f) { g.swapped(0xbe12, f); g.observe(0xbe12, f, 5700, 5480, true); }
+    g.swapped(0xbe12, 105);
+    g.observe(0xbe12, 105, 5730, 0, true);   // the exchange frame
+    CHECK(g.why(0xbe12, 106) == (confirm ? CoverageGate::Why::Ok : CoverageGate::Why::Low));
+    g.swapped(0xbe12, 106);
+    g.observe(0xbe12, 106, 5700, 5470, true);
+    CHECK(g.allow(0xbe12, 107));
+    g.swapped(0xbe12, 107);
+    g.observe(0xbe12, 107, 5700, 0, true);
+    g.swapped(0xbe12, 108);
+    g.observe(0xbe12, 108, 5700, 0, true);     // a real loss: two in a row
+    CHECK(g.why(0xbe12, 109) == CoverageGate::Why::Low);
+    CoverageGate cards;                        // not swapping: the start decision is the strict one, unconfirmed
+    cards.hold = true;
+    cards.confirm = confirm;
+    cards.observe(0x77, 100, 5700, 0);
+    CHECK(cards.why(0x77, 101) == CoverageGate::Why::Low);
+  }
+  for (int i = 0; i < 2000; ++i) {   // monotone: confirm never refuses what the hold alone allows
+    CoverageGate off, on;
+    off.hold = on.hold = true;
+    on.confirm = true;
+    for (uint64_t f = 100; f < 140; ++f) {
+      const uint64_t card = 64 + rnd(6000), strand = rnd(4) ? card * (850 + rnd(150)) / 1000 : rnd(uint32_t(card) + 1);
+      if (off.allow(5, f)) off.swapped(5, f);
+      if (on.allow(5, f)) on.swapped(5, f);
+      off.observe(5, f, card, strand, off.is_swapping(5, f));
+      on.observe(5, f, card, strand, on.is_swapping(5, f));
+      if (off.is_swapping(5, f + 1) == on.is_swapping(5, f + 1) && off.allow(5, f + 1)) CHECK(on.allow(5, f + 1));
+    }
+  }
 }
 // rt_hair_coverage_footprint: every measurement, also a first swap, against the bound at its own footprint.
 // 2026-11-07 live draws: 9861 0.842 of 443, 23a3 0.792 of 610, 5381 0.314 of 51 and 0.674 of 46 (refused strictly).

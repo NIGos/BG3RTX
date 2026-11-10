@@ -1237,6 +1237,37 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
 - With rt_hair_coverage_union=1 (next session): judged = U/C flat over the bins (0.9-1.08), fails near 0 above 256
   card pixels, switches near 0 with a still camera; dropouts unchanged in kind (U = 0 is still a dropout).
 
+**Live evidence: hs1 085153 (S8 still camera, main 2e1f28d0, VALID, the user saw the flicker; 30 switches lines of
+60 frames).**
+- The frame watchdog is not the loop here: trips in 2 of 30 periods (frame 1492, 1075/1867; 5 trips near 2116,
+  7773/14059, after the live toggle window, 2 frames under a tenth).
+- The steady flicker is per key: in about 15 of 30 periods one key goes strands->cards 1-5 times per 60 frames, card
+  runs 1/1/1 (max 4), causes "coverage low" and "other" in about equal numbers.
+- "other" is the echo of the same refusal, not a second cause: the period's swap refusals pair it with
+  "prepass: strike N" and "G-buffer: card depth not dropped N" (e.g. 2280: coverage low 4, card depth not dropped 6,
+  prepass strike 6). Refusal::Strike is SwapGate::allow_prepass, the prepass/G-buffer handshake (the key's G-buffer
+  drew strands in the previous publish); after a coverage-low card frame the next prepass keeps its card depth, so the
+  G-buffer after it draws cards too ("card depth not dropped", switch cause of the prepass refusal = Other). One
+  refusal shows as two one-frame card flashes one strand frame apart.
+- be12 (two groom rows, 5650-6200 card pixels, ratio 0.94-0.96, up to 11 switches per period, min 0.000): cause B,
+  the 5s slot exchange, not a measurement fault. Every dropout is `be12:~5700/0 rejected after the hit [2 rows: 0+0]`
+  (card markers written, no strand accepted) at build frames of `slot content jumps` pairs for be12
+  (2204, 2205, 2232, 2245, 2356, 2677, 2822, 2861, 2865, 2866; 2275 and 2359 lie past the 6-entry cap). The draw really drew no strands that frame (a
+  one-frame hole); the probe traces the same exchanged rows, hence 0.000 "as cards" too. rt_hair_slot_stable was 0.
+  The zero is read 5-6 frames later and refuses a healthy frame: a second artefact.
+- ca38 (393-456 card pixels in those periods, as strands 0.815..0.938, as cards 0.882..0.928): S/C straddling the
+  bound at a 400-pixel footprint. With S that is A plus noise (5u fixture: S/C 0.81 at 4 texels per pixel); U/C
+  decides (the coverage by footprint line). 5d82 (1..1161 card pixels, 0.143..0.967): a changing footprint, the
+  small end below kDropoutMinCard-scale evidence.
+- Fix `rt_hair_coverage_confirm` (live, off, CPU only; launcher "Strand hair: confirm a failed coverage check"): a held
+  swapping key returns to cards only after kCoverConfirm = 2 measurements in a row outside its own swapping bound
+  (kWatchdogDrawBad's reason: one header per G-buffer frame, so a one-publish fault makes one bad measurement; noise
+  fails twice in a row at p^2). A key on cards keeps the strict start bound. Relaxation only (test_coverage_union
+  part 6: be12's sequence, a real two-frame loss still refused, 2000 random sequences: never refuses what the hold
+  alone allows). It removes the delayed card flash; the hole frame itself is fixed by rt_hair_slot_stable.
+- Next session with the keys on (union, confirm, slot_stable): switches "coverage low" and "other" near 0, be12
+  dropouts 0 with "slot exchanges resolved" > 0.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

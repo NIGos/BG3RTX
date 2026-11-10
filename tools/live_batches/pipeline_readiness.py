@@ -126,6 +126,8 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_hair_shared_key rt_hair_watchdog_one_key "
     # 5t: the coverage gate latch (hair_primary CoverageGate). CPU only.
     "rt_hair_swap_latch "
+    # 5u: two bad coverage measurements in a row (hair_primary CoverageGate::confirm). CPU only.
+    "rt_hair_coverage_confirm "
     # Elastic capture reserve policy (common/rt_capture_budget.h CaptureHeadroom, read per frame in layer/geocapture.cpp).
     "rt_capture_rise_reserve rt_alpha_floor_yield "
     # Mesh cache budget accounting (common/rt_capture_budget.h mesh_cache_charged_as, read per build/present in

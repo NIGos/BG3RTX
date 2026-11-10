@@ -419,6 +419,20 @@ struct CoverageGate {
   bool latch = false;
   std::unordered_map<uint64_t, uint64_t> latched;
   uint64_t latches = 0, releases = 0;
+  // rt_hair_coverage_confirm (off; docs/RTX_HAIR_PRIMARY.md 5u): a held swapping key goes to cards only after
+  // kCoverConfirm measurements in a row outside the swapping-key bounds (the hold's bound at each measurement's own
+  // footprint), not on one. Same rule and reason as kWatchdogDrawBad: a G-buffer frame applies one header, so a fault of
+  // one publish (hs1 085153: be12's slot exchange, `[2 rows: 0+0]` on single frames) makes one bad measurement; by the time
+  // it is read (5-6 frames later) that frame's hole is already shown and the card frame it causes is a second artefact.
+  // Count noise at the bound fails two measurements in a row at p^2 instead of p. A real loss still fails on the second.
+  bool confirm = false;
+  std::unordered_map<uint64_t, uint32_t> bad_run;
+  static constexpr uint32_t kCoverConfirm = 2;
+  static bool outside_swapping(uint64_t card, uint64_t strand, uint64_t inside) {
+    const double s = cover_sigma(strand, card), c = double(card);
+    return double(strand) < (std::min)(kCoverMin, kCoverRatioMin - s) * c ||
+           double(inside) > (std::max)(kCoverMax, kCoverRatioMax + s) * c;
+  }
   static bool footprint_changed(uint64_t card, uint64_t reference) {
     const double d = card > reference ? double(card - reference) : double(reference - card);
     return d > std::sqrt(double(card)) + std::sqrt(double(reference));
@@ -439,7 +453,12 @@ struct CoverageGate {
     if (hold && !card) return;
     if (inside == UINT64_MAX) inside = strand;
     auto& e = latest[key];
-    if (frame >= e.frame) e = {frame, card, strand, inside};
+    const bool newest = frame >= e.frame;
+    if (newest) e = {frame, card, strand, inside};
+    if (confirm && newest && card) {
+      uint32_t& b = bad_run[key];
+      b = outside_swapping(card, strand, inside) ? b + 1 : 0;
+    }
     if (!latch || !card) return;
     if (was_swapped) {
       const double s = hold || footprint ? cover_sigma(strand, card) : 0.0;
@@ -471,12 +490,17 @@ struct CoverageGate {
       bound = (std::min)(bound, kCoverRatioMin - s);
       upper = (std::max)(upper, kCoverRatioMax + s);
     }
-    return e.ratio() < bound ? Why::Low : e.inside_ratio() > upper ? Why::High : Why::Ok;
+    const Why w = e.ratio() < bound ? Why::Low : e.inside_ratio() > upper ? Why::High : Why::Ok;
+    if (confirm && held && w != Why::Ok) {   // one bad measurement of a swapping key: not yet confirmed
+      const auto b = bad_run.find(key);
+      if (b == bad_run.end() || b->second < kCoverConfirm) return Why::Ok;
+    }
+    return w;
   }
   bool allow(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
     return why(key, now, bound, upper) == Why::Ok;
   }
-  void clear() { latest.clear(); incomplete.clear(); swapping.clear(); latched.clear(); }
+  void clear() { latest.clear(); incomplete.clear(); swapping.clear(); latched.clear(); bad_run.clear(); }
 };
 
 // Main-view hair draws that kept their cards, by the first gate that refused them (layer/hair_primary.cpp
