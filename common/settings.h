@@ -1354,6 +1354,7 @@ inline Map parse_ini(const std::string& text) {
 // Applies one layer onto `merged`: its preset's keys first, then its own keys.
 // Returns a note for the log ("" or "unknown preset 'x'").
 inline void enforce_release_policy(Map& m);
+inline void complete_marked_choices(Map& merged, const Map& layer);
 
 inline std::string apply_layer(Map& merged, const Map& layer) {
   std::string note;
@@ -1367,6 +1368,7 @@ inline std::string apply_layer(Map& merged, const Map& layer) {
     }
   }
   for (auto& kv : layer) merged[kv.first] = kv.second;
+  complete_marked_choices(merged, layer);
   enforce_release_policy(merged);
   return note;
 }
@@ -1450,6 +1452,35 @@ inline int knob_value(const Knob& k, const Map& m) {
 }
 
 // Neutralize stale raw overrides as well as hidden GUI selections in release.
+// A file written before a release control's choice gained keys (RTX Hair On, 2026-11-10: four keys more) still
+// selects that choice through its migration mark, but lacks the new keys, so they would load as their code defaults
+// until the launcher saves again. The keys of such a choice that this file does not set (its preset writes every choice key, so it cannot tell)
+// take the choice's values at load. A key the file sets keeps the file's value. Only for a mark set in this same
+// file, only without dev=1, and never for developer-only knobs or choices.
+inline void complete_marked_choices(Map& merged, const Map& layer) {
+  if (dev_mode(lookup(merged, "dev"))) return;
+  for (const auto& k : kKnobs) {
+    if (k.dev_only || k.kind != Kind::Choice) continue;
+    bool exact = false;
+    for (int c = 0; c < choice_count(k) && !exact; ++c) {
+      exact = true;
+      for (const KV& kv : k.choices[c].kv)
+        if (kv.key && !same_value(lookup(merged, kv.key), kv.value)) exact = false;
+    }
+    if (exact) continue;
+    const int c = knob_value(k, merged);   // the choice the mark selects
+    if (c <= 0 || k.choices[c].dev) continue;
+    bool marked_here = false;
+    for (const char* mark : k.choices[c].mark)
+      if (mark && layer.count(mark))
+        for (const KV& kv : k.choices[c].kv)
+          if (kv.key && std::string(kv.key) == mark && same_value(lookup(layer, mark), kv.value)) marked_here = true;
+    if (!marked_here) continue;
+    for (const KV& kv : k.choices[c].kv)
+      if (kv.key && !layer.count(kv.key)) merged[kv.key] = kv.value;
+  }
+}
+
 inline void enforce_release_policy(Map& m) {
   if (dev_mode(lookup(m, "dev"))) return;
   auto write = [&](const char* id, int value) {

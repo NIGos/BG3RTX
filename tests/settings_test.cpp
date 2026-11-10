@@ -1398,6 +1398,38 @@ static void test_release_rtx_hair() {
   // dev=1: the policy does not run.
   m = merged(off, true);
   CHECK_EQ(get(m, "rt_hair_groom"), "1"); CHECK_EQ(get(m, "rt_hair_fibre"), "1");
+  // Upgrade (complete_marked_choices): a file the launcher wrote before 2026-11-10 has RTX Hair On without the four
+  // keys the bundle gained. They load as the choice's values, with no launcher save.
+  static const char* const grown[] = {"rt_hair_coverage_union", "rt_hair_coverage_confirm", "rt_hair_slot_stable", "rt_hair_live_warmup"};
+  Map old_on = on_map(hair, 1);
+  for (const char* key : grown) CHECK(old_on.erase(key) == 1);
+  m = merged(old_on);
+  CHECK(knob_value(hair, m) == 1);
+  for (const KV& kv : hair.choices[1].kv) if (kv.key) CHECK_EQ(std::string(kv.key) + "=" + get(m, kv.key), std::string(kv.key) + "=" + kv.value);
+  { Map only; only["rt_hair_groom_primary"] = "1"; m = merged(only); }   // the mark alone: the whole bundle
+  for (const KV& kv : hair.choices[1].kv) if (kv.key) CHECK_EQ(std::string(kv.key) + "=" + get(m, kv.key), std::string(kv.key) + "=" + kv.value);
+  // A key the file sets keeps the file's value (an A/B of one bundle key survives a load).
+  { Map ab = old_on; ab["rt_hair_coverage_union"] = "0"; m = merged(ab); }
+  CHECK_EQ(get(m, "rt_hair_coverage_union"), "0"); CHECK_EQ(get(m, "rt_hair_slot_stable"), "1");
+  CHECK(knob_value(hair, m) == 1);
+  // RTX Hair off, with or without the old keys: the four stay 0.
+  { Map old_off = old_on; old_off["rt_hair_groom_primary"] = "0"; old_off["rt_hair_capture"] = "0"; m = merged(old_off); }
+  for (const char* key : grown) CHECK_EQ(std::string(key) + "=" + get(m, key), std::string(key) + "=0");
+  m = merged(Map{});
+  for (const char* key : grown) CHECK_EQ(std::string(key) + "=" + get(m, key), std::string(key) + "=0");
+  CHECK(knob_value(hair, m) == 0);
+  // dev=1: nothing is completed.
+  m = merged(old_on, true);
+  for (const char* key : grown) CHECK_EQ(std::string(key) + "=" + get(m, key), std::string(key) + "=0");
+  // The mark must be in the file that lacks the keys: a later file without it completes nothing, and a file whose
+  // keys already match a choice is left alone.
+  {
+    Map base = code_defaults(), first, second;
+    first["rt_hair_groom_primary"] = "1"; first["rt_hair_coverage_union"] = "0"; first["experimental_options"] = "1";
+    second["fps_cap"] = "58";
+    apply_layer(base, first); apply_layer(base, second);
+    CHECK_EQ(get(base, "rt_hair_coverage_union"), "0"); CHECK_EQ(get(base, "rt_hair_coverage_confirm"), "1");
+  }
 }
 
 static void test_stats_window() {
