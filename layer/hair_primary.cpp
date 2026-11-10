@@ -180,6 +180,12 @@ struct PendingHeader {
   hair_primary::DrawSlots slots;
   bool open = false;
   bool slotless = false;   // the record-time header (current 0, diagnostic): only checked for a newer ordered build
+  // 6a rt_hair_stale_publish: the record-time publish's build camera, and the camera UBO (set 0 binding 2) of the
+  // G-buffer's first swapped draw (its gCam), read at the submit.
+  float cam[3] = {};
+  bool cam_ok = false;
+  VkBuffer ubo = VK_NULL_HANDLE;
+  VkDeviceSize ubo_offset = 0;
 };
 PendingHeader g_pending[kHeaderSlots];
 uint32_t g_pending_next = 0;
@@ -207,6 +213,14 @@ uint64_t g_watchdog_logged = 0, g_watchdog_period = 0;
 hair_primary::DrawWatchdog g_draw_watchdog;
 bool g_cfg_watchdog_draw = false;
 uint64_t g_draw_watchdog_period = 0;
+// 6a rt_hair_stale_publish (read once per publish): G-buffer submits by camera check (period line), the frames drawn as
+// cards, how the G-buffer camera was known (its UBO / the build camera of its frame), and the first frames logged.
+bool g_cfg_stale = false;
+struct StaleStats {
+  uint64_t n[size_t(hair_primary::Stale::Count)] = {}, carded = 0, from_ubo = 0, from_build = 0;
+  float max_m = 0.0f;
+} g_stale;
+uint32_t g_stale_logged = 0;
 uint64_t g_watchdog_spared_mark = 0;   // rt_hair_watchdog_one_key: g_watchdog.spared at the last period line
 // 5u: the coverage measurements by footprint (lean period line), and rt_hair_coverage_union (read once per publish): the
 // count runs the union request and the gate and both watchdogs judge every accepted strand pixel instead of only those
@@ -1312,7 +1326,7 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
     }
     GbFrame& gf = g_gb_frames[p.frame % 16];
     const bool frame_known = gf.frame == p.frame;
-    const hair_primary::SubmitDecision d = hair_primary::submit_decision(picks, submitted, usable, pixels, keys, kStaged, p.tag,
+    hair_primary::SubmitDecision d = hair_primary::submit_decision(picks, submitted, usable, pixels, keys, kStaged, p.tag,
         p.pixels, p.slots, g, [&](int i) {
           for (size_t k = 0; k < cmds.size(); ++k)
             if (uint64_t(cmds[k]) == g_staged[i].pick.cmd && cmd_recording(cmds[k]) == g_staged[i].recording) return int(k);
@@ -1322,6 +1336,50 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
     if (p.slotless) {   // rt_hair_groom_primary_current 0 (diagnostic): the record-time header cannot follow the build
       if (ci >= 0) ++g_header_mismatch;
       continue;
+    }
+    uint32_t stale_extra = 0;
+    {   // 6a: the camera of the publish this G-buffer will trace (ci, else the record-time one) against its own camera
+      const StagedHeader* a = ci >= 0 ? &g_staged[ci] : nullptr;
+      const uint64_t pub = a ? (a->pick.tag ? a->pick.tag - 1u : 0u) : (p.tag ? p.tag - 1u : 0u);
+      const float* hcam = a ? a->cam : p.cam;
+      const bool hcam_ok = a ? usable[ci] : p.cam_ok;
+      float gcam[3] = {}, vp[16], eye[3], ubo_eye = -1.0f, off = -1.0f, labelled = -1.0f;
+      const char* source = "none";
+      // Its gCam (set 0 binding 2 of its first swapped draw), trusted only as a camera block: a camera-relative VP whose
+      // eye sits at its origin (5z vp_eye). Else the build camera noted for its frame.
+      if (p.ubo && read_mapped(p.ubo, p.ubo_offset + 128, vp, sizeof vp) &&
+          read_mapped(p.ubo, p.ubo_offset + 208, gcam, sizeof gcam)) {
+        ubo_eye = hair_primary::vp_eye(vp, eye);
+        if (ubo_eye >= 0.0f && ubo_eye <= hair_primary::kStaleCameraTol) source = "its camera UBO";
+      }
+      const hair_primary::CameraSteps::Entry* own = g_cam_steps.find(p.frame);
+      if (*source == 'i' && own) labelled = hair_primary::camera_distance(gcam, own->pos);
+      if (*source != 'i' && own) { std::memcpy(gcam, own->pos, sizeof gcam); source = "the build camera of its frame"; }
+      if (*source == 'i') ++g_stale.from_ubo; else if (own) ++g_stale.from_build;
+      if (*source != 'n' && hcam_ok) off = hair_primary::camera_distance(gcam, hcam);
+      const hair_primary::Stale st = hair_primary::stale_publish(hcam_ok ? pub : 0u, p.frame, off);
+      ++g_stale.n[size_t(st)];
+      g_stale.max_m = (std::max)(g_stale.max_m, off);
+      const uint32_t extra = stale_extra = hair_primary::stale_card_slots(g_cfg_stale, st, p.slots) & ~d.plan.card_slots;
+      if (extra) {   // card mode for every recorded slot (the shader's mask bits 16-31), no evidence from them
+        ++g_stale.carded;
+        d.plan.card_slots |= extra;
+        d.masks = hair_primary::slot_masks(frame_known ? gf.swapped_slots & ~d.plan.card_slots : hair_primary::kAllSwapSlots,
+                                           d.plan.card_slots);
+        if (!a && frame_known) {   // the record-time header stays: only its slots' bookkeeping (the c path does it below)
+          for (uint32_t i = 0; i < hair_primary::kDrawSlots; ++i) if (extra & (1u << i)) gf.draw_keys[i] = 0;
+          gf.swapped_slots &= ~extra;
+        }
+      }
+      if ((st == hair_primary::Stale::Moved || st == hair_primary::Stale::Unknown) && g_stale_logged < 8) {
+        ++g_stale_logged;
+        log("[hair primary] stale publish: G-buffer frame %llu applies the publish of build frame %llu (%lld frames "
+            "before), header camera %.3f m from the G-buffer's (camera from %s; its UBO VP eye %.3f m, -1: not read; UBO "
+            "camera %.3f m from the build camera of frame %llu, -1: not both): %s; %s (rt_hair_stale_publish %d)",
+            (unsigned long long)p.frame, (unsigned long long)pub, (long long)p.frame - (long long)pub, off, source, ubo_eye,
+            labelled, (unsigned long long)p.frame, hair_primary::stale_name(st),
+            extra ? "every recorded slot draws its card this frame" : "traced as before", int(g_cfg_stale));
+      }
     }
     const StagedHeader* c = ci >= 0 ? &g_staged[ci] : nullptr;
     const uint32_t slot = uint32_t(&p - g_pending);
@@ -1345,9 +1403,9 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
       header_image(*c, image);
       if (p.seal) std::memcpy(image, &p.seal, 4);   // rt_hair_primary_frame_tag: the frame keeps its own tag
       std::memcpy(image + hair_primary::kKeyMapOffset, u.key_map, sizeof u.key_map);   // the recorded draws' slots
-      if (card_slots) {
+      if (const uint32_t upgrade_cards = card_slots & ~stale_extra) {   // 6a frames are counted on their own line
         ++g_card_upgrades;
-        for (uint32_t i = 0; i < hair_primary::kDrawSlots; ++i) g_card_slots += (card_slots >> i) & 1u;
+        for (uint32_t i = 0; i < hair_primary::kDrawSlots; ++i) g_card_slots += (upgrade_cards >> i) & 1u;
       }
       if (frame_known) {
         gf.tag = p.seal ? p.seal : c->pick.tag;
@@ -1585,6 +1643,8 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
     p.slots = g_staged[i].slots;
     p.slotless = !have_slots;
     p.open = true;
+    p.cam_ok = hair_primary::header_usable(g_staged[i].bytes);
+    std::memcpy(p.cam, g_staged[i].cam, sizeof p.cam);
   }
   const uint32_t seal = hair_primary::gbuffer_tag(frame_tags, g_staged[i].pick.tag, frame);
   apply_header(cmd, g_staged[i], slot, seal);
@@ -1612,7 +1672,17 @@ void depth_orphan(uint64_t key, uint64_t now, VkPipeline pipeline, const char* r
     g_depth_orphans[g_depth_orphan_count++] = {key, g_depth.keys.at(key), now, uint64_t(pipeline), reason};
 }
 
-bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+// 6a: the open submit-time header of this G-buffer recording (g_mu held; nullptr: none).
+static PendingHeader* pending_of(VkCommandBuffer cmd) {
+  const uint64_t recording = cmd_recording(cmd);
+  for (PendingHeader& p : g_pending)
+    if (p.open && !p.slotless && p.cmd == uint64_t(cmd) && p.recording == recording) return &p;
+  return nullptr;
+}
+
+// want_cam (6a): this G-buffer draw swapped and its recording's pending header has no camera UBO yet (looked up by the
+// caller after g_mu is released: the tracker lock is taken first elsewhere).
+static bool hair_primary_swap_locked(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args, bool& want_cam) {
   if (args.kind != 1 || !s->pipe[0] || !hair_primary_wanted()) return false;
   // M2.2: a sun cascade pass (depth-only D16 cascade array layer), decided before the lock (tracker lock inside).
   const bool sun = s->pass.color_count == 0 && s->pass.depth_format == VK_FORMAT_D16_UNORM && geo_cascade_layer(s->pass) >= 0;
@@ -1777,6 +1847,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
       }
     }
     if (g_gb_frames[(now + 1) % 16].frame == now + 1) g_gb_frames[(now + 1) % 16].swapped_slots |= 1u << draw;
+    if (const PendingHeader* ph = pending_of(cmd)) want_cam = !ph->ubo;
     g_coverage.swapped(key, now + 1);
     {
       uint64_t& last = g_last_swap_frame[key];
@@ -1812,6 +1883,20 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->hp_query);
   }
   return true;
+}
+
+bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  bool want_cam = false;
+  const bool swapped = hair_primary_swap_locked(cmd, s, args, want_cam);
+  if (want_cam) {   // 6a: the strand draw's gCam (set 0 binding 2), as geocapture finds the build's camera UBO
+    Bg3Binding b;
+    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, s) &&
+        (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)) {
+      std::lock_guard<std::mutex> lock(g_mu);
+      if (PendingHeader* p = pending_of(cmd)) if (!p->ubo) { p->ubo = b.buffer; p->ubo_offset = b.offset; }
+    }
+  }
+  return swapped;
 }
 
 void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
@@ -1858,6 +1943,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   g_cfg_passes = cfg_int("rt_hair_primary_passes", 15);                   // the draw hook's keys (round 3 L5)
   g_cfg_cascade_drop = cfg_int("rt_hair_groom_cascade_drop", 0) != 0;
   g_cfg_watchdog_draw = cfg_int("rt_hair_watchdog_draw", 0) != 0;
+  g_cfg_stale = cfg_int("rt_hair_stale_publish", 0) != 0;
   g_watchdog.one_key = cfg_int("rt_hair_watchdog_one_key", 0) != 0;
   count =(std::min)(count, hair_primary::kMaxGrooms);
   const uint64_t now = frame_index();
@@ -2122,6 +2208,14 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         (unsigned long long)g_cam_check.differ, g_cam_check.max_m, (unsigned long long)g_cam_check.gpu,
         (unsigned long long)(g_watchdog.spared - g_watchdog_spared_mark), int(g_watchdog.one_key));
     g_watchdog_spared_mark = g_watchdog.spared;
+    log_stats("[hair primary] stale publish check (last %u frames): G-buffer submits with their own build frame's "
+        "publish %llu, an older publish of the same camera %llu, camera moved since the publish %llu, camera not known "
+        "%llu; drawn as cards %llu (rt_hair_stale_publish %d); G-buffer camera from its UBO %llu, from its frame's build "
+        "camera %llu; largest offset %.3f m",
+        stats_period(300), (unsigned long long)g_stale.n[0], (unsigned long long)g_stale.n[1],
+        (unsigned long long)g_stale.n[2], (unsigned long long)g_stale.n[3], (unsigned long long)g_stale.carded,
+        int(g_cfg_stale), (unsigned long long)g_stale.from_ubo, (unsigned long long)g_stale.from_build, g_stale.max_m);
+    g_stale = StaleStats{};
     g_header_mismatch = g_card_upgrades = g_card_slots = g_mask_holes = g_watchdog_period = g_colour_samples = 0;
     g_cam_check = CamCheck{};
     g_draw_watchdog_period = 0;

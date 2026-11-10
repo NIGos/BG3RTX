@@ -30,6 +30,9 @@ HAIR = ("rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,r
         "rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,"
         # the fix under test (branch claude/hair-row-stable, 5w): not in the bundle
         "rt_hair_row_stable=1,"
+        # 6a (branch claude/hair-stale-publish): a G-buffer frame that can only trace a publish of another camera draws
+        # its cards that frame (210357: every trip was such a frame, k = 1 and a 0.34-0.70 m camera step)
+        "rt_hair_stale_publish=1,"
         # part 2 (branch claude/hair-pixel-lod, 5v): off until its windows
         "rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0")
 SET = ("preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,"
@@ -133,6 +136,15 @@ def make_job(plan):
              "match": "build camera step -?[0-9.]+ m at that frame.*applied the publish of build frame \\d+ .*VP eye -?[0-9.]+ m",
              "windows": ["lower", "watch"], "event": True,
              "min": 0},
+            # 6a (rt_hair_stale_publish=1): no frame watchdog trip in the zoom or after it (210357: 5 in lower), judged on
+            # every complete 'header safety' period line (frame windows reset the stats).
+            {"name": "no frame watchdog trip in lower and watch (rt_hair_stale_publish)",
+             "select": "\\[hair primary\\] header safety \\(last", "match": ", watchdog trips 0, ",
+             "windows": ["lower", "watch"], "period_frames": 60, "min": 1},
+            {"name": "the stale publish check acts in the lower window (key on, the G-buffer camera known)",
+             "select": "\\[hair primary\\] stale publish check \\(last",
+             "match": "\\(rt_hair_stale_publish 1\\); G-buffer camera from its UBO [1-9]",
+             "windows": ["lower"], "period_frames": 60, "min": 1},
             {"name": "the groom TLAS check period line in both windows",
              "select": "\\[hair primary\\] groom TLAS check \\(last", "match": "G-buffer submits checked",
              "windows": ["watch"], "event": True, "min": 1},
@@ -157,7 +169,8 @@ def make_job(plan):
         ],
         "live_flow": {"expected_fps": 30, "settings_latency_s": 1, "trace_stall_s": 3},
         "estimated_phase_seconds": sum(p["seconds"] for p in plan),
-        "purpose": "Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the "
+        "purpose": "6a: rt_hair_stale_publish on, 0 frame watchdog trips in the zoom (lower) and after it (watch). "
+                   "Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the "
                    "groom TLAS check and the first-seen frame lines: which candidate breaks the existing keys' strands. "
                    "Then, same launch, rt_hair_pixel_lod off/on/off at the static zoomed-out camera: period line, strand "
                    "G-buffer GPU ms, PNG bursts of the heads. STAGED, not authorized.",

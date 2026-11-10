@@ -1690,6 +1690,41 @@ the wheel dolly runs at about 15 m/s), none in the static windows. Frame 2066 (s
 3. shaderInt64 and fragment stores (water's precedent: `sharc_device=1`); refuse the variant otherwise.
 4. Instanced hair (FS 0ca5ee93, other bindings) keeps its cards in increment 1.
 
+## 6a. Stale publish under a fast camera (offline 2026-11-10, branch claude/hair-stale-publish: key rt_hair_stale_publish, off)
+
+Live hl1 210357 (VALID, 5z diagnostics): all 5 frame watchdog trips (G-buffer frames 2618-2620, 2622, 2624) applied
+the previous build frame's publish (k = 1), its header camera one build camera step (0.34-0.70 m) from the frame's,
+VP eye 0.000 m at both; every dropout "rejected after the hit"; no trip in a static window.
+- Cause, as far as it is established: the game submitted those G-buffer passes before their frame's scene build
+  (heavy frames during the wheel dolly). `ordered_publish` (common/hair_primary.h) then correctly picks the newest
+  publish ordered before the G-buffer on the queue, the previous frame's: the builds rewrite points and BLASes in place,
+  so no other publish is consistent with what the GPU holds. The pick counter calls it "this frame's publish" (it counts
+  any upgrade newer than the record-time header), which is why 5z read "58 of 61 current".
+- Option (b) of the brief (rebase the ray by the header camera offset) already exists: `hp_rebase`
+  (shaders/rt/hair_primary_rebase.hlsli) starts the rays at gCam.position - header camera, hit depth and the card band
+  use this frame's VP. Every live frame so far ran it with org = 0; the trips are its first non-zero use and it lost the
+  strands there. Why (a +208 that is not the VP origin under motion, or points not of the header's build) is not
+  decidable offline; the new log lines below decide it.
+- Option (a) (wait for the frame's own build) is not possible: the build is submitted after the G-buffer, so a wait at
+  the G-buffer's vkQueueSubmit would block the game's render thread on its own later submit.
+- Fix (CPU only, no shader, no ABI, variants delta 0): at the G-buffer's submit the applied publish's build camera is
+  compared with the G-buffer's own camera: its gCam UBO (set 0 binding 2 of its first swapped draw, +208, read at the
+  submit; trusted only when its VP eye (+128) is within 1 cm of its origin), else the build camera noted for its frame.
+  `hair_primary::stale_publish`: Own / SameCamera / Moved / Unknown. With the key, Moved (over kStaleCameraTol = 1 cm,
+  hp_on_card's fixed band term) and Unknown for an older publish put every recorded slot in card mode for that frame
+  (the existing submit card mode: card G-buffer and card depth, velocity card motion, no coverage evidence, not judged by
+  either watchdog). One frame of cards instead of 28. Key off: counted and logged only, no behaviour change; a frame of
+  its own publish with an unknown camera is never changed.
+- Lines: `[hair primary] stale publish check (last N frames): ... own ... same camera ... camera moved ... not known ...;
+  drawn as cards C (rt_hair_stale_publish K); G-buffer camera from its UBO U, from its frame's build camera B; largest
+  offset X m` per period, and the first 8 `[hair primary] stale publish: G-buffer frame F applies the publish of build
+  frame B (k frames before), header camera X m from the G-buffer's (...; UBO camera Y m from the build camera of frame F)`.
+- CTest hair_groom_asset_test test_stale_publish. hl1 regenerated with the key on: expect_every "watchdog trips 0" on
+  every complete header safety line in lower and watch, and the stale check line in lower with its UBO camera known
+  (predicted.json fix_6a_stale_publish); lint 0 failing (live and frozen).
+- Next after the live: if Y is about 0 and trips are 0, the rebase with org != 0 is the remaining defect (strands for
+  those frames instead of cards); if Y is about one step, +208 of the build UBO is not the G-buffer's camera.
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU
