@@ -725,6 +725,18 @@ inline bool groom_prev_points(uint32_t prev_frames_after, uint64_t last_update, 
   return prev_frames_after > 1 && last_update && last_update + 1 == now;
 }
 
+// Diagnostic (docs/RTX_HAIR_PRIMARY.md 5q): a groom slot whose points left their own bounds between two consecutive
+// builds. A dynamic slot is the n-th draw of its mesh in the capture (layer/bvhsplit.cpp bvh_classify), so when the game
+// swaps the order of two characters with one hairstyle each slot receives the other character's points in place. world:
+// the bounds centre plus that build's camera; diagonal: the larger of the two bounds' diagonals. Derived, not tuned: a
+// head that moves more than its own hair's diagonal in one frame is not animation (0.3 m per frame is 18 m/s at 60 fps).
+inline bool groom_bounds_jump(const float prev_world[3], uint64_t prev_frame, const float world[3], uint64_t frame,
+                              float diagonal) {
+  if (!prev_frame || frame != prev_frame + 1 || !(diagonal > 0.0f)) return false;
+  const float dx = world[0] - prev_world[0], dy = world[1] - prev_world[1], dz = world[2] - prev_world[2];
+  return dx * dx + dy * dy + dz * dz > diagonal * diagonal;
+}
+
 // Round 3 L4: the whole per-pending-header decision at vkQueueSubmit (layer/hair_primary.cpp hair_primary_submit_begin),
 // composed from ordered_publish and upgrade_plan so it is unit-tested as the layer runs it. Staged publish i: its pick,
 // submitted flag, header_usable, pixel count and keys. frame_known: the G-buffer frame's GbFrame is this recording's

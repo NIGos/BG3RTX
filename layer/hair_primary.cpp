@@ -186,7 +186,8 @@ uint64_t g_current_picks[size_t(hair_primary::CurrentPick::Count)] = {};   // G-
 struct DropoutStats {
   uint64_t no_camera = 0, recovered = 0, gated = 0, upgrades_gated = 0, draws = 0;
   uint64_t why[size_t(hair_primary::Dropout::Count)] = {};
-  struct First { uint64_t frame, key; uint32_t card, accepted; hair_primary::Dropout why; } first[4] = {};
+  // rows / row_pixels: the judged frame's strand pixels of the first two groom rows carrying the key (5q: one or both).
+  struct First { uint64_t frame, key; uint32_t card, accepted; hair_primary::Dropout why; uint32_t rows = 0, row_pixels[2] = {}; } first[4] = {};
   uint32_t firsts = 0;
 } g_drop;
 std::unordered_map<uint64_t, uint32_t> g_last_card;   // per draw key: its card pixels in the last counted frame
@@ -400,7 +401,12 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
           const auto why = hair_primary::dropout_reason(card, acc, last_card, g_seen.traced, g_seen.hit, true);
           if (why != hair_primary::Dropout::None) {
             ++g_drop.draws; ++g_drop.why[size_t(why)];
-            if (g_drop.firsts < 4) g_drop.first[g_drop.firsts++] = {gf->frame, key, card, acc, why};
+            if (g_drop.firsts < 4) {
+              auto& f = g_drop.first[g_drop.firsts++];
+              f = {gf->frame, key, card, acc, why};
+              for (uint32_t r = 0; r < hair_primary::kMaxGrooms; ++r)
+                if (g_seen.keys[r] == key && f.rows++ < 2) f.row_pixels[f.rows - 1] = g_seen.pixels[r];
+            }
           }
           g_watchdog.draw(card, acc, last_card, key);
           g_draw_watchdog.draw(key, card, acc, last_card);
@@ -1905,12 +1911,14 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     log_stats("[hair primary] depth orphans (last %u frames, first 4; key prefix:prepass frame_index,draw frame_index,reason,pipeline):%s",
         stats_period(300), at ? per : " none");
     {
-      char first[400] = {};
+      char first[520] = {};
       size_t fa = 0;
       for (uint32_t i = 0; i < g_drop.firsts; ++i) {
         const auto& d = g_drop.first[i];
         fa += std::snprintf(first + fa, sizeof first - fa, " %llu:%04llx:%u/%u:%s", (unsigned long long)d.frame,
                             (unsigned long long)(d.key >> 48), d.card, d.accepted, hair_primary::dropout_name(d.why));
+        if (d.rows > 1 && fa < sizeof first)   // a key on two groom rows (two characters): which of them lost its strands
+          fa += std::snprintf(first + fa, sizeof first - fa, " [%u rows: %u+%u]", d.rows, d.row_pixels[0], d.row_pixels[1]);
       }
       using hair_primary::Dropout;
       log_stats("[hair primary] dropouts (last %u frames): %llu swapped G-buffer draws wrote under a tenth of their card "

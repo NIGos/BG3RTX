@@ -544,6 +544,13 @@ struct GroomSlot {
   uint64_t rec = 0;            // build record of its last build/refit (refit once that was submitted)
   Buf readback;                // host-visible: the compacted size (at 32), then a ring of bounds (24 bytes per frame)
   uint64_t bounds_frame[4] = {};   // the frame whose bounds each ring slot (at 64 + 32 * slot) holds; 0 none
+  // 5q diagnostic (hair_primary::groom_bounds_jump): each ring slot's build camera, the last measured world centre and
+  // its frame, and the frame of a jump not yet counted (the points left their own bounds between consecutive builds).
+  float bounds_cam[4][3] = {};
+  bool bounds_cam_ok[4] = {};
+  float seen_world[3] = {}, seen_diagonal = 0;
+  uint64_t seen_frame = 0, jumped = 0;
+  bool judged = false;
   int compact = 0;             // 0 none, 1 size queried (query, query_frame), 2 compacted
   uint32_t query = 0;
   uint64_t query_frame = 0, query_rec = 0;
@@ -970,6 +977,9 @@ struct GroomStats {
   uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0, lod_waits = 0, lod_drops = 0;
   uint64_t keyed_new = 0, key_wait_sum = 0, key_wait_max = 0;   // slots whose first key was published (warm-up line)
   uint64_t shared_withheld = 0;   // rt_hair_shared_key: groom rows whose shared key was withheld (cards)
+  // 5q diagnostic: slots whose points left their own bounds between consecutive builds, of the judged pairs of builds.
+  uint64_t jumps = 0, jump_judged = 0;
+  struct Jump { uint64_t frame, key; } jump_first[6] = {};
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
   uint32_t lod[kGroomLods] = {};
   uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
@@ -1200,6 +1210,17 @@ int groom_pick_lod(GroomSlot& g, int lods, uint64_t gpu_done, bool warmup) {
       g.size = size;
       g.centre[0] = cx, g.centre[1] = cy, g.centre[2] = cz;
       g.bounds_frame_used = float(g.bounds_frame[slot]);
+      if (g.bounds_cam_ok[slot] && g.bounds_frame[slot] != g.seen_frame) {
+        const float world[3] = {cx + g.bounds_cam[slot][0], cy + g.bounds_cam[slot][1], cz + g.bounds_cam[slot][2]};
+        const float diagonal = std::sqrt(ex * ex + ey * ey + ez * ez);
+        g.judged = g.seen_frame && g.bounds_frame[slot] == g.seen_frame + 1;
+        if (hair_primary::groom_bounds_jump(g.seen_world, g.seen_frame, world, g.bounds_frame[slot],
+                                            (std::max)(diagonal, g.seen_diagonal)))
+          g.jumped = g.bounds_frame[slot];
+        std::memcpy(g.seen_world, world, sizeof world);
+        g.seen_diagonal = diagonal;
+        g.seen_frame = g.bounds_frame[slot];
+      }
       first_measure = warmup && !g.measured;   // rt_hair_warmup: the no-bounds LOD 0 was no choice (lod_vote)
       g.measured = true;
     }
@@ -2979,6 +3000,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
       GroomSlot& g = *s.groom;
       int lod = groom_pick_lod(g, int(groom_src->lods.size()), life_gpu_done(), warmup);
+      if (g.judged) { ++g_groom_st.jump_judged; g.judged = false; }
+      if (g.jumped) {   // 5q: this slot's points came from another place than the build before (another character's soup)
+        if (g_groom_st.jumps < 6) g_groom_st.jump_first[g_groom_st.jumps] = {g.jumped, fd.hp_key};
+        ++g_groom_st.jumps;
+        g.jumped = 0;
+      }
       if (const auto* src = hair_groom::find(fd.groom_id, groom_src->indices))
         for (uint32_t l = 0; l < kGroomLods; ++l) g.segments[l] = l < groom_src->lods.size() ? src->asset.lod_segments[l] : 0u;
       g_groom_seen.push_back(s.groom);
@@ -3415,6 +3442,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         const VkBufferCopy c{w.g->bounds_off, 64 + 32 * slot, 24};
         dd->vk.CmdCopyBuffer(cmd, g_pool.b, w.g->readback.b, 1, &c);
         w.g->bounds_frame[slot] = now;
+        uint64_t cam_frame = 0;
+        w.g->bounds_cam_ok[slot] = rt_current_build_camera(w.g->bounds_cam[slot], &cam_frame);
       }
     }
   }
@@ -4004,6 +4033,17 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         (unsigned long long)g_groom_st.miss[4], (unsigned long long)g_groom_st.miss[5], (unsigned long long)g_groom_st.miss[6],
         double(g_groom_pool_used) / 1048576.0, double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0,
         (unsigned long long)g_groom_st.shared_withheld);
+    {
+      char first[160] = {};
+      size_t fa = 0;
+      for (uint64_t i = 0; i < (std::min<uint64_t>)(g_groom_st.jumps, 6); ++i)
+        fa += std::snprintf(first + fa, sizeof first - fa, " %llu:%04llx", (unsigned long long)g_groom_st.jump_first[i].frame,
+                            (unsigned long long)(g_groom_st.jump_first[i].key >> 48));
+      log_stats("[hair groom] slot content jumps (last %u frames): %llu of %llu consecutive slot builds moved further than "
+                "their bounds diagonal (the n-th draw of a mesh became another character); first (build frame:key prefix):%s",
+                stats_period(300), (unsigned long long)g_groom_st.jumps, (unsigned long long)g_groom_st.jump_judged,
+                fa ? first : " none");
+    }
     // Warm-up (docs/RTX_HAIR_PRIMARY.md 5o): how long matched grooms waited for their first primary key (UV join, LOD
     // upload, full build, the second points update). Only in periods where a slot got its first key.
     if (g_groom_st.keyed_new)
