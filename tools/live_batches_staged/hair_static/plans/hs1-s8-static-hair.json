@@ -39,7 +39,7 @@
       "gi: gi/[^ ]+ generation ",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0,
+    "wait_log_timeout": 2.0,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
@@ -65,7 +65,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "warm-inputs",
@@ -91,7 +91,7 @@
     "label": "settle-strands",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.2,
+    "seconds": 3.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -129,7 +129,7 @@
     "label": "settle-aa",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.2,
+    "seconds": 3.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -146,7 +146,7 @@
       "\\[rrpost\\] gpu: render-res chain",
       "\\[rt\\] scene wait: \\d+ frames"
     ],
-    "wait_log_timeout": 180.0,
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -173,7 +173,7 @@
     "label": "settle-cards",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.2,
+    "seconds": 3.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -190,7 +190,7 @@
       "\\[rrpost\\] gpu: render-res chain",
       "\\[rt\\] scene wait: \\d+ frames"
     ],
-    "wait_log_timeout": 180.0,
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -233,6 +233,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.003
   }
 ]

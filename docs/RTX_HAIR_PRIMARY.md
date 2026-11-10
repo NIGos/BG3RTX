@@ -1354,6 +1354,65 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
 - 2 mm radius cap: 124 of 898 grooms have points at it, at most 0.17% of their points (OGRE dreads), median 0.003%,
   medians 0.13-0.23 mm. No visible effect: a few clumps on near-degenerate LOD1 UV triangles are clamped.
 
+**Post-toggle holes with the v3 set (hs1 125217, main a2211fc9, 2026-11-10, branch claude/hair-v3-settle, offline).**
+- Not v3 and not the warm-up's settle test. The warm-up ended correctly at frame 2160 (30 settled frames after the
+  switch-on at 2130: 12 instances, full builds 0, refits 720, no UV join pending). The losses start at the first
+  appearance in the session of three more hair draws (UV join 45252 at 12:54:23.15, 100101 at .47, 7092 at .53;
+  their grooms decode in 31-78 ms and upload: 16fa158c LOD 0 at .376 and LOD 1 at .646, 5dbb53eb LOD 0 at .756,
+  b7349689 LOD 0 at .866). Trips at G-buffer frames 2171-2176 (249/3702, 0/5160, 30/6015, 63/6737, 91/7655,
+  138/8679) line up with those uploads. The keys that lose their strands are the existing ones (931e, 5149, 18db, d3cc
+  at 2171; worst 08ab, 13c7, 18db), not the newcomers. 103633 (v2) has the same three joins and uploads at the same
+  scene time, but 17-30 frames after its switch-on, inside the warm-up window, so no key was swapping (0 trips; strands
+  back after 80-105 card frames). 095322 (v2) shows it 50 frames after the switch (trips 2163-2169). So the toggle
+  and v3 only move when the window ends against the characters' arrival. This is the open "groom rebuilt mid-play"
+  item: a groom that joins while other keys swap.
+- Mechanism (code, likely, not proven offline): a newcomer's rows are keyed after their second update
+  (hair_primary.h groom_primary_key, bvhsplit.cpp:3957 instance mask 0xFF), while its draw still shows cards and is
+  probed (coverage none until its first count, about 6 frames). The shared pixel trace of every swapped draw skips a
+  non-swapping slot's strands by restarting past them at most kHpSkips = 3 times (hair_primary_gbuffer.hlsl:41, :99-116),
+  then stores no strand. Every pixel ray with 4 or more of the newcomer's strands in front of its own returns
+  nothing. The header line shows it: mask-hole pixels (traces that skipped a card-kept groom) 82744 in that period
+  against 660-4760 in the clean periods; 59158 in 095322's transient. Not shown: that the newcomer's strands lie in
+  front of every other key along most rays (the loss is frame-wide).
+- No fix landed: the fix at the cause is not small. Either the shared trace finds the closest strand of an accepted slot
+  without a skip limit (a non-opaque groom query that commits only accepted candidates, as rt_groom_blocks walks
+  candidates), or newcomer rows get their own instance mask bit that only their own probe traces. Both change the
+  strand G-buffer shader (a specialization constant, restart-applied) and need hair_primary_gpu_test checked on the LSS
+  device. Staged: (1) a GPU fixture in hair_primary_gpu_test with a dense non-swapping groom in front of a swapped
+  one: count the pixels that come back with no strand at kHpSkips 3 (decides the mechanism offline); (2) the
+  candidate-filter trace behind a key, compared with the fixture; (3) one hs1 rerun.
+- Predicted for an unchanged rerun of hs1 with the v3 set: the transient appears exactly when the three joins
+  (45252/100101/7092) fall after the warm-up's end. If so: 4-7 frame watchdog trips and 40-60 dropouts in that one
+  period, mask-hole pixels above 30000 there; every other period clean. If the joins fall inside the window: 0 trips
+  and strands back after 80-105 frames, as in 103633.
+- GPU fixture (hair_primary_gpu_test nearest_check, RTX 5090, run once, device fine): the synthetic groom with 600
+  strands, twice in one TLAS (instance 0 accepted; instance 1 the same groom 3 cm towards the camera, card-kept), 160 x
+  160 rays. Of 25478 pixels where instance 0 alone has a strand, the restart loop of the strand G-buffer variant leaves
+  2567 without a strand (1860 rays need a 4th restart) and returns a farther strand of the right groom on 11154 more:
+  each restart begins 2 x hair_primary_max_radius = 2 cm past the other row's strand and jumps over an accepted strand
+  that lies within 2 cm behind it. Mechanism confirmed offline; the second defect (wrong, deeper strand) was not known.
+- Fix `rt_hair_groom_nearest` (off; specialization 1047 = kSpecIdHairGroomNearest, compiled into the strand G-buffer
+  pipelines when on at their creation, header flag kFlagNearest = 64 switches it off live, as rt_hair_groom_coverage):
+  hp_trace takes the closest strand of an accepted row from one non-opaque query that passes over other rows'
+  candidates and commits accepted ones (shaders/rt/hair_primary_nearest.hlsli hp_nearest, the rt_groom_blocks walk; the
+  traversal reports only candidates closer than the last commit). Found on the device: LSS candidates carry their own
+  candidate type (not triangle); they give CandidateTriangleRayT and commit as triangle hits. Same fixture: hp_nearest
+  returns the reference's own strand and distance on 25478 of 25478 pixels, 0 holes, 0 hits of the card-kept groom.
+  Key off: 223 requests byte-identical, the strand G-buffer request equivalent with 1047 frozen to 0
+  (tools/release_shader_equivalence.py --freeze-spec 1047, cascade control PASS); variants.txt delta 0.
+- Cheaper alternative not taken: hiding a groom's rows from primary rays (bvhsplit.cpp:3957 mask 0x01) until its draw
+  key swaps would hide them from its own masked probe too (the probe traces the same TLAS with mask 0xFE), so a
+  newcomer could never be measured and would stay on cards; making it work needs a second mask bit for the probe, a
+  shader change anyway, and it leaves the 2 cm restart jump in place.
+- Cost: the fixture has no timer. A non-opaque query visits every candidate in front of the closest accepted one
+  (opaque traversal stops at the first); read it live from `[hair primary] strand G-buffer draws GPU` (0.133 ms/frame
+  in 125217 with the loop).
+- hs1 (staged job, regenerated): the key is on for the whole run (it is applied at pipeline creation; the arrival
+  happens once per session, so no A/B inside one launch). Predicted, v3 set: in the period with the three arrivals
+  0 frame watchdog trips, 0 frames under a tenth, dropouts at most 2, key watchdog trips 0, strand runs not cut;
+  every other period as 125217 (coverage low 0, own-bound fails 0); strand G-buffer GPU above 0.133 ms/frame, the
+  increase reported (not a gate). Mask-hole pixels still count passed-over candidates (a diagnostic, now harmless).
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

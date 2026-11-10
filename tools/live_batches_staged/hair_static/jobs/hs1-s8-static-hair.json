@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 1464,
+  "timeout": 576,
   "max_minutes": 5,
   "repeat": 1,
   "live_batch": "hair-static",
@@ -12,7 +12,7 @@
   "window_mode": "visible_unfocused_fg",
   "fail_fast": true,
   "stop_on_dump": false,
-  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rr_hair_strand_aa=2,detailed_logging=1,rt_stats_period_frames=60",
+  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rr_hair_strand_aa=2,detailed_logging=1,rt_stats_period_frames=60",
   "args": [
     "-RealPresent",
     "-Move",
@@ -103,9 +103,15 @@
           0,
           0
         ],
-        "fps": 28.985507246686534,
-        "windows": 60,
+        "fps": 20.463847203269342,
+        "windows": 126,
         "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.005103.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.015416.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.085153.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.095322.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.103633.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hs1-s8-static-hair.1.125217.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv3-s8-mesh-cache-budget.1.203607.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv3-s8-mesh-cache-budget.1.220145.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rv5-s8-blas-cap-occupied.1.204140.log",
@@ -120,6 +126,6 @@
       "maximum": 0.4969999999993888
     }
   },
-  "estimated_phase_seconds": 83.3,
+  "estimated_phase_seconds": 85.7,
   "purpose": "Static-camera RTX Hair flicker at S8 (user set, fg=3): 16-frame RR-input bursts of strands (rr_hair_strand_aa 0, then 2) and cards (rt_hair_groom_primary=0) in one run; temporal_burst.py decides whether the flicker is in the pre-RR strand image (class-5 toggles, rr_color) or only after RR (final). STAGED, not authorized."
 }

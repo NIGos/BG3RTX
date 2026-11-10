@@ -1045,11 +1045,15 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     // branches per strand fragment, shaders/rt/hair_primary_gbuffer.hlsl); header flags kFlagMacroNormal /
     // kFlagTangentWorld switch each one live, and with both flags off the output is that of constant 0.
     const uint32_t shading_space = 1u;
-    const uint32_t spec_words[4] = {uint32_t(header_addr), uint32_t(header_addr >> 32), coverage, shading_space};
-    const VkSpecializationMapEntry spec_map[4] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4},
+    // 5u rt_hair_groom_nearest: the candidate-filtered nearest-strand trace, compiled in when the key is on at pipeline
+    // creation (header flag kFlagNearest then switches it live; the velocity FS has no constant 1047).
+    const uint32_t nearest = cfg_int("rt_hair_groom_nearest", 0) != 0 ? 1u : 0u;
+    const uint32_t spec_words[5] = {uint32_t(header_addr), uint32_t(header_addr >> 32), coverage, shading_space, nearest};
+    const VkSpecializationMapEntry spec_map[5] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4},
                                                   {shader_variant::kSpecIdHairGroomCoverage, 8, 4},
-                                                  {shader_variant::kSpecIdHairShadingSpace, 12, 4}};
-    const VkSpecializationInfo spec{4, spec_map, sizeof spec_words, spec_words};
+                                                  {shader_variant::kSpecIdHairShadingSpace, 12, 4},
+                                                  {shader_variant::kSpecIdHairGroomNearest, 16, 4}};
+    const VkSpecializationInfo spec{nearest ? 5u : 4u, spec_map, sizeof spec_words, spec_words};
     VkPipelineDepthStencilStateCreateInfo dsv = *ds;
     if (pass != Pass::Prepass) {
       Bg3ShaderBlob blob{};
@@ -1126,11 +1130,12 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       dsv.front = ds->front; dsv.back = ds->back;
       // Pipeline specialization supplies exact draw-key attribution before tracing,
       // without changing the game's descriptor or push-constant layouts.
-      const uint32_t words[5] = {spec_words[0], spec_words[1], k, coverage, shading_space};
-      const VkSpecializationMapEntry map[5] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
+      const uint32_t words[6] = {spec_words[0], spec_words[1], k, coverage, shading_space, nearest};
+      const VkSpecializationMapEntry map[6] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
                                                {shader_variant::kSpecIdHairGroomCoverage, 12, 4},
-                                               {shader_variant::kSpecIdHairShadingSpace, 16, 4}};
-      const VkSpecializationInfo draw_spec{5, map, sizeof words, words};
+                                               {shader_variant::kSpecIdHairShadingSpace, 16, 4},
+                                               {shader_variant::kSpecIdHairGroomNearest, 20, 4}};
+      const VkSpecializationInfo draw_spec{nearest ? 6u : 5u, map, sizeof words, words};
       stages[size_t(fs)].pSpecializationInfo = &draw_spec;
       dsv.depthWriteEnable = VK_TRUE;
       vci.pColorBlendState = ci.pColorBlendState;
@@ -1841,6 +1846,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   h.tag = uint32_t(pub + 1);
   h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
   if (cfg_int("rt_hair_groom_coverage", 0) != 0) h.flags |= hair_primary::kFlagCoverage;   // M3.2, live off-switch
+  if (cfg_int("rt_hair_groom_nearest", 0) != 0) h.flags |= hair_primary::kFlagNearest;     // 5u, live off-switch
   if (cfg_int("rt_hair_macro_normal", 0) != 0) h.flags |= hair_primary::kFlagMacroNormal;   // 5g, live once compiled in
   if (cfg_int("rt_hair_tangent_world", 0) != 0) h.flags |= hair_primary::kFlagTangentWorld;
   h.width = width;

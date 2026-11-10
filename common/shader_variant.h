@@ -66,7 +66,8 @@ enum SpecId : unsigned {
   // The raygen GI trace's reorder hint (GI_TRACE_RAYGEN only):
   // gi_rt_pipeline_reorder (common/rt_pipeline.h reorder_spec) on the GI_TRACE_RAYGEN requests; 0 off (no prepass),
   // 1 kind + instance, 2 kind; offline tools/gi_trace_rgen*.hlsl too).
-  // 1047-1049 left to the hair streams.
+  kSpecIdHairGroomNearest = 1047,    // 5u rt_hair_groom_nearest: candidate-filtered nearest strand (rt/hair_primary_gbuffer)
+  // 1048-1049 left to the hair streams.
   kSpecIdGiSer = 1050,
   // rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md 3.4): the scene TLAS by address from the scene stamp
   // (rt/rt_common.hlsli RT_TRACE_SCENE); added only when on, so key-off pipelines keep their specialization.
