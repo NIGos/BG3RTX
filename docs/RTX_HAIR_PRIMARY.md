@@ -1844,6 +1844,42 @@ the camera was the dominant error, not the only one.
   or TLAS/rows/key map written on the GPU by the build as the camera is); "the applied publish's build" -> the loss is
   inside the build (refit or LOD), test full rebuilds while moving.
 
+## 6e. Build stamp result: header, TLAS, points and BLASes agree; what is left (offline 2026-11-11, branch claude/hair-holes-root: no code, open)
+
+Live hl1 003637 (build stamp, `rt_hair_header_cam_gpu=1`): 5 trips at G-buffer 2448-2452 (1932, 2193, 2491, 2731 of
+3257-3837 card px; 364 of 5366 at the long frame), every one "of the applied publish's build", every period line 40-60
+same, 0 newer, 0 older, 0 not read.
+- 6d's candidate (header one publish older than the BLASes) is DISPROVED. The submit pick is right.
+- BLAS refit: ruled out by runs already on disk, without a rebuild test. A refit computes its boxes from the points of
+  its own build, so an error from it does not depend on the camera speed and would stay once the camera is still. After
+  the 8 m dolly every draw is back at 0.96-1.09 of its card pixels with "full builds 0, refits 793" (003637 period at
+  frame 2558; the same in 000345 and 210357). The loss exists only while the camera moves and grows with the step.
+- A forced full rebuild is not staged: every groom BLAS is compacted after its first build (bvhsplit.cpp groom work,
+  `g.compact = 2`, the storage replaced by the compacted size), and a full build needs the uncompacted size. A rebuild
+  key would have to reallocate about 300 MB of BLAS storage per moving frame; not a safe live test.
+  Related risk, not verified: the existing path `w.refit = g.built && rec_submitted(g.rec) && dyn_refit_ok` falls back to
+  a full build "after an unsubmitted one" without checking that the storage is still the uncompacted size.
+- LOD vote: unlikely. At 2448 no upload had happened ("LOD switches waiting for upload 13 (kept)" over the period,
+  rt_hair_groom_lod_keep holds the built LOD), and the loss is frame-wide.
+- Per groom at the first trip frame (2448): 58da 64/0, 6a5d 74/0, 5c44 224/22: the three are LOD 2 grooms with 59-185
+  card pixels when still (the far heads); the large LOD 1 grooms keep most of their pixels. In 000345 the same (e297
+  87/0, b166 132/0). Two samples (2449, 2452): origin 0, card at 10.9 and 9.0 m, both rays missed.
+- So what is left is an error that grows with the camera step, is larger for far heads, exists with a consistent header
+  and build, and is gone when still. Not found by reading. Open candidates, each needs the sampler below:
+  1. the capture's camera block (prepass, used by xfb_to_world) and the G-buffer's block agree in position (origin 0)
+     but not in the view-projection: the strand points and the cards then differ by an amount that grows with distance;
+  2. the pixel entries of a G-buffer frame are reused by a second G-buffer recording with the same frame label (the
+     label is frame_index + 1 and `g_applied_frame == frame` skips the second one; the label phase moves with the
+     present: count lines show the judged tag at tag - 1 or tag - 2);
+  3. the game's own hair mesh LOD switch at the zoom start (new index counts arrive in the trip frames): the cards of
+     the frame are another mesh than the one the groom was embedded on for a frame.
+- Not done: the dense sampler (card-marked pixels only, several per frame, hit or miss, card distance, hit distance and
+  the reject reason). It needs the strand G-buffer shader and the count shader (specialization constants, the reason in
+  the marker's second word, a per-window histogram in the count) and one identity run. It is the next step and the only
+  instrument that separates the three: 1 gives hits a few cm off the card growing with distance, 2 gives entries not
+  traced in their frame, 3 gives misses on the grooms whose index count changed.
+- hl1 is unchanged since 6d (its stamp gate stays); no new job.
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU

@@ -86,5 +86,11 @@
       "header and points agree": "'of the applied publish's build' on the trip lines: the TLAS is this build's. Then the per-groom loss is inside the build: LSS refit bounds after a large translation (test: rt_hair_groom full rebuilds in a moving window), or the LOD vote switching rows during the zoom (trip frames against 'LOD switches waiting' in the [hair groom] line).",
       "build after the G-buffer": "'of an older build': the header is ahead of the points; the pick took a publish whose build had not run."
     }
+  },
+  "result_003637": {
+    "run": "hl1 003637, build stamp",
+    "result": "5 trips (2448-2452), every one 'of the applied publish's build'; period lines 40-60 same, 0 newer, 0 older, 0 not read.",
+    "prediction_missed": "second_defect_6d expected 'of a newer build'. Disproved: header, TLAS, points and BLASes are of one build.",
+    "next": "docs/RTX_HAIR_PRIMARY.md 6e: refit ruled out from existing runs; three candidates left; the dense sampler is the next instrument (not built)."
   }
 }

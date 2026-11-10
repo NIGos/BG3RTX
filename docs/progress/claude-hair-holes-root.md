@@ -35,3 +35,7 @@
   lines and a period line say whether the points were of the applied publish's build, a newer or an older one. CTest
   test_build_stamp. GbFrame::pub_frame now reset per G-buffer. Sampler unchanged (needs a shader change; next if the
   stamp says "same"). hl1 regenerated, predicted.json second_defect_6d; lint 0 failing. Details: 6d.
+- Live hl1 003637 (build stamp): all 5 trips "of the applied publish's build", 0 newer in every period: the 6d candidate
+  is DISPROVED. Refit ruled out from runs on disk (the loss is gone when still, refits only). No rebuild key: grooms are
+  compacted, a full build needs the uncompacted size. Lost first: the far LOD 2 grooms. Cause of the remaining 30-50%
+  not found; three candidates and the dense sampler (not built, needs two shaders and an identity run) in 6e.
