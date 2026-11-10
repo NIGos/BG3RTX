@@ -964,6 +964,68 @@ static void test_round3() {
     CHECK(upgrade_plan(s, after, true).card_slots == 0);
     CHECK(upgrade_plan(s, dropped, true).card_slots == (1u << s.find(0xA0)));   // the old behaviour: card mode
   }
+  {   // rt_hair_row_stable (5w): the hl1 164930 arrival replayed. 12 grooms in rows, then the camera moves: one groom
+      // leaves (its hold freed), the game alternates the draw order every frame, three newcomers arrive one by one.
+    GroomRows rows;
+    const uint64_t lag = 8;
+    uint64_t at[kMaxGrooms] = {}, before[kMaxGrooms] = {};   // the groom in each row of this build and the one before
+    uint32_t row_of_groom[32] = {};                          // groom id (1..) -> its row while live
+    bool live_before[32] = {};
+    uint32_t moved = 0, mismatched = 0, reused_early = 0, row_count = 0;
+    uint32_t left_row = kMaxGrooms;
+    for (uint64_t frame = 100; frame < 140; ++frame) {
+      std::vector<uint64_t> live;
+      for (uint64_t g = 1; g <= 12; ++g) if (frame < 110 || g != 4) live.push_back(g);   // groom 4 leaves at 110
+      for (uint64_t g = 13; g <= 15; ++g) if (frame >= 111 + (g - 13) * 2) live.push_back(g);   // newcomers
+      if (frame >= 130) live.push_back(16);   // a late groom, after the lag: may take groom 4's row
+      if (frame >= 110 && frame % 2) std::reverse(live.begin(), live.end());   // the capture order alternates
+      if (frame >= 110 && frame % 3 == 0) std::swap(live[1], live[5]);
+      uint32_t out[kMaxGrooms];
+      row_count = rows.assign(live.data(), uint32_t(live.size()), frame, lag, out);
+      std::memcpy(before, at, sizeof at);
+      std::memset(at, 0, sizeof at);
+      bool live_now[32] = {};
+      for (size_t i = 0; i < live.size(); ++i) {
+        CHECK(out[i] < row_count && at[out[i]] == 0);   // one groom per row
+        at[out[i]] = live[i];
+        if (live_before[live[i]] && row_of_groom[live[i]] != out[i]) ++moved;
+        if (live[i] == 4) left_row = out[i];
+        if (live[i] >= 13 && frame < 110 + lag && out[i] == left_row) ++reused_early;
+        row_of_groom[live[i]] = out[i];
+        live_now[live[i]] = true;
+      }
+      // The consumer: a hit on instance k of this build's TLAS read with the previous build's header rows (and the
+      // reverse) names the same groom whenever both hold one there.
+      for (uint32_t k = 0; k < kMaxGrooms; ++k) if (at[k] && before[k] && at[k] != before[k]) ++mismatched;
+      std::memcpy(live_before, live_now, sizeof live_now);
+    }
+    CHECK(moved == 0 && mismatched == 0 && reused_early == 0 && rows.early == 0);
+    CHECK(left_row < 12 && at[left_row] == 16);   // the freed row went to the groom that arrived after the lag
+    CHECK(row_count == 15);                       // 11 + 3 newcomers in new rows + the late one in the freed row
+    // The key-off order for the same sequence (position in the list) moves rows: the bug this replaces.
+    {
+      const uint64_t f0[3] = {1, 2, 3}, f1[3] = {3, 2, 1};
+      CHECK(f0[0] != f1[0]);
+      GroomRows r;
+      uint32_t a[3], b[3];
+      CHECK(r.assign(f0, 3, 1, lag, a) == 3 && r.assign(f1, 3, 2, lag, b) == 3);
+      CHECK(a[0] == b[2] && a[1] == b[1] && a[2] == b[0]);
+    }
+    // A groom that returns within the lag takes its own row back; every row taken: the oldest freed one, counted.
+    {
+      GroomRows r;
+      uint64_t all[kMaxGrooms];
+      uint32_t out[kMaxGrooms];
+      for (uint32_t i = 0; i < kMaxGrooms; ++i) all[i] = 100 + i;
+      CHECK(r.assign(all, kMaxGrooms, 1, lag, out) == kMaxGrooms && out[7] == 7);
+      CHECK(r.assign(all, 7, 2, lag, out) == 7);                       // rows 7.. leave
+      const uint64_t back[2] = {107, 999};                             // 107 returns, 999 is new: no row is past the lag
+      CHECK(r.assign(back, 2, 3, lag, out) == 9 && out[0] == 7 && out[1] == 8 && r.early == 1);
+      const uint64_t twice[2] = {5, 5};                                // one key twice in a build: two rows
+      GroomRows d;
+      CHECK(d.assign(twice, 2, 1, lag, out) == 2 && out[0] != out[1]);
+    }
+  }
   // M1: previous points only when the slot's last update was the previous build frame.
   CHECK(groom_prev_points(2, 99, 100) && !groom_prev_points(2, 97, 100) && !groom_prev_points(2, 0, 100));
   CHECK(!groom_prev_points(1, 99, 100));
