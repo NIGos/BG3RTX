@@ -737,6 +737,50 @@ inline bool groom_bounds_jump(const float prev_world[3], uint64_t prev_frame, co
   return dx * dx + dy * dy + dz * dz > diagonal * diagonal;
 }
 
+// rt_hair_slot_stable (docs/RTX_HAIR_PRIMARY.md 5s): the occurrence index of the hair draws of one mesh, by continuity
+// with the place each occurrence had in the capture before instead of by draw order. prev: the occurrences still alive
+// (ascending) and their last world position; cur: this capture's draws in draw order. Pairs are taken nearest first
+// (correct while a head moves less than half the distance to the other one per frame); a draw without a partner (a new
+// character) takes the lowest occurrence nobody holds, so with no history the result is the draw order. An occurrence
+// whose character left this capture stays reserved for it (its slot is held or expires on its own).
+// out[i]: the occurrence of draw i. Returns the draws whose occurrence differs from their draw order.
+constexpr uint32_t kSlotGroup = 16;   // draws of one mesh matched per capture (more: draw order, as before)
+struct SlotSeen { uint32_t occurrence = 0; double pos[3] = {}; };
+inline uint32_t stable_occurrences(const SlotSeen* prev, uint32_t prev_n, const double (*cur)[3], uint32_t n, uint32_t* out) {
+  for (uint32_t i = 0; i < n; ++i) out[i] = i;
+  if (n > kSlotGroup || prev_n > kSlotGroup) return 0;
+  uint32_t cur_done = 0, prev_done = 0;
+  for (;;) {
+    double best = 0;
+    int bi = -1, bp = -1;
+    for (uint32_t i = 0; i < n; ++i) {
+      if (cur_done >> i & 1u) continue;
+      for (uint32_t p = 0; p < prev_n; ++p) {
+        if (prev_done >> p & 1u) continue;
+        const double dx = cur[i][0] - prev[p].pos[0], dy = cur[i][1] - prev[p].pos[1], dz = cur[i][2] - prev[p].pos[2];
+        const double d = dx * dx + dy * dy + dz * dz;
+        if (bi < 0 || d < best) { best = d; bi = int(i); bp = int(p); }
+      }
+    }
+    if (bi < 0) break;
+    out[bi] = prev[bp].occurrence;
+    cur_done |= 1u << bi; prev_done |= 1u << bp;
+  }
+  for (uint32_t i = 0; i < n; ++i) {
+    if (cur_done >> i & 1u) continue;
+    for (uint32_t o = 0;; ++o) {
+      bool taken = false;
+      for (uint32_t p = 0; p < prev_n; ++p) taken |= prev[p].occurrence == o;
+      for (uint32_t j = 0; j < n; ++j) taken |= (cur_done >> j & 1u) && out[j] == o;
+      if (!taken) { out[i] = o; break; }
+    }
+    cur_done |= 1u << i;
+  }
+  uint32_t moved = 0;
+  for (uint32_t i = 0; i < n; ++i) moved += out[i] != i;
+  return moved;
+}
+
 // Round 3 L4: the whole per-pending-header decision at vkQueueSubmit (layer/hair_primary.cpp hair_primary_submit_begin),
 // composed from ordered_publish and upgrade_plan so it is unit-tested as the layer runs it. Staged publish i: its pick,
 // submitted flag, header_usable, pixel count and keys. frame_known: the G-buffer frame's GbFrame is this recording's
