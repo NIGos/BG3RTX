@@ -1356,7 +1356,9 @@ static void test_release_rtx_hair() {
   CHECK_EQ(zeroed, "rt_hair_groom<exp_hair_groom rt_hair_groom_shadow_t<exp_hair_groom_shadow_t rt_hair_groom_ao_t<exp_hair_groom_ao_t "
     "rt_hair_groom_cascade_drop<exp_hair_groom_cascade_drop rt_hair_fibre<exp_hair_fibre rt_hair_fibre_gi<exp_hair_fibre_gi "
     "rt_hair_fibre_spec<exp_hair_fibre_spec rt_hair_fibre_mapped<exp_hair_fibre_mapped rr_hair_guides<exp_rr_hair_guides "
-    "rt_hair_physical_origin<exp_hair_physical_origin ");
+    "rt_hair_physical_origin<exp_hair_physical_origin rt_hair_coverage_union<exp_hair_coverage_union "
+    "rt_hair_coverage_confirm<exp_hair_coverage_confirm rt_hair_slot_stable<exp_hair_slot_stable "
+    "rt_hair_live_warmup<exp_hair_live_warmup ");
   // The rule's footprint: the only choice of a release control that writes a developer-reset key to another value.
   std::string touched;
   for (const auto& k : kKnobs) if (!k.dev_only && k.kind == Kind::Choice)
@@ -1516,12 +1518,15 @@ static void test_strand_bundle() {
                           // RTX Hair single option (user-tested set, 2026-11-08)
                           "rt_hair_groom", "rt_hair_groom_shadow_t", "rt_hair_groom_ao_t", "rt_hair_groom_cascade_drop",
                           "rt_hair_fibre", "rt_hair_fibre_gi", "rt_hair_fibre_spec", "rt_hair_fibre_mapped",
-                          "rr_hair_guides", "rt_hair_physical_origin"}) {
+                          "rr_hair_guides", "rt_hair_physical_origin",
+                          // 5u (live hs1 095322 and 103633, user decision 2026-11-10)
+                          "rt_hair_coverage_union", "rt_hair_coverage_confirm", "rt_hair_slot_stable", "rt_hair_live_warmup"}) {
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=1");
     CHECK_EQ(std::string(key) + "=" + code_default(key), std::string(key) + "=0");   // off by default
   }
   // Untested strand options stay out of the bundle.
-  for (const char* key : {"rt_hair_groom_tips", "rt_hair_groom_coverage", "rt_hair_macro_normal", "rt_hair_coverage_footprint"})
+  for (const char* key : {"rt_hair_groom_tips", "rt_hair_groom_coverage", "rt_hair_macro_normal", "rt_hair_coverage_footprint",
+                          "rt_hair_coverage_min_pixels", "rt_hair_swap_latch"})
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=<missing>");
   // 5m: the one startup reservation left in the bundle. A game started with RTX Hair off shows the restart banner for
   // it (launcher ui_state::restart_count against the session baseline); the rest of the bundle applies live.

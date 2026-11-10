@@ -1317,6 +1317,16 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
   inside their card's raster (a pose or LOD fault) pass where S would have fallen; with confirm, a fault that alternates
   bad/good every frame is never refused (holes on every other frame); with slot_stable, groups without a readable
   placement fall back to draw order (as today).
+- Bundle default (user decision 2026-11-10, branch claude/hair-keys-default): RTX Hair On (common/settings.h
+  `exp_hair_groom_primary` "on") now also writes `rt_hair_coverage_union=1`, `rt_hair_coverage_confirm=1`,
+  `rt_hair_slot_stable=1` and `rt_hair_live_warmup=1`. Code defaults stay 0, so RTX Hair off is unchanged; the
+  Advanced knobs stay for A/B. Warm-up evidence: VALID hs1 103633 (five keys on), 30 periods: frame watchdog trips 0
+  (095322 had 5 after the toggle), dropouts 0 in 27 of 27 footprint lines (26 after the toggle in 095322), own-bound
+  fails 0 in 82 bins; after the live toggle 11 keys returned to strands after card runs of 80 to 105 frames, no trip.
+- Disproved prediction, `rt_hair_coverage_min_pixels` (hs1 103633): predicted 0 "coverage stale" switches on tiny
+  hair, observed 5 (key 2aa3 once at 57 to 70 card pixels, key 9b09 four times at 1 to 583; 095322 had 2 on key
+  5364). 2aa3 sits across the 64 pixel threshold, which has no hysteresis: the key may add flapping there. Not
+  qualified, not in the bundle, not fixed here.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
