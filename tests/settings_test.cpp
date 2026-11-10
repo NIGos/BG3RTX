@@ -1358,7 +1358,7 @@ static void test_release_rtx_hair() {
     "rt_hair_fibre_spec<exp_hair_fibre_spec rt_hair_fibre_mapped<exp_hair_fibre_mapped rr_hair_guides<exp_rr_hair_guides "
     "rt_hair_physical_origin<exp_hair_physical_origin rt_hair_coverage_union<exp_hair_coverage_union "
     "rt_hair_coverage_confirm<exp_hair_coverage_confirm rt_hair_slot_stable<exp_hair_slot_stable "
-    "rt_hair_live_warmup<exp_hair_live_warmup ");
+    "rt_hair_live_warmup<exp_hair_live_warmup rt_hair_groom_nearest<exp_hair_groom_nearest ");
   // The rule's footprint: the only choice of a release control that writes a developer-reset key to another value.
   std::string touched;
   for (const auto& k : kKnobs) if (!k.dev_only && k.kind == Kind::Choice)
@@ -1400,7 +1400,8 @@ static void test_release_rtx_hair() {
   CHECK_EQ(get(m, "rt_hair_groom"), "1"); CHECK_EQ(get(m, "rt_hair_fibre"), "1");
   // Upgrade (complete_marked_choices): a file the launcher wrote before 2026-11-10 has RTX Hair On without the four
   // keys the bundle gained. They load as the choice's values, with no launcher save.
-  static const char* const grown[] = {"rt_hair_coverage_union", "rt_hair_coverage_confirm", "rt_hair_slot_stable", "rt_hair_live_warmup"};
+  static const char* const grown[] = {"rt_hair_coverage_union", "rt_hair_coverage_confirm", "rt_hair_slot_stable", "rt_hair_live_warmup",
+                                      "rt_hair_groom_nearest"};
   Map old_on = on_map(hair, 1);
   for (const char* key : grown) CHECK(old_on.erase(key) == 1);
   m = merged(old_on);
@@ -1552,7 +1553,9 @@ static void test_strand_bundle() {
                           "rt_hair_fibre", "rt_hair_fibre_gi", "rt_hair_fibre_spec", "rt_hair_fibre_mapped",
                           "rr_hair_guides", "rt_hair_physical_origin",
                           // 5u (live hs1 095322 and 103633, user decision 2026-11-10)
-                          "rt_hair_coverage_union", "rt_hair_coverage_confirm", "rt_hair_slot_stable", "rt_hair_live_warmup"}) {
+                          "rt_hair_coverage_union", "rt_hair_coverage_confirm", "rt_hair_slot_stable", "rt_hair_live_warmup",
+                          // 5u (live hs1 133243)
+                          "rt_hair_groom_nearest"}) {
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=1");
     CHECK_EQ(std::string(key) + "=" + code_default(key), std::string(key) + "=0");   // off by default
   }

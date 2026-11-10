@@ -1412,6 +1412,16 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
   0 frame watchdog trips, 0 frames under a tenth, dropouts at most 2, key watchdog trips 0, strand runs not cut;
   every other period as 125217 (coverage low 0, own-bound fails 0); strand G-buffer GPU above 0.133 ms/frame, the
   increase reported (not a gate). Mask-hole pixels still count passed-over candidates (a diagnostic, now harmless).
+- Live hs1 133243 (S8 still, main 613a272f, v3 set, rt_hair_groom_nearest=1, VALID): 30 of 30 periods with 0 frame
+  watchdog trips, 0 key watchdog trips, 0 dropouts and no "coverage low" switch; 2 "coverage stale" switches (the tiny
+  hair item, 5364 class). Strand G-buffer GPU median 0.171 ms/frame (0.118..0.320, 27 lines) against 0.227
+  (0.097..0.307, 27 lines) in 125217: no measurable cost. (The 0.133 above was one period of 125217, not its median.)
+  Not proven by this run: the three arrivals (UV joins 45252 at 13:34:25.14, 7092 at .45, 100101 at .62) came 0.6-1.1 s
+  after the switch-on at 13:34:24.54 (frame 2219), inside the warm-up window (it ended at 2312), as in 103633. The
+  failing timing of 125217 was not reproduced: the live shows no regression, the proof of the fix is the GPU case
+  (2,567 holes to 0). Passed-over pixels 27,403 and 37,441 in the two back-on periods (103633: 30,036, 35,197).
+- In the RTX Hair On bundle since this run (branch claude/hair-nearest-default; code default 0). It is compiled into the
+  strand pipelines at their creation: a game started with RTX Hair off keeps the restart loop until a restart.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
