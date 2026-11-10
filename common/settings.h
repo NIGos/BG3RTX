@@ -94,7 +94,7 @@ struct Choice {
   const char* id;
   const char* label;
   unsigned caps;   // Cap bits
-  KV kv[18];        // keys this choice writes (key == nullptr ends the list)
+  KV kv[24];        // keys this choice writes (key == nullptr ends the list)
   Need need[3];    // dependencies on other knobs (knob == nullptr ends the list)
   // Migration of a file whose keys match no choice exactly (written before the knob became one
   // level choice, or hand-edited): the highest choice one of whose `mark` keys has this choice's
@@ -407,13 +407,18 @@ inline constexpr Knob kKnobs[] = {
     // transfer-source usage for the capture). Only rt_hair_physical_origin stays a startup reservation (43.7 MB at
     // 2560 x 1067 and the GI's origin shader variants): 0 -> 1 needs a restart (the restart banner says so); its
     // other transitions and every other key are live. rt_hair=0 (hotkey_rtx_hair) makes this whole list read 0.
+    // 5u (user decision 2026-11-10, live hs1 095322 and 103633): the union coverage count, the confirmed coverage
+    // failure, the stable character slots and the warm-up after a live switch are part of On. Their own Advanced
+    // knobs stay for A/B. rt_hair_coverage_min_pixels stays out (its prediction failed in 103633).
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores,
      {{"rt_hair_groom_primary", "1"}, {"rt_hair_groom_primary_order", "1"}, {"rt_hair_groom_primary_current", "1"},
       {"rt_hair_primary_frame_tag", "1"}, {"rt_hair_groom_lod_keep", "1"}, {"rt_hair_primary_hold", "1"},
       {"rt_hair_tangent_world", "1"}, {"rt_hair_groom", "1"}, {"rt_hair_groom_shadow_t", "1"},
       {"rt_hair_groom_ao_t", "1"}, {"rt_hair_groom_cascade_drop", "1"}, {"rt_hair_fibre", "1"},
       {"rt_hair_fibre_gi", "1"}, {"rt_hair_fibre_spec", "1"}, {"rt_hair_fibre_mapped", "1"},
-      {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"}},
+      {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"},
+      {"rt_hair_coverage_union", "1"}, {"rt_hair_coverage_confirm", "1"}, {"rt_hair_slot_stable", "1"},
+      {"rt_hair_live_warmup", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified. It turns on and off while playing, also with its keyboard shortcut (Ctrl+Shift+F7 by default); if the game started with RTX Hair off, the physical hair ray origins need a game restart."},
 
