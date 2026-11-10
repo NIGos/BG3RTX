@@ -1444,7 +1444,7 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
   period line with frame watchdog trips 0, key watchdog trips 0 and dropouts 0-2. If A shows no holes, the test does
   not reproduce 125217 with 45252 alone (the fix stays proven by the GPU case only); the period lines then say why.
 
-## 5v. Pixel-footprint strand LOD for camera rays (branch claude/hair-pixel-lod, 2026-11-10: step 1 built, step 2 designed, not built)
+## 5v. Pixel-footprint strand LOD for camera rays (branch claude/hair-pixel-lod, 2026-11-10: steps 1 and 2 (b) built, key rt_hair_pixel_lod off)
 Study: docs/progress/claude-hair-pixel-lod-study.md (eca698b9). Keeping fewer strands about 1 render pixel wide for the
 camera rays gives HF like the cards and 1.5-2.4x less coverage noise at heads of 80-150 px (coverage +3 to +6%); it
 fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop about 2x today's.
@@ -1481,6 +1481,29 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
   - Checks to add with it: the coverage gate's upper side is judged on S <= C, so wider strands cannot trip "coverage
     high"; hp_on_card's band uses hair_primary_max_radius (10 mm) >= the 9 mm cap; the tips test is per pixel (no
     radius). A period line: grooms per camera keep, projected diameter range.
+- Step 2 (b) built (branch claude/hair-pixel-lod, offline; key rt_hair_pixel_lod, off): layer/bvhsplit.cpp.
+  - Camera arrays per (groom LOD, level j): `hair_groom::camera_subset` (common/hair_groom_v3.h) keeps the LOD's strands
+    whose LOD 0 index (the n-th strand of a LOD is the n-th index the hash keeps at keep_lod; strands0 = table points -
+    segments, `Asset::lod_points`) passes keep_lod / 2^j, radii x 2^j under 9 mm. Uploaded once into the mesh pool
+    (radius 4 B per LOD point + index 4 B per kept segment), counted in the groom budget, freed with the LOD (eviction,
+    discarded upload, grooms off) and when the key goes off. The LOD's segment starts and radii stay on the host while
+    the key is on (8 B per point; decoded again once if the key went on after the upload).
+  - Pick per slot: px per radian = render height / 2 x |P[1][1]| of the build's camera UBO (host mapping; 0: level 0),
+    head px = bounds diagonal / distance x that, d0 px = 2 x (median LOD radius x keep_lod) / distance x that;
+    `pixel_lod_level` (prev = the built level) then the 30-frame `lod_vote`. A level still uploading keeps the built one.
+  - Camera BLAS per slot on the groom's points range (LSS successive, kept-segment index + widened radius buffers, not
+    compacted), full build on a level or LOD change, refit with the groom BLAS in the same batch; destroyed with
+    kGroomFreeLag on a level/LOD change, slot release and key off.
+  - Camera groom TLAS per scene slot (`g_cam_tlas`, own scratch): the groom TLAS's instances at the same rows (inactive
+    gaps zero), each row's camera BLAS or, at level 0, its groom BLAS. The header publishes its address and row.z = the
+    camera index buffer; if it is not built the header falls back to the groom TLAS and the groom's segment table. The
+    TLAS check (`hair_primary_groom_tlas_built`) records the header's TLAS. Secondary rays (scene stamp) keep the groom TLAS.
+  - Readers of the pixel record's segment: the strand G-buffer, velocity, count, coverage, gi/hair_strand_pixel.hlsli,
+    rt/hair_fibre_gi.hlsli and rr_strand_aa.hlsl all resolve it through the header row (hp_segment): consistent.
+    InstInfo word 3 (rt_groom_links) and hf_groom only see primitives of their own groom TLAS traces: unaffected.
+  - Key off: no allocation, no camera TLAS, header and rows as before. Shaders unchanged: tools/shader_identity.py
+    227/227 byte-identical to e5f62b50; variants delta 0. Test: hair_groom_v3_test, on the fixture every table LOD x
+    levels 1-5 equals decode_v3_lod's extra keep keep_lod / 2^j strand for strand and radius for radius (14 pairs).
 ## 5w. Stable groom rows (offline 2026-11-10, branch claude/hair-row-stable: key rt_hair_row_stable, off)
 
 Live hl1 164930 (natural arrival, camera wheel zoom): of the 5u candidates A (another build's TLAS traced: 75 submits
