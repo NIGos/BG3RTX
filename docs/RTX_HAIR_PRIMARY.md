@@ -1525,8 +1525,9 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
   dev knob rt_hair_pixel_lod_small_keep 0.25, 0 = before); under 35 px level 0. Numbers:
   docs/progress/claude-hair-pixel-lod-small.md. Live staged: tools/live_batches_staged/hair_pixel_lod (pl1).
 - Not built: (c) the cross-fade between two adjacent levels (spec constant 1048); without it a level change pops.
-- User check: none yet (rt_hair_pixel_lod is a dev key, not in the launcher); the hl1 part 2 bursts show it (S8 zoomed out:
-  strand hair about 1 px wide, less grain next to the cards). A launcher toggle comes once the live part qualifies it.
+- User check: launcher Lighting, "RTX Hair detail at distance" (`hair_distant_detail`, 2026-11-10): Off / 1/4 (Standard,
+  small_keep 0.25) / 1/8 (Sharper, 0.125), live after Save; Off in every preset and in data/release.ini until the final
+  qualification live (no longer a release pin). Watch S8 zoomed out while switching. docs/progress/claude-hair-detail-knob.md.
 ## 5w. Stable groom rows (offline 2026-11-10, branch claude/hair-row-stable: key rt_hair_row_stable, off)
 
 Live hl1 164930 (natural arrival, camera wheel zoom): of the 5u candidates A (another build's TLAS traced: 75 submits

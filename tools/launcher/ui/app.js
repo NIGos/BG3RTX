@@ -385,7 +385,7 @@ function renderSettings() {
   root.append(grid);
   const foot=el('div','page-foot');const notices=el('a','link','Fonts and third-party notices');notices.href='https://app.bg3rtx.local/notices';notices.onclick=e=>{e.preventDefault();send('notices');};foot.append(notices,el('p','help-copy',"Independent fan mod; not affiliated with the game's developers."));root.append(foot);return;
  }
- const lightingOrder=["rt_geometry", "rr", "sun_shadows", "gi", "exp_hidden_surface", "local_shadows", "box_lights", "exp_native_coverage", "exp_hair_groom_primary", "rt_intensity"];
+ const lightingOrder=["rt_geometry", "rr", "sun_shadows", "gi", "exp_hidden_surface", "local_shadows", "box_lights", "exp_native_coverage", "exp_hair_groom_primary", "hair_distant_detail", "rt_intensity"];
  const all=(state.settings||[]).filter(s=>section==='Developer'?state.developer&&s.developer:s.category===section&&!s.developer);
  const performanceOrder=['frame_generation','reflex','fps_cap'];
  if(section==='Performance')all.sort((a,b)=>{const rank=s=>performanceOrder.includes(s.id)?performanceOrder.indexOf(s.id):performanceOrder.length;return rank(a)-rank(b);});
@@ -476,6 +476,7 @@ if(sample) {
  ['rr_post_temporal','Depth of field and bloom smoothing','Surfaces',['Off','On'],1,'Blends background blur and bloom across frames to smooth fine edges. About 0.15 ms on an RTX 5090 in dialogue.'],
  ['exp_native_coverage','Hair shadows','Lighting',['Off','On'],1,"Adds shadows and contact shading from the game's hair, including on faces and necks."],
  ['exp_hair_groom_primary','RTX Hair','Lighting',['Off','On'],1,'Beta: shows hair as individual ray-traced strands instead of flat cards. A style gets strands after the game has shown it once and the launcher has converted it. Turns on and off while playing.'],
+ ['hair_distant_detail','RTX Hair detail at distance','Lighting',['Off','1/4 (Standard)','1/8 (Sharper)'],0,'Traces fewer, wider strands for distant RTX Hair. The hair keeps its look and costs less. Changes while playing.'],
  ['exp_gi_rt_pipeline','Faster bounce light tracing','Performance',['Off','On'],1,"Traces the off-screen bounce light with the GPU's ray tracing pipeline instead of a compute pass: the same lighting, about 2 ms faster on an RTX 5090."],
  ['exp_gi_rt_pipeline_reorder','Bounce trace reordering','Performance',['Off','By hit kind','By hit kind and object'],1,'Sorts the bounce rays by what they hit before shading them (shader execution reordering): about 1.5 ms faster at the camp and 0.8 ms at the inn on top of the faster bounce light tracing, same lighting.'],
  ['reflections','Reflections','Surfaces',['Off','Glossy','Standard','Rough'],3,'Adds reflections to smooth surfaces and, at higher levels, rougher surfaces.'],

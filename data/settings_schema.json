@@ -370,6 +370,20 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_primary": "0", "rt_hair_capture": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query", "linear_swept_spheres", "shader_int64", "fragment_stores"], "keys": {"rt_hair_groom_primary": "1", "rt_hair_groom_primary_order": "1", "rt_hair_groom_primary_current": "1", "rt_hair_primary_frame_tag": "1", "rt_hair_groom_lod_keep": "1", "rt_hair_primary_hold": "1", "rt_hair_tangent_world": "1", "rt_hair_groom": "1", "rt_hair_groom_shadow_t": "1", "rt_hair_groom_ao_t": "1", "rt_hair_groom_cascade_drop": "1", "rt_hair_fibre": "1", "rt_hair_fibre_gi": "1", "rt_hair_fibre_spec": "1", "rt_hair_fibre_mapped": "1", "rr_hair_guides": "1", "rt_hair_physical_origin": "1", "rt_hair_capture": "1", "rt_hair_coverage_union": "1", "rt_hair_coverage_confirm": "1", "rt_hair_slot_stable": "1", "rt_hair_live_warmup": "1", "rt_hair_groom_nearest": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": ["rt_hair_groom_primary"], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "hair_distant_detail", "label": "RTX Hair detail at distance",
+     "description": "Traces fewer, wider strands for distant RTX Hair. The hair keeps its look and costs less. Changes while playing.",
+     "apply": "live", "apply_note": "Applies after saving, while playing", "advanced": false, "experimental": false, "developer": false,
+     "category": "Lighting", "summary": "Traces fewer, wider strands for distant RTX Hair. The hair keeps its look and costs less. Changes while playing.",
+     "details": "Only changes RTX Hair. Off traces every strand at every distance. 1/4 (Standard): small, distant heads trace down to a quarter of their strands, each drawn wider so the hair covers the same area; the outline stays as it is today. 1/8 (Sharper): those heads trace an eighth; finer-looking and slightly cheaper, but the hair outline is about 2% fuller than physically correct. Switch while watching a character a few metres away.",
+     "cost": {"status": "Measured", "gpu": "Saves about 0.08 ms (1/4) or 0.10 ms (1/8)", "vram": "About 75-100 MB", "provenance": "RTX 5090, one scene with 13 characters at a distance (2026-11-10). Not yet qualified."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_pixel_lod": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "quarter", "label": "1/4 (Standard)", "apply": "live", "caps": ["ray_query", "linear_swept_spheres"], "keys": {"rt_hair_pixel_lod": "1", "rt_hair_pixel_lod_small_keep": "0.25"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "eighth", "label": "1/8 (Sharper)", "apply": "live", "caps": ["ray_query", "linear_swept_spheres"], "keys": {"rt_hair_pixel_lod": "1", "rt_hair_pixel_lod_small_keep": "0.125"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+     ]},
     {"id": "exp_hair_fibre", "label": "Physical strand shading",
      "description": "Experimental: gives on-screen hair brighter, warmer shading.",
      "apply": "live", "apply_note": "live; needs Strand hair on screen", "advanced": false, "experimental": true, "developer": true,

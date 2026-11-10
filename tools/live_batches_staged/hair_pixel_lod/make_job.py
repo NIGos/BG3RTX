@@ -31,7 +31,7 @@ HAIR = ("rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,r
         "rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0,rt_hair_pixel_lod_small_keep=0.25")
 SET = ("preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,"
        "rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,"
-       "rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,"
+       "rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,"
        "pan_prepare=0,sharc=0,"
        "qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,"
        "rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60," + HAIR)
@@ -101,7 +101,7 @@ def make_job(plan):
              "windows": windows, "period_frames": 60, "min": 1},
             {"name": "small keep 1/4: the period line with a projection read and some groom at camera level 1 or 2",
              "select": "\\[hair groom\\] pixel LOD \\(last",
-             "match": "level 0/1/2/3/4/5 \\d+/(?:[1-9]\\d*/\\d+|\\d+/[1-9]\\d*)/\\d+/\\d+/\\d+/\\d+;.*\\([1-9][0-9]* px per "
+             "match": "level 0/1/2/3/4/5 \\d+/(?:[1-9]\\d*/\\d+|\\d+/[1-9]\\d*)/\\d+/\\d+/\\d+;.*\\([1-9][0-9]* px per "
                       "radian, 0 groom frames without.*small keep 0\\.250\\)",
              "windows": ["pl-on-q"], "period_frames": 60, "min": 1},
             {"name": "small keep 1/8: the period line with some groom at camera level 1-3",

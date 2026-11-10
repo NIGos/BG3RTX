@@ -423,6 +423,21 @@ inline constexpr Knob kKnobs[] = {
       {"rt_hair_live_warmup", "1"}, {"rt_hair_groom_nearest", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified. It turns on and off while playing, also with its keyboard shortcut (Ctrl+Shift+F7 by default); if the game started with RTX Hair off, the physical hair ray origins need a game restart."},
+  // Distant RTX Hair detail (docs/RTX_HAIR_PRIMARY.md 5v, user request 2026-11-10): the release control of the pixel LOD.
+  // 1/4 and 1/8 are rt_hair_pixel_lod_small_keep (common/hair_groom_budget.h pixel_lod_level). Off in every preset until
+  // the final qualification live; to make 1/4 the default, see docs/progress/claude-hair-detail-knob.md.
+  // No Need on RTX Hair: without it the keys do nothing, and a preset may then select 1/4 on its own.
+  {"hair_distant_detail", "RTX Hair detail at distance",
+   "Traces fewer, wider strands for distant RTX Hair. The hair keeps its look and costs less. Changes while playing.",
+   Kind::Choice, Apply::Live, "Applies after saving, while playing", false,
+   {{"off", "Off", 0, {{"rt_hair_pixel_lod", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"quarter", "1/4 (Standard)", kCapRayQuery | kCapLinearSweptSpheres,
+     {{"rt_hair_pixel_lod", "1"}, {"rt_hair_pixel_lod_small_keep", "0.25"}}, {}, {}, false, false, false, Apply::Live},
+    {"eighth", "1/8 (Sharper)", kCapRayQuery | kCapLinearSweptSpheres,
+     {{"rt_hair_pixel_lod", "1"}, {"rt_hair_pixel_lod_small_keep", "0.125"}}, {}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, false, {}, false, "Lighting",
+   {"Measured", "Saves about 0.08 ms (1/4) or 0.10 ms (1/8)", "About 75-100 MB", "RTX 5090, one scene with 13 characters at a distance (2026-11-10). Not yet qualified."},
+   "Only changes RTX Hair. Off traces every strand at every distance. 1/4 (Standard): small, distant heads trace down to a quarter of their strands, each drawn wider so the hair covers the same area; the outline stays as it is today. 1/8 (Sharper): those heads trace an eighth; finer-looking and slightly cheaper, but the hair outline is about 2% fuller than physically correct. Switch while watching a character a few metres away."},
 
   {"exp_hair_fibre", "Physical strand shading",
    "Experimental: gives on-screen hair brighter, warmer shading.",
@@ -1535,7 +1550,9 @@ inline void enforce_release_policy(Map& m) {
   const bool detailed=map_int(m,"detailed_logging",0)!=0;
   for (const KV& pin:kReleaseDefaults) {
     const std::string key=pin.key;
-    if (key=="dev" || key=="detailed_logging" || key=="geo_capture" || std::string(pin.value)!="0") continue;
+    // rt_hair_pixel_lod: off by default in release, but the release control hair_distant_detail owns it.
+    if (key=="dev" || key=="detailed_logging" || key=="geo_capture" || key=="rt_hair_pixel_lod" ||
+        std::string(pin.value)!="0") continue;
     const bool support_stats=key=="rt_stats" || key=="ls_stats" || key=="rf_stats" || key=="sharc_stats" ||
       key=="cpu_timing" || key=="geo_timing" || key=="rt_stats_period_frames" || key=="rt_stats_reset";
     if (!detailed || !support_stats) m[key]="0";

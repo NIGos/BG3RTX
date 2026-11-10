@@ -1,0 +1,23 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. Final RTX Hair qualification in the user's real preset: one Water Queens House (S8) launch, preset=ultra with fg=3 (the hl1/pl1/hm1 set), the RTX Hair On bundle plus every new hair key together: rt_hair_stale_publish=1 (6a), rt_hair_mv_card=2 (5y, non-zero from the level load: specialization 1049), rt_hair_row_stable=1 (5w), RTX Hair detail at distance 1/4 (hair_distant_detail: rt_hair_pixel_lod=1, rt_hair_pixel_lod_small_keep=0.25). window_mode visible_unfocused_fg.",
+  "observables": {
+    "b_zoom": "hl1's wheel 10 ('lower') and 'watch': every complete '[hair primary] header safety' 60-frame line says 'watchdog trips 0' (210357 without 6a: 5 trips in lower); the 'stale publish check' line in lower shows the key on with the G-buffer camera read from its UBO (at least one such frame).",
+    "c_orbit": "slow rotation at the isometric distance (hc1's 60 px/s move, right then back left), one K8 edge burst with RR motion vectors (pan_edge=1, pan_mvec=1, 8 frames, ~0.1 GB) 3 s into the right turn. Offline: py -3 tools/hair_groom/mv_ratio.py <burst dir>; with the camera moving, the camera-only share is not meaningful (the background moves), the hair / ring median |mv| ratio is: predicted 0.8-1.2 (strands move with their head, as the cards do: hs1 cards 0.52-1.08); the static-camera strand failure was 0-0.54 (hs1, before 5y). No frame watchdog trip expected (report only: not gated in c).",
+    "d_distance": "static isometric camera, distant detail off / 1/4 / 1/8 / off, a PNG trace (dump_preview_f32=1) 1.5 s after each switch (the 30-frame level vote plus the camera BLAS build: ~1.2 s at 30 fps), then a 120-frame cost window. pl1 211046: 5 of 13 grooms at level 2 (1/4) and level 3 (1/8), heads 6-53 px; no holes, no card fallback, no outline growth in any on shot; float frame mean within the off/off spread (0.4%).",
+    "e_cost": "every window: '[hair primary] strand G-buffer draws GPU', 'rt passes: GPU cost' and '[pace] rendered frame time' per 60 frames. pl1: strand G-buffer off 0.28-0.31 ms, 1/4 0.21-0.22, 1/8 0.19; rt passes and frame time: report only (FG on, unfocused; judge GPU ms, not frame time, if the window is occluded)."
+  },
+  "pixel_lod_lines": {
+    "win-q": "'[hair groom] pixel LOD (last 60 frames)': groom frames at level 1 or 2 non-zero, 'small keep 0.250'",
+    "win-e": "the same grooms one level deeper, 'small keep 0.125'"
+  },
+  "energy": "float frame mean of the four shots (dump_preview_f32) within the off/off spread; the off shots bracket the on shots.",
+  "invalid_if": [
+    "no '[pan] burst 99500 complete: 8 frames' line",
+    "any of the four motion-trace lines missing",
+    "no header safety line in lower or watch",
+    "background median |mv| under 0.05 px in the orbit burst (the camera did not move: the rotation input was lost)"
+  ],
+  "decision": "pass: 0 trips in b, ring ratio 0.8-1.2 in c, no holes or outline growth in d with the strand G-buffer cost at or below off. Then the presets may flip hair_distant_detail to 1/4 (docs/progress/claude-hair-detail-knob.md) and the new keys join the RTX Hair On bundle.",
+  "disk": "1 K8 edge burst ~0.1 GB + 4 PNG traces with float previews ~0.05 GB: under 0.3 GB",
+  "duration": "about 115 s of phases after the scene is ready; under 3 minutes after the load"
+}
