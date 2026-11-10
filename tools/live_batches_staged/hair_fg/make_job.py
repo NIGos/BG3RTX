@@ -23,6 +23,13 @@ import make_job as hs1  # the user's set and the S8 view: one copy
 NAME = "hf1-s8-hair-fg"
 PLAN = f"tools/live_batches_staged/hair_fg/plans/{NAME}.json"
 SNAP = 12
+ZOOM = 20   # wheel notches in: hs1's 10 left the heads at about 30 px of the 1920 x 800 captures (hf1 073932)
+# The generated frames are really shown: the layer's count of presents per rendered frame over a full period.
+FG_SHOWN = (r"\[sl\] DLSS-G frame \d+: status 0x0, presented per app frame 3, displayed/rendered over the last \d+ "
+            r"frames (?:2\.[5-9]\d|[3-9]\.\d+)")
+# The last PNG of a capture. "[sl] present capture done" is logged when the last frame is requested, 0.1 s after the
+# start and 1 s before this line.
+SNAP_DONE = rf"\[sl\] presented frame {SNAP - 1} -> .*\(ok\)"
 SET = hs1.SET + ",fg_snap=0,fg_snap_any=1,fg_snap_after=60,fg_state_every=60"
 # label, fg, rr_hair_strand_aa, rt_hair_groom_primary
 WINDOWS = [("fg3-a", 3, 2, 1), ("fg0", 0, 2, 1), ("fg3-b", 3, 2, 1), ("fg3-aa0", 3, 0, 1), ("fg3-cards", 3, 2, 0)]
@@ -45,8 +52,10 @@ def make_plan():
         # every value the watch windows use, before them (live_flow warm-up lint)
         phase("warm-cards", 3, strands=0),
         phase("warm-aa0", 3, aa=0),
+        # zoom before warm-fg0, so that the first watch window changes fg (a phase whose set equals the previous one
+        # gets no fresh settings read to anchor its wait condition)
+        phase("zoom", 8, wheel=ZOOM),
         phase("warm-fg0", 6, fg=0),
-        phase("lower", 8, wheel=10),
     ]
     for label, fg, aa, strands in WINDOWS:
         # survive- (live_flow keeps a wall-clock observation window at its declared length): the user watches here.
@@ -65,7 +74,6 @@ def every(name, select, match, windows, **kw):
 
 def make_job(plan):
     snaps = ["snap-" + w[0] for w in WINDOWS]
-    fg_on = ["snap-" + w[0] for w in WINDOWS if w[1]]
     return {
         "name": NAME,
         "save": "Water Queens House",
@@ -85,7 +93,7 @@ def make_job(plan):
         "patterns": ["\\[auto\\]", "\\[cfg\\]", "\\[hot\\]", "\\[watch\\]", "\\[crash\\]", "FAILED", "\\[rrpost\\]",
                      "\\[hair primary\\] frame", "\\[rt\\] scene wait", "rt passes: GPU cost", "\\[sl\\] DLSS-G frame",
                      "\\[sl\\] FG decision", "\\[sl\\] slDLSSGSetOptions\\(mode", "\\[sl\\] capturing",
-                     "\\[sl\\] present", "\\[sl\\] warn", "VK_ERROR", "\\[log\\]"],
+                     "\\[sl\\] present", "\\[sl\\] FG cadence", "\\[sl\\] foreground change", "\\[sl\\] warn", "VK_ERROR", "\\[log\\]"],
         "expect": [
             "\\[auto\\] scene ready",
             "\\[hot\\] core generation \\d+ loaded",
@@ -105,15 +113,15 @@ def make_job(plan):
             "PNG write failed", "capture writer backlog",
         ],
         "expect_every": [
-            every("presented frames captured in every snap window", "\\[sl\\] present capture done",
-                  "\\[sl\\] present capture done", snaps, event=True),
-            every("generated frames shown in every fg=3 snap window", "\\[sl\\] DLSS-G frame",
-                  "status 0x0, presented per app frame 3, displayed/rendered over the last \\d+ frames "
-                  "(?:[2-9]\\.\\d+).*api errors 0", fg_on, event=True, settle_s=1),
+            # Only this event gate on the snap windows. hf1 073932 was INVALID because a second, periodic gate
+            # ('[sl] DLSS-G frame') made live_flow turn them into stats_reset frame windows: such a window starts at
+            # its motion-ready record (07:41:30.365), and the capture, started by the settings read (07:41:29.806),
+            # had logged its line before it. The generated frames are now proven by the watch windows' wait condition.
+            every("12 presented frames written in every snap window", SNAP_DONE, SNAP_DONE, snaps, event=True),
         ],
         "expect_runner": [
             "\\[window-mode\\].*visible_unfocused",
-            "\\[wheel-input\\] phase=4 notches=10\\b",
+            f"\\[wheel-input\\] phase=3 notches={ZOOM}\\b",
             f"\\[motion-plan\\] complete phases={len(plan)}\\b",
             "^Run ended: done",
         ],
@@ -136,9 +144,23 @@ def main():
     from tools.live_batches.live_flow import tighten_files
     tighten_files(HERE, job_names=[NAME])
     tight = json.loads((HERE / "plans" / f"{NAME}.json").read_text(encoding="utf-8"))
+    fg3 = {"survive-" + w[0] for w in WINDOWS if w[1]}
     for p in tight:
         if p["label"].startswith("survive-"):
             assert p["seconds"] >= 8, (p["label"], p["seconds"])   # the user's watch time is the observable
+        if p["label"].startswith("snap-"):
+            assert not p.get("stats_reset") and "frames" not in p, p["label"]   # a timed event window (see the gate)
+            # live_flow sizes an event window for the request line; the 12th PNG came 1.12 s after the settings
+            # read in hf1 073932 (writer thread), so keep 4 s.
+            p["seconds"] = p["motion_start"] = p["motion_end"] = 4.0
+        if p["label"] in fg3:
+            # Wait condition: the 8 s start only after a fresh line shows the generated frames on screen (the runner
+            # starts the phase clock at motion-ready). Not shown within 30 s: "pipeline readiness timed out:
+            # <label>; missing: <this pattern>", fail-fast. Added after tighten_files, which owns the build witnesses.
+            p["wait_log"] = list(p.get("wait_log", [])) + [FG_SHOWN]
+            p["wait_log_fresh"] = list(p.get("wait_log_fresh", [])) + [FG_SHOWN]
+            p["wait_log_timeout"] = 30
+    (HERE / "plans" / f"{NAME}.json").write_text(json.dumps(tight, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"Generated {NAME}: {sum(p['seconds'] for p in tight)} s of phases; no queue staging")
 
 

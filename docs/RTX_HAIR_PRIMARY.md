@@ -1091,11 +1091,26 @@ Root cause NOT established. Verified facts, then the one hypothesis left and the
     displayed/rendered 1.00 until frame 1621), then 3.00 for the bursts.
   - `fg` is read every present: 3 -> 0 -> 3 works inside one launch when the game starts with fg >= 2 (the Restart
     mark in settings.h is for crossing on/off at startup, when Streamline is not loaded). Precedent: ef1 `fg-off`.
-- Staged, not queued: `tools/live_batches_staged/hair_fg` job `hf1-s8-hair-fg` (S8, the user's set, 98 s of phases).
+- Staged, not queued: `tools/live_batches_staged/hair_fg` job `hf1-s8-hair-fg` (S8, the user's set, 98 s of phases; 97 s after the fix below).
   Watch windows of 8 s, each followed by 12 presented frames (`fg_snap`, rendered and generated): fg=3, fg=0, fg=3,
   fg=3 with rr_hair_strand_aa=0, fg=3 with cards. The user says in which window the toggling stops; predicted.json
   holds the reading per answer. If it stops at fg=0: stable FG depth and motion on hair (card depth and motion from
   the hold layer at strand pixels) behind a key.
+- hf1 run 073932 (main 85711bbe): INVALID, job error, fixed on claude/hair-fg-job (97 s of phases, lint 0 failing).
+  - Cause: the snap windows also carried a periodic `[sl] DLSS-G frame` gate, so live_flow made them stats_reset
+    frame windows. Such a window starts at its motion-ready record (07:41:30.365); `fg_snap` is applied at the
+    settings read (07:41:29.806) and `present capture done` was logged at 07:41:29.932, before the window: 0 events.
+  - Fix: snap windows are plain 4 s timed windows with one event gate, the last PNG line
+    (`[sl] presented frame 11 -> ... (ok)`, 1.12 s after the request). Each fg=3 watch window has a runner wait
+    condition: a fresh `[sl] DLSS-G frame` line with displayed/rendered >= 2.5, 30 s, else
+    `pipeline readiness timed out: survive-fg3-...`. Zoom 20 wheel notches instead of 10 (head size not checked
+    offline; the captures are half resolution, 1920 x 800).
+  - FG timeline of that run: after the load FG went on at 07:40:37.1; the SDK cadence line showed 3.00 from
+    07:40:39.7, the layer's present counter (displayed/rendered) stayed 1.00 with 0 batched presents until 07:40:50
+    and reached 3.00 at 07:40:53.9. The log names no cause (no cooldown or pacing line; a foreground-change sample
+    at 07:40:49.4 is the only coincident line). After the live fg 0 -> 3 at 07:41:19.2 it was 3.00 at 07:41:21.9, so
+    window A (07:41:21.8 to 07:41:29.8) had generated frames throughout; the 1.00 lines up to 07:41:17 are the load,
+    the warm-up and the warm-fg0 phase.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
