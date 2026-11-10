@@ -4,15 +4,15 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 727,
-  "max_minutes": 5,
+  "timeout": 420.0,
+  "max_minutes": 3,
   "repeat": 1,
   "live_batch": "hair-late",
   "tree": ".claude/worktrees/test-main",
   "window_mode": "visible_unfocused_fg",
-  "fail_fast": true,
+  "fail_fast": false,
   "stop_on_dump": false,
-  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_debug_late_arrival=45252",
+  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1",
   "args": [
     "-RealPresent",
     "-Move",
@@ -26,14 +26,8 @@
     "\\[watch\\]",
     "\\[crash\\]",
     "FAILED",
-    "\\[hair primary\\] frame",
-    "\\[hair primary\\] switches",
-    "\\[hair primary\\] coverage by footprint",
-    "\\[hair primary\\] late arrival",
-    "\\[hair primary\\] live",
-    "\\[hair primary\\] watchdog",
-    "\\[hair primary\\] header safety",
-    "\\[hair primary\\] strand G-buffer draws GPU",
+    "\\[hair primary\\]",
+    "\\[hair groom\\]",
     "\\[rt\\] scene wait",
     "VK_ERROR",
     "\\[log\\]"
@@ -42,8 +36,40 @@
     "\\[auto\\] scene ready",
     "\\[hot\\] core generation \\d+ loaded",
     "\\[cfg\\] settings read",
-    "\\[hair primary\\] late arrival: groom of the 45252-index hair draws held",
-    "\\[hair primary\\] late arrival: groom of the 45252-index hair draws released"
+    "\\[hair primary\\] G-buffer hair pipeline: .*nearest-strand trace compiled in \\(specialization 1047\\) 1",
+    "\\[hair primary\\] nearest-strand trace: header flag 1 .*specialization 1047 in the strand G-buffer pipelines 1"
+  ],
+  "expect_every": [
+    {
+      "name": "the arrival: 45252 waits for its UV join in the lower window",
+      "select": "\\[hair groom\\] unmatched hair draw: 45252 indices",
+      "match": "UV join pending",
+      "windows": [
+        "lower"
+      ],
+      "event": true,
+      "min": 1
+    },
+    {
+      "name": "the first-seen frame lines in the lower window",
+      "select": "\\[hair groom\\] frame \\d+ \\(a hair draw first seen",
+      "match": "groom rows \\d+ \\(previous publish \\d+\\)",
+      "windows": [
+        "lower"
+      ],
+      "event": true,
+      "min": 1
+    },
+    {
+      "name": "the groom TLAS check period line in both windows",
+      "select": "\\[hair primary\\] groom TLAS check \\(last",
+      "match": "G-buffer submits checked",
+      "windows": [
+        "watch"
+      ],
+      "event": true,
+      "min": 1
+    }
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -54,53 +80,10 @@
     "\\[log\\] reached \\d+ MB",
     "\\[sl\\] .*eWarnOutOfVRAM"
   ],
-  "expect_every": [
-    {
-      "name": "late arrival released inside each arrival window",
-      "select": "\\[hair primary\\] late arrival: groom of the 45252-index hair draws released",
-      "match": "released at frame \\d+, (30[1-9]|3[1-9]\\d) frames after the switch-on",
-      "windows": [
-        "arrival-a",
-        "arrival-b"
-      ],
-      "event": true,
-      "min": 1
-    },
-    {
-      "name": "A (restart loop): the late arrival leaves holes (frame watchdog trips or dropouts)",
-      "select": "\\[hair primary\\] switches \\(last .*frame watchdog trips [1-9]|\\[hair primary\\] coverage by footprint .*dropouts [1-9]",
-      "match": "trips [1-9]|dropouts [1-9]",
-      "windows": [
-        "arrival-a"
-      ],
-      "event": true,
-      "min": 1
-    },
-    {
-      "name": "B (nearest): 0 frame and key watchdog trips in every period",
-      "select": "\\[hair primary\\] switches \\(last",
-      "match": "frame watchdog trips 0 .*key watchdog trips 0;",
-      "windows": [
-        "arrival-b"
-      ],
-      "event": true,
-      "min": 6
-    },
-    {
-      "name": "B (nearest): at most 2 dropouts in every period",
-      "select": "\\[hair primary\\] coverage by footprint",
-      "match": "dropouts [0-2] \\(",
-      "windows": [
-        "arrival-b"
-      ],
-      "event": true,
-      "min": 6
-    }
-  ],
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "\\[wheel-input\\] phase=1 notches=10\\b",
-    "\\[motion-plan\\] complete phases=8\\b",
+    "\\[motion-plan\\] complete phases=3\\b",
     "^Run ended: done"
   ],
   "live_flow": {
@@ -140,6 +123,6 @@
       "maximum": 0.4969999999993888
     }
   },
-  "estimated_phase_seconds": 60.967,
-  "purpose": "Late groom arrival at S8 (rt_hair_debug_late_arrival=45252, 301 frames after each live switch-on): A with rt_hair_groom_nearest=0 live must show 125217's holes, B with it on none. STAGED, not authorized."
+  "estimated_phase_seconds": 35.0,
+  "purpose": "Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the groom TLAS check and the first-seen frame lines: which candidate breaks the existing keys' strands. STAGED, not authorized."
 }

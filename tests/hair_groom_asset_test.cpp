@@ -380,6 +380,31 @@ static void test_late_arrival() {
   unseen.switch_on(10);
   CHECK(!unseen.draw(10 + kLateArrivalFrames, &start, &release) && !start && !release);
 }
+// 5u observable: the groom TLAS a G-buffer traces against the header applied to it.
+static void test_tlas_check() {
+  using namespace hair_primary;
+  TlasCheck c;
+  const uint64_t keys_a[3] = {0x0d51ull << 48, 0x0754ull << 48, 0x51e8ull << 48};
+  const uint64_t keys_b[4] = {0x0d51ull << 48, 0x16faull << 48, 0x0754ull << 48, 0x51e8ull << 48};
+  bool sub[16] = {};
+  auto submitted = [&](uint64_t rec) { return rec < 16 && sub[rec]; };
+  CHECK(!c.check(0xA, 1, keys_a, 3, submitted).other && c.checked == 0);   // never built: not checked
+  c.build(0xA, 1, 100, keys_a, 3);
+  sub[1] = true;
+  CHECK(!c.check(0xA, 1, keys_a, 3, submitted).other && c.checked == 1);   // its own build: consistent
+  c.build(0xA, 2, 101, keys_b, 4);                                          // the same address rebuilt by another publish
+  CHECK(!c.check(0xA, 1, keys_a, 3, submitted).other);                      // not submitted yet: runs after this G-buffer
+  sub[2] = true;
+  const auto r = c.check(0xA, 1, keys_a, 3, submitted);                      // submitted first: this G-buffer traces it
+  CHECK(r.other && r.n_tlas == 4 && r.n_header == 3 && r.first_diff == 1 && r.key_tlas == keys_b[1] &&
+        r.key_header == keys_a[1] && r.frame_tlas == 101 && c.other == 1 && c.differ == 1);
+  c.build(0xB, 3, 102, keys_a, 3); c.build(0xB, 4, 103, keys_a, 3);          // rebuilt with the same instances
+  sub[3] = sub[4] = true;
+  const auto same = c.check(0xB, 3, keys_a, 3, submitted);
+  CHECK(same.other && same.first_diff == -1 && c.differ == 1);
+  c.reset_period();
+  CHECK(c.checked == 0 && c.other == 0 && c.differ == 0 && c.built.size() == 2);
+}
 static void test_coverage_union() {
   using namespace hair_primary;
   uint32_t seed = 12345;
@@ -1106,7 +1131,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

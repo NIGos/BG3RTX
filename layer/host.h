@@ -897,6 +897,8 @@ bool hair_primary_wanted();
 // rt_hair_debug_late_arrival (dev only, 5u): true while the groom of a hair draw with this index count is held back after
 // the last live strands switch-on (logs the start and the release of each hold).
 bool hair_primary_late_hold(uint32_t index_count);
+// 5u observable: a groom TLAS build (its device address, the build's recording, the key of each instance in order).
+void hair_primary_groom_tlas_built(uint64_t address, uint64_t rec, const uint64_t* keys, uint32_t n);
 // After a device loss (layer/devfault.cpp): the strand breadcrumbs (common/hair_primary.h kCrumbAddrOffset).
 void hair_primary_fault_log();
 void hair_primary_stats_reset();

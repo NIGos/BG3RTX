@@ -210,7 +210,10 @@ uint64_t g_watchdog_spared_mark = 0;   // rt_hair_watchdog_one_key: g_watchdog.s
 // count runs the union request and the gate and both watchdogs judge every accepted strand pixel instead of only those
 // inside the card markers. The pipeline of each request ([0] default, [1] union) and its shader generation.
 hair_primary::FootprintStats g_footprint;
-hair_primary::LateArrival g_late;   // rt_hair_debug_late_arrival (dev only)
+hair_primary::LateArrival g_late;
+int g_nearest_compiled = -1, g_nearest_flag_logged = -1, g_nearest_compiled_logged = -2;
+hair_primary::TlasCheck g_tlas_check;   // 5u observable (detailed logging)
+uint64_t g_tlas_check_logged = 0;   // 5u: specialization 1047 at the last strand pipeline creation   // rt_hair_debug_late_arrival (dev only)
 bool g_cfg_union = false;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
 float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
@@ -1076,8 +1079,10 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       // Velocity: the strand depth the G-buffer wrote passes, nearer geometry does not; no writes.
       char t[240];
       std::snprintf(t, sizeof t, "[hair primary] %s hair pipeline: native depth test %u write %u compare %d -> strands test 1 "
-                    "write %u compare GREATER_OR_EQUAL", pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable,
-                    ds->depthWriteEnable, int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer));
+                    "write %u compare GREATER_OR_EQUAL; nearest-strand trace compiled in (specialization 1047) %u",
+                    pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable, ds->depthWriteEnable,
+                    int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer), pass == Pass::Gbuffer ? nearest : 0u);
+      if (pass == Pass::Gbuffer) g_nearest_compiled = int(nearest);
       notes.push_back(std::string("pipe:") + t);
       dsv.depthTestEnable = VK_TRUE;
       dsv.depthWriteEnable = pass == Pass::Gbuffer ? VK_TRUE : VK_FALSE;
@@ -1301,6 +1306,17 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
     uint8_t* image = static_cast<uint8_t*>(g_hdr_slots.map) + VkDeviceSize(slot) * hair_primary::kHeaderAllocAll;
     const uint32_t card_slots = d.plan.card_slots;
     const hair_primary::CurrentPick pick = d.pick;
+    if (c && logging::stats_enabled(cfg_int)) {   // 5u observable: the TLAS this G-buffer traces against its header
+      uint64_t address = 0;
+      std::memcpy(&address, c->bytes + 16, 8);   // header words 4-5: the groom TLAS
+      const auto r = g_tlas_check.check(address, c->pick.rec, c->keys, c->n, [](uint64_t rec) { return bvh_rec_submitted(rec); });
+      if (r.other && g_tlas_check_logged++ < 16)
+        log_stats("[hair primary] groom TLAS check: G-buffer frame %llu applies the publish of tag %u but its TLAS 0x%llx was "
+                  "rebuilt at frame %llu by another build already submitted: instances %u, header rows %u, first differing "
+                  "instance %d (TLAS key %04llx, header key %04llx)", (unsigned long long)p.frame, c->pick.tag,
+                  (unsigned long long)address, (unsigned long long)r.frame_tlas, r.n_tlas, r.n_header, r.first_diff,
+                  (unsigned long long)(r.key_tlas >> 48), (unsigned long long)(r.key_header >> 48));
+    }
     if (c) {
       if (!usable[ci]) ++g_drop.upgrades_gated;
       const hair_primary::Upgrade& u = d.plan;
@@ -1399,6 +1415,12 @@ bool strands_on() {
   return g_live_on.load(std::memory_order_acquire) && g_header.b != VK_NULL_HANDLE;
 }
 }  // namespace
+
+void hair_primary_groom_tlas_built(uint64_t address, uint64_t rec, const uint64_t* keys, uint32_t n) {
+  if (!logging::stats_enabled(cfg_int)) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  g_tlas_check.build(address, rec, frame_index(), keys, n);
+}
 
 bool hair_primary_late_hold(uint32_t index_count) {
   const int want = cfg_int("rt_hair_debug_late_arrival", 0);
@@ -1867,6 +1889,16 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
   if (cfg_int("rt_hair_groom_coverage", 0) != 0) h.flags |= hair_primary::kFlagCoverage;   // M3.2, live off-switch
   if (cfg_int("rt_hair_groom_nearest", 0) != 0) h.flags |= hair_primary::kFlagNearest;     // 5u, live off-switch
+  {   // 5u: which trace the strand G-buffer runs, logged when it changes (the header flag needs specialization 1047)
+    const int now_flag = (h.flags & hair_primary::kFlagNearest) != 0 ? 1 : 0;
+    if (now_flag != g_nearest_flag_logged || g_nearest_compiled != g_nearest_compiled_logged) {
+      g_nearest_flag_logged = now_flag;
+      g_nearest_compiled_logged = g_nearest_compiled;
+      log("[hair primary] nearest-strand trace: header flag %d at publish frame %llu; specialization 1047 in the strand "
+          "G-buffer pipelines %d (-1: none created yet): the %s trace runs", now_flag, (unsigned long long)frame_index(),
+          g_nearest_compiled, now_flag && g_nearest_compiled == 1 ? "nearest-strand" : "restart-loop");
+    }
+  }
   if (cfg_int("rt_hair_macro_normal", 0) != 0) h.flags |= hair_primary::kFlagMacroNormal;   // 5g, live once compiled in
   if (cfg_int("rt_hair_tangent_world", 0) != 0) h.flags |= hair_primary::kFlagTangentWorld;
   h.width = width;
@@ -2035,6 +2067,11 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
           (unsigned long long)g_drop.upgrades_gated);
       g_drop = DropoutStats{};
     }
+    log_stats("[hair primary] groom TLAS check (last %u frames): %llu G-buffer submits checked, %llu traced a TLAS rebuilt "
+              "by another build already submitted, %llu of them with instance keys other than the header's rows",
+              stats_period(300), (unsigned long long)g_tlas_check.checked, (unsigned long long)g_tlas_check.other,
+              (unsigned long long)g_tlas_check.differ);
+    g_tlas_check.reset_period();
     log_stats("[hair primary] header safety (last %u frames): header/BLAS mismatch frames %llu (record-time header older "
         "than a build ordered before its G-buffer), submit headers with card draws %llu (draw slots %llu), mask-hole pixels "
         "%llu (strand traces that skipped a card-kept groom), watchdog trips %llu, per-draw watchdog trips %llu (deciding: %s), "

@@ -1,14 +1,13 @@
 {
-  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch, release Ultra with fg=3 and the RTX Hair bundle (rt_hair_groom_nearest=1 at startup, so specialization 1047 is compiled in), static camera lowered 10 notches. rt_hair_debug_late_arrival=45252 holds the groom of the 45252-index hair draws (groom 16fa158c, LOD 0 889,639 points: the first upload of the 125217 transient) for kLateArrivalFrames = 301 frames after every live strands switch-on, so it arrives after the warm-up ended (133243: 93 frames) while the other keys swap. Two cycles in the one launch: A with rt_hair_groom_nearest=0 live (header flag 64 off: the restart loop), B with it on.",
-  "observable": "Does a groom that arrives while the other keys swap leave holes with the restart loop (125217 reproduced), and none with the nearest-strand trace?",
-  "arrival-a (nearest off, restart loop)": {
-    "predicted": "release line 'late arrival ... released at frame F, 301 frames after the switch-on' inside the window; in the period(s) after F: frame watchdog trips 1-7 or dropouts 10-60 (125217: 6 trips, 55 dropouts, 6 frames under a tenth), passed-over (mask-hole) pixels > 30000",
-    "gate": "event gate: at least one switches line with frame watchdog trips >= 1 or one coverage-by-footprint line with dropouts >= 1 in arrival-a",
-    "if_not": "the test does not reproduce 125217 (45252 alone is not dense enough in front of the others, or its rows were not keyed before its probe measured it): report the period lines; the fix stays proven by the GPU case only"
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized. One Water Queens House (S8) launch, release Ultra with fg=3 and the RTX Hair bundle (rt_hair_groom_nearest=1), detailed logging, static camera: warm-up 20 s, then 'lower' (wheel 10), whose phase start triggered the three arrivals (45252, 100101, 7092: 'UV join pending') 0.06 s later in hl1 161106, then 12 s watch. No test aid (rt_hair_debug_late_arrival is not set). The job requires the observables, not holes.",
+  "observable": "At the frames the existing keys lose their strands (161106: G-buffer frames 1992-1998, the frame the first newcomer is only waiting for its UV join), what changed for them?",
+  "q1_nearest_trace": "the strand G-buffer pipeline line ends 'specialization 1047) 1' and the header flag line says 'the nearest-strand trace runs'",
+  "trigger": "unmatched hair draw: 45252 ... UV join pending within 1 s after the 'lower' window starts; '[hair groom] frame F (a hair draw first seen at S)' lines for S..S+6",
+  "candidates": {
+    "A. the G-buffer traces a groom TLAS rebuilt by another build (ring or ordering)": "'groom TLAS check: G-buffer frame F applies the publish ... rebuilt at frame ... by another build already submitted' lines at the trip frames; the period line 'traced a TLAS rebuilt by another build' > 0 (and 'with instance keys other than the header's rows' > 0 if the rows moved)",
+    "B. the existing rows move inside one publish (row index -> other key) while the recorded draws keep their slots": "first-seen frame lines with 'keyed rows whose row index now holds another key than before' >= 1 at the trip frames, the TLAS check 0",
+    "C. the existing grooms are rebuilt that frame": "first-seen frame lines with 'full BLAS builds' > 0 at the trip frames, A and B 0",
+    "D. none of these": "TLAS check 0, moved rows 0, full builds 0 while the frame watchdog trips: the cause is outside the groom TLAS and its header (points of the existing grooms, card markers); the next observable is a per-groom points check at those frames"
   },
-  "arrival-b (nearest on)": {
-    "predicted": "release line inside the window; every complete switches line: frame watchdog trips 0, key watchdog trips 0; every coverage-by-footprint line: dropouts 0-2; passed-over pixels similar to A (diagnostic)",
-    "gate": "expect_every on both period lines in arrival-b"
-  },
-  "cost": "strand G-buffer GPU line (report only): A and B within the 133243 range 0.118-0.320 ms/frame"
+  "holes": "as 161106 if the arrival repeats: 1-7 frame watchdog trips and 10-60 dropouts in the period after the 'lower' start; none is also a valid outcome (then the trigger did not repeat and the observables say so)"
 }
