@@ -1492,36 +1492,53 @@ struct CameraSteps {
   }
 };
 
-// 6a rt_hair_stale_publish (docs/RTX_HAIR_PRIMARY.md 6a). hl1 210357: all 5 frame watchdog trips were G-buffer frames
-// that applied the previous build frame's publish (k = 1) while the camera moved (header camera one step, 0.34-0.70 m,
-// from the frame's): the newest publish ordered before the G-buffer on the queue is all the GPU holds (the builds rewrite
-// the points and BLASes in place), and its rebased trace (hp_rebase) lost the strands in exactly those frames. The
-// submit-time check: the distance between the applied publish's build camera and the G-buffer's own camera (its camera
-// UBO +208 read at the submit, else the build camera noted for its frame; -1 unknown). Over kStaleCameraTol the frame
-// draws its cards (card mode of every recorded slot: card G-buffer and card depth, no coverage evidence, no watchdog
-// judgement) instead of tracing a publish of another camera. The tolerance is the card band's fixed term
-// (hair_primary_max_radius, hp_on_card): a strand displaced by less stays inside its card's band.
+// 6a rt_hair_stale_publish (docs/RTX_HAIR_PRIMARY.md 6a, 6b). The submit-time check: the distance between the applied
+// publish's build camera and the G-buffer's own camera, measured from the G-buffer's camera UBO (+208, read at the
+// submit; -1 unknown). Over kStaleCameraTol the frame draws its cards (card mode of every recorded slot) instead of
+// tracing a publish of another camera. The tolerance is the card band's fixed term (hair_primary_max_radius, hp_on_card).
+// 6b (hf2 225504): the frame labels never decide. The G-buffer frame is frame_index + 1 at its recording, the build frame
+// frame_index at the build; in every submit of hf2 the build of the G-buffer's own label was not yet recorded (k = 1 by
+// label in 60 of 60 frames, still camera included), so a build camera looked up by the G-buffer's label is unknown in
+// the normal case and k says nothing about the cameras. An unknown camera traces as before (never cards).
 constexpr float kStaleCameraTol = 0.01f;
 enum class Stale : uint8_t { Own, SameCamera, Moved, Unknown, Count };
 inline const char* stale_name(Stale s) {
-  static const char* const names[] = {"own build frame, same camera", "older publish, same camera",
+  static const char* const names[] = {"same camera, same label", "same camera, older label",
                                       "camera moved since the publish", "camera not known"};
   return s < Stale::Count ? names[size_t(s)] : "?";
 }
-// pub_frame: the applied publish's build frame (0: none); gb_frame: the G-buffer frame; offset_m: the camera distance.
+// pub_frame: the applied publish's build frame (0: none, its camera unknown); gb_frame: the G-buffer frame (labels,
+// reported only); offset_m: the measured camera distance (< 0: not measured).
 inline Stale stale_publish(uint64_t pub_frame, uint64_t gb_frame, float offset_m) {
-  if (!pub_frame) return Stale::Unknown;
-  if (offset_m < 0.0f || !std::isfinite(offset_m)) return pub_frame == gb_frame ? Stale::Own : Stale::Unknown;
+  if (!pub_frame || offset_m < 0.0f || !std::isfinite(offset_m)) return Stale::Unknown;
   if (offset_m > kStaleCameraTol) return Stale::Moved;
   return pub_frame == gb_frame ? Stale::Own : Stale::SameCamera;
 }
-// The card-mode slots the check adds: every recorded slot when the key is on and the camera moved or is unknown for an
-// older publish (a frame of its own publish with an unknown camera keeps the old behaviour: hp_rebase gives org 0).
+// The card-mode slots the check adds: every recorded slot, only for a measured camera move with the key on.
 inline uint32_t stale_card_slots(bool enabled, Stale s, const DrawSlots& recorded) {
-  if (!enabled || (s != Stale::Moved && s != Stale::Unknown)) return 0u;
+  if (!enabled || s != Stale::Moved) return 0u;
   uint32_t m = 0;
   for (uint32_t i = 0; i < kDrawSlots; ++i) if (recorded.keys[i]) m |= 1u << i;
   return m;
+}
+// 6b: the G-buffer camera UBO of a recording is looked up at its main-view hair draws (any, swapped or not: hf2 never
+// swapped once its first frames drew cards, so a swap-only lookup never ran). At most kStaleUboTries queries per header.
+constexpr uint32_t kStaleUboTries = 4;
+inline bool stale_ubo_wanted(bool has_ubo, uint32_t tries) { return !has_ubo && tries < kStaleUboTries; }
+// Why a G-buffer camera was not measured (period line): no main-view hair draw in the recording, the binding query
+// failed (no set 0 binding 2 uniform buffer), the UBO is not host-readable, its VP is not camera-relative (eye off).
+enum class StaleWhy : uint8_t { Measured, NoDraw, NoBinding, NotMapped, EyeOff, Count };
+inline const char* stale_why_name(StaleWhy w) {
+  static const char* const names[] = {"measured", "no main-view hair draw", "no camera UBO binding",
+                                      "UBO not host-readable", "UBO VP not camera-relative"};
+  return w < StaleWhy::Count ? names[size_t(w)] : "?";
+}
+inline StaleWhy stale_why(bool drawn, bool bound, bool read, float vp_eye_m) {
+  if (!drawn) return StaleWhy::NoDraw;
+  if (!bound) return StaleWhy::NoBinding;
+  if (!read) return StaleWhy::NotMapped;
+  if (!(vp_eye_m >= 0.0f && vp_eye_m <= kStaleCameraTol)) return StaleWhy::EyeOff;
+  return StaleWhy::Measured;
 }
 inline float camera_distance(const float* a, const float* b) {
   double d2 = 0;

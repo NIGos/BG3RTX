@@ -453,37 +453,52 @@ static void test_vp_eye() {
   c.note(102, p1);
   CHECK(c.find(102)->eye < 0);                     // not read
 }
-// 6a rt_hair_stale_publish: the submit-time camera check, with hl1 210357's trip frames as the moved case.
+// 6a/6b rt_hair_stale_publish: the submit-time camera check. hl1 210357's trip frames are the moved case; hf2 225504's
+// policy bug (every frame "camera not known", drawn as cards) is the unknown case, which must trace as before.
 static void test_stale_publish() {
   using namespace hair_primary;
-  // The trips: G-buffer frame 2618 applied build frame 2617's publish, header camera 0.524 m from the frame's.
   CHECK(stale_publish(2617, 2618, 0.524f) == Stale::Moved);
   CHECK(stale_publish(2621, 2622, 0.342f) == Stale::Moved);
-  // A still camera: the older publish traces exactly as before (hp_rebase gives org 0).
+  CHECK(stale_publish(2618, 2618, 0.5f) == Stale::Moved);      // a measured move counts whatever the labels say
   CHECK(stale_publish(2617, 2618, 0.0f) == Stale::SameCamera);
   CHECK(stale_publish(2617, 2618, kStaleCameraTol) == Stale::SameCamera);   // inside the card band's fixed term
   CHECK(stale_publish(2617, 2618, 0.0101f) == Stale::Moved);
-  // Its own build frame: same camera, or moved (a camera that differs from its own publish is checked by camera too).
   CHECK(stale_publish(2618, 2618, 0.0f) == Stale::Own);
-  CHECK(stale_publish(2618, 2618, 0.5f) == Stale::Moved);
-  // Unknown camera: own frame keeps the old behaviour, an older publish or no publish camera fails closed.
-  CHECK(stale_publish(2618, 2618, -1.0f) == Stale::Own);
-  CHECK(stale_publish(2617, 2618, -1.0f) == Stale::Unknown);
+  // Unknown camera (not measured, no publish camera, NaN): never cards, whatever k is (hf2: k = 1 by label in 60 of 60).
+  CHECK(stale_publish(1191, 1192, -1.0f) == Stale::Unknown);
+  CHECK(stale_publish(1192, 1192, -1.0f) == Stale::Unknown);
   CHECK(stale_publish(0, 2618, 0.0f) == Stale::Unknown);
   CHECK(stale_publish(2617, 2618, std::nanf("")) == Stale::Unknown);
   DrawSlots slots;
   slots.keys[0] = 0x8424ull << 48; slots.keys[3] = 0x3efaull << 48; slots.keys[15] = 0xad91ull << 48;
   const uint32_t recorded = (1u << 0) | (1u << 3) | (1u << 15);
   CHECK(stale_card_slots(true, Stale::Moved, slots) == recorded);
-  CHECK(stale_card_slots(true, Stale::Unknown, slots) == recorded);
+  CHECK(stale_card_slots(true, Stale::Unknown, slots) == 0);   // the hf2 bug: unknown traced as before
   CHECK(stale_card_slots(true, Stale::Own, slots) == 0 && stale_card_slots(true, Stale::SameCamera, slots) == 0);
   CHECK(stale_card_slots(false, Stale::Moved, slots) == 0);   // key off: no behaviour change in any frame
-  // The masks the shader reads: the card slots leave the swap bits and enter bits 16-31.
   const uint32_t m = slot_masks(recorded & ~stale_card_slots(true, Stale::Moved, slots), recorded);
   CHECK((m & 0xFFFFu) == 0 && (m >> 16) == recorded);
+  // Frame indexing (6b): the G-buffer's label frame N is frame_index + 1 at its recording, a build's label frame_index
+  // at the build; the build labelled N is normally noted after G-buffer N's submit, so a lookup by N finds nothing at
+  // the submit and the decision must not depend on it (the measured UBO camera alone decides).
+  CameraSteps c;
+  const float cam0[3] = {-220.008f, 8.643f, -202.684f};
+  c.note(1191, cam0);
+  CHECK(!c.find(1192) && c.find(1191));
+  CHECK(stale_publish(1191, 1192, camera_distance(cam0, cam0)) == Stale::SameCamera);   // still camera, k = 1: traced
+  // Why a camera was not measured: no draw, no binding, not mapped, a VP that is not camera-relative.
+  CHECK(stale_why(false, false, false, -1.0f) == StaleWhy::NoDraw);
+  CHECK(stale_why(true, false, false, -1.0f) == StaleWhy::NoBinding);
+  CHECK(stale_why(true, true, false, -1.0f) == StaleWhy::NotMapped);
+  CHECK(stale_why(true, true, true, 3.0f) == StaleWhy::EyeOff && stale_why(true, true, true, -1.0f) == StaleWhy::EyeOff);
+  CHECK(stale_why(true, true, true, 0.0f) == StaleWhy::Measured);
+  // The lookup is tried at any main-view hair draw (swapped or not), a bounded number of times per header.
+  CHECK(stale_ubo_wanted(false, 0) && stale_ubo_wanted(false, kStaleUboTries - 1));
+  CHECK(!stale_ubo_wanted(true, 0) && !stale_ubo_wanted(false, kStaleUboTries));
   const float a[3] = {-217.835f, 15.327f, -197.319f}, b[3] = {-217.835f, 15.327f, -196.795f};
   CHECK(std::fabs(camera_distance(a, b) - 0.524f) < 1e-3f && camera_distance(a, a) == 0.0f);
   CHECK(std::string(stale_name(Stale::Moved)) == "camera moved since the publish");
+  CHECK(std::string(stale_why_name(StaleWhy::NoBinding)) == "no camera UBO binding");
 }
 static void test_coverage_union() {
   using namespace hair_primary;
