@@ -45,7 +45,11 @@ def phase(label, seconds, strands=1, nearest=1, wheel=None, frames=None):
     if wheel:
         p["wheel"] = wheel
     if frames:
-        p["frames"] = frames
+        # A frame window (camera-plan.ps1 Assert-CameraPlanFields): the runner resets the stats periods when the window
+        # starts (stats_reset, acknowledged by the game) and counts `frames` from there. The switch-on is applied at the
+        # settings read just before, so the release (301 frames after it) falls inside the 481 frames, and every period
+        # line the event gates read covers only this window's frames (no line straddles the toggle).
+        p.update(frames=frames, settle_frames=0, stats_reset=True, wait_stats=[], wait_log_timeout=30)
     return p
 
 

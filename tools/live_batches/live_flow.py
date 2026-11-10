@@ -466,6 +466,11 @@ def window_problems(job, plan):
     if not all(math.isfinite(v) and v >= 0 for v in (latency, trace_stall)):
         return ["windows: settings latency and trace stall budgets must be finite and nonnegative"], []
     errors, budgets = [], []
+    # scripts/camera-plan.ps1 Assert-CameraPlanFields refuses every frame window without these (hl1 160108: two event-gate
+    # frame windows, never seen by the per-gate frame check below, stopped the run before the launch).
+    errors += [f"windows: {p.get('label')}: frame windows need stats_reset and 0 <= settle_frames < frames" for p in plan
+               if p.get("frames") is not None and not (int(p["frames"]) > 0 and p.get("stats_reset")
+                                                       and 0 <= int(p.get("settle_frames", 0)) < int(p["frames"]))]
     schedules = trace_schedules(job, plan)
     phases = {p.get("label"): (p, s) for p, s in zip(plan, phase_states(job, plan))}
     segment_meta = {p.get("label"): seg.get("live_flow", {})
