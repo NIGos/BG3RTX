@@ -70,10 +70,11 @@ inline int lod_vote(int lod, int want, int& votes, bool first_measure) {
 // strands: the keep hash is nested). Level 0 is today's groom. The finest level whose strands are at least k render px
 // wide: d0_px / (lod_keep / 2^j) >= k (d0_px: the LOD 0 median strand diameter in render px at the groom's distance),
 // never coarser than 1/32 of the full groom (the decode-time ladder, hair_groom_v3.h kV3ExtraKeeps). A head under
-// kPixelLodMinHeadPx render px keeps level 0: the study (docs/progress/claude-hair-pixel-lod-study.md) measured silhouette
-// growth of +12 to +23% at 40 px and +3 to +6% at 80 px for k 1.0; 60 is the midpoint of the failing and the passing
-// size. Hysteresis: a quarter octave of the diameter around the level's bounds (prev: the level the groom traces, -1
-// none); the 30-frame lod_vote runs on the result in the layer.
+// kPixelLodMinHeadPx render px stops at a coarser keep (small_keep below) or, under kPixelLodSmallHeadPx, keeps level 0:
+// the study (docs/progress/claude-hair-pixel-lod-study.md) measured silhouette growth of +12 to +23% at 40 px and +3 to
+// +6% at 80 px for k 1.0; 60 is the midpoint of the failing and the passing size. Hysteresis: a quarter octave of the
+// diameter around the level's bounds (prev: the level the groom traces, -1 none); the 30-frame lod_vote runs on the
+// result in the layer.
 constexpr float kPixelLodMinHeadPx = 60.0f, kPixelLodMinKeep = 1.0f / 32, kPixelLodHysteresis = 0.25f;
 constexpr int kPixelLodMaxLevel = 5;   // 1 -> 1/32
 // The head size the floor is defined on (branch claude/hair-pixel-lod-fix): the study's head height, 0.25 m, at the groom's
@@ -95,12 +96,26 @@ inline float median_radius(const float* r, uint32_t n) {
   std::nth_element(v.begin(), v.begin() + std::ptrdiff_t(n / 2), v.end());
   return v[n / 2];
 }
-inline int pixel_lod_level(float d0_px, float head_px, float lod_keep, float k, int prev) {
-  if (!(d0_px > 0) || !(k > 0) || !(lod_keep > 0) || !(head_px >= kPixelLodMinHeadPx)) return 0;
+// Small heads (branch claude/hair-pixel-lod-small, ladder sweep of tools/hair_groom/pixel_lod.py --ladder, 20-60 px): the
+// coverage and silhouette growth of a thinned groom depend on its keep, not on the head size (keep 1/8: +1.8 to +2.9%,
+// 1/16: +5.3 to +5.7%, 1/32: +15% at every size 20-60 px, and the same at 80-150 px in the study), so "fails under
+// 60 px" was the k rule asking for 1/32 there. Gate per size: coverage, silhouette and bulk energy no further from
+// the truth than today's LOD step or the split-half noise, and a coverage-noise or HF gain beyond that noise. Only keep
+// 1/4 passes at 35-60 px (HF +15 to +32%, coverage noise -1 to -9%); 1/8 and finer fail at every size (with or without
+// a coverage-conserving radius, which passes at some sizes only); at 30 px 1/4 gains nothing, at 20 px today's LOD is
+// already 1/4. So a head of kPixelLodSmallHeadPx to kPixelLodMinHeadPx render px traces the same k pick with the
+// ladder stopped at small_keep of the full groom (rt_hair_pixel_lod_small_keep, default 1/4, 0: level 0 as before).
+constexpr float kPixelLodSmallHeadPx = 35.0f, kPixelLodSmallKeep = 0.25f;
+inline int pixel_lod_level(float d0_px, float head_px, float lod_keep, float k, int prev,
+                           float small_keep = kPixelLodSmallKeep) {
+  if (!(d0_px > 0) || !(k > 0) || !(lod_keep > 0) || !(head_px >= kPixelLodSmallHeadPx)) return 0;
+  const bool small = !(head_px >= kPixelLodMinHeadPx);
+  if (small && !(small_keep > 0)) return 0;
+  const float min_keep = small ? (std::max)(small_keep, kPixelLodMinKeep) : kPixelLodMinKeep;
   // x: the level that just reaches k, as a real number: lod_keep / 2^x = d0_px / k.
   const float x = std::log2(lod_keep * k / d0_px);
   int top = 0;   // the deepest level the ladder allows for this groom
-  while (top < kPixelLodMaxLevel && lod_keep / float(1 << (top + 1)) >= kPixelLodMinKeep * 0.999f) ++top;
+  while (top < kPixelLodMaxLevel && lod_keep / float(1 << (top + 1)) >= min_keep * 0.999f) ++top;
   auto clampl = [&](int j) { return j < 0 ? 0 : j > top ? top : j; };
   const int want = clampl(int(std::ceil(x - 1e-6f)));
   if (prev < 0 || prev > top) return want;
