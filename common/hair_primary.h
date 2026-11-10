@@ -398,6 +398,20 @@ struct CoverageGate {
   // pixels, 0.31 of 50).
   bool footprint = false;
   std::unordered_map<uint64_t, uint64_t> swapping;
+  // rt_hair_swap_latch (off; docs/RTX_HAIR_PRIMARY.md 5t): a key whose own strands failed its bound (a measurement of a
+  // frame it was swapped in, outside the bounds a swapping key is judged by) stays on cards until its footprint
+  // changes materially, instead of being retried on the next passing probe measurement (strands, verdict, cards,
+  // probe, strands: a periodic flicker). The key is still measured every frame by the masked probe (never displayed).
+  // Reference footprint: the card pixels of its first card-frame measurement after the failure (same kind of
+  // measurement as the ones compared with it); 0 while that is pending. Material: the two counts differ by more than
+  // their summed count noise sqrt(C) + sqrt(C0) (per-count variance <= mean, the model of cover_sigma).
+  bool latch = false;
+  std::unordered_map<uint64_t, uint64_t> latched;
+  uint64_t latches = 0, releases = 0;
+  static bool footprint_changed(uint64_t card, uint64_t reference) {
+    const double d = card > reference ? double(card - reference) : double(reference - card);
+    return d > std::sqrt(double(card)) + std::sqrt(double(reference));
+  }
   void swapped(uint64_t key, uint64_t frame) { if (key && frame > swapping[key]) swapping[key] = frame; }
   bool is_swapping(uint64_t key, uint64_t now) const {
     const auto it = swapping.find(key);
@@ -406,17 +420,33 @@ struct CoverageGate {
   void invalidate(uint64_t key, uint64_t frame) {
     if (key && frame > incomplete[key]) incomplete[key] = frame;
   }
-  void observe(uint64_t key, uint64_t frame, uint64_t card, uint64_t strand) {
+  // was_swapped: the measured G-buffer frame drew this key as strands (its own markers, not the probe's).
+  void observe(uint64_t key, uint64_t frame, uint64_t card, uint64_t strand, bool was_swapped = false) {
     if (!key) return;
     if (hold && !card) return;
     auto& e = latest[key];
     if (frame >= e.frame) e = {frame, card, strand};
+    if (!latch || !card) return;
+    if (was_swapped) {
+      const double s = hold || footprint ? cover_sigma(strand, card) : 0.0;
+      const double r = double(strand) / double(card);
+      if (r < (std::min)(kCoverMin, kCoverRatioMin - s) || r > (std::max)(kCoverMax, kCoverRatioMax + s)) {
+        if (!latched.count(key)) ++latches;
+        latched[key] = 0;
+      }
+      return;
+    }
+    const auto l = latched.find(key);
+    if (l == latched.end()) return;
+    if (!l->second) l->second = card;
+    else if (footprint_changed(card, l->second)) { latched.erase(l); ++releases; }
   }
   // Why allow() refuses (the swap-refusal tally of the period line); Ok when it allows.
-  enum class Why : uint8_t { Ok, None, Invalidated, Stale, Low, High };
+  enum class Why : uint8_t { Ok, None, Invalidated, Stale, Low, High, Latched };
   Why why(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax, bool use_hold = true) const {
     const auto it = latest.find(key);
     if (it == latest.end()) return Why::None;
+    if (latch && latched.count(key)) return Why::Latched;
     const auto& e = it->second;
     const auto bad = incomplete.find(key);
     if (bad != incomplete.end() && e.frame <= bad->second) return Why::Invalidated;
@@ -432,27 +462,27 @@ struct CoverageGate {
   bool allow(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
     return why(key, now, bound, upper) == Why::Ok;
   }
-  void clear() { latest.clear(); incomplete.clear(); swapping.clear(); }
+  void clear() { latest.clear(); incomplete.clear(); swapping.clear(); latched.clear(); }
 };
 
 // Main-view hair draws that kept their cards, by the first gate that refused them (layer/hair_primary.cpp
 // hair_primary_swap), per pass (0 G-buffer, 1 velocity, 2 prepass). Printed in the 300-frame period line.
 enum class Refusal : uint8_t {
   Publish, Quiet, CoverNone, CoverInvalidated, CoverStale, CoverLow, CoverHigh, Strike, Order, NoSlot, Passes,
-  Applied, PrepassDrop, NotDropped, NoStrand, Watchdog, Count
+  Applied, PrepassDrop, NotDropped, NoStrand, Watchdog, CoverLatched, Count
 };
 inline const char* refusal_name(Refusal r) {
   static const char* const names[] = {"publish", "load quiet", "coverage none", "coverage invalidated", "coverage stale",
                                       "coverage low", "coverage high", "strike", "order 0", "no slot", "passes mask",
                                       "not applied/live", "prepass drop", "card depth not dropped", "no strand variant",
-                                      "watchdog"};
+                                      "watchdog", "coverage latched"};
   static_assert(sizeof names / sizeof names[0] == size_t(Refusal::Count), "one name per refusal");
   return r < Refusal::Count ? names[size_t(r)] : "?";
 }
 inline Refusal coverage_refusal(CoverageGate::Why w) {
   return w == CoverageGate::Why::None ? Refusal::CoverNone : w == CoverageGate::Why::Invalidated ? Refusal::CoverInvalidated
        : w == CoverageGate::Why::Stale ? Refusal::CoverStale : w == CoverageGate::Why::Low ? Refusal::CoverLow
-                                                               : Refusal::CoverHigh;
+       : w == CoverageGate::Why::Latched ? Refusal::CoverLatched : Refusal::CoverHigh;
 }
 struct RefusalTally {
   uint64_t n[3][size_t(Refusal::Count)] = {};
@@ -474,6 +504,177 @@ struct RefusalTally {
       }
     }
     if (!at) std::snprintf(out, N, " none");
+  }
+};
+
+// Strand/card switches per hair draw key (docs/RTX_HAIR_PRIMARY.md 5t), always on, also in lean builds: one line per
+// 300 frames, "[hair primary] switches ...". A switch is a key whose main-view G-buffer draw was strands in one frame
+// and cards in the next one it was drawn in (or the reverse); a key not drawn for more than kSwitchGap frames starts a
+// new run without a switch. The cause of a strands->cards switch is the first gate that refused the card frame's draw
+// (hair_primary_swap's Refusal). Run lengths (frames a key stayed on strands or on cards between two switches) show
+// the oscillation's phases: a frame watchdog cycle is card runs of about kWatchdogFrames and strand runs of the
+// verdict latency.
+enum class SwitchCause : uint8_t { FrameWatchdog, KeyWatchdog, CoverLow, CoverHigh, CoverStale, Latched, NotApplied, Live,
+                                   Other, Count };
+constexpr uint64_t kSwitchGap = 2;
+inline const char* switch_cause_name(SwitchCause c) {
+  static const char* const names[] = {"frame watchdog", "key watchdog", "coverage low", "coverage high",
+                                      "coverage stale/none/invalidated", "coverage latched",
+                                      "header not applied (camera gate, order)", "live toggle", "other"};
+  static_assert(sizeof names / sizeof names[0] == size_t(SwitchCause::Count), "one name per cause");
+  return c < SwitchCause::Count ? names[size_t(c)] : "?";
+}
+// key_watchdog: the watchdog refusal was this key's own (rt_hair_watchdog_draw or rt_hair_watchdog_one_key).
+inline SwitchCause switch_cause(Refusal r, bool key_watchdog) {
+  switch (r) {
+    case Refusal::Watchdog: return key_watchdog ? SwitchCause::KeyWatchdog : SwitchCause::FrameWatchdog;
+    case Refusal::CoverLow: return SwitchCause::CoverLow;
+    case Refusal::CoverHigh: return SwitchCause::CoverHigh;
+    case Refusal::CoverNone: case Refusal::CoverInvalidated: case Refusal::CoverStale: return SwitchCause::CoverStale;
+    case Refusal::CoverLatched: return SwitchCause::Latched;
+    case Refusal::Applied: return SwitchCause::NotApplied;
+    default: return SwitchCause::Other;
+  }
+}
+struct SwapTransitions {
+  struct Key {
+    uint64_t last = 0, run_start = 0, pre_frame = 0;
+    bool seen = false, strands = false, pre_set = false;
+    SwitchCause pre = SwitchCause::Other;
+    // The period: switches, card pixels (the footprint) and ratios of the measured frames, [0] on cards (probe), [1] strands.
+    uint32_t to_cards = 0, to_strands = 0, n[2] = {};
+    uint64_t card_min = 0, card_max = 0;
+    double r_min[2] = {}, r_max[2] = {};
+  };
+  using Entry = std::pair<const uint64_t, Key>;
+  std::unordered_map<uint64_t, Key> keys;
+  uint64_t to_cards[size_t(SwitchCause::Count)] = {}, to_strands = 0, frames = 0, all_cards = 0;
+  uint64_t frame = 0;
+  uint32_t f_strands = 0, f_cards = 0;
+  std::vector<uint32_t> runs[2];   // completed run lengths of the period: [0] card runs, [1] strand runs
+  // Frame watchdog trips of the period: draws under / above their own bound in the tripped frames, frames whose strands
+  // wrote under a tenth of the card pixels, and the last trip.
+  uint64_t wd_trips = 0, wd_key_trips = 0, wd_bad = 0, wd_good = 0, wd_lost = 0, wd_frame = 0, wd_s = 0, wd_c = 0;
+  double wd_bound = 0.0;
+  void close_frame() {
+    if (f_strands + f_cards) { ++frames; all_cards += !f_strands; }
+    f_strands = f_cards = 0;
+  }
+  // The prepass of `key` kept its card depth for this reason: the G-buffer draw that follows is then refused for the
+  // card depth alone (Refusal::NotDropped), which is not the cause.
+  void prepass_refused(uint64_t key, uint64_t now, SwitchCause cause) {
+    if (!key) return;
+    Key& k = keys[key];
+    k.pre = cause; k.pre_frame = now; k.pre_set = true;
+  }
+  // One main-view G-buffer draw of `key` in frame `now`: strands, or cards for `cause` (the first draw of a key per
+  // frame counts). handshake: refused only because the card depth was still there.
+  void gbuffer(uint64_t key, uint64_t now, bool strands, SwitchCause cause = SwitchCause::Other, bool handshake = false) {
+    if (!key) return;
+    if (now != frame) { close_frame(); frame = now; }
+    Key& k = keys[key];
+    if (k.seen && k.last == now) return;
+    ++(strands ? f_strands : f_cards);
+    if (!k.seen || now > k.last + kSwitchGap) { k.seen = true; k.strands = strands; k.run_start = now; }
+    else if (k.strands != strands) {
+      auto& done = runs[k.strands ? 1 : 0];
+      if (done.size() < 4096) done.push_back(uint32_t(now - k.run_start));
+      if (strands) { ++to_strands; ++k.to_strands; }
+      else {
+        if (handshake && k.pre_set && k.pre_frame + kSwitchGap >= now) cause = k.pre;
+        ++to_cards[size_t(cause < SwitchCause::Count ? cause : SwitchCause::Other)];
+        ++k.to_cards;
+      }
+      k.strands = strands; k.run_start = now;
+    }
+    k.last = now;
+  }
+  // The live switch turned the strands off: a key that was on strands goes to cards (other draws are not tracked).
+  void live_off(uint64_t key, uint64_t now) {
+    const auto it = keys.find(key);
+    if (it != keys.end() && it->second.seen && it->second.strands) gbuffer(key, now, false, SwitchCause::Live);
+  }
+  // One coverage measurement of `key`: card and strand pixels of a counted frame; swapped: it drew strands there.
+  void measure(uint64_t key, uint64_t card, uint64_t strand, bool swapped) {
+    if (!key || !card) return;
+    Key& k = keys[key];
+    const double r = double(strand) / double(card);
+    const int i = swapped ? 1 : 0;
+    if (!(k.n[0] + k.n[1])) k.card_min = k.card_max = card;
+    if (!k.n[i]++) k.r_min[i] = k.r_max[i] = r;
+    k.r_min[i] = (std::min)(k.r_min[i], r); k.r_max[i] = (std::max)(k.r_max[i], r);
+    k.card_min = (std::min)(k.card_min, card); k.card_max = (std::max)(k.card_max, card);
+  }
+  void watchdog_trip(uint64_t gframe, uint64_t accepted, uint64_t card, double bound, uint32_t good, uint32_t bad) {
+    ++wd_trips; wd_bad += bad; wd_good += good; wd_lost += accepted * 10 < card;
+    wd_frame = gframe; wd_s = accepted; wd_c = card; wd_bound = bound;
+  }
+  static void run_stats(std::vector<uint32_t> v, uint32_t out[3]) {   // min, median, max
+    out[0] = out[1] = out[2] = 0;
+    if (v.empty()) return;
+    std::sort(v.begin(), v.end());
+    out[0] = v.front(); out[1] = v[v.size() / 2]; out[2] = v.back();
+  }
+  uint64_t switches() const {
+    uint64_t n = to_strands;
+    for (uint64_t c : to_cards) n += c;
+    return n;
+  }
+  // The period line's text after "[hair primary] switches (last N frames):".
+  template <size_t N> void format(char (&out)[N], uint64_t latched_now = 0) const {
+    size_t at = 0;
+    out[0] = 0;
+    auto put = [&](const char* fmt, auto... a) {
+      if (at >= N - 1) return;
+      const int w = std::snprintf(out + at, N - at, fmt, a...);
+      if (w > 0) at = (std::min)(at + size_t(w), N - 1);
+    };
+    put(" %llu strands->cards (", (unsigned long long)(switches() - to_strands));
+    for (size_t c = 0; c < size_t(SwitchCause::Count); ++c)
+      put("%s%s %llu", c ? ", " : "", switch_cause_name(SwitchCause(c)), (unsigned long long)to_cards[c]);
+    uint32_t sr[3], cr[3];
+    run_stats(runs[1], sr); run_stats(runs[0], cr);
+    put("), %llu cards->strands; %llu frames with hair draws, %llu with every draw on cards; strand runs %zu: "
+        "%u/%u/%u frames (min/median/max), card runs %zu: %u/%u/%u; frame watchdog trips %llu (their draws under own "
+        "bound %llu, above %llu; frames under a tenth of the card pixels %llu; last: frame %llu, %llu/%llu, bound %.4f), "
+        "key watchdog trips %llu; latched keys %llu; worst keys (prefix: switches, ratio as strands min..max (frames), "
+        "as cards min..max (frames), card pixels min..max):",
+        (unsigned long long)to_strands, (unsigned long long)frames, (unsigned long long)all_cards, runs[1].size(), sr[0],
+        sr[1], sr[2], runs[0].size(), cr[0], cr[1], cr[2], (unsigned long long)wd_trips, (unsigned long long)wd_bad,
+        (unsigned long long)wd_good, (unsigned long long)wd_lost, (unsigned long long)wd_frame, (unsigned long long)wd_s,
+        (unsigned long long)wd_c, wd_bound, (unsigned long long)wd_key_trips, (unsigned long long)latched_now);
+    const auto count = [](const Entry* e) { return e->second.to_cards + e->second.to_strands; };
+    const Entry* worst[3] = {};
+    for (const Entry& kv : keys) {
+      const Entry* cand = &kv;
+      if (!count(cand)) continue;
+      for (const Entry*& w : worst) {
+        if (!w) { w = cand; break; }
+        if (count(cand) > count(w) || (count(cand) == count(w) && cand->first < w->first)) std::swap(w, cand);
+      }
+    }
+    if (!worst[0]) put(" none");
+    for (const Entry* w : worst) if (w) {
+      const Key& k = w->second;
+      put(" %04llx: %u, %.3f..%.3f (%u), %.3f..%.3f (%u), %llu..%llu;", (unsigned long long)(w->first >> 48),
+          k.to_cards + k.to_strands, k.r_min[1], k.r_max[1], k.n[1], k.r_min[0], k.r_max[0], k.n[0],
+          (unsigned long long)k.card_min, (unsigned long long)k.card_max);
+    }
+  }
+  // A new period: the counters go, each key's current run stays (a run is counted in the period it ends in).
+  void reset_period() {
+    for (uint64_t& c : to_cards) c = 0;
+    to_strands = frames = all_cards = 0;
+    runs[0].clear(); runs[1].clear();
+    wd_trips = wd_key_trips = wd_bad = wd_good = wd_lost = 0;
+    for (auto it = keys.begin(); it != keys.end();) {
+      Key& k = it->second;
+      if (k.last + 600 < frame) { it = keys.erase(it); continue; }
+      k.to_cards = k.to_strands = k.n[0] = k.n[1] = 0;
+      k.card_min = k.card_max = 0;
+      k.r_min[0] = k.r_min[1] = k.r_max[0] = k.r_max[1] = 0.0;
+      ++it;
+    }
   }
 };
 

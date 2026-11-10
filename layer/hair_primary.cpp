@@ -93,6 +93,7 @@ std::unordered_map<uint64_t, uint64_t> g_last_swap_frame;   // key -> frame_inde
 uint64_t g_swap_resumes = 0;                 // swaps that resumed after card frames (strand/card flicker, period line)
 uint64_t g_held_swaps = 0;                    // rt_hair_primary_hold: G-buffer swap frames only the hold allowed (period line)
 hair_primary::RefusalTally g_refusals;        // main-view hair draws kept as cards, by first refusing gate (period line)
+hair_primary::SwapTransitions g_switches;     // strand/card switches per draw key (5t; the lean period line "switches")
 // Keys whose prepass card depth went; native draws must restore it during the frame latch.
 hair_primary::DepthLatch g_depth;
 std::unordered_set<uint64_t> g_depth_safe_keys;
@@ -384,8 +385,11 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
         for (uint64_t key : f.keys) if (key) g_coverage.invalidate(key, f.frame);
     }
     if (gf) {
-      for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) if (gf->draw_keys[k])
-        g_coverage.observe(gf->draw_keys[k], gf->frame, cc[j * 64 + k], tc[j * 64 + k]);
+      for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) if (gf->draw_keys[k]) {
+        const bool was_swapped = (gf->swapped_slots & (1u << k)) != 0;
+        g_coverage.observe(gf->draw_keys[k], gf->frame, cc[j * 64 + k], tc[j * 64 + k], was_swapped);
+        g_switches.measure(gf->draw_keys[k], cc[j * 64 + k], tc[j * 64 + k], was_swapped);
+      }
       g_seen.evidence_frame = gf->frame;
       // 5h dropouts and the frame watchdog (item 19): the swapped draws of the judged frame against their card pixels
       // (same pass, same tag). The trace counts are of that frame's window too: always attributed (item 4).
@@ -415,6 +419,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
       }
       if (const uint32_t tripped = g_draw_watchdog.judge(gf->frame)) {
         g_draw_watchdog_period += tripped;
+        g_switches.wd_key_trips += tripped;
         if (g_cfg_watchdog_draw && g_watchdog_logged++ < 8)
           log("[hair primary] per-draw watchdog: G-buffer frame %llu: %u draws under their bound for %u judged frames in a "
               "row: their cards for %llu frames", (unsigned long long)gf->frame, tripped, hair_primary::kWatchdogDrawBad,
@@ -422,6 +427,8 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
       }
       if (g_watchdog.judge(gf->frame)) {
         ++g_watchdog_period;
+        g_switches.watchdog_trip(gf->frame, g_watchdog.accepted, g_watchdog.card, g_watchdog.bound(), g_watchdog.good,
+                                 g_watchdog.bad);
         if (!g_cfg_watchdog_draw && g_watchdog_logged++ < 8)
           log("[hair primary] watchdog: G-buffer frame %llu swapped draws wrote %llu strand pixels of %llu card pixels "
               "(bound %.4f): cards for %llu frames", (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
@@ -665,6 +672,7 @@ void observe_depth(uint64_t image, uint64_t now, uint64_t identity) {
   if (!g_load.observe(image, now, identity)) return;
   g_watchdog = hair_primary::Watchdog{};
   g_draw_watchdog = hair_primary::DrawWatchdog{};
+  g_switches = hair_primary::SwapTransitions{};
   g_gate.clear();
   g_coverage.clear(); g_last_swap_frame.clear();
   g_depth_safe_keys.clear();
@@ -705,6 +713,14 @@ bool stats_due(uint64_t now) {
 }
 void coverage_log(uint64_t now) {
   if (!stats_due(now)) return;
+  // 5t: the strand/card switches of the period. log(), not log_stats: the lean layer prints it too (one line per period,
+  // only while hair draws were seen).
+  if (g_switches.frames || g_switches.switches() || g_switches.wd_trips) {
+    char sw[2000];
+    g_switches.format(sw, g_coverage.latch ? g_coverage.latched.size() : 0);
+    log("[hair primary] switches (last %u frames):%s", stats_period(300), sw);
+  }
+  g_switches.reset_period();
   char per[1200] = {};
   size_t at = 0;
   uint32_t shown = 0, probed = 0, swapped = 0, below = 0, below_own = 0;
@@ -743,6 +759,7 @@ void coverage_log(uint64_t now) {
 void hair_primary_stats_reset() {
   std::lock_guard<std::mutex> lock(g_mu);
   g_stats_start = frame_index();
+  g_switches.reset_period();
   g_st = Stats{}; g_failures.reset(); g_depth_orphan_count = 0; g_coverage_period.clear();
   g_part = hair_primary::Participation{}; g_refusals.reset(); g_held_swaps = 0; g_swap_resumes = 0; std::fill_n(g_current_picks, 4, uint64_t(0));
   g_ambiguous = 0; g_fallbacks = 0; g_without_slot.clear();
@@ -1512,6 +1529,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     // the native depth (fallback pipeline), as any refused swap does; nothing else runs.
     if (!main_view || s->pass.color_count < 4) return false;
     const uint64_t key = hair_primary_draw_key(s, args);
+    if (!g_switches.keys.empty()) g_switches.live_off(key, now);
     if (!g_depth.needs_card_depth(key, now, false)) return false;
     const auto fb = g_fallback.find(s->pipe[0]);
     if (fb == g_fallback.end()) { depth_orphan(key, now, s->pipe[0], "no fallback (strands off)"); return false; }
@@ -1595,6 +1613,12 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     allowed = false; refuse(Refusal::NoStrand);
   }
   if (!allowed) g_refusals.add(pass == Pass::Gbuffer ? 0 : pass == Pass::Velocity ? 1 : 2, why);
+  if (pass != Pass::Velocity) {   // 5t: this key's strand/card switches (the decision itself is unchanged)
+    const auto cause = hair_primary::switch_cause(why, g_cfg_watchdog_draw || !g_watchdog.active(now + 1));
+    if (pass == Pass::Gbuffer)
+      g_switches.gbuffer(key, now, allowed, cause, why == Refusal::NotDropped || why == Refusal::PrepassDrop);
+    else if (!allowed) g_switches.prepass_refused(key, now, cause);
+  }
   // Every G-buffer gate passed but the card depth was still there: the next prepass may drop it (SwapGate ready_*).
   if (pass == Pass::Gbuffer && why == Refusal::NotDropped && draw < hair_primary::kDrawSlots && dv != g_draw_variants.end() &&
       dv->second.strand[draw])
@@ -1831,11 +1855,13 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     };
     auto prune = [&](auto& map) { for (auto it = map.begin(); it != map.end();) it = unseen(it->first) ? map.erase(it) : std::next(it); };
     prune(g_transmit); prune(g_last_card); prune(g_last_swap_frame); prune(g_first_pub); prune(g_draw_watchdog.keys);
-    prune(g_coverage.latest); prune(g_coverage.incomplete); prune(g_coverage.swapping);
+    prune(g_coverage.latest); prune(g_coverage.incomplete); prune(g_coverage.swapping); prune(g_coverage.latched);
     for (auto it = g_key_seen.begin(); it != g_key_seen.end();) it = it->second + kKeyForgetFrames < now ? g_key_seen.erase(it) : std::next(it);
   }
   g_coverage.hold = cfg_int("rt_hair_primary_hold", 0) != 0;   // once per publish (hysteresis, CoverageGate)
   g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint
+  g_coverage.latch = cfg_int("rt_hair_swap_latch", 0) != 0;               // 5t: a failed key waits for a new footprint
+  if (!g_coverage.latch) g_coverage.latched.clear();
   // Round 3 (aa98b960) had joined this statement into the comment above: the publish gate then refused every
   // strand swap (main-view hair stayed cards). Keep it on its own line.
   g_published = now + 1;
