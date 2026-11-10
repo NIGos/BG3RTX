@@ -26,4 +26,7 @@
   new request compiles and passes spirv-val; variants.txt 131 -> 132 (+1). No ABI change.
 - User session (all keys off, 1 min, still camera, characters far and near): A is confirmed if the small bins' S/C is
   >= 0.1 under the 4096+ bins while H/C stays within 0.05. Then rt_hair_coverage_union=1: judged flat, switches near 0.
+- Live result hs1 095322 (S8 still, union + confirm + slot_stable on, VALID) against 085153 (keys off): coverage low
+  25 -> 0 and other 22 -> 0 switches over 30 periods; judged U/C 1.00-1.04 flat over 64..16383 card pixels; own-bound
+  fails 0 in 84 bins; dropouts 0 in 28 of 29 periods; 104 slot exchanges resolved per period. Kept (off by default).
 - Details: docs/RTX_HAIR_PRIMARY.md 5u.

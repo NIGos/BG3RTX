@@ -402,6 +402,14 @@ struct CoverageGate {
   // widened by that measurement's own count noise (the bound's formula at the live footprint) and at most kHoldFrames
   // old; it returns to cards on an outside measurement, an invalidation, or when the measurement gets older.
   bool hold = false;
+  // rt_hair_coverage_min_pixels (off; 5u audit): a measurement with fewer than kMinEvidenceCard card pixels is no
+  // evidence (it replaces nothing), as a measurement without card pixels under the hold. hs1 095322 key 5364: 1..55 card
+  // pixels, union ratio 1.056..6.000, switches by "coverage stale" every ~30 frames. Below 64 pixels the count noise of
+  // one measurement exceeds any margin (cover_sigma(64, 64) = 0.25), the watchdogs and the dropout counter already ignore
+  // such draws (kDropoutMinCard). Such hair keeps whatever its last real evidence allowed until that ages out, then cards,
+  // steady until it is drawn at 64 pixels or more again.
+  bool min_pixels = false;
+  static constexpr uint64_t kMinEvidenceCard = 64;   // == kDropoutMinCard (static_assert there)
   // rt_hair_coverage_footprint (off): every measurement, also a new swap's, is judged by the same bound at its own
   // footprint: [kCoverRatioMin - sigma, kCoverRatioMax + sigma], sigma = cover_sigma(S, C) of that measurement. At the
   // offline footprint (9397 card samples) that is kCoverMin/kCoverMax; small draws (100-1800 pixels, 2026-11-07:
@@ -451,6 +459,7 @@ struct CoverageGate {
                uint64_t inside = UINT64_MAX) {
     if (!key) return;
     if (hold && !card) return;
+    if (min_pixels && card < kMinEvidenceCard) return;
     if (inside == UINT64_MAX) inside = strand;
     auto& e = latest[key];
     const bool newest = frame >= e.frame;
@@ -783,6 +792,16 @@ struct LoadGuard {
     return true;
   }
   bool quiet(uint64_t now) const { return now < quiet_until; }
+  // rt_hair_live_warmup (off; docs/RTX_HAIR_PRIMARY.md 5u audit): the live switch turned the strands on. Every groom
+  // slot is rebuilt then (layer/bvhsplit.cpp: a slot built without per-point UVs gets a new points range and a full
+  // build), starts its LOD vote again and re-joins its UVs: the state a level load leaves. The same quiet window,
+  // ended by the same settled signal (rt_hair_warmup) or kLoadQuietFrames. The depth image is unchanged (no boundary).
+  void restart(uint64_t now) {
+    quiet_until = now + kLoadQuietFrames;
+    boundary = now;
+    settled_since = settled_last = 0;
+    early = false;
+  }
 };
 
 inline uint32_t key(uint32_t groom, uint32_t segment) {
@@ -820,6 +839,7 @@ enum class CurrentPick : uint8_t { Current, NotRecorded, AfterGbuffer, Incompati
 // entries sealed with the counted tag, and those with a strand. The first check that can explain it.
 enum class Dropout : uint8_t { None, NoMarker, NoTrace, Missed, Rejected, Unattributed, Count };
 constexpr uint32_t kDropoutMinCard = 64;   // fewer card pixels: too little evidence (a few pixels at the screen edge)
+static_assert(CoverageGate::kMinEvidenceCard == kDropoutMinCard, "one evidence floor for the gate and the watchdogs");
 inline const char* dropout_name(Dropout d) {
   static const char* const names[] = {"none", "no card marker (header tag)", "no trace (camera rebase)",
                                       "rays missed (groom TLAS)", "rejected after the hit (owner, card band, tips)",

@@ -1268,6 +1268,56 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
 - Next session with the keys on (union, confirm, slot_stable): switches "coverage low" and "other" near 0, be12
   dropouts 0 with "slot exchanges resolved" > 0.
 
+**Keys-on result: hs1 095322 (S8 still, union + confirm + slot_stable = 1, VALID); before = 085153 (keys off).**
+- Switches over 30 periods: coverage low 25 -> 0, other 22 -> 0, frame watchdog 15 -> 10 (all in the one period after
+  the strands-on toggle), live toggle 11 -> 11, coverage stale 0 -> 2 (key 5364). Periods with per-key switches:
+  about 15 -> 0. Judged ratio (U/C) 1.00-1.04 flat over 64..16383 card pixels; own-bound fails 0 in 84 of 84 bins
+  outside the toggle period; dropouts 0 in 28 of 29 periods; slot exchanges resolved 104 draws per period.
+- be12 46 switches -> gone; ca38 29 -> 0; 5d82 16 -> 0.
+
+**Audit after that run (2026-11-10, branch claude/hair-audit, offline), ranked by visible impact.**
+1. Strands-on transient (095322 period ending 09:55:11.313; 085153 at frame 2116; same shape after a load or a new
+   groom in the user's log). After the live switch every groom slot is rebuilt (layer/bvhsplit.cpp: a slot built
+   without per-point UVs gets a new points range and a full build), votes its LOD again from 0 and re-joins its UVs
+   (UV pending 12, LOD switches waiting for upload 15, full builds 11, compacted 11 in that period; new uploads
+   16fa158c LOD 0/2, 5dbb53eb, b7349689 LOD 2 at 09:55:09.5-10.1). The losses (G-buffer 2163-2169: 2994/4734, 84/3301,
+   119/3502, 170/3719, 4518/7608; 26 dropouts, all "rejected after the hit", one frame-wide) fall inside that
+   rebuild. Which stage drops them is not decided: the per-row hit count H uses the judged frame's row keys, and the
+   row set changed in that period (12 -> 13 rows, "different grooms 2"), so its "nothing traced 16 / rejected 10"
+   split is not reliable there. The live switch skipped the level-load warm-up (it only waited for two publishes).
+   Fix `rt_hair_live_warmup` (off, live, CPU only): the strands-on edge opens the level-load quiet window
+   (LoadGuard::restart), ended by rt_hair_warmup's settled signal (30 frames without full builds, LOD votes, uploads
+   or UV joins), at most 300 frames. Predicted live: no frame watchdog trips or dropouts in the period after a
+   toggle; strands back after about 30-80 frames instead of 2. Not covered: a groom that rebuilds mid-play (a new
+   character, a LOD upload); that needs the stage found first (live: dropouts of that period with the row keys of
+   the applied header, not the record-time ones).
+2. Tiny hair (5364: 0..436 card pixels, mostly 1..55, union ratio up to 6.0; 8 switches, "coverage stale"). Under
+   64 card pixels one measurement says nothing (cover_sigma(64, 64) = 0.25); the watchdogs and dropouts already ignore
+   such draws. A swapping key whose draws stay that small never refreshes its evidence: stale after kHoldFrames (28),
+   cards, a tiny probe passes, strands again: a 30-frame cycle. Fix `rt_hair_coverage_min_pixels` (off, live, CPU
+   only): measurements under kDropoutMinCard replace nothing, so tiny hair stays on cards steadily until it is drawn
+   at 64 pixels or more. Identical answers at >= 64 pixels (5000 random cases). The ratio cannot reach "coverage
+   high": the upper bound is judged on S, and S <= C.
+3. Upper bound: unenforced in practice. S <= C per slot, so kCoverMax (1.095) never refuses with either count. With
+   U, real keys reach 1.07-1.08 at 256+ pixels (50a3 1.075, c09f 1.071) and 1.12-1.34 only under ~230 pixels. No
+   flicker can come from it; a groom wider than its cards would show thicker hair, not be refused. Left as is.
+4. Steady cards, not flicker: "coverage stale" 684 and "coverage none" 128 G-buffer refusals in 095322 are keys that
+   never get fresh evidence (tiny or hidden draws); "count unknown 120" per period are two S8 draws with no groom
+   (index counts 3399 and 7086: in no groom file of the 871 in data/assetdb). Both stay cards.
+5. Groom catalogue (data/assetdb/hair_grooms: 871 files, all v2; 447 distinct index counts, 141 shared by several
+   files and told apart by the UV join). The installed release has 29 grooms (converted on the user's PC). The user
+   log's "no groom file" counts: 4578, 4800, 7224, 9384, 14073, 78216 (4 files), 123912 (2 files) exist in the repo
+   catalogue but not in the install (conversion pending: cards until the launcher converts them); 1623, 3399, 4077,
+   7086 exist nowhere (cards). LOD0 strand radius median 0.143 mm (p5 0.082, p95 0.257); 122 grooms have points at
+   the 2 mm radius clamp. Per-groom offline U/C and S/C need the batch cache (captures/hair_groom_batch, gone with
+   the 2026-11-07 format): regenerating it is the batch conversion (hours); the fixture says U/C tracks the opacity
+   ratio at every footprint, so the bound's 2631-view minimum (0.9105) still holds per groom.
+- Bundle (no default changed here): union and confirm only turn refusals into passes (proved by test), slot_stable
+  only changes which slot a draw keeps; all three passed 095322. What could regress: with union, strands misplaced
+  inside their card's raster (a pose or LOD fault) pass where S would have fallen; with confirm, a fault that alternates
+  bad/good every frame is never refused (holes on every other frame); with slot_stable, groups without a readable
+  placement fall back to draw order (as today).
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
