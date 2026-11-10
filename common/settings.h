@@ -442,13 +442,14 @@ inline constexpr Knob kKnobs[] = {
   // RTX Hair motion stability (docs/RTX_HAIR_PRIMARY.md 5y, user request 2026-11-10): the release control of the strand
   // motion fix. On is rt_hair_mv_card=2 (every strand pixel takes its card's own skinned motion); mode 1 is disproved
   // and not exposed. The velocity pipelines compile specialization 1049 only when the key is non-zero at their creation
-  // (layer/hair_primary.cpp), so On needs a game restart; Off is live (header flag). Off in every preset until qualified.
+  // (layer/hair_primary.cpp), so On needs a game restart; Off is live (header flag). On in High and Ultra (user decision
+  // 2026-11-11 after hm1 210705 and hf2 000619), Off in Low and Medium.
   {"hair_motion_stability", "RTX Hair motion stability",
    "Reduces RTX Hair smearing and trails when characters or the camera move.",
    Kind::Choice, Apply::Restart, "Restart the game to turn on; turns off while playing", false,
    {{"off", "Off", 0, {{"rt_hair_mv_card", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres, {{"rt_hair_mv_card", "2"}}, {}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, false, {}, false, "Lighting", {},
+   {}, {0, 0, 1, 1}, false, {}, false, "Lighting", {},
    "Only changes RTX Hair. Strand pixels take the motion of the hair they belong to, so the denoiser stops dragging old hair behind moving heads. Turning it on takes effect after a game restart (the hair motion shaders are prepared when the game starts); turning it off works while playing. Watch a character walk or turn the camera."},
 
   {"exp_hair_fibre", "Physical strand shading",
@@ -957,7 +958,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_primary_frame_tag", "0"},
     {"rt_hair_header_cam_gpu", "0"},
     {"rt_hair_stale_publish", "0"},
-    {"rt_hair_mv_card", "0"},
+    {"rt_hair_mv_card", "2"},
     {"rt_hair_watchdog_draw", "0"},
     {"rt_hair_shared_key", "0"},
     {"rt_hair_slot_stable", "0"},
@@ -1154,7 +1155,6 @@ inline constexpr KV kReleaseDefaults[] = {
     {"rt_em_log", "0"},
     {"rt_hair_debug_late_arrival", "0"},
     {"rt_hair_pixel_lod", "0"},
-    {"rt_hair_mv_card", "0"},
     {"rt_hit_reference", "0"},
     {"fg_snap", "0"},
     {"fg_snap_any", "0"},
@@ -1564,9 +1564,9 @@ inline void enforce_release_policy(Map& m) {
   const bool detailed=map_int(m,"detailed_logging",0)!=0;
   for (const KV& pin:kReleaseDefaults) {
     const std::string key=pin.key;
-    // rt_hair_pixel_lod / rt_hair_mv_card: off by default in release, but the release controls hair_distant_detail and
-    // hair_motion_stability own them.
-    if (key=="dev" || key=="detailed_logging" || key=="geo_capture" || key=="rt_hair_pixel_lod" || key=="rt_hair_mv_card" ||
+    // rt_hair_pixel_lod: off by default in release, but the release control hair_distant_detail owns it.
+    // (rt_hair_mv_card left data/release.ini on 2026-11-11: hair_motion_stability is On in High and Ultra.)
+    if (key=="dev" || key=="detailed_logging" || key=="geo_capture" || key=="rt_hair_pixel_lod" ||
         std::string(pin.value)!="0") continue;
     const bool support_stats=key=="rt_stats" || key=="ls_stats" || key=="rf_stats" || key=="sharc_stats" ||
       key=="cpu_timing" || key=="geo_timing" || key=="rt_stats_period_frames" || key=="rt_stats_reset";
