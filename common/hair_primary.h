@@ -1411,4 +1411,33 @@ struct Participation {
   }
 };
 
+// 5x diagnostic (branch claude/hair-pool-reuse): the build camera's step per frame, kept for the frame watchdog, which
+// judges a G-buffer frame about 5 frames after it ran. note() records a publish's build frame and camera; step(F) is the
+// distance from frame F's camera to the camera of the newest earlier noted frame (-1: F or an earlier frame not kept).
+// Every hole of hl1 (125217, 164930, 180301, 180949) began the frame the runner's wheel zoom began.
+struct CameraSteps {
+  static constexpr uint32_t kKeep = 32;
+  struct Entry { uint64_t frame = 0; float pos[3] = {}; };
+  Entry e[kKeep] = {};
+  void note(uint64_t frame, const float pos[3]) {
+    if (!frame) return;
+    Entry& x = e[frame % kKeep];
+    x.frame = frame;
+    for (int i = 0; i < 3; ++i) x.pos[i] = pos[i];
+  }
+  float step(uint64_t frame) const {
+    const Entry* now = nullptr;
+    const Entry* prev = nullptr;
+    for (const Entry& x : e) {
+      if (!x.frame) continue;
+      if (x.frame == frame) now = &x;
+      else if (x.frame < frame && (!prev || x.frame > prev->frame)) prev = &x;
+    }
+    if (!now || !prev) return -1.0f;
+    float d2 = 0;
+    for (int i = 0; i < 3; ++i) d2 += (now->pos[i] - prev->pos[i]) * (now->pos[i] - prev->pos[i]);
+    return std::sqrt(d2);
+  }
+};
+
 }  // namespace hair_primary
