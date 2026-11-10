@@ -540,6 +540,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_shared_key", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5i 2026-11-09: two characters with the same hair style in view (S8), turn the camera: with On their hair should no longer flash to cards."},
 
+  {"exp_hair_row_stable", "Strand hair: stable strand rows",
+   "Experimental: each character's strands keep their place in the strand tables while the camera moves or a new character appears, instead of being reordered every frame (holes in every character's hair for a few frames). Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_row_stable", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_row_stable", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5w 2026-11-10: several characters in view (S8), zoom with the wheel: with On their hair should no longer show holes at the start of the zoom."},
+
   {"exp_hair_slot_stable", "Strand hair: stable character slots",
    "Experimental: when two characters wear the same hair style, each keeps its own strands when the game changes the order it draws them in, instead of the two swapping for a frame (a one-frame hole in the hair). Unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -921,6 +928,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_watchdog_draw", "0"},
     {"rt_hair_shared_key", "0"},
     {"rt_hair_slot_stable", "0"},
+    {"rt_hair_row_stable", "0"},
     {"rt_hair_watchdog_one_key", "0"},
     {"rt_hair_swap_latch", "0"},
     {"rt_hair_coverage_union", "0"},

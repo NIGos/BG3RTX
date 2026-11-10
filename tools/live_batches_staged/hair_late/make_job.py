@@ -27,7 +27,9 @@ HAIR = ("rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,r
         "rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,"
         "rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,"
         "rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,"
-        "rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1")
+        "rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,"
+        # the fix under test (branch claude/hair-row-stable, 5w): not in the bundle
+        "rt_hair_row_stable=1")
 SET = ("preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,"
        "rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,"
        "rt_primary_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,"
@@ -92,6 +94,10 @@ def make_job(plan):
             {"name": "the first-seen frame lines in the lower window",
              "select": "\\[hair groom\\] frame \\d+ \\(a hair draw first seen",
              "match": "groom rows \\d+ \\(previous publish \\d+\\)", "windows": ["lower"], "event": True, "min": 1},
+            # 5w (rt_hair_row_stable=1): hl1 164930 had 11, 7, 4, 4, 0, 7 ... here; every line must say 0.
+            {"name": "no keyed row holds another key than before (rt_hair_row_stable)",
+             "select": "\\[hair groom\\] frame \\d+ \\(a hair draw first seen",
+             "match": "holds another key than before 0 \\(", "windows": ["lower"], "event": True, "min": 1},
             {"name": "the groom TLAS check period line in both windows",
              "select": "\\[hair primary\\] groom TLAS check \\(last", "match": "G-buffer submits checked",
              "windows": ["watch"], "event": True, "min": 1},

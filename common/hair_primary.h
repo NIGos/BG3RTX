@@ -1045,6 +1045,42 @@ inline uint32_t shared_key_complete(uint64_t* row_keys, uint32_t rows, const uin
   }
   return cleared;
 }
+// rt_hair_row_stable (docs/RTX_HAIR_PRIMARY.md 5w, live hl1 164930): a groom's row (its groom TLAS instance index, header
+// row and InstInfo row) used to be its position in the build's dynamic draw list: sorted by key only while the camera
+// is still and holds are on, otherwise the game's capture draw order, which changes from frame to frame (11 of 11 keyed
+// rows held another key in the first frame of a camera move, the strands of every key rejected). With the key a groom
+// (its dynamic slot key) keeps its row while it is live; a row whose groom left is given to another groom only `lag`
+// build frames later, when no frame in flight can still read a header or TLAS that holds the old groom there (the scene
+// ring: one groom TLAS per scene slot). Rows between live ones stay empty (an inactive instance, key 0).
+struct GroomRows {
+  uint64_t key[kMaxGrooms] = {};    // the groom holding the row (0: never used)
+  uint64_t last[kMaxGrooms] = {};   // the last build frame it was live in the row
+  uint32_t early = 0;               // rows reused before the lag (every row taken: more than kMaxGrooms grooms in `lag` frames)
+  // live: this build's groom keys in any order (count <= kMaxGrooms); rows_out[i]: the row of live[i]. now: the build
+  // frame, increasing and never 0. Returns the row count (the highest live row + 1).
+  uint32_t assign(const uint64_t* live, uint32_t count, uint64_t now, uint64_t lag, uint32_t* rows_out) {
+    uint32_t rows = 0;
+    for (uint32_t i = 0; i < count; ++i) rows_out[i] = kMaxGrooms;
+    for (uint32_t i = 0; i < count; ++i)   // the grooms that keep their row first: a newcomer never takes it
+      for (uint32_t r = 0; r < kMaxGrooms; ++r)
+        if (key[r] == live[i] && last[r] && last[r] != now) { last[r] = now; rows_out[i] = r; break; }
+    for (uint32_t i = 0; i < count; ++i) {
+      if (rows_out[i] == kMaxGrooms) {
+        uint32_t pick = kMaxGrooms, oldest = kMaxGrooms;
+        for (uint32_t r = 0; r < kMaxGrooms && pick == kMaxGrooms; ++r) {
+          if (last[r] == now) continue;
+          if (!last[r] || last[r] + lag < now) pick = r;
+          else if (oldest == kMaxGrooms || last[r] < last[oldest]) oldest = r;
+        }
+        if (pick == kMaxGrooms) { pick = oldest; if (pick < kMaxGrooms) ++early; }
+        if (pick == kMaxGrooms) continue;   // more grooms than rows (the caller caps the count)
+        key[pick] = live[i]; last[pick] = now; rows_out[i] = pick;
+      }
+      rows = rows_out[i] + 1 > rows ? rows_out[i] + 1 : rows;
+    }
+    return rows;
+  }
+};
 // Round 3 M1: the row's previous points are valid only when they are the previous build frame's (the velocity variant
 // pairs them with the previous publish's camera): a slot that skipped updates (held, soup refused, crowd cards) returns
 // with points from an older frame. last_update: the build frame of the slot's last update before this one.
