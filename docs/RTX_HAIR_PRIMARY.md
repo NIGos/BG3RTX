@@ -1513,7 +1513,8 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
   (60-frame windows with stats_reset), PNG bursts 99310 (off) and 99311 (on), the period line and the strand G-buffer GPU
   ms per window; predictions in its predicted.json (part2_rt_hair_pixel_lod). live_flow --frozen: 0 failing.
 - Not built: (c) the cross-fade between two adjacent levels (spec constant 1048); without it a level change pops.
-- User check: Advanced, strand pixel LOD On, S8 zoomed out: strand hair about 1 px wide, less grain next to the cards.
+- User check: none yet (rt_hair_pixel_lod is a dev key, not in the launcher); the hl1 part 2 bursts show it (S8 zoomed out:
+  strand hair about 1 px wide, less grain next to the cards). A launcher toggle comes once the live part qualifies it.
 ## 5w. Stable groom rows (offline 2026-11-10, branch claude/hair-row-stable: key rt_hair_row_stable, off)
 
 Live hl1 164930 (natural arrival, camera wheel zoom): of the 5u candidates A (another build's TLAS traced: 75 submits
