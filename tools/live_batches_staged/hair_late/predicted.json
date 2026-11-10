@@ -28,5 +28,19 @@
     "if_level_0_everywhere": "the projection or the median radius was not read (period line: groom frames without a projection, or diameter 0): the pick inputs are wrong, not the BLAS; fix the input offline before any rerun",
     "if_holes_in_pl_on": "a segment reader resolves the camera primitive with the groom's own table: check the refusal counters and the strand G-buffer header TLAS check; the key stays off",
     "first_on_period": "the 30-frame level vote takes ~1 s: the pl-on period may still count some groom frames at level 0 and the camera BLAS full builds; burst 99311 (6 s later) is at the settled levels"
+  },
+  "result_180301_180949": "hl1 180301 and 180949 (rt_hair_row_stable=1): moved rows 0 in every first-seen line, TLAS check 0, full builds 0 at the trip frames; holes remain (frame watchdog at G-buffer frames 2089, 2090, 2093-2095 and 2152, 2153, 2155-2158). B is not the cause (A and C were disproved by 164930).",
+  "candidate_D_pool_reuse": {
+    "hypothesis": "a newcomer groom upload (or the free/eviction/growth that makes room) writes mesh-pool memory an existing groom still uses, or is not ordered before its refit/trace",
+    "verdict": "DISPROVED offline by the existing logs and the code (branch claude/hair-pool-reuse)",
+    "timing": "the first trips precede every upload: 180301 G-buffer 2089 at 18:04:39.76, first upload (16fa LOD 0) recorded in build 2093 at 18:04:40.020; 180949 2152 at 18:11:18.75, upload in build 2156 at 18:11:18.987; 164930 2125 at 16:51:06.78, upload at 16:51:06.995",
+    "control": "180301 warm-up, static camera, strands swapping (420 of 460 G-buffer draws): 5 LOD 0 uploads (53 MB, 18:04:21.58-.83, frames 1553-1560) and 5 more (15 MB) gave 0 dropouts and 0 watchdog trips",
+    "code": "no eviction under budget (hair_groom_budget.h plan_evictions: used + need <= 512 MB here); freed ranges retire only 6 frames on, GPU-done + 2 and older than every live scene slot (bvhsplit.cpp bvh_on_present, as_chunk_alloc.h retired, kGroomFreeLag 3); uploads copy into such ranges between barriers (bvhsplit.cpp 3736/3767) and a LOD is used only after its recording completed (groom_lod readback_state); no pool growth or repack in any hole window (grown 30-40 s earlier)"
+  },
+  "candidate_E_zoom": {
+    "observation": "every hole run began its trips the frame the runner's wheel zoom began ('[bg] dropped real input ... runner mouse passed 2' at frames 2088/2152/2124/2167); the arrivals (45252, 100101, 7092) are characters entering the view the zoom lowers to, so they coincide with it; card pixels grow 3149 -> 6360 in 6 frames (fast dolly)",
+    "observable": "the frame watchdog line now ends 'build camera step X m at that frame, Y m the frame before' (CameraSteps, CPU only, no key)",
+    "predicted": "the trip lines in 'lower' carry a camera step of at least 0.05 m (a fast dolly towards heads 5-8 m away); the static windows (pl-*) have no trip lines; if a trip shows a step under 0.01 m, camera motion is not the trigger and the arrival itself is back as the suspect",
+    "no_fix": "no key: the stage that rejects the hits under motion (owner, card band or tips) is not decided offline; the next step after this run is that stage"
   }
 }

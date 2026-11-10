@@ -125,6 +125,12 @@ def make_job(plan):
             {"name": "no keyed row holds another key than before (rt_hair_row_stable)",
              "select": "\\[hair groom\\] frame \\d+ \\(a hair draw first seen",
              "match": "holds another key than before 0 \\(", "windows": ["lower"], "event": True, "min": 1},
+            # 5x (branch claude/hair-pool-reuse): candidate D (pool reuse) is disproved by 180301/180949; every trip line
+            # names the build camera step of its frame (the zoom candidate). Trips are not required (min 0).
+            {"name": "every frame watchdog line in lower and watch names the build camera step",
+             "select": "\\[hair primary\\] watchdog: G-buffer frame",
+             "match": "build camera step -?[0-9.]+ m at that frame", "windows": ["lower", "watch"], "event": True,
+             "min": 0},
             {"name": "the groom TLAS check period line in both windows",
              "select": "\\[hair primary\\] groom TLAS check \\(last", "match": "G-buffer submits checked",
              "windows": ["watch"], "event": True, "min": 1},
@@ -142,7 +148,8 @@ def make_job(plan):
         ],
         "expect_runner": [
             "\\[window-mode\\].*visible_unfocused",
-            "\\[wheel-input\\] phase=1 notches=10\\b",
+            # the wheel phase's index in the plan (warm-off moved "lower" to 2: run 180301 was INVALID on phase=1)
+            rf"\[wheel-input\] phase={next(i for i, p in enumerate(plan) if p.get('wheel'))} notches=10\b",
             f"\\[motion-plan\\] complete phases={len(plan)}\\b",
             "^Run ended: done",
         ],

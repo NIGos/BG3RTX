@@ -406,6 +406,25 @@ static void test_tlas_check() {
   c.reset_period();
   CHECK(c.checked == 0 && c.other == 0 && c.differ == 0 && c.built.size() == 2);
 }
+// 5x: the build camera step the frame watchdog line prints (a G-buffer frame judged ~5 frames after it ran).
+static void test_camera_steps() {
+  using namespace hair_primary;
+  CameraSteps c;
+  const float a[3] = {-220.0f, 8.6f, -202.7f}, b[3] = {-220.0f, 8.3f, -202.3f};
+  CHECK(c.step(10) < 0);                              // nothing kept
+  c.note(10, a);
+  CHECK(c.step(10) < 0);                              // no earlier frame
+  c.note(11, a);
+  CHECK(c.step(11) == 0.0f);                          // still camera
+  c.note(13, b);                                      // frame 12 had no publish: the newest earlier one is 11
+  CHECK(std::fabs(c.step(13) - 0.5f) < 1e-4f);
+  CHECK(c.step(12) < 0);                              // never noted
+  for (uint64_t f = 14; f < 14 + CameraSteps::kKeep; ++f) c.note(f, b);
+  CHECK(c.step(13) < 0);                              // overwritten by the ring
+  CHECK(c.step(14 + CameraSteps::kKeep - 1) == 0.0f);
+  c.note(0, a);                                       // frame 0 is never kept
+  CHECK(c.step(14 + CameraSteps::kKeep - 1) == 0.0f);
+}
 static void test_coverage_union() {
   using namespace hair_primary;
   uint32_t seed = 12345;
@@ -1194,7 +1213,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

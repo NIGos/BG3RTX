@@ -1554,6 +1554,44 @@ hit"). Before and after, the row order was constant for hundreds of frames with 
 - User check: Advanced, "Strand hair: stable strand rows" On, S8 with several characters in view, zoom with the wheel:
   no holes in the hair at the start of the zoom.
 
+## 5x. Holes at the zoom start: pool reuse disproved (offline 2026-11-10, branch claude/hair-pool-reuse: diagnostic, no key)
+
+Live hl1 180301 and 180949 (rt_hair_row_stable=1, VALID data, 180301 INVALID only for the runner expect below): moved rows
+0 in every first-seen line, groom TLAS check 0, full BLAS builds 0 at the trip frames, yet the frame watchdog tripped at
+G-buffer frames 2089, 2090, 2093-2095 (180301, down to 0 of 5715 strand px) and 2152, 2153, 2155-2158 (180949, 0 of
+5495). So A (164930), C (164930) and B (5w) are not the cause. Dropouts at the first trip frame: every swapped key,
+"rejected after the hit" (frame-wide elimination, 5q).
+
+- Candidate D (a newcomer upload, or the free/eviction/growth making room for it, writes pool memory an existing groom
+  still uses, or is unordered against its refit/trace) is DISPROVED:
+  - Timing: the first trips come before any upload. 180301: trip frame 2089 at 18:04:39.76, first upload (16fa158c LOD
+    0) staged in build 2093 at 18:04:40.020; 180949: 2152 at 18:11:18.75, upload in build 2156 at 18:11:18.987; 164930:
+    2125 at 16:51:06.78, upload at 16:51:06.995. A copy recorded in build N cannot touch frame N - 4's G-buffer.
+  - Control in the same run: 180301's warm-up (static camera, strands swapping in 420 of 460 G-buffer draws) staged five
+    LOD 0 uploads (53 MB, frames 1553-1560) and five more LODs (15 MB) with 0 dropouts and 0 watchdog trips.
+  - Code: no eviction below the groom budget (hair_groom_budget.h plan_evictions; used + need stayed under 512 MB);
+    freed ranges (kGroomFreeLag, bvhsplit.cpp:355) return to the allocator only 6 frames on, with the GPU 2 frames past
+    them and older than every live scene slot (bvh_on_present, as_chunk_alloc.h retired); uploads copy into such
+    ranges between barriers (bvhsplit.cpp:3736 and 3767) and a LOD is used only once its recording completed
+    (groom_lod, readback_state). The pool grew 30-40 s before the holes and never in a hole window; no repack.
+- What every hole run shares instead (125217, 164930, 180301, 180949): the trips start in the frame the runner's wheel
+  zoom starts (`[bg] dropped real input ... runner mouse passed 2` at frames 2167, 2124, 2088, 2151), and the card
+  pixels of the heads double in 6 frames (a fast dolly). The three "arrivals" are characters entering the lowered view:
+  a consequence of the zoom, not its cause. The hold runs of 161106 and 133243 had no swapping keys during a zoom. At
+  that frame the build itself changes mode (bvhsplit.cpp:2626 `moving`: no dynamic holds :2813, no hold snapshots
+  :3459, dynamic list in the game's draw order) and the strand passes trace a publish one frame and one camera step old
+  (hp_rebase). Which stage rejects the hits under motion is not decided offline; hk1/hc1 turns showed the same class
+  (rt_hair_header_cam_gpu did not remove it).
+- Diagnostic (CPU only, no key, no shader, no ABI change, variants delta 0): `hair_primary::CameraSteps`
+  (common/hair_primary.h) keeps 32 build frames' cameras; the frame watchdog line ends `build camera step X m at that
+  frame, Y m the frame before (-1: not kept)`. CTest hair_groom_asset_test test_camera_steps.
+- hl1 regenerated: expect `[wheel-input] phase=2` (warm-off had moved "lower" to index 2; phase=1 made 180301
+  INVALID), now derived from the plan; expect_every: every watchdog line in lower/watch carries the camera step
+  (min 0). predicted.json: candidate_D_pool_reuse (disproved) and candidate_E_zoom. Lint: 0 failing (live and frozen).
+- Predicted for the next hl1: trip lines in "lower" with a camera step >= 0.05 m and none in the static pl-* windows.
+  A trip with a step under 0.01 m puts the arrival back as the suspect. Next after that: the rejecting stage (owner,
+  card band or tips) under motion, then the fix there.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0
