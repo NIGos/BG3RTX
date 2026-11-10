@@ -106,7 +106,7 @@ def make_job(plan):
         "live_batch": "hair-final",
         "tree": ".claude/worktrees/test-main",
         "window_mode": "visible_unfocused_fg",
-        "fail_fast": False,
+        "fail_fast": True,   # a nonmatching period line (no strands, a watchdog trip) ends the run at once
         "stop_on_dump": False,
         "set": SET,
         "args": ["-RealPresent", "-Move", "-MovePlan", PLAN],
@@ -137,9 +137,16 @@ def make_job(plan):
                   "\\[hair groom\\] pixel LOD \\(last",
                   "level 0/1/2/3/4/5 \\d+/(?:[1-9]\\d*/\\d+/\\d+|\\d+/[1-9]\\d*/\\d+|\\d+/\\d+/[1-9]\\d*)/\\d+/\\d+;"
                   ".*small keep 0\\.125\\)", ["win-e"], period_frames=60),
-            # (e) cost in every measured window (report only)
+            # Strands drawn in every measured window, judged on the line the layer prints every period whatever it
+            # draws (225504: every strand frame drew cards, the strand G-buffer GPU line never came and "lower" waited
+            # for it until the run deadline). A line with 0 G-buffer strand draws fails the run at once (fail_fast).
+            every("strands drawn in the G-buffer in every window",
+                  "\\[hair primary\\] frame \\d+: \\d+ grooms published; last",
+                  "\\d+ prepass, [1-9]\\d* G-buffer and \\d+ velocity strand draws", cost, period_frames=60),
+            # (e) cost in every measured window (report only). The strand G-buffer GPU line exists only while strands
+            # draw: when_present keeps it out of the frame windows' wait_stats (no hang); the gate above requires them.
             every("strand G-buffer GPU ms in every window", "\\[hair primary\\] strand G-buffer draws GPU",
-                  "GPU [0-9.]+ ms/frame", cost, period_frames=60),
+                  "GPU [0-9.]+ ms/frame", cost, period_frames=60, when_present=True),
             every("rt passes GPU ms in every window", "rt passes: GPU cost", "GPU cost [0-9.]+ ms/frame", cost,
                   period_frames=60),
             every("rendered frame time in every window", "\\[pace\\] rendered frame time over \\d+ frames",

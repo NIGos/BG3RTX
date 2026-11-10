@@ -1650,6 +1650,8 @@ User: strand hair at isometric distance trails / blurs when characters or the ca
   (`EdgePanSamples::kept`) are skipped before the budget (layer/dump.cpp pan_capture, pan_epoch_test); hm1 unchanged.
 - User check (once qualified): S8 or the camp with the party walking; the hair should move with the heads instead of
   leaving a smear behind them. Not in the launcher yet.
+- User control (2026-11-10): launcher Lighting, "RTX Hair motion stability" (`hair_motion_stability`): Off / On =
+  rt_hair_mv_card 0 / 2, Off in presets and release until qualified; On needs a game restart (1049 at pipeline creation).
 ## 5z. Holes under a fast camera step: where a camera mismatch could hide (offline 2026-11-10, branch claude/hair-cam-step: diagnostic, no key)
 
 Live hl1 200821 (VALID) confirmed 5x's prediction: 6 frame watchdog trips at G-buffer frames 2064, 2065, 2067-2070, each

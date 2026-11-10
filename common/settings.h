@@ -439,6 +439,18 @@ inline constexpr Knob kKnobs[] = {
    {"Measured", "Saves about 0.08 ms (1/4) or 0.10 ms (1/8)", "About 75-100 MB", "RTX 5090, one scene with 13 characters at a distance (2026-11-10). Not yet qualified."},
    "Only changes RTX Hair. Off traces every strand at every distance. 1/4 (Standard): small, distant heads trace down to a quarter of their strands, each drawn wider so the hair covers the same area; the outline stays as it is today. 1/8 (Sharper): those heads trace an eighth; finer-looking and slightly cheaper, but the hair outline is about 2% fuller than physically correct. Switch while watching a character a few metres away."},
 
+  // RTX Hair motion stability (docs/RTX_HAIR_PRIMARY.md 5y, user request 2026-11-10): the release control of the strand
+  // motion fix. On is rt_hair_mv_card=2 (every strand pixel takes its card's own skinned motion); mode 1 is disproved
+  // and not exposed. The velocity pipelines compile specialization 1049 only when the key is non-zero at their creation
+  // (layer/hair_primary.cpp), so On needs a game restart; Off is live (header flag). Off in every preset until qualified.
+  {"hair_motion_stability", "RTX Hair motion stability",
+   "Reduces RTX Hair smearing and trails when characters or the camera move.",
+   Kind::Choice, Apply::Restart, "Restart the game to turn on; turns off while playing", false,
+   {{"off", "Off", 0, {{"rt_hair_mv_card", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery | kCapLinearSweptSpheres, {{"rt_hair_mv_card", "2"}}, {}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, false, {}, false, "Lighting", {},
+   "Only changes RTX Hair. Strand pixels take the motion of the hair they belong to, so the denoiser stops dragging old hair behind moving heads. Turning it on takes effect after a game restart (the hair motion shaders are prepared when the game starts); turning it off works while playing. Watch a character walk or turn the camera."},
+
   {"exp_hair_fibre", "Physical strand shading",
    "Experimental: gives on-screen hair brighter, warmer shading.",
    Kind::Choice, Apply::Live, "live; needs Strand hair on screen", false,
@@ -1187,6 +1199,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "fg_present_metering") return true;
   // core/gi.cpp initialize_hair_origin persists the startup reservation across core reloads.
   if (key == "rt_hair_physical_origin") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // 5y: specialization 1049 is compiled into the velocity pipelines only when rt_hair_mv_card is non-zero at their creation.
+  if (key == "rt_hair_mv_card") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // rt_hair_groom_primary is live since 5m (docs/RTX_HAIR_PRIMARY.md): its startup parts are prepared on every capable device.
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
   // M5.3: the water FS variants exist only if the key was on when the pipelines were created.
@@ -1550,8 +1564,9 @@ inline void enforce_release_policy(Map& m) {
   const bool detailed=map_int(m,"detailed_logging",0)!=0;
   for (const KV& pin:kReleaseDefaults) {
     const std::string key=pin.key;
-    // rt_hair_pixel_lod: off by default in release, but the release control hair_distant_detail owns it.
-    if (key=="dev" || key=="detailed_logging" || key=="geo_capture" || key=="rt_hair_pixel_lod" ||
+    // rt_hair_pixel_lod / rt_hair_mv_card: off by default in release, but the release controls hair_distant_detail and
+    // hair_motion_stability own them.
+    if (key=="dev" || key=="detailed_logging" || key=="geo_capture" || key=="rt_hair_pixel_lod" || key=="rt_hair_mv_card" ||
         std::string(pin.value)!="0") continue;
     const bool support_stats=key=="rt_stats" || key=="ls_stats" || key=="rf_stats" || key=="sharc_stats" ||
       key=="cpu_timing" || key=="geo_timing" || key=="rt_stats_period_frames" || key=="rt_stats_reset";

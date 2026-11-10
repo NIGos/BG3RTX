@@ -30,3 +30,11 @@
   distant detail 1/4. Warm-up, hl1 zoom (0 watchdog trips per 60-frame line), slow orbit right/left with one K8 RR-motion
   burst (mv_ratio.py ring ratio), off / 1/4 / 1/8 / off PNG traces 1.5 s after each switch, cost lines in every window.
   About 93 s after load, under 0.3 GB. live_flow live and frozen: 0 failing (4 readiness queries added to the snapshot).
+### RTX Hair motion stability (`hair_motion_stability`, Lighting, after the distance detail; 2026-11-10)
+- Off / On = `rt_hair_mv_card` 0 / 2 (5y; mode 1 disproved, not exposed). Off in every preset and in data/release.ini
+  (a default there, not a pin: the release policy keeps a selected On). Off -> On shows "Restart to apply"
+  (choice Apply::Restart, key_change_needs_restart 0 -> non-zero): specialization 1049 is compiled into the velocity
+  pipelines only when the key is non-zero at their creation (layer/hair_primary.cpp). On -> Off is live (header flag).
+  Not made live-compilable: always compiling 1049 would change the default velocity pipeline and touch
+  layer/hair_primary.cpp, where the stale-publish fix is in progress; a later step if wanted.
+- Tests: settings_test `test_hair_motion_stability`, release controls 22, bridge and UI order, schema regenerated.
