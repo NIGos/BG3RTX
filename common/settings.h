@@ -547,6 +547,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_swap_latch", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5t 2026-11-10: still camera, characters at a distance whose hair flickers between strands and cards: with On each hair settles on strands or on cards and stays there until the camera or the character moves."},
 
+  {"exp_hair_coverage_union", "Strand hair: coverage check on every strand pixel",
+   "Experimental: the check that decides between strands and cards counts every strand pixel, as its limit was derived, instead of only the strand pixels that land on an opaque card pixel (which drops for small, distant characters and sends their hair back to cards). Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_coverage_union", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_coverage_union", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5u 2026-11-10: still camera, characters at a distance whose hair flickers between strands and cards: with On distant hair should stay on strands; the log line '[hair primary] coverage by footprint' shows the judged ratio flat over the card-pixel bins."},
+
   {"exp_rr_hair_guides", "RR hair guides",
    "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -880,6 +887,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_slot_stable", "0"},
     {"rt_hair_watchdog_one_key", "0"},
     {"rt_hair_swap_latch", "0"},
+    {"rt_hair_coverage_union", "0"},
     {"rt_hair_groom_lod_keep", "0"},
     {"rt_hair_warmup", "1"},
     {"rt_hair_macro_normal", "0"},

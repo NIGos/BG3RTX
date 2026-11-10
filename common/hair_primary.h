@@ -92,6 +92,14 @@ constexpr uint32_t kMaskHoleOffset = kTagRefusedOffset + kCountTags * kMaxGrooms
 constexpr uint32_t kCountBytes = kMaskHoleOffset + kCountTags * 4;                      // 6016
 static_assert(kTagTracedOffset == 3920 && kTagPixelOffset == 3952 && kTagRefusedOffset == 4976 && kMaskHoleOffset == 6000,
               "hair_primary_count.hlsl tag-window offsets");
+// Then (5u, rt_hair_coverage_union; only the HP_COUNT_UNION=1 request of the count shader writes it) per tag window j and
+// draw slot the accepted strand pixels whatever the card marker of that pixel holds: every pixel whose accepted word is
+// (tag << 8) | slot. The words above count only the accepted pixels whose card marker is the same word (strand AND card),
+// which falls with the pixel footprint (5u); this one is the quantity the bound was derived for (strand opacity over card
+// opacity, tools/hair_groom/coverage_bound.py). The buffer always has the region: zero unless that request ran.
+constexpr uint32_t kUnionCountOffset = kCountBytes;                                         // 6016
+constexpr uint32_t kCountBytesAll = kUnionCountOffset + kCountTags * kMaxGrooms * 4;        // 7040
+static_assert(kUnionCountOffset == 6016, "hair_primary_count.hlsl hair_primary_union_count_offset");
 // The card-marker flag of a pixel whose strand trace skipped another groom (its slot neither swaps nor is this draw's).
 constexpr uint32_t kMarkerSkipped = 0x20;
 // The accepted-marker flag of a card-mode G-buffer pixel (round 3 M2): the swapped velocity variant writes its card MV.
@@ -379,9 +387,12 @@ inline bool prepass_drop_allowed(uint64_t applied, uint64_t now, bool live,
   return applied >= now && applied - now <= 1 && live && depth_safe && sibling_safe;
 }
 struct CoverageGate {
+  // strand: the accepted strand pixels the lower bound judges; inside: those whose card marker is the same word (the
+  // upper bound's count, and the lower one's too unless rt_hair_coverage_union gives `strand` the union count, 5u).
   struct Evidence {
-    uint64_t frame = 0, card = 0, strand = 0;
+    uint64_t frame = 0, card = 0, strand = 0, inside = 0;
     double ratio() const { return card ? double(strand) / double(card) : 0.0; }
+    double inside_ratio() const { return card ? double(inside) / double(card) : 0.0; }
   };
   std::unordered_map<uint64_t, Evidence> latest;
   std::unordered_map<uint64_t, uint64_t> incomplete;
@@ -420,17 +431,20 @@ struct CoverageGate {
   void invalidate(uint64_t key, uint64_t frame) {
     if (key && frame > incomplete[key]) incomplete[key] = frame;
   }
-  // was_swapped: the measured G-buffer frame drew this key as strands (its own markers, not the probe's).
-  void observe(uint64_t key, uint64_t frame, uint64_t card, uint64_t strand, bool was_swapped = false) {
+  // was_swapped: the measured G-buffer frame drew this key as strands (its own markers, not the probe's). inside: the
+  // strand pixels inside the card markers when `strand` is the union count (5u); omitted: the same count.
+  void observe(uint64_t key, uint64_t frame, uint64_t card, uint64_t strand, bool was_swapped = false,
+               uint64_t inside = UINT64_MAX) {
     if (!key) return;
     if (hold && !card) return;
+    if (inside == UINT64_MAX) inside = strand;
     auto& e = latest[key];
-    if (frame >= e.frame) e = {frame, card, strand};
+    if (frame >= e.frame) e = {frame, card, strand, inside};
     if (!latch || !card) return;
     if (was_swapped) {
       const double s = hold || footprint ? cover_sigma(strand, card) : 0.0;
-      const double r = double(strand) / double(card);
-      if (r < (std::min)(kCoverMin, kCoverRatioMin - s) || r > (std::max)(kCoverMax, kCoverRatioMax + s)) {
+      const double r = double(strand) / double(card), r_in = double(inside) / double(card);
+      if (r < (std::min)(kCoverMin, kCoverRatioMin - s) || r_in > (std::max)(kCoverMax, kCoverRatioMax + s)) {
         if (!latched.count(key)) ++latches;
         latched[key] = 0;
       }
@@ -457,7 +471,7 @@ struct CoverageGate {
       bound = (std::min)(bound, kCoverRatioMin - s);
       upper = (std::max)(upper, kCoverRatioMax + s);
     }
-    return e.ratio() < bound ? Why::Low : e.ratio() > upper ? Why::High : Why::Ok;
+    return e.ratio() < bound ? Why::Low : e.inside_ratio() > upper ? Why::High : Why::Ok;
   }
   bool allow(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
     return why(key, now, bound, upper) == Why::Ok;
@@ -1113,6 +1127,82 @@ struct DrawWatchdog {
     const auto it = keys.find(key);
     return it != keys.end() && now < it->second.until;
   }
+};
+
+// 5u (docs/RTX_HAIR_PRIMARY.md): the coverage measurements of the period by footprint, always on, lean too, CPU only:
+// one line per period, "[hair primary] coverage by footprint". It separates the causes of a strand key failing its bound:
+// A, the measured ratio falling with the footprint: S/C (strand pixels inside the card markers, the gate's count) per
+// card-pixel bin, against H/C (the shared pixel trace's hits on the key's own groom rows, swapped draws: what the
+// strands cover, whatever the card marker says) and U/C (every accepted strand pixel; only with rt_hair_coverage_union);
+// B, draws without strands (dropouts: judged count under a tenth of >= kDropoutMinCard card pixels), frame-wide (every
+// measured swapped draw of a frame, at least two) or not, with nothing traced on their rows (header, TLAS, rebase) or
+// traced and then rejected (ownership, key map, row UVs), on keys with two groom rows (5s); C, count noise: own-bound
+// fails in a bin whose mean judged ratio is well inside the bound.
+constexpr uint32_t kFootprintBins = 5;
+inline uint32_t footprint_bin(uint64_t card) {
+  return card < 256 ? 0u : card < 1024 ? 1u : card < 4096 ? 2u : card < 16384 ? 3u : 4u;
+}
+struct FootprintStats {
+  struct Bin {   // [0] card frames (the masked probe), [1] strand frames (the key's own swapped draw)
+    uint64_t n[2] = {}, unions[2] = {}, fails = 0;
+    double inside[2] = {}, uni[2] = {}, judged = 0.0, traced = 0.0;
+  };
+  Bin bins[kFootprintBins];
+  uint64_t dropouts = 0, frame_wide = 0, untraced = 0, rejected = 0, two_row = 0, frames = 0;
+  uint32_t f_marked = 0, f_dropped = 0;
+  void begin() { f_marked = f_dropped = 0; }
+  // One measured draw slot of the judged frame. inside: S; traced: H (meaningful for swapped draws only: a probe traces
+  // privately and stores nothing); uni: U, or < 0 when the count did not run the union request; judged: the count the
+  // gate judged (U with rt_hair_coverage_union, else S); rows: the groom rows of the key in that frame.
+  void draw(uint64_t card, uint64_t inside, uint64_t traced, int64_t uni, uint64_t judged, bool swapped, uint32_t rows) {
+    if (card < kDropoutMinCard) return;
+    Bin& b = bins[footprint_bin(card)];
+    const int i = swapped ? 1 : 0;
+    const double c = double(card);
+    ++b.n[i];
+    b.inside[i] += double(inside) / c;
+    if (uni >= 0) { ++b.unions[i]; b.uni[i] += double(uni) / c; }
+    if (!swapped) return;
+    b.judged += double(judged) / c;
+    b.traced += double(traced) / c;
+    // The bound a held swapping key is judged by (CoverageGate::why under rt_hair_primary_hold).
+    if (double(judged) < (std::min)(kCoverMin, kCoverRatioMin - cover_sigma(judged, card)) * c) ++b.fails;
+    ++f_marked;
+    if (judged * 10 < card) {   // dropout_reason's rule, on the judged count
+      ++dropouts; ++f_dropped;
+      ++(traced * 10 < card ? untraced : rejected);
+      two_row += rows >= 2;
+    }
+  }
+  void end_frame() {
+    ++frames;
+    if (f_marked >= 2 && f_dropped == f_marked) ++frame_wide;
+  }
+  // The period line's text after "[hair primary] coverage by footprint (last N frames):".
+  template <size_t N> void format(char (&out)[N]) const {
+    static const char* const names[kFootprintBins] = {"64-255", "256-1023", "1024-4095", "4096-16383", "16384+"};
+    size_t at = 0;
+    out[0] = 0;
+    auto put = [&](const char* fmt, auto... a) {
+      if (at >= N - 1) return;
+      const int w = std::snprintf(out + at, N - at, fmt, a...);
+      if (w > 0) at = (std::min)(at + size_t(w), N - 1);
+    };
+    auto mean = [](double sum, uint64_t n) { return n ? sum / double(n) : 0.0; };
+    for (uint32_t i = 0; i < kFootprintBins; ++i) {
+      const Bin& b = bins[i];
+      if (!(b.n[0] + b.n[1])) continue;
+      put(" card pixels %s: strands %llu, S/C %.3f, judged %.3f, H/C %.3f, U/C %.3f (%llu), own-bound fails %llu; cards %llu, "
+          "S/C %.3f, U/C %.3f (%llu) |", names[i], (unsigned long long)b.n[1], mean(b.inside[1], b.n[1]),
+          mean(b.judged, b.n[1]), mean(b.traced, b.n[1]), mean(b.uni[1], b.unions[1]), (unsigned long long)b.unions[1],
+          (unsigned long long)b.fails, (unsigned long long)b.n[0], mean(b.inside[0], b.n[0]), mean(b.uni[0], b.unions[0]),
+          (unsigned long long)b.unions[0]);
+    }
+    put(" dropouts %llu (frame-wide %llu of %llu judged frames, nothing traced %llu, traced then rejected %llu, keys on two "
+        "rows %llu)", (unsigned long long)dropouts, (unsigned long long)frame_wide, (unsigned long long)frames,
+        (unsigned long long)untraced, (unsigned long long)rejected, (unsigned long long)two_row);
+  }
+  void reset_period() { *this = FootprintStats{}; }
 };
 
 // Review 2026-11-08 item 12: rt_hair_groom_cascade_drop removes the hair cards from the game's sun cascades. The hair's

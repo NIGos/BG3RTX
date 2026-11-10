@@ -169,6 +169,8 @@ inline bool cascade_entry(const char* file) {
 // the 104-byte records and the refraction ray (WATER_REFR on top of both); M5.4c's WATER_GSH on top of each
 // (the records + 8 bytes: the game's sun shadow replaced on the FS that sample it).
 inline constexpr const char* kFixedRequests[] = {"rt/hair_primary_count.hlsl",
+                                                 // rt_hair_coverage_union (layer/hair_primary.cpp, 5u): the union count
+                                                 "rt/hair_primary_count.hlsl?HP_COUNT_UNION=1",
                                                  "rt/hair_primary_gbuffer.hlsl",
                                                  "rt/hair_primary_velocity.hlsl",
                                                  // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance

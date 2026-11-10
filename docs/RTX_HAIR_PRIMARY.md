@@ -1167,6 +1167,76 @@ Root cause NOT established. Verified facts, then the one hypothesis left and the
   above 0 per period with the causes and run lengths above; key on in the same scene: switches near 0 after the first
   period, "latched keys" > 0, strand runs no longer ending.
 
+## 5u. Why strands fail the coverage bound (offline 2026-11-10, branch claude/hair-coverage-cause: key rt_hair_coverage_union, off)
+User report (release, RTX Hair On, Ultra, still camera, also fg=0): most hair flickers strands/cards, worse far away,
+absent in close-ups; zoomed in near a character it is periodic (flicker, ~0.5 s stable, again). Three candidate causes.
+
+**A. The gate measures the wrong quantity; it falls with the pixel footprint. REAL (code + fixture).**
+- What the count does (rt/hair_primary_count.hlsl): C = pixels whose card marker (mark.x) holds (tag, slot); S = those
+  of them whose accepted word (mark.y) is the same word. S counts strand pixels *inside* the card markers only.
+- The card marker is the native dithered alpha test (hp_tips_keep) of the mask sampled with the card's own gradients
+  (SampleGrad, mip-filtered). Keep share = the filtered alpha, so C is the card's opacity at any footprint. The strand
+  pixel is one ray through the same jittered sample, unbiased for the strands' area at any footprint (5d).
+- Near (texels >= pixels) the alpha is sharp and sits where the strands are: S/C ~ strand/card opacity. Far, a pixel
+  covers many texels, its alpha is the mean (~0.5) and the dither keeps it independently of where the strands fall:
+  E[S]/E[C] -> (strand/card opacity) x (alpha the strands sit on, averaged) -> about half. The bound (kCoverMin 0.891)
+  was derived for strand over card opacity (coverage_bound.py: sum of strand opacity / sum of card opacity), i.e.
+  U/C with U = every accepted strand pixel. Strand radius, LOD and the trace do not change with distance in a way
+  that matters: LOD k keeps share `keep` and widens radii by 1 / keep (area kept); the ray is exact on the capsules.
+- Fixture (tools/hair_groom/primary.py footprint_report, CTest hair_groom_test test_coverage_footprint_metric): a
+  256-texel card, 30 painted strands 6 texels wide (mean alpha 0.52), groom strands 0.95 as wide on the same lines,
+  opacity ratio 0.964, 16 Halton frames. S/C at 0.5/1/2/4/8/16 texels per pixel: 0.934, 0.933, 0.890, 0.808, 0.689,
+  0.585; U/C: 0.965, 0.964, 0.965, 0.966, 0.966, 0.967 (= the opacity ratio within 4 sigma everywhere).
+- User log fits: `coverage used` minima 0.754-0.83 on several keys with maxima 0.97-1.0; frame watchdog trips at sums
+  0.63-0.71 (2740, 2746, 2777, 2859) with bounds 0.79-0.85 (small footprints in the frame). So distant keys sit at
+  or below the bound by measurement alone: loop 2 of 5t (coverage low, a few frames of cards), and a frame with
+  several distant keys trips the frame watchdog for every key (loop 1, the ~0.5 s period, also the close character).
+- Fix `rt_hair_coverage_union` (live, off; launcher "Strand hair: coverage check on every strand pixel", Advanced):
+  the count runs `rt/hair_primary_count.hlsl?HP_COUNT_UNION=1` (also counts per tag window and slot every pixel whose
+  accepted word is (tag, slot), at kUnionCountOffset 6016; the counts buffer is 7040 bytes always), and the lower
+  bound, the latch and both watchdogs judge U instead of S. The upper bound keeps S (CoverageGate::Evidence::inside).
+  The count slot records which request ran; a slot counted without the union is judged by S. A define, not a
+  specialization constant: it adds a counts region (layout); one request, variants.txt 131 -> 132.
+- Protections: U >= S for every slot (S's pixels are a subset), the bound's sigma grows with the count and the upper
+  side is unchanged, so the key on can only turn a refusal into a pass, never the reverse (test_coverage_union: 20000
+  random measurements x 8 gate modes; healthy keys at 430-9397 card pixels: identical decisions, 0 switches with and
+  without the hold). Missing strands still fail (U = 0, or U/C 0.5). Default request byte-identical
+  (tools/shader_identity.py vs 2e1f28d0: 226/226), the new one compiles and passes spirv-val.
+- Kind of change: a measurement change of the gate, not a reconstruction or shading change. With it distant hair stays
+  on strands; mean brightness there changes from the card look to the strand look (the existing strand path).
+- Cost: key off none (1 KB more buffer and readback copy). Key on: one groupshared atomic per marked pixel and tag
+  window in the existing count dispatch; unmeasured, expected far below the count's own cost.
+
+**B. Draws or frames with ~0 strand pixels. REAL as known mechanisms; the user log alone does not say which.**
+- Code paths that write card markers but no strand on a still scene: a two-row key whose slots exchange content
+  (5q/5s: `[2 rows: 0+0]` in S8, fix rt_hair_slot_stable, off, untested live), a shared key with a missing row (5i,
+  rt_hair_shared_key), a LOD change dropping the groom (5h cause 2, rt_hair_groom_lod_keep in the bundle), and before
+  5h the header without the build camera (now unconditional). The user log's near-empty frames 2741 and 2860-2862
+  come right after trips, during groom LOD uploads (36576f20, c4938983, a8cd960d), a refused mesh pool growth and UV
+  joins: not a still scene in the counted sense. With A, few draws stay swapped, so one bad draw is the frame sum.
+- No speculative fix. The frame-wide fallback stays for frame-wide evidence; per-key decisions exist:
+  rt_hair_watchdog_draw (every key on its own, 2 bad frames in a row) and rt_hair_watchdog_one_key.
+
+**C. Count noise at the bound. NOT an independent cause.** With S a far key's mean is at or under the bound, so the
+hold's noise band decides each frame: that is A. With U the fixture's per-frame U/C spread is 0.0128 at 2142 card
+pixels and 0.025 at 536 (the bound's model sigma there is 0.042 and 0.085: stratified jitter, correlated counts):
+own-bound fails 0 of 64 frames down to 534 pixels and 1.5-3% at 133 pixels (the strands at 0.964 and at 0.925 opacity ratio). No fix; the session numbers below decide.
+
+**Lean line for the user session (all new keys off), one per 300 frames:** `[hair primary] coverage by footprint
+(last 300 frames, judged inside the card markers): card pixels <bin>: strands n, S/C, judged, H/C, U/C (n), own-bound
+fails; cards n, S/C, U/C (n) | ... dropouts D (frame-wide F of G judged frames, nothing traced T, traced then rejected
+R, keys on two rows W)`. H = the shared pixel trace's hits on the key's own groom rows (existing counts, no shader),
+so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-4095, 4096-16383, 16384+.
+- A confirmed: strands S/C in the 64-255 and 256-1023 bins at least 0.1 under the 4096+ bins and under 0.89, own-bound
+  fails mostly in those bins, while H/C there stays within 0.05 of the 4096+ bins (>= 0.9). Refuted: H/C falls with
+  S/C (then strands really cover less when small: a rendering fix, minimum strand width by footprint, not built).
+  5t switches line: "coverage low" and "frame watchdog" causes, worst keys with card pixels under ~2000.
+- B: D > 0. W = D: the 5s exchange (try rt_hair_slot_stable); F > 0 with W = 0: a per-frame header/publish fault;
+  T (nothing traced: header, TLAS, rebase, row) against R (traced, then ownership/key map/row UVs) names the stage.
+- C: own-bound fails in a bin whose "judged" mean is >= 0.95 (key off: 4096+ bins; predicted 0).
+- With rt_hair_coverage_union=1 (next session): judged = U/C flat over the bins (0.9-1.08), fails near 0 above 256
+  card pixels, switches near 0 with a still camera; dropouts unchanged in kind (U = 0 is still a dropout).
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame, which is world space (VS 41a168e2 locations 3-5; only location 1, the RT0

@@ -533,6 +533,105 @@ def post_depth_report(frame, near=0.1, far=1000.0):
             "max_err_mm": float(err[np.isfinite(err)].max() * 1e3), "max_step_mm": float(step[np.isfinite(step)].max() * 1e3)}
 
 
+# ---- 5u: the coverage gate's measurement against the pixel footprint (docs/RTX_HAIR_PRIMARY.md 5u) ----
+def card_mask_fixture(seed=6, texels=256, lines=30, paint=6.0, strand=0.95, supersample=4):
+    """A hair card's alpha mask and its groom in card texel space: `lines` straight strands (random x, slope up to
+    0.25), painted `paint` texels wide (alpha = the texel's share inside a band, supersample^2 samples), and the groom's
+    strands on the same centre lines `strand` times as wide (the converter puts the strands where the card is opaque;
+    the offline bound's minimum style has strand/card opacity 0.91). Returns (mask [texels, texels], lines (x0, slope),
+    half width of a strand in texels)."""
+    rng = np.random.default_rng(seed)
+    x0, slope = rng.uniform(0, texels, lines), rng.uniform(-0.25, 0.25, lines)
+    s = (np.arange(texels * supersample) + 0.5) / supersample
+    y, x = np.meshgrid(s, s, indexing="ij")
+    inside = np.zeros(x.shape, bool)
+    for a, b in zip(x0, slope):
+        inside |= band_distance(x, y, a, b, texels) <= paint / 2
+    mask = inside.reshape(texels, supersample, texels, supersample).mean((1, 3))
+    return mask, np.stack([x0, slope], 1), strand * paint / 2
+
+
+def band_distance(x, y, x0, slope, texels):
+    """Distance (texels) of (x, y) to the wrapped line x = x0 + slope (y - texels / 2)."""
+    d = np.mod(x - (x0 + slope * (y - texels / 2)) + texels / 2, texels) - texels / 2
+    return np.abs(d) / np.sqrt(1 + slope * slope)
+
+
+def mip_chain(mask):
+    """Box-filtered mips (the mean alpha of every level equals the mask's)."""
+    levels = [np.asarray(mask, np.float64)]
+    while levels[-1].shape[0] > 1:
+        m = levels[-1]
+        levels.append(m.reshape(m.shape[0] // 2, 2, m.shape[1] // 2, 2).mean((1, 3)))
+    return levels
+
+
+def sample_trilinear(levels, u, v, lod):
+    """SampleGrad with a wrap sampler: bilinear in the two mips around `lod` (texel units of level 0 for u, v)."""
+    lod = float(np.clip(lod, 0.0, len(levels) - 1))
+    lo = int(np.floor(lod))
+    hi, f = min(lo + 1, len(levels) - 1), lod - lo
+
+    def bilinear(m, scale):
+        n = m.shape[0]
+        x, y = u / scale - 0.5, v / scale - 0.5
+        x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+        fx, fy = x - x0, y - y0
+        at = lambda i, j: m[np.mod(j, n), np.mod(i, n)]
+        return ((at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) +
+                (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy)
+
+    a = bilinear(levels[lo], 2.0 ** lo)
+    return a if f == 0 else a * (1 - f) + bilinear(levels[hi], 2.0 ** hi) * f
+
+
+def gate_counts(mask, lines, half, footprint, frames=16, seed=0):
+    """What the count shader measures for one card seen frontally at `footprint` card texels per pixel, per frame: card
+    pixels C (the card marker: the dithered native alpha test at the jittered sample, keep share = the mip-filtered
+    alpha), accepted strand pixels inside them S (the gate's ratio today: mark.y == card word) and all accepted strand
+    pixels U (any pixel of the card's raster, the accepted marker alone). One ray per pixel through the jittered sample
+    (Halton jitter, frame f), the dither a uniform variate per pixel and frame (hp_tips_keep keeps exactly the alpha
+    share, 5c). Returns int arrays (frames, 3): C, S, U."""
+    rng = np.random.default_rng(seed)
+    texels = mask.shape[0]
+    n = max(1, int(round(texels / footprint)))
+    levels = mip_chain(mask)
+    py, px = np.mgrid[0:n, 0:n]
+    out = []
+    for f in range(frames):
+        j = jitter(f)
+        u, v = (px + 0.5 + j[0]) * footprint, (py + 0.5 + j[1]) * footprint
+        alpha = sample_trilinear(levels, u, v, np.log2(footprint))
+        card = alpha + rng.uniform(size=alpha.shape) >= 1.0
+        hit = np.zeros(u.shape, bool)
+        for a, b in lines:
+            hit |= band_distance(u, v, a, b, texels) <= half
+        out.append((int(card.sum()), int((card & hit).sum()), int(hit.sum())))
+    return np.array(out)
+
+
+def footprint_report(footprints=(0.5, 1, 2, 4, 8, 16), frames=16, seed=6):
+    """The gate's two ratios over footprints (5u): S/C (today) and U/C (the bound's definition: strand opacity over card
+    opacity), pooled over `frames`, and the per-frame U/C spread; plus the fixture's own opacity ratio (strand area /
+    card alpha, the offline bound's quantity)."""
+    mask, lines, half = card_mask_fixture(seed=seed)
+    texels = mask.shape[0]
+    ss = 8
+    s = (np.arange(texels * ss) + 0.5) / ss
+    y, x = np.meshgrid(s, s, indexing="ij")
+    area = np.zeros(x.shape, bool)
+    for a, b in lines:
+        area |= band_distance(x, y, a, b, texels) <= half
+    rows = []
+    for fp in footprints:
+        c = gate_counts(mask, lines, half, fp, frames, seed)
+        per = c[:, 2] / np.maximum(c[:, 0], 1)
+        rows.append({"footprint": float(fp), "card_pixels": float(c[:, 0].mean()),
+                     "intersection": float(c[:, 1].sum() / c[:, 0].sum()), "union": float(c[:, 2].sum() / c[:, 0].sum()),
+                     "union_frame_std": float(per.std()), "intersection_frame_min": float((c[:, 1] / c[:, 0]).min())})
+    return {"opacity_ratio": float(area.mean() / mask.mean()), "mean_alpha": float(mask.mean()), "rows": rows}
+
+
 def main():
     from PIL import Image
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])

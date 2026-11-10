@@ -94,6 +94,8 @@ GENERIC = r"\[shaders\].*(?: compiled(?: in| \()|read from the cache|cache: pref
 CONSERVATIVE = set("rt_hair_fibre rt_hair_groom_primary_order rt_hair_primary_passes rt_hair_groom_tips rt_hair_groom_crowd_ksegments rt_water_geometry rr fg preset ab_off".split())
 for key in CONSERVATIVE:
     TABLE[key] = [GENERIC]
+# 5u: the count shader's HP_COUNT_UNION=1 request (layer/hair_primary.cpp count_pipeline), compiled at its first use.
+TABLE["rt_hair_coverage_union"] = [GENERIC]
 
 # Settings which schedule observations or change CPU/log policy, without
 # selecting pipelines. Unknown rendering keys require explicit completion evidence.

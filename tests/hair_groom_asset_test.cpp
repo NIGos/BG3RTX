@@ -318,6 +318,111 @@ static void test_swap_latch() {
   strict.observe(key, 100, 430, 372, true);   // 0.865 < 0.891
   CHECK(strict.why(key, 101) == CoverageGate::Why::Latched);
 }
+// 5u rt_hair_coverage_union: the gate judges U (every accepted strand pixel of the slot) instead of S (only those inside
+// the card markers); the count shader gives U >= S for every slot (the pixels S counts are a subset). Protections: a key
+// that passes today passes with the key on, in every gate mode, with the same switches; a key without strands still fails.
+static void test_coverage_union() {
+  using namespace hair_primary;
+  uint32_t seed = 12345;
+  auto rnd = [&](uint32_t n) { seed = seed * 1664525u + 1013904223u; return (seed >> 8) % n; };
+  // 1. Monotone: for any measurement, any mode, an Ok with S stays Ok with U >= S (and the latch never fires more).
+  for (int i = 0; i < 20000; ++i) {
+    const uint64_t card = 64 + rnd(20000), inside = rnd(uint32_t(card) + 1), uni = inside + rnd(uint32_t(card / 4) + 1);
+    const bool swapped = rnd(2) != 0;
+    for (int mode = 0; mode < 8; ++mode) {
+      CoverageGate off, on;
+      off.hold = on.hold = (mode & 1) != 0;
+      off.footprint = on.footprint = (mode & 2) != 0;
+      off.latch = on.latch = (mode & 4) != 0;
+      if (swapped) { off.swapped(7, 100); on.swapped(7, 100); }
+      off.observe(7, 100, card, inside, swapped);
+      on.observe(7, 100, card, uni, swapped, inside);
+      CHECK(on.latches <= off.latches);
+      if (off.why(7, 101) == CoverageGate::Why::Ok) CHECK(on.why(7, 101) == CoverageGate::Why::Ok);
+      // The upper bound is judged on S in both: U above kCoverMax with S inside it is no refusal.
+      if (on.why(7, 101) == CoverageGate::Why::High) CHECK(off.why(7, 101) == CoverageGate::Why::High);
+    }
+  }
+  // 2. Healthy keys (S passes the strict bound every frame, any footprint): the same decisions and zero switches.
+  struct K { uint64_t key, card; };
+  const K ks[] = {{0x11, 9397}, {0x22, 4000}, {0x33, 1200}, {0x44, 430}};
+  for (bool hold : {false, true}) {
+    CoverageGate off, on;
+    off.hold = on.hold = hold;
+    SwapTransitions s_off, s_on;
+    for (uint64_t f = 100; f < 400; ++f)
+      for (const K& k : ks) {
+        const uint64_t inside = k.card * (900 + rnd(90)) / 1000, uni = inside + k.card * rnd(80) / 1000;   // 0.90-0.99
+        off.observe(k.key, f, k.card, inside, off.is_swapping(k.key, f));
+        on.observe(k.key, f, k.card, uni, on.is_swapping(k.key, f), inside);
+        const bool a = off.allow(k.key, f + 1), b = on.allow(k.key, f + 1);
+        CHECK(a && b);
+        off.swapped(k.key, f + 1); on.swapped(k.key, f + 1);
+        s_off.gbuffer(k.key, f + 1, a); s_on.gbuffer(k.key, f + 1, b);
+      }
+    CHECK(s_off.switches() == 0 && s_on.switches() == 0);
+  }
+  // 3. A distant key: S/C 0.62 (mip-filtered card alpha, 5u fixture), U/C 0.96: refused today, strands with the key.
+  {
+    CoverageGate off, on;
+    off.hold = on.hold = true;
+    off.observe(0x55, 100, 600, 372); on.observe(0x55, 100, 600, 576, false, 372);
+    CHECK(off.why(0x55, 101) == CoverageGate::Why::Low && on.allow(0x55, 101));
+    // The safety net: a key whose strands are missing (U = S = 0) or far too few is refused with the key on too.
+    on.swapped(0x66, 100);
+    on.observe(0x66, 100, 600, 0, true, 0);
+    CHECK(on.why(0x66, 101) == CoverageGate::Why::Low);
+    on.observe(0x67, 100, 5000, 2500, false, 2400);   // U/C 0.5
+    CHECK(on.why(0x67, 101) == CoverageGate::Why::Low);
+    // U over the upper bound with S inside it: Ok (the upper side keeps today's count).
+    on.observe(0x68, 100, 5000, 6000, false, 4900);
+    CHECK(on.allow(0x68, 101));
+  }
+  // 4. Frame watchdog fed the judged count: three distant draws (S 0.62, U 0.96) trip it today, not with the key; a
+  // frame whose draws lost their strands trips it with both counts.
+  {
+    Watchdog off, on;
+    off.begin(); on.begin();
+    for (uint64_t k = 1; k <= 3; ++k) { off.draw(600, 372, 600, k); on.draw(600, 576, 600, k); }
+    CHECK(off.judge(100) && !on.judge(100));
+    Watchdog lost;
+    lost.begin(); lost.draw(600, 0, 600, 1); lost.draw(900, 3, 900, 2);
+    CHECK(lost.judge(100));
+    DrawWatchdog dw;   // per draw: a key with U = 0 trips after two frames, a healthy distant key never
+    for (uint64_t f = 100; f < 103; ++f) { dw.begin(); dw.draw(1, 600, 0, 600); dw.draw(2, 600, 576, 600); dw.judge(f); }
+    CHECK(dw.active(1, 103) && !dw.active(2, 103));
+  }
+  // 5. The lean footprint line: bins, the judged ratio, own-bound fails, and the dropout classes.
+  {
+    FootprintStats fs;
+    CHECK(footprint_bin(64) == 0 && footprint_bin(256) == 1 && footprint_bin(4095) == 2 && footprint_bin(16384) == 4);
+    fs.begin();
+    fs.draw(600, 372, 580, -1, 372, true, 1);    // distant: S 0.62 fails its own bound, traced 0.97
+    fs.draw(9000, 8600, 8700, -1, 8600, true, 1);
+    fs.draw(600, 380, 0, -1, 380, false, 1);     // probe: no trace counted
+    fs.draw(30, 0, 0, -1, 0, true, 1);           // under kDropoutMinCard: no evidence
+    fs.end_frame();
+    CHECK(fs.bins[1].n[1] == 1 && fs.bins[1].n[0] == 1 && fs.bins[1].fails == 1 && fs.bins[3].fails == 0);
+    CHECK(fs.dropouts == 0 && fs.frame_wide == 0 && fs.frames == 1 && fs.bins[0].n[0] + fs.bins[0].n[1] == 0);
+    fs.begin();
+    fs.draw(5000, 10, 4800, -1, 10, true, 2);    // traced then rejected, a two-row key
+    fs.draw(3000, 0, 0, -1, 0, true, 1);         // nothing traced
+    fs.end_frame();
+    CHECK(fs.dropouts == 2 && fs.frame_wide == 1 && fs.rejected == 1 && fs.untraced == 1 && fs.two_row == 1);
+    fs.begin();
+    fs.draw(5000, 10, 0, 4900, 4900, true, 1);   // with the union count judged: no dropout
+    fs.end_frame();
+    CHECK(fs.dropouts == 2 && fs.bins[3].unions[1] == 1);
+    char line[1600];
+    fs.format(line);
+    const std::string t(line);
+    CHECK(t.find("card pixels 256-1023: strands 1, S/C 0.620") != std::string::npos &&
+          t.find("dropouts 2 (frame-wide 1 of 3 judged frames, nothing traced 1, traced then rejected 1, keys on two rows 1)") !=
+              std::string::npos);
+    fs.reset_period();
+    CHECK(fs.frames == 0 && fs.dropouts == 0);
+  }
+}
 // rt_hair_coverage_footprint: every measurement, also a first swap, against the bound at its own footprint.
 // 2026-11-07 live draws: 9861 0.842 of 443, 23a3 0.792 of 610, 5381 0.314 of 51 and 0.674 of 46 (refused strictly).
 static void test_coverage_footprint() {
@@ -902,7 +1007,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
