@@ -1385,6 +1385,33 @@ so A is decidable with the keys off. Bins of card pixels 64-255, 256-1023, 1024-
   (45252/100101/7092) fall after the warm-up's end. If so: 4-7 frame watchdog trips and 40-60 dropouts in that one
   period, mask-hole pixels above 30000 there; every other period clean. If the joins fall inside the window: 0 trips
   and strands back after 80-105 frames, as in 103633.
+- GPU fixture (hair_primary_gpu_test nearest_check, RTX 5090, run once, device fine): the synthetic groom with 600
+  strands, twice in one TLAS (instance 0 accepted; instance 1 the same groom 3 cm towards the camera, card-kept), 160 x
+  160 rays. Of 25478 pixels where instance 0 alone has a strand, the restart loop of the strand G-buffer variant leaves
+  2567 without a strand (1860 rays need a 4th restart) and returns a farther strand of the right groom on 11154 more:
+  each restart begins 2 x hair_primary_max_radius = 2 cm past the other row's strand and jumps over an accepted strand
+  that lies within 2 cm behind it. Mechanism confirmed offline; the second defect (wrong, deeper strand) was not known.
+- Fix `rt_hair_groom_nearest` (off; specialization 1047 = kSpecIdHairGroomNearest, compiled into the strand G-buffer
+  pipelines when on at their creation, header flag kFlagNearest = 64 switches it off live, as rt_hair_groom_coverage):
+  hp_trace takes the closest strand of an accepted row from one non-opaque query that passes over other rows'
+  candidates and commits accepted ones (shaders/rt/hair_primary_nearest.hlsli hp_nearest, the rt_groom_blocks walk; the
+  traversal reports only candidates closer than the last commit). Found on the device: LSS candidates carry their own
+  candidate type (not triangle); they give CandidateTriangleRayT and commit as triangle hits. Same fixture: hp_nearest
+  returns the reference's own strand and distance on 25478 of 25478 pixels, 0 holes, 0 hits of the card-kept groom.
+  Key off: 223 requests byte-identical, the strand G-buffer request equivalent with 1047 frozen to 0
+  (tools/release_shader_equivalence.py --freeze-spec 1047, cascade control PASS); variants.txt delta 0.
+- Cheaper alternative not taken: hiding a groom's rows from primary rays (bvhsplit.cpp:3957 mask 0x01) until its draw
+  key swaps would hide them from its own masked probe too (the probe traces the same TLAS with mask 0xFE), so a
+  newcomer could never be measured and would stay on cards; making it work needs a second mask bit for the probe, a
+  shader change anyway, and it leaves the 2 cm restart jump in place.
+- Cost: the fixture has no timer. A non-opaque query visits every candidate in front of the closest accepted one
+  (opaque traversal stops at the first); read it live from `[hair primary] strand G-buffer draws GPU` (0.133 ms/frame
+  in 125217 with the loop).
+- hs1 (staged job, regenerated): the key is on for the whole run (it is applied at pipeline creation; the arrival
+  happens once per session, so no A/B inside one launch). Predicted, v3 set: in the period with the three arrivals
+  0 frame watchdog trips, 0 frames under a tenth, dropouts at most 2, key watchdog trips 0, strand runs not cut;
+  every other period as 125217 (coverage low 0, own-bound fails 0); strand G-buffer GPU above 0.133 ms/frame, the
+  increase reported (not a gate). Mask-hole pixels still count passed-over candidates (a diagnostic, now harmless).
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is

@@ -19,6 +19,7 @@
 // from specialization constants 1100/1101.
 #include "hair_primary_rebase.hlsli"
 #include "hair_primary_coverage.hlsli"
+#include "hair_primary_nearest.hlsli"
 
 // M3.2 (rt_hair_groom_coverage, common/shader_variant.h kSpecIdHairGroomCoverage): two stratified rays per pixel.
 // 0: the single pixel ray below, unchanged; 1: the pair, when header flag 8 is also set (live off-switch).
@@ -28,6 +29,11 @@
 // native FS writes: VS 41a168e2 location 1 = view(location 3)), flag 32 writes RT3 in world space, the space of the
 // native card tangent (VS 41a168e2 locations 3-5 are world vectors; 3033c895 reads class 5 T without rotation).
 [[vk::constant_id(1045)]] const uint kHairShadingSpace = 0u;
+// 5u (rt_hair_groom_nearest, common/shader_variant.h kSpecIdHairGroomNearest): 0: hp_trace's restart loop below,
+// unchanged; 1: with header flag 64 the closest strand of an accepted row from one candidate-filtered query
+// (hair_primary_nearest.hlsli): no kHpSkips limit and no 2 x radius jump past another row's strand.
+[[vk::constant_id(1047)]] const uint kHairGroomNearest = 0u;
+static const uint hair_primary_flag_nearest = 64u;   // common/hair_primary.h kFlagNearest
 static const uint hair_primary_flag_macro_normal = 16u;   // common/hair_primary.h kFlagMacroNormal
 static const uint hair_primary_flag_tangent_world = 32u;  // common/hair_primary.h kFlagTangentWorld
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
@@ -90,11 +96,46 @@ float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 // sphere's diameter bound). The same trace and validation for the single ray and each ray of the M3.2 pair. false: no
 // valid strand (a miss, or a hit whose groom/segment fails the bounds: stored as no strand). skipped: a strand of another
 // row was in front.
+// 5u: a groom row accepted by the pixel trace: its draw slot (key map) is in `accept`.
+struct HpSlotAccept {
+  uint64_t rec;
+  uint accept, grooms;
+  bool ok(uint k) {
+    if (k >= grooms) return false;
+    const uint slot = vk::RawBufferLoad<uint>(rec + hair_primary_key_map_offset + k * 4u, 4);
+    return slot < 16u && ((accept >> slot) & 1u) != 0u;
+  }
+};
 bool hp_trace(uint64_t rec, float3 org, float3 dir, uint accept, uint grooms, uint64_t pool, uint pool_bytes,
               uint64_t crumbs, uint64_t pool_end, out uint3 e, out float t, out bool skipped) {
   e = uint3(hair_primary_no_strand, 0u, 0u);
   t = 0.0;
   skipped = false;
+  if (kHairGroomNearest != 0u && (ld(rec + 60u) & hair_primary_flag_nearest) != 0u) {
+    RayDesc r;
+    r.Origin = org;
+    r.TMin = 0.0;
+    r.Direction = dir;
+    r.TMax = 1.0e5;
+    HpSlotAccept acc;
+    acc.rec = rec;
+    acc.accept = accept;
+    acc.grooms = grooms;
+    uint k, seg;
+    float th;
+    if (!hp_nearest(hp_tlas(ld2(rec + 16u)), r, 0xFEu, acc, k, seg, th, skipped)) return false;
+    if (seg > hair_primary_max_segment) return false;
+    const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
+    uint i0;
+    if (!hp_segment(pool, pool_bytes, row, seg, i0) ||
+        !hp_crumb_ok(crumbs, 3u, hp_at(pool, row.x, i0, 12u), 24u, pool, pool_end)) return false;
+    const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
+    t = th;
+    const float3 hit = dir * t;
+    const float4 c = mul(float4(hit, 1.0), gCam.vp);
+    e = uint3((k << 24) | seg, asuint(hp_segment_param(hit + org, p0, p1)), asuint(c.z / c.w));
+    return true;
+  }
   float tmin = 0.0;
   for (uint i = 0u; i <= kHpSkips; ++i) {
     RayDesc r;

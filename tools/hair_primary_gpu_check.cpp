@@ -156,8 +156,12 @@ static int run_bsdf(const std::vector<char>& in, const std::vector<char>& spv, c
 
 int main(int argc, char** argv) {
   const bool bsdf = argc >= 5 && std::strcmp(argv[1], "bsdf") == 0;
-  if (argc < 4 || (argc >= 5 && !bsdf)) {
-    std::fprintf(stderr, "usage: hair_primary_gpu_check [bsdf] <input.bin> <check.spv> <output.bin>\n");
+  // 5u twin mode (tools/hair_nearest_gpu_check.hlsl): instance 0 mask 0x02; instance 1, the same BLAS moved <metres>
+  // towards the camera along the push block's forward, mask 0x04 (a card-kept groom in front of a swapped one).
+  const bool twin = !bsdf && argc == 6 && std::strcmp(argv[4], "twin") == 0;
+  const float twin_m = twin ? float(std::atof(argv[5])) : 0.0f;
+  if (argc < 4 || (argc >= 5 && !bsdf && !twin)) {
+    std::fprintf(stderr, "usage: hair_primary_gpu_check [bsdf] <input.bin> <check.spv> <output.bin> [twin <metres>]\n");
     return 2;
   }
   if (bsdf) ++argv;
@@ -300,17 +304,27 @@ int main(int argc, char** argv) {
   VkAccelerationStructureKHR blas = build(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, g, ns, blas_buf);
   VkAccelerationStructureDeviceAddressInfoKHR bai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
   bai.accelerationStructure = blas;
-  VkAccelerationStructureInstanceKHR ins{};
-  ins.transform.matrix[0][0] = ins.transform.matrix[1][1] = ins.transform.matrix[2][2] = 1.0f;
-  ins.mask = 0xFF;
-  ins.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
-  ins.accelerationStructureReference = pAddr(dev, &bai);
-  Buf ibuf = make(sizeof ins, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, &ins);
+  VkAccelerationStructureInstanceKHR ins[2]{};
+  for (VkAccelerationStructureInstanceKHR& i : ins) {
+    i.transform.matrix[0][0] = i.transform.matrix[1][1] = i.transform.matrix[2][2] = 1.0f;
+    i.mask = 0xFF;
+    i.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
+    i.accelerationStructureReference = pAddr(dev, &bai);
+  }
+  if (twin) {
+    float fwd[3];
+    std::memcpy(fwd, push + 48, sizeof fwd);
+    ins[0].mask = 0x02;
+    ins[1].mask = 0x04;
+    for (int c = 0; c < 3; ++c) ins[1].transform.matrix[c][3] = -fwd[c] * twin_m;
+  }
+  const uint32_t instances = twin ? 2u : 1u;
+  Buf ibuf = make(sizeof ins[0] * instances, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, ins);
   VkAccelerationStructureGeometryKHR tg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
   tg.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
   tg.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
   tg.geometry.instances.data.deviceAddress = ibuf.addr;
-  VkAccelerationStructureKHR tlas = build(VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, tg, 1, tlas_buf);
+  VkAccelerationStructureKHR tlas = build(VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, tg, instances, tlas_buf);
 
   // ---- the check pass ----
   Buf out = make(VkDeviceSize(width) * height * 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);

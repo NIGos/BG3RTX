@@ -53,6 +53,9 @@ constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101, kSpecDrawSlot = 1
 //  points (float3), point UV (float2), segment start indices (uint), previous points (float3; 0: none yet).
 constexpr uint32_t kFlagTips = 1u << 0, kFlagCamera = 1u << 1, kFlagPrevCamera = 1u << 2, kFlagCoverage = 1u << 3;
 constexpr uint32_t kFlagMacroNormal = 1u << 4, kFlagTangentWorld = 1u << 5;
+// 5u rt_hair_groom_nearest: the candidate-filtered nearest-strand trace (shaders/rt/hair_primary_nearest.hlsli), read only by
+// a G-buffer variant built with specialization kSpecIdHairGroomNearest = 1 (the live off-switch, as kFlagCoverage).
+constexpr uint32_t kFlagNearest = 1u << 6;
 constexpr uint32_t kHeaderWords = 16;
 constexpr uint32_t kDrawSlots = 16;
 constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax

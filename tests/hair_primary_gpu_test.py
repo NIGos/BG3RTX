@@ -31,11 +31,11 @@ def check(name, ok, info=""):
         FAILS.append(name)
 
 
-def synthetic(seed=3):
+def synthetic(seed=3, n=120):
     """Wavy strands in front of the camera, 2 mm radius each (constant along a strand)."""
     rng = np.random.default_rng(seed)
     pts, rad, offs = [], [], [0]
-    for _ in range(120):
+    for _ in range(n):
         root = rng.uniform([-0.05, -0.05, 0.25], [0.05, 0.05, 0.32])
         d = rng.normal(size=3)
         d /= np.linalg.norm(d)
@@ -62,7 +62,7 @@ def push_block(cam, near=0.1, far=1000.0, jitter=None, tag=0):
     return head + struct.pack("<3fI", *fwd, tag) + vp.astype("<f4").tobytes()
 
 
-def run(exe, spv, points, radii, offsets, cam, push=None):
+def run(exe, spv, points, radii, offsets, cam, push=None, extra=()):
     s0, _ = primary.segments(points, radii, offsets)
     w, h = cam.size
     with tempfile.TemporaryDirectory() as d:
@@ -70,7 +70,7 @@ def run(exe, spv, points, radii, offsets, cam, push=None):
         inp.write_bytes(b"HPGC" + struct.pack("<7I", 1, len(points), len(s0), w, h, 0, 0) + (push or push_block(cam)) +
                         np.asarray(points, "<f4").tobytes() + np.asarray(radii, "<f4").tobytes() +
                         s0.astype("<u4").tobytes())
-        p = subprocess.run([str(exe), str(inp), str(spv), str(out)], capture_output=True, text=True)
+        p = subprocess.run([str(exe), str(inp), str(spv), str(out), *extra], capture_output=True, text=True)
         print(p.stdout.strip())
         if p.returncode == 77:
             print("SKIP: no linear swept spheres on this device")
@@ -519,6 +519,43 @@ def coverage_check(exe, spv, frames=16):
           (rep["box_rmse"], single["box_rmse"]))
 
 
+def nearest_check(exe, spv, shift=0.03):
+    """5u (rt_hair_groom_nearest): a dense card-kept groom in front of a swapped one (the harness' twin mode: the same
+    groom twice, instance 1 moved `shift` metres towards the camera). Per pixel ray: the strand G-buffer variant's restart
+    loop (kHpSkips = 3), hp_nearest, and the reference (instance 0 alone). The loop leaves pixels without a strand where
+    the reference has one; hp_nearest finds the reference's own strand on every such pixel."""
+    pts, rad, offs = synthetic(seed=5, n=600)
+    cam = primary.Camera(np.zeros(3), np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]), np.radians(20.0), (160, 160))
+    g = run(exe, spv, pts, rad, offs, cam, extra=("twin", str(shift)))
+    if g is None:
+        return
+    none = 0xFFFFFFFF
+    ref = g[..., 4] != none
+    loop_hole = ref & (g[..., 0] == none)
+    near_hit = g[..., 2] != none
+    same = ref & near_hit & ((g[..., 2] & 0xFFFFFF) == g[..., 4]) & ((g[..., 2] >> 24) == 0) & (g[..., 3] == g[..., 5])
+    loop_same = ref & (g[..., 0] == g[..., 4]) & (g[..., 1] == g[..., 5])
+    rep = {"reference_pixels": int(ref.sum()), "loop_holes": int(loop_hole.sum()), "loop_same": int(loop_same.sum()),
+           "nearest_same": int(same.sum()), "nearest_holes": int((ref & ~near_hit).sum()),
+           "nearest_extra": int((~ref & near_hit).sum()), "restarts_max": int(g[..., 6].max()),
+           "rays_with_4_restarts": int((g[..., 6] >= 4).sum()), "nearest_passed_over": int(g[..., 7].sum())}
+    print(json.dumps({"nearest_gpu": rep}))
+    check("nearest: the restart loop (kHpSkips 3) leaves pixels without the strand the reference finds (the hole)",
+          rep["loop_holes"] > 0, rep)
+    check("nearest: hp_nearest returns the reference's own strand and distance on every reference pixel",
+          rep["nearest_same"] == rep["reference_pixels"], rep)
+    check("nearest: hp_nearest finds no strand where instance 0 has none (the card-kept groom is never returned)",
+          rep["nearest_extra"] == 0, rep)
+    # The loop's other defect: a restart begins 2 x hair_primary_max_radius (2 cm) past the other row's strand, so an
+    # accepted strand within 2 cm behind it is jumped over and a farther one (of the same groom) is returned.
+    loop_wrong = ref & (g[..., 0] != none) & ~loop_same
+    farther = g[..., 1].view("<f4") >= g[..., 5].view("<f4")   # equal: the joint of two chained segments
+    rep["loop_farther_strand"] = int(loop_wrong.sum())
+    print(json.dumps({"nearest_gpu_loop_farther": rep["loop_farther_strand"]}))
+    check("nearest: where the loop returns another strand than the reference it is a farther one (jumped over)",
+          bool(np.all(farther[loop_wrong])), rep)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -531,6 +568,7 @@ def main():
     ap.add_argument("--shadow-spv", type=Path, help="also count strand crossings per ray (tools/hair_shadow_gpu_check.hlsl)")
     ap.add_argument("--coverage-spv", type=Path, help="also check the M3.2 coverage pair (HP_CHECK_COVERAGE build)")
     ap.add_argument("--game-light-spv", type=Path, help="also check M4.3 (tools/hair_game_light_gpu_check.hlsl), N-light fixture")
+    ap.add_argument("--nearest-spv", type=Path, help="also check 5u hp_nearest (tools/hair_nearest_gpu_check.hlsl), twin groom")
     a = ap.parse_args()
     if a.groom:
         gr = np.load(a.groom)
@@ -556,6 +594,8 @@ def main():
         shadow_check(a.exe, a.shadow_spv, pts, rad, offs, cam)
     if a.coverage_spv:
         coverage_check(a.exe, a.coverage_spv)
+    if a.nearest_spv:
+        nearest_check(a.exe, a.nearest_spv)
     if a.game_light_spv and a.bsdf_spv and a.dual_spv:
         game_light_check(a.exe, a.game_light_spv, a.bsdf_spv, a.dual_spv)
     print(f"{len(FAILS)} failures" if FAILS else "all passed")

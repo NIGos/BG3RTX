@@ -1,10 +1,13 @@
-## Post-toggle holes with the v3 groom set: cause narrowed, no fix landed (branch claude/hair-v3-settle, offline, 2026-11-10)
+## Holes when a groom joins while others swap: nearest-strand trace (branch claude/hair-v3-settle, offline, 2026-11-10)
 
-- hs1 125217: not v3 and not the warm-up test. The warm-up ended correctly at 2160; the trips at 2171-2176 start with
-  the session's first UV joins of three more hair draws (45252, 100101, 7092) and their groom uploads (16fa158c,
-  5dbb53eb, b7349689). The existing keys lose their strands, not the newcomers. 103633 had the same arrivals inside its
-  warm-up window (0 trips), 095322 50 frames after the switch (trips). This is the "groom joins mid-play" item.
-- Likely mechanism: a keyed but not yet swapping newcomer's strands are skipped by every swapped draw's pixel trace at
-  most kHpSkips = 3 times, then no strand is stored. Mask-hole pixels 82744 in that period vs 660-4760 elsewhere.
-- Not small: needs a strand G-buffer shader change (candidate-filtered trace or a per-row mask bit) plus a GPU fixture.
-  Staged plan and predicted rerun numbers in docs/RTX_HAIR_PRIMARY.md 5u. No code change, no test run needed.
+- hs1 125217: not v3 and not the warm-up test. The trips at 2171-2176 start with the session's first joins of three
+  more hair draws (45252, 100101, 7092) after the warm-up ended; existing keys lose their strands. 103633 had the same
+  arrivals inside its warm-up window (0 trips). Same mechanism as the "groom joins mid-play" item.
+- GPU fixture (hair_primary_gpu_test nearest_check, twin groom, card-kept copy 3 cm in front): the strand G-buffer's
+  restart loop (kHpSkips 3, restart 2 cm past the other strand) leaves 2567 of 25478 strand pixels empty and returns a
+  farther strand on 11154 more.
+- Fix `rt_hair_groom_nearest` (off; specialization 1047, header flag 64 live off-switch): one non-opaque query that
+  passes over other rows' candidates and commits accepted ones (shaders/rt/hair_primary_nearest.hlsli). Fixture: 25478
+  of 25478 exact, 0 holes, 0 card-kept hits. Key off: 223 identical + G-buffer equivalent with 1047 frozen; variants 0.
+- hs1 staged job: key on for the whole run (pipeline-creation key). Predicted: 0 frame watchdog trips in the arrival
+  period; GPU cost from the strand G-buffer line (0.133 ms/frame before). Details: docs/RTX_HAIR_PRIMARY.md 5u.

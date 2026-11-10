@@ -496,6 +496,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_coverage", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "M3.2: compiled into the strand pipelines at their creation. Doubles the strand trace on strand candidate pixels. Compare thin strands against the sky or a bright wall in Test Dialogue1 while turning."},
 
+  {"exp_hair_groom_nearest", "Strand hair: nearest-strand trace",
+   "Experimental: each strand pixel finds the nearest strand of its own hair style in one pass, past any number of strands of a hair style still drawn as cards, instead of giving up after three (holes in other characters' hair while a new character's hair is being prepared). Unqualified.",
+   Kind::Choice, Apply::Restart, "restart to enable; switches off live", true,
+   {{"off", "Off", 0, {{"rt_hair_groom_nearest", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_groom_nearest", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5u 2026-11-10: compiled into the strand pipelines at their creation. In S8 with the camera still, the hair of the others keeps its strands when a character appears; the frame watchdog line stays at 0 trips."},
+
   {"exp_hair_macro_normal", "Strand hair: card normal",
    "Experimental: on-screen strands give the game's hair lighting the hair card's own normal (the hair volume's surface) instead of a normal facing the camera. Appearance is unqualified.",
    Kind::Choice, Apply::Restart, "restart to enable; switches live after", true,
@@ -906,6 +913,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_coverage_footprint", "0"},
     {"rt_hair_groom_tips", "0"},
     {"rt_hair_groom_coverage", "0"},
+    {"rt_hair_groom_nearest", "0"},
     {"rt_hair_primary_frame_tag", "0"},
     {"rt_hair_header_cam_gpu", "0"},
     {"rt_hair_watchdog_draw", "0"},
