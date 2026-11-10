@@ -619,6 +619,12 @@ still. The 5h counter then reported ~1000-1500 "no card marker" dropouts per per
   - The user checks it at S8 (two characters with the same hairstyle in view): turn the camera with
     `exp_hair_shared_key` on; the hair stays strands (or both on cards for a frame) instead of flashing all hair to
     cards; the dropouts line no longer lists 7a27/5285/93ea and "watchdog trips" falls near 0.
+  - Live hk1 (2026-11-10, log hk1-s8-shared-key.1.004759): INVALID and the prediction is disproved. The gate of 0
+    watchdog trips failed in the first ON window (turn-shared-r: 8 trips; windows without the key 3 to 10 per 120
+    frames, a trip every 30 to 31 frames = the 28-frame hold plus the feedback latency), so the later windows did not
+    run and `rt_hair_watchdog_one_key` is unmeasured in turns. "shared-key rows withheld" stayed 0: the key only acts
+    when a shared key has fewer rows than draws, and every groom was in every publish (matched = instances x publishes).
+    The dropping key had both its rows present. See 5q.
 - Fixtures: CTest hair_groom_asset_test test_upgrade_safe, test_frame_tags (two G-buffer frames on one publish: ambiguous and reused with
   publish tags, distinct with frame tags; the counter judges the previous frame), test_lod_keep.
 - Live check (Test Dialogue1 and the isometric view, one session, camera and characters moving, both keys on/off/on):
@@ -962,7 +968,63 @@ rebase 0, strand draws 720/720, coverage 94-96%, no refusals. Code read (no defe
   G-buffer pass (5n next step) and/or a conservative-raster candidate region in the strand G-buffer clone;
   reconstruction: a stable RR normal guide on strand pixels (macro normal for the guide only, rr_guides.hlsl).
 
-## 5q. Release policy made the toggle inert in 0.9.5-beta (offline 2026-11-10, branch claude/hair-release-policy: no key)
+## 5q. One-frame holes of a two-row key and the frame-wide miss (offline 2026-11-10, branch claude/hair-frame-miss: diagnostic, no key)
+
+Root cause NOT established. Verified facts, then the one hypothesis left and the measurement that decides it.
+
+- Static camera, hs1 (log hs1-s8-static-hair.1.005103, bursts 99300/99301/99302). predicted.json verdict: pre-RR
+  flicker strands / cards 0.4287 / 0.4198 = 1.02 (not coverage), final 0.0698 / 0.0465 = 1.50 (reconstruction side,
+  borderline). RR guides on strand pixels are not less stable than on cards (normal delta median 0.022 against 0.039).
+- The static scene is not clean: 12 dropouts in frames 2244 to 3322, all of key 6047, 0 to 2 per 60 frames, e.g.
+  2904: 5382 card / 409 strand pixels. Watchdog trips 0 (one key does not trip the frame bound). In the bursts one
+  head loses its hair for exactly one frame: class-5 pixels in x 1024..1279, y 320..639: 232 at frame 2582 against
+  about 2100 in the other 15 frames, 332 at frame 2904 against about 1900; final luminance there 0.44 -> 0.32 and
+  0.44 -> 0.34. The lost pixels show the head or the background (a hole, not cards). No such frame in the cards burst.
+  This is a visible flash every 30 to 60 frames, on top of the 1.5x reconstruction flicker.
+- Frame 2582's hole is not in the dropout list: the counter sums both draws of a key (one draw slot per key,
+  layer/hair_primary.cpp `g_live_slots.find(key)`), so a hole of one of two characters can stay above a tenth.
+  Open contradiction: at 2904 the counter lost 92% of the key's strand pixels while the burst shows one head lost.
+- 6047 is the only key on two groom rows (10 and 11: two characters, one hairstyle). In hk1 the dominant dropout key
+  3b08 is on two rows too (6 and 7).
+- "rejected after the hit" for one key proves nothing about the hit: dropout_reason (common/hair_primary.h) uses the
+  frame-wide traced/hit totals, so a key whose rays all missed while other keys hit is listed as rejected. The static
+  one-key dropouts and the frame-wide "rays missed" of the turns (hk1 3571, 3725, 3884) may be the same class.
+- The two rows exchange their content between frames: strand pixels row 10 / row 11 = 2206 / 3233 (frame 2546),
+  3185 / 2177 (2606), 2167 / 3176 (2726), 3154 / 2131 (3274). Code: a dynamic slot (BLAS, groom points range, previous
+  points, LOD votes) is the n-th draw of its mesh in the capture (`fd.dyn_key = mix(dk, g_dyn_seen[dk]++)`,
+  layer/bvhsplit.cpp bvh_classify), so when the game swaps the order of two same-mesh draws each slot receives the
+  other character's points in place and its BLAS is refit across the jump; `[bvh] static-camera stability` shows the
+  dynamic draw list changing in 8 of 300 static frames.
+- Hypothesis (unproven): a dropout of a two-row key happens in the frame of such an exchange. Proven by code for that
+  frame: the rows' previous points are the other character's (wrong strand motion vectors for both heads). Not
+  proven: why the strands are lost. Rows, points and TLAS of one publish stay consistent across an exchange, so a
+  loss needs a G-buffer that traces a header older than the points and BLASes it reads; "header/BLAS mismatch
+  frames" reads 0, and for a one-row key that error is only a frame of animation (invisible), so the existing
+  counters cannot exclude it. Per-period parity of exchanges against dropouts in hs1 is suggestive, not conclusive:
+  the log has no per-frame exchange record.
+- Static flicker and frame-wide miss: one mechanism or two is NOT decided offline. The reconstruction flicker (1.5x)
+  is a separate component in any case (5p).
+- Diagnostic added (CPU only, always on, no key, no shader, no ABI change):
+  - `[hair groom] slot content jumps (last N frames): J of M consecutive slot builds moved further than their bounds
+    diagonal ...; first (build frame:key prefix)`: hair_primary::groom_bounds_jump on the existing per-slot bounds
+    readback plus that build's camera (world centre). Threshold derived: a head cannot move its own hair's diagonal in
+    one frame (0.3 m per frame is 18 m/s).
+  - The dropouts line appends `[2 rows: a+b]` to a listed key that is on two rows: the judged frame's strand pixels
+    of each row (one character lost, or both).
+- Deciding observable (any S8 static live, 300 frames, no new job needed): the build frames of the jumps of key 6047
+  against its dropout frames. Predicted if the hypothesis holds: every 6047 dropout frame F has a jump at build frame
+  F or F - 1, jumps of 6047 come in pairs (both slots), and J > 0 only for keys on two rows. If J = 0 or the frames
+  do not match, the exchange is ruled out and the per-row pixels say whether one row or both lost (one row:
+  per-instance rejection; both: the key's slot).
+- If confirmed, the fix is identity, not gating: a per-character identity for a hair draw's dyn slot instead of the
+  occurrence index, and one draw slot per draw instead of per key.
+- Installed build: `rt_hair_groom` and `rt_hair_groom_primary` are 0 in bg3rtx.ini here and at cb2d03f2, so stock
+  cards are drawn unless the RTX Hair option is on. hs1/hk1 turn the strand path on (rt_hair_groom, _primary, _order,
+  _current, rt_hair_primary_frame_tag, _hold, rt_hair_groom_lod_keep, rr_hair_guides, rr_hair_strand_aa=2 and the
+  fibre keys).
+- Fixture: hair_groom_asset_test (groom_bounds_jump: idle animation, another character, not consecutive, no bounds).
+
+## 5r. Release policy made the toggle inert in 0.9.5-beta (offline 2026-11-10, branch claude/hair-release-policy: no key)
 - 0.9.5-beta shipped with RTX Hair On doing nothing in release (dev=0): no strands were drawn. The user's session had
   the whole 5l set at 1 in bg3rtx_user.ini, but `[cfg] keys` showed rt_hair_groom, shadow_t, ao_t, cascade_drop, fibre,
   fibre_gi, fibre_spec, fibre_mapped, rr_hair_guides and rt_hair_physical_origin at 0.

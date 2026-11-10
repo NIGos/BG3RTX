@@ -533,6 +533,13 @@ static void test_watchdog() {
     CHECK(shared_key_complete(both, 2, draws, 4) == 0 && both[0] == 7 && both[1] == 7);
     uint64_t keyless[2] = {7, 0};   // the second character's row without a primary key (first update): withheld too
     CHECK(shared_key_complete(keyless, 2, draws, 4) == 1 && keyless[0] == 0);
+    // 5q diagnostic: a slot's points leave their own bounds between consecutive builds (the other character's soup).
+    const float head_a[3] = {1.0f, 1.6f, 2.0f}, head_a_idle[3] = {1.02f, 1.6f, 2.01f}, head_b[3] = {2.2f, 1.6f, 2.0f};
+    CHECK(!groom_bounds_jump(head_a, 100, head_a_idle, 101, 0.4f));   // idle animation
+    CHECK(groom_bounds_jump(head_a, 100, head_b, 101, 0.4f));         // the other character
+    CHECK(!groom_bounds_jump(head_a, 100, head_b, 103, 0.4f));        // not consecutive: no verdict
+    CHECK(!groom_bounds_jump(head_a, 0, head_b, 1, 0.4f));            // no previous measurement
+    CHECK(!groom_bounds_jump(head_a, 100, head_b, 101, 0.0f));        // no bounds
     uint64_t single[1] = {9};
     CHECK(shared_key_complete(single, 1, draws, 4) == 0 && single[0] == 9);
   }
