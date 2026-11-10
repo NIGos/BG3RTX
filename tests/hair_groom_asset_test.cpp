@@ -321,6 +321,45 @@ static void test_swap_latch() {
 // 5u rt_hair_coverage_union: the gate judges U (every accepted strand pixel of the slot) instead of S (only those inside
 // the card markers); the count shader gives U >= S for every slot (the pixels S counts are a subset). Protections: a key
 // that passes today passes with the key on, in every gate mode, with the same switches; a key without strands still fails.
+// 5u audit. rt_hair_coverage_min_pixels: hs1 095322 key 5364 (1..55 card pixels, ratio up to 6.0) no longer cycles; keys
+// at >= 64 card pixels get the same answers. rt_hair_live_warmup: LoadGuard::restart opens the level-load window.
+static void test_coverage_audit() {
+  using namespace hair_primary;
+  for (bool on : {false, true}) {
+    CoverageGate g;
+    g.hold = true;
+    g.min_pixels = on;
+    g.observe(0x5364, 100, 40, 41);              // a tiny draw: ratio 1.03 of 40 pixels
+    CHECK(g.why(0x5364, 101) == (on ? CoverageGate::Why::None : CoverageGate::Why::Ok));
+    g.observe(0x5364, 101, 5, 30, true);         // 6.0 of 5 pixels
+    CHECK(on ? g.latest.find(0x5364) == g.latest.end() : g.latest.at(0x5364).card == 5);
+    g.observe(0x5364, 102, 64, 62);              // at the floor: evidence again
+    CHECK(g.allow(0x5364, 103));
+  }
+  uint32_t seed = 99;
+  auto rnd = [&](uint32_t n) { seed = seed * 1664525u + 1013904223u; return (seed >> 8) % n; };
+  for (int i = 0; i < 5000; ++i) {   // >= 64 card pixels: identical answers with the key on
+    CoverageGate off, on;
+    off.hold = on.hold = rnd(2) != 0;
+    on.min_pixels = true;
+    const uint64_t card = 64 + rnd(9000), strand = rnd(uint32_t(card * 11 / 10) + 1);
+    const bool sw = rnd(2) != 0;
+    if (sw) { off.swapped(3, 100); on.swapped(3, 100); }
+    off.observe(3, 100, card, strand, sw); on.observe(3, 100, card, strand, sw);
+    CHECK(off.why(3, 101) == on.why(3, 101));
+  }
+  LoadGuard lg;
+  CHECK(lg.observe(0xD, 10, 1) && lg.quiet(11));
+  CHECK(lg.settle(10 + 1, true) == false);
+  for (uint64_t f = 12; f < 12 + kWarmupSettledFrames; ++f) lg.settle(f, true);
+  CHECK(!lg.quiet(12 + kWarmupSettledFrames));        // the load window ended on the settled signal
+  lg.restart(500);                                     // the live switch: the same window, same image
+  CHECK(lg.quiet(500) && lg.quiet(799) && !lg.quiet(800) && !lg.observe(0xD, 501, 1));
+  for (uint64_t f = 501; f < 501 + kWarmupSettledFrames - 1; ++f) CHECK(!lg.settle(f, true));
+  lg.settle(530, false);                               // a full build or LOD vote: the run restarts
+  for (uint64_t f = 531; f <= 531 + kWarmupSettledFrames; ++f) lg.settle(f, true);
+  CHECK(!lg.quiet(531 + kWarmupSettledFrames + 1) && lg.early);
+}
 static void test_coverage_union() {
   using namespace hair_primary;
   uint32_t seed = 12345;
@@ -1047,7 +1086,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

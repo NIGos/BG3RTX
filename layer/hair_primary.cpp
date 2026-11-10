@@ -1361,8 +1361,13 @@ void live_tick() {
     g_last_tag = 0;
     for (CountSlot& c : g_cnt) c.valid = false;
     g_live_ever.store(true, std::memory_order_release);
-    log("[hair primary] live: strands ON at frame %llu (switch %u): swaps resume after two fresh groom publishes",
-        (unsigned long long)now, g_live.ons);
+    // rt_hair_live_warmup (5u audit): every groom slot rebuilds now (UVs), votes its LOD and re-joins: the level-load
+    // warm-up window (ended by rt_hair_warmup's settled signal, at most kLoadQuietFrames).
+    const bool warm = cfg_int("rt_hair_live_warmup", 0) != 0;
+    if (warm) g_load.restart(now);
+    log("[hair primary] live: strands ON at frame %llu (switch %u): swaps resume after %s",
+        (unsigned long long)now, g_live.ons,
+        warm ? "the groom state settles (rt_hair_live_warmup, as after a level load)" : "two fresh groom publishes");
   } else if (edge == hair_live::Edge::Off) {
     log("[hair primary] live: strands OFF at frame %llu (switch %u): cards from this frame; card depth restored "
         "through frame %llu", (unsigned long long)now, g_live.offs, (unsigned long long)g_depth_latch_until.load());
@@ -1905,6 +1910,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (!g_coverage.latch) g_coverage.latched.clear();
   g_cfg_union = cfg_int("rt_hair_coverage_union", 0) != 0;               // 5u: judge every accepted strand pixel
   g_coverage.confirm = cfg_int("rt_hair_coverage_confirm", 0) != 0;       // 5u: two bad measurements in a row
+  g_coverage.min_pixels = cfg_int("rt_hair_coverage_min_pixels", 0) != 0; // 5u audit: < 64 card pixels: no evidence
   if (!g_coverage.confirm) g_coverage.bad_run.clear();
   // Round 3 (aa98b960) had joined this statement into the comment above: the publish gate then refused every
   // strand swap (main-view hair stayed cards). Keep it on its own line.

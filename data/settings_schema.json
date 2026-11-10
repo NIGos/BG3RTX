@@ -634,6 +634,32 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_coverage_confirm": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_coverage_confirm": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_coverage_min_pixels", "label": "Strand hair: no coverage check on tiny hair",
+     "description": "Experimental: hair drawn on fewer than 64 pixels is not measured (its count says nothing), so tiny distant hair stays on cards steadily instead of trying strands every half second. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: hair drawn on fewer than 64 pixels is not measured (its count says nothing), so tiny distant hair stays on cards steadily instead of trying strands every half second. Unqualified.",
+     "details": "5u audit 2026-11-10: S8, still camera, very distant characters: with On their hair stays cards without switching; the switches line shows no 'coverage stale' switches.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_coverage_min_pixels": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_coverage_min_pixels": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "exp_hair_live_warmup", "label": "Strand hair: warm-up after turning RTX Hair on",
+     "description": "Experimental: after RTX Hair is turned on while playing, the hair keeps its cards until every hair style is rebuilt and settled, as after a level load, instead of showing strands while they are still being rebuilt. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: after RTX Hair is turned on while playing, the hair keeps its cards until every hair style is rebuilt and settled, as after a level load, instead of showing strands while they are still being rebuilt. Unqualified.",
+     "details": "5u audit 2026-11-10: turn RTX Hair off and on (Ctrl+Shift+F7): with On the hair returns as strands once, without a burst of card flashes a second later.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_live_warmup": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_live_warmup": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_rr_hair_guides", "label": "RR hair guides",
      "description": "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
