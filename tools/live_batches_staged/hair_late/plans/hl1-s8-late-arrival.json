@@ -97,13 +97,16 @@
     "direction": 0,
     "set": "rt_hair_groom_primary=1,rt_hair_groom_nearest=0",
     "frames": 481,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 2.002,
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 2.002
+    ]
   },
   {
     "label": "off-b",
@@ -142,13 +145,16 @@
     "direction": 0,
     "set": "rt_hair_groom_primary=1,rt_hair_groom_nearest=1",
     "frames": 481,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 2.002,
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 2.002
+    ]
   },
   {
     "label": "restore",
