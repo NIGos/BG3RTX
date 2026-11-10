@@ -24,3 +24,9 @@
 - High equals the developer defaults (settings_test), so also bg3rtx.ini `rt_hair_pixel_lod=1` (and data/release.ini
   `rt_hair_pixel_lod=1`, or drop that line), then `python scripts/gen_settings_defaults.py`,
   `bin/settings_test.exe --write-schema`, and update `test_hair_distant_detail`'s preset/default checks.
+
+### Final qualification live, staged (not queued): `tools/live_batches_staged/hair_final` (hf2-s8-hair-final)
+- S8, ultra + fg=3, RTX Hair bundle + rt_hair_stale_publish=1, rt_hair_mv_card=2 (from load), rt_hair_row_stable=1,
+  distant detail 1/4. Warm-up, hl1 zoom (0 watchdog trips per 60-frame line), slow orbit right/left with one K8 RR-motion
+  burst (mv_ratio.py ring ratio), off / 1/4 / 1/8 / off PNG traces 1.5 s after each switch, cost lines in every window.
+  About 93 s after load, under 0.3 GB. live_flow live and frozen: 0 failing (4 readiness queries added to the snapshot).
