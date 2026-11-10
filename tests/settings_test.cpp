@@ -1387,8 +1387,8 @@ static void test_hair_distant_detail() {
 }
 
 // RTX Hair motion stability (hair_motion_stability, user request 2026-11-10): Off / On = rt_hair_mv_card 0 / 2 (5y; mode 1
-// disproved, not exposed). On needs a restart (specialization 1049 at pipeline creation), Off is live; Off in every preset
-// and in data/release.ini, but a selected On survives the release policy.
+// disproved, not exposed). On needs a restart (specialization 1049 at pipeline creation), Off is live; On in High and
+// Ultra, Off in Low and Medium; a release player's selection survives the release policy either way.
 static void test_hair_motion_stability() {
   const Knob* k = find_knob("hair_motion_stability");
   CHECK(k && !k->dev_only && !k->experimental && k->kind == Kind::Choice && knob_visible(*k, false));
@@ -1404,8 +1404,10 @@ static void test_hair_motion_stability() {
   }
   CHECK(transition_apply(*k, 0, 1) == Apply::Restart && transition_apply(*k, 1, 0) == Apply::Live);
   CHECK(key_change_needs_restart("rt_hair_mv_card", "0", "2") && !key_change_needs_restart("rt_hair_mv_card", "2", "0"));
-  for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[knob_index("hair_motion_stability")] == 0);
-  CHECK(knob_value(*k, code_defaults()) == 0);
+  // On in High and Ultra (user decision 2026-11-11: hm1 210705, hf2 000619), Off in Low and Medium.
+  for (int p = 0; p < kPresetCount; ++p)
+    CHECK(preset_values(p)[knob_index("hair_motion_stability")] == (p == kHigh || p == kUltra ? 1 : 0));
+  CHECK(knob_value(*k, code_defaults()) == 1);   // High = the developer defaults
   const Map release = parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini") + read_file(BG3RTX_SOURCE_DIR "/data/release.ini"));
   for (int c = 0; c < 2; ++c) {
     Map user = parse_ini("preset=ultra\n");
@@ -1418,6 +1420,14 @@ static void test_hair_motion_stability() {
   // Mode 1 (disproved) is not a choice: a file with it reads as custom.
   Map m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini("rt_hair_mv_card=1\n"));
   CHECK(knob_value(*k, m) == -1);
+  // A release player: the preset the launcher saves writes On for High and Ultra, Off for
+  // Low and Medium; the release profile alone (no preset in the player's file) follows bg3rtx.ini (High): On.
+  for (int p = 0; p < kPresetCount; ++p) {
+    m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini(std::string("preset=") + kPresetId[p] + "\n"));
+    CHECK(knob_value(*k, m) == (p == kHigh || p == kUltra ? 1 : 0));
+  }
+  m = code_defaults(); apply_layer(m, release);
+  CHECK(knob_value(*k, m) == 1);
 }
 
 // 0.9.5-beta shipped with the release control RTX Hair inert: the reset of the developer-only exp_hair_* knobs undid

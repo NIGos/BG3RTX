@@ -1651,7 +1651,12 @@ User: strand hair at isometric distance trails / blurs when characters or the ca
 - User check (once qualified): S8 or the camp with the party walking; the hair should move with the heads instead of
   leaving a smear behind them. Not in the launcher yet.
 - User control (2026-11-10): launcher Lighting, "RTX Hair motion stability" (`hair_motion_stability`): Off / On =
-  rt_hair_mv_card 0 / 2, Off in presets and release until qualified; On needs a game restart (1049 at pipeline creation).
+  rt_hair_mv_card 0 / 2; On needs a game restart (1049 at pipeline creation), Off is live.
+- Qualified, ON in High and Ultra (user decision 2026-11-11; Low and Medium Off; bg3rtx.ini default 2, no longer in
+  data/release.ini). Gates: hm1 210705 (static, mode 2) camera-only share 11% (off 98%), hair/ring MV ratio 0.77 (cards
+  0.55); hf2 000619 (Ultra, all new keys, orbit burst) camera-only share 3.2%, hair/neighbour ratio 1.00. Cost: strand
+  G-buffer 0.22-0.31 ms, no regression. User check: Ultra, a save at isometric distance (S8), characters walking or the
+  camera turning: hair no longer smears or trails behind moving heads; compare Off/On (On needs a restart).
 ## 5z. Holes under a fast camera step: where a camera mismatch could hide (offline 2026-11-10, branch claude/hair-cam-step: diagnostic, no key)
 
 Live hl1 200821 (VALID) confirmed 5x's prediction: 6 frame watchdog trips at G-buffer frames 2064, 2065, 2067-2070, each
