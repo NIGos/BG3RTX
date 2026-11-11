@@ -1,5 +1,6 @@
 """Independently parse the C++ bridge's JSON with the standard library."""
 import json
+import re
 import subprocess
 import sys
 
@@ -12,7 +13,8 @@ assert isinstance(state["report"]["files"], list)
 assert isinstance(state["frameGeneration"], str)
 print(f"Parsed {len(state['settings'])} settings; JSON control characters retained.")
 
-assert state["version"] == "0.9.5.0"
+# No package beside the test binary: the base version of tools/launcher/version.h, marked as a developer build.
+assert re.fullmatch(r"\d+\.\d+\.\d+\.\d+ \(developer build\)", state["version"]), state["version"]
 assert state["modStatus"] == "Not checked"
 for setting in state["settings"]:
     assert "Unknown" not in setting["cost"]

@@ -27,6 +27,17 @@ param([switch]$ListOnly, [switch]$DryRun, [switch]$NoBuild, [switch]$Diagnostics
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
 
+# A numbered package must match the launcher's version resource (tools\launcher\version.h): the 0.9.6 test packages
+# shipped a BG3RTX.exe that still said 0.9.5.0. The window itself shows VERSION.txt, written below.
+if ($Version -match '^(\d+\.\d+\.\d+)') {
+  $packageBase = $matches[1]
+  $headerBase = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'tools\launcher\version.h') -Raw),
+    '#define BG3RTX_PRODUCT_VERSION "(\d+\.\d+\.\d+)\.\d+"').Groups[1].Value
+  if ($packageBase -ne $headerBase) {
+    throw "package version $Version does not match tools\launcher\version.h ($headerBase): update BG3RTX_PRODUCT_VERSION and BG3RTX_PRODUCT_VERSION_NUM, rebuild, then package"
+  }
+}
+
 # Validate before builds or package writes. THIRD_PARTY.md owns the required file list.
 $noticeDoc = Join-Path $root "docs\release\THIRD_PARTY.md"
 $noticeDir = Join-Path $root "docs\release\licences"

@@ -41,6 +41,8 @@ std::wstring exe_dir();    // bin/ (where the layer and its manifest are)
 std::wstring root_dir();   // parent of bin/: bg3rtx.ini, bg3rtx_user.ini
 std::wstring user_ini_path();
 std::wstring base_ini_path();
+// display_version (version.h) of <root>\VERSION.txt, read once.
+const std::string& product_version();
 
 // "<...>\Baldurs Gate 3" (the folder with bin\bg3.exe), or "".
 std::wstring detect_game_dir();

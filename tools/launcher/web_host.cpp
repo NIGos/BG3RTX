@@ -173,7 +173,7 @@ void paint_caption(const Host& h,HDC target){
   if(h.caption_icon)DrawIconEx(dc,x,(bar.bottom-icon)/2,h.caption_icon,icon,icon,0,nullptr,DI_NORMAL);
   x+=icon+px(h,10);
   SetBkMode(dc,TRANSPARENT);HGDIOBJ old_font=SelectObject(dc,h.caption_font);
-  const std::wstring name=L"BG3RTX",version=widen(BG3RTX_PRODUCT_VERSION);
+  const std::wstring name=L"BG3RTX",version=widen(product_version());
   RECT text{x,0,caption_button_rect(h,HTMINBUTTON).left-px(h,8),bar.bottom};
   SetTextColor(dc,h.active?kCaptionText:kCaptionMuted);DrawTextW(dc,name.c_str(),int(name.size()),&text,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX|DT_END_ELLIPSIS);
   SIZE extent{};GetTextExtentPoint32W(dc,name.c_str(),int(name.size()),&extent);text.left+=extent.cx+px(h,8);
@@ -280,7 +280,7 @@ void review_bridge(Host& h,const std::wstring& view){
   a.driver_version="621.01";a.dedicated_bytes=uint64_t(32)<<30;probe.adapters.push_back(a);
   if(view==L"probe"){probe.adapters.push_back(a);probe.adapters.back().gpu.name="Integrated graphics adapter";h.bridge->set_compatibility(probe,-1);}
   else h.bridge->set_compatibility(probe);
-  h.bridge->set_mod_status("Mod files present");h.bridge->set_game_path(view==L"missing"?"":"C:\\Games\\Baldurs Gate 3");
+  h.bridge->set_version(product_version());h.bridge->set_mod_status("Mod files present");h.bridge->set_game_path(view==L"missing"?"":"C:\\Games\\Baldurs Gate 3");
   if(view==L"experimental")h.bridge->handle("{\"type\":\"experimental\",\"value\":true}");
   if(view==L"preset")h.bridge->handle("{\"type\":\"preset\",\"value\":2}");
   if(view==L"report")h.bridge->handle("{\"type\":\"report\"}");
@@ -364,7 +364,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
           h.prep->tick(game_running());return true;
         }
         if(!h.prep->act(action,value))return false;h.prep->tick(game_running());return true;};
-      h.bridge=std::make_unique<Bridge>(h.state,std::move(hooks));
+      h.bridge=std::make_unique<Bridge>(h.state,std::move(hooks));h.bridge->set_version(product_version());
       h.bridge->set_game_path(narrow(h.game));
       h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,effective(h.state)):0);
       h.bridge->set_status(valid_game_dir(h.game)?"Settings loaded.":"Choose the game folder containing bin\\bg3.exe. Settings remain available.");

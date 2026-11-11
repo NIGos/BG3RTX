@@ -190,6 +190,19 @@ int main(int argc,char** argv){
     check(lowered.values[st::knob_index("rt_geometry")]==0&&lowered.values[st::knob_index("gi")]<=1&&lowered.blocked.empty());
     check(st::enforce_needs(lowered.values).empty());   // nothing left that needs what was turned off
   }
+  // Displayed version: line 1 of the package's VERSION.txt (scripts/package.ps1), BOM or not; anything else is a
+  // developer build of the base version. The bridge shows what the host read.
+  {
+    using launcher::display_version;
+    check(display_version("BG3RTX 0.9.6-hairtest8\r\ncommit cb8b2360\r\nlayer lean\r\n")=="0.9.6-hairtest8");
+    check(display_version("\xEF\xBB\xBF" "BG3RTX 1.0.0\n")=="1.0.0"&&display_version("BG3RTX beta-20261111-86ca572b-dirty")=="beta-20261111-86ca572b-dirty");
+    const std::string dev=BG3RTX_PRODUCT_VERSION " (developer build)";
+    check(display_version("")==dev&&display_version("BG3RTX ")==dev&&display_version("fixture-version\n")==dev&&display_version("BG3RTX <script>\n")==dev);
+    launcher::State vs;vs.base={{"dev","0"}};vs.values=st::preset_values(st::kHigh);launcher::web::Bridge vb(vs);
+    check(vb.state_json().find("\"version\":\""+dev+"\"")!=std::string::npos);
+    vb.set_version(display_version("BG3RTX 0.9.6-hairtest8\n"));
+    check(vb.state_json().find("\"version\":\"0.9.6-hairtest8\"")!=std::string::npos);
+  }
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
   {
     launcher::State broken;broken.base={{"dev","0"},{"hotkey_rt_toggle","broken"},{"hotkey_dlss5","also broken"}};

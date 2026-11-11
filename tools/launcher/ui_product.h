@@ -75,7 +75,7 @@ static void footer() {
   auto preset=st::preset_values_for(g.st.preset,g.st.caps);int custom=0;
   for(int i=0;i<st::kKnobCount;++i)if(st::knob_visible(st::kKnobs[i],g.dev,opt_in())&&std::string(st::kKnobs[i].category)!="Support")custom+=g.st.values[i]!=preset[i];
   std::wstring note=!g.st.have_gpu?L"Compatibility not checked\nRecheck graphics in Help & support":custom?L"Custom: "+std::to_wstring(custom)+(custom==1?L" setting":L" settings"):L"Matches preset";
-  std::wstring header=L"BG3RTX "+widen(BG3RTX_PRODUCT_VERSION)+L" | "+(custom?L"Custom":widen(st::kPresetLabel[g.st.preset]))+L" | "+(g.st.have_gpu?widen(g.st.gpu.name):L"GPU not detected")+L" | "+(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?L"Mod files present":L"Mod files missing");
+  std::wstring header=L"BG3RTX "+widen(launcher::product_version())+L" | "+(custom?L"Custom":widen(st::kPresetLabel[g.st.preset]))+L" | "+(g.st.have_gpu?widen(g.st.gpu.name):L"GPU not detected")+L" | "+(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?L"Mod files present":L"Mod files missing");
   SetWindowTextW(control(g.wnd,HEADER),header.c_str());
   SetWindowTextW(control(g.wnd,NOTE),note.c_str());
   for(int p=0;p<st::kPresetCount;++p)SendMessageW(control(g.wnd,PRESET_LOW+p),BM_SETCHECK,!custom&&p==g.st.preset?BST_CHECKED:BST_UNCHECKED,0);

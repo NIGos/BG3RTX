@@ -292,7 +292,7 @@ std::string Bridge::state_json() const {
   out+="],\"gamePath\":"+q(game_path_)+",\"compatibility\":{\"gpu\":"+q(gpu)+",\"vram\":"+q(vram)+",\"memory\":"+q(compatibility_.memory_text)+",\"driver\":"+q(driver)+",\"warnings\":"+strings(warnings)+",\"details\":"+strings({compatibility_.hardware_text,compatibility_.driver_text,compatibility_.memory_text,compatibility_.adapter_text})+",\"selected\":"+std::to_string(selected_)+",\"adapters\":[";
   for(size_t i=0;i<inspection_.adapters.size();++i){if(i)out+=",";out+="{\"value\":"+std::to_string(i)+",\"label\":"+q(inspection_.adapters[i].gpu.name)+"}";}out+="]}";
   out+=",\"presetDescriptions\":[";for(int p=0;p<st::kPresetCount;++p){if(p)out+=",";out+=q(st::kPresetDesc[p]);}out+="]";
-  out+=",\"version\":"+q(BG3RTX_PRODUCT_VERSION)+",\"modStatus\":"+q(mod_status_);
+  out+=",\"version\":"+q(version_)+",\"modStatus\":"+q(mod_status_);
   out+=",\"shortcuts\":{";for(size_t i=0;i<kShortcutCount;++i){if(i)out+=",";out+=q(bg3::hotkeys::ids[i])+":"+q(state_.shortcuts[i]);}out+="}";
   // Defaults for the Hotkeys page's "Reset" line (the bridge resets; the page only shows them).
   out+=",\"shortcutDefaults\":{";for(size_t i=0;i<kShortcutCount;++i){if(i)out+=",";out+=q(bg3::hotkeys::ids[i])+":"+q(bg3::hotkeys::defaults[i]);}out+="}";
