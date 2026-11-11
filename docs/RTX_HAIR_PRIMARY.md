@@ -1844,6 +1844,103 @@ the camera was the dominant error, not the only one.
   or TLAS/rows/key map written on the GPU by the build as the camera is); "the applied publish's build" -> the loss is
   inside the build (refit or LOD), test full rebuilds while moving.
 
+## 6e. Build stamp result: header, TLAS, points and BLASes agree; what is left (offline 2026-11-11, branch claude/hair-holes-root: no code, open)
+
+Live hl1 003637 (build stamp, `rt_hair_header_cam_gpu=1`): 5 trips at G-buffer 2448-2452 (1932, 2193, 2491, 2731 of
+3257-3837 card px; 364 of 5366 at the long frame), every one "of the applied publish's build", every period line 40-60
+same, 0 newer, 0 older, 0 not read.
+- 6d's candidate (header one publish older than the BLASes) is DISPROVED. The submit pick is right.
+- BLAS refit: ruled out by runs already on disk, without a rebuild test. A refit computes its boxes from the points of
+  its own build, so an error from it does not depend on the camera speed and would stay once the camera is still. After
+  the 8 m dolly every draw is back at 0.96-1.09 of its card pixels with "full builds 0, refits 793" (003637 period at
+  frame 2558; the same in 000345 and 210357). The loss exists only while the camera moves and grows with the step.
+- A forced full rebuild is not staged: every groom BLAS is compacted after its first build (bvhsplit.cpp groom work,
+  `g.compact = 2`, the storage replaced by the compacted size), and a full build needs the uncompacted size. A rebuild
+  key would have to reallocate about 300 MB of BLAS storage per moving frame; not a safe live test.
+  Related risk, not verified: the existing path `w.refit = g.built && rec_submitted(g.rec) && dyn_refit_ok` falls back to
+  a full build "after an unsubmitted one" without checking that the storage is still the uncompacted size.
+- LOD vote: unlikely. At 2448 no upload had happened ("LOD switches waiting for upload 13 (kept)" over the period,
+  rt_hair_groom_lod_keep holds the built LOD), and the loss is frame-wide.
+- Per groom at the first trip frame (2448): 58da 64/0, 6a5d 74/0, 5c44 224/22: the three are LOD 2 grooms with 59-185
+  card pixels when still (the far heads); the large LOD 1 grooms keep most of their pixels. In 000345 the same (e297
+  87/0, b166 132/0). Two samples (2449, 2452): origin 0, card at 10.9 and 9.0 m, both rays missed.
+- So what is left is an error that grows with the camera step, is larger for far heads, exists with a consistent header
+  and build, and is gone when still. Not found by reading. Open candidates, each needs the sampler below:
+  1. the capture's camera block (prepass, used by xfb_to_world) and the G-buffer's block agree in position (origin 0)
+     but not in the view-projection: the strand points and the cards then differ by an amount that grows with distance;
+  2. the pixel entries of a G-buffer frame are reused by a second G-buffer recording with the same frame label (the
+     label is frame_index + 1 and `g_applied_frame == frame` skips the second one; the label phase moves with the
+     present: count lines show the judged tag at tag - 1 or tag - 2);
+  3. the game's own hair mesh LOD switch at the zoom start (new index counts arrive in the trip frames): the cards of
+     the frame are another mesh than the one the groom was embedded on for a frame.
+- Not done: the dense sampler (card-marked pixels only, several per frame, hit or miss, card distance, hit distance and
+  the reject reason). It needs the strand G-buffer shader and the count shader (specialization constants, the reason in
+  the marker's second word, a per-window histogram in the count) and one identity run. It is the next step and the only
+  instrument that separates the three: 1 gives hits a few cm off the card growing with distance, 2 gives entries not
+  traced in their frame, 3 gives misses on the grooms whose index count changed.
+- hl1 is unchanged since 6d (its stamp gate stays); no new job.
+
+## 6f. The three candidates read offline; the dense sampler (offline 2026-11-11, branch claude/hair-holes-root: diagnostic key rt_hair_dense_sample, off; READY_FOR_LIVE)
+
+Offline, from the code and the 8 hl1 logs (no new live). None of 6e's three candidates is shown to be the cause; no fix.
+- 1 (view-projection): the G-buffer side cannot disagree with itself. The card point, the ray direction, the hit depth
+  and the card band all use the draw's own camera block (`gCam.vp`, hair_primary_gbuffer.hlsl main). The groom points
+  are the exact inverse of the prepass block's VP as its vertex shader applied it (xfb_to_world.hlsl reads the same UBO
+  in the same command buffer), so a jitter or projection difference between the prepass and the G-buffer block moves no
+  point; the header camera is that block's position (GPU copy, origin 0 measured). Left open only: the prepass block
+  rewritten between its draws and the conversion, or a block whose VP is not view x projection. Both are in the sampler.
+- 2 (entry reuse by a second G-buffer of one label): ruled out for 003637's trips. With rt_hair_primary_frame_tag=1 the
+  seal is the G-buffer label; labels 2448-2452 each found the build stamp of their own number (5 of 5) and the builds
+  are logged once per label 2447-2462, so no two G-buffers shared a label there. 000345 has a build label gap
+  (2178 -> 2180) at its long frame: open for that one frame only.
+- 3 (the game's hair LOD switch): in all 8 logs a new hair draw is first seen at the first trip frame or the frame
+  before, and again 7 frames later (003637: 2447, 2454, 2456; trips 2448-2452). The arrivals are unmatched draws (not
+  swapped); in the trip frames the rows stay 12, 0 rows hold another key, 0 full BLAS builds; the loss lasts 5-7 frames
+  and follows the step (000345 trips again at 2178 and 2179 after its long frame, with no arrival). The zoom starts
+  both; the arrivals do not explain the per-step loss.
+- Also checked: no "no point update this frame" line in 003637 (every groom was updated from this frame's soup).
+
+Dense sampler (`rt_hair_dense_sample`, developer key, pinned 0 in data/release.ini; specialization constant 1052 of the
+per-slot strand G-buffer variants, `kSpecIdHairDenseSample`, added to the specialization only when the key is on at
+pipeline creation):
+- A quarter of the card-marked fragments (pixel and tag hash) store one 96-byte sample, 4 per draw slot (64 a frame, so
+  the small far grooms have their own; last writer wins, a checksum drops a torn one), behind the pixel record
+  (device-local). The next build's count copies the 6 KB behind the counts readback (one copy, two barriers; nothing
+  recorded with the key off). No atomics, no host-visible store.
+- Per sample: pixel, tag, slot, reason (accepted, no strand on the ray, strand of another draw, segment or pool bound,
+  outside the card band, no point UVs, tips), reused entry or private trace, ray origin and direction,
+  card distance, hit distance, the band, the stored strand point's distance from the ray, the sine between the ray and
+  the pixel's direction from the block's own view and projection, the G-buffer camera, hit row and its slot, the draw's
+  own row and that row's first point (the anchor).
+- Layer (`dense_frame`, common/hair_primary.h `dense_parse`, `DenseStats`): the camera step comes from the G-buffer
+  cameras of consecutive tags as the GPU read them (no CPU label); the anchor is put in the world (double) and compared
+  with the same key's anchor of the frame before; LOD and "key first drawn N frames before" per sample. Lines:
+  `[hair primary] dense sample: G-buffer frame ...` for moving (step over 0.02 m) and watchdog frames, 600 a session;
+  `[hair primary] dense samples (last N frames, rt_hair_dense_sample 1): ... still: ... | moving ...`.
+  The pipeline line ends "dense samples (specialization 1052) 0/1". CTest hair_groom_asset_test test_dense_sample.
+- Signatures on the moving side (the still side is the baseline: accepted, origin 0, sine at float noise, fresh points
+  within 10 mm of their ray, anchors moving by millimetres):
+  - points displaced in the world (1 as left open, or any stale point data): the anchor moves centimetres or more per
+    frame (near the step: a whole stale frame; a fraction growing with the card distance: a rotation); rejects are
+    "outside the card band" with |hit - card| near that drift, or "no strand on the ray" for the far grooms;
+  - a camera block whose matrices disagree (1, matrix form): sine over 0.1 mrad while moving;
+  - entry reuse (2): reused entries whose strand point is centimetres to decimetres off its ray, anchors still;
+  - the game's LOD or a new key (3): rejects only on keys first drawn under about 10 frames before, or cards metres
+    from their anchor; the other keys accepted;
+  - slot or key map of another publish: "strand of another draw" for whole draws, anchors still;
+  - trace or acceleration structure: "no strand on the ray" with the anchor still, origin 0, sine 0 and the card as
+    near its anchor as when still: points and ray are right, the query is not.
+- Shader identity against origin/main (tools/shader_identity.py --baseline): 225 of 227 requests byte-identical; the
+  two others are rt/hair_primary_gbuffer.hlsl (the constant and its branches are in the module; constant 0 runs none of
+  it, but the module is not byte-identical). shaders/variants.txt delta 0. build.ps1 -Test: 224 of 224 passed.
+- Cost: with the key on, one 4x4 inverse and a 96-byte store per sampled fragment; read the strand G-buffer GPU line of
+  the live against 003637's 0.206 ms. Key off: the pixel record is 6 KB larger, nothing else.
+- hl1 regenerated (predicted.json offline_6f and dense_sampler_6f first): `rt_hair_dense_sample=1`; expect the pipeline
+  line with 1052 on; expect_every: the period line with sampled frames in lower and watch, sample lines in lower. Trips
+  reported, not gated (5-7 expected again). Lint 0 failing (live and frozen).
+- Next live shows which signature the moving samples carry; the fix follows from it (displaced points: where the stale
+  data comes from; trace: the groom BLAS/TLAS update; reuse: the seal).
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU

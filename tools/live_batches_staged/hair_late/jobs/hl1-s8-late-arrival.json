@@ -12,7 +12,7 @@
   "window_mode": "visible_unfocused_fg",
   "fail_fast": false,
   "stop_on_dump": false,
-  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_row_stable=1,rt_hair_header_cam_gpu=1,rt_hair_stale_publish=0,rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0",
+  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_row_stable=1,rt_hair_header_cam_gpu=1,rt_hair_stale_publish=0,rt_hair_dense_sample=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0",
   "args": [
     "-RealPresent",
     "-Move",
@@ -39,6 +39,7 @@
     "\\[cfg\\] settings read",
     "\\[hair primary\\] G-buffer hair pipeline: .*nearest-strand trace compiled in \\(specialization 1047\\) 1",
     "\\[hair primary\\] nearest-strand trace: header flag 1 .*specialization 1047 in the strand G-buffer pipelines 1",
+    "\\[hair primary\\] G-buffer hair pipeline: .*dense samples \\(specialization 1052\\) 1",
     "\\[pan\\] burst 99310 complete: \\d+ frames, \\d+ samples, transport ok",
     "\\[pan\\] burst 99311 complete: \\d+ frames, \\d+ samples, transport ok"
   ],
@@ -118,6 +119,27 @@
       "min": 1
     },
     {
+      "name": "the dense sample period line in lower and watch, with sampled frames",
+      "select": "\\[hair primary\\] dense samples \\(last",
+      "match": "rt_hair_dense_sample 1\\): [1-9][0-9]* sampled frames, .* still: \\d+ samples: .* \\| moving .*: \\d+ samples: ",
+      "windows": [
+        "lower",
+        "watch"
+      ],
+      "period_frames": 60,
+      "min": 1
+    },
+    {
+      "name": "dense sample lines of the zoom's moving frames in lower",
+      "select": "\\[hair primary\\] dense sample: G-buffer frame",
+      "match": "origin -?[0-9.]+ m, ray against view x projection [0-9.]+ mrad, card [0-9.]+ m, hit -?[0-9.]+ m, .*anchor moved -?[0-9.]+ m in the world .* camera step [0-9.]+ m",
+      "windows": [
+        "lower"
+      ],
+      "event": true,
+      "min": 1
+    },
+    {
       "name": "the groom TLAS check period line in both windows",
       "select": "\\[hair primary\\] groom TLAS check \\(last",
       "match": "G-buffer submits checked",
@@ -178,10 +200,11 @@
           0,
           0
         ],
-        "fps": 8.826125330967004,
-        "windows": 179,
+        "fps": 8.998200359927239,
+        "windows": 188,
         "logs": [
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hf2-s8-hair-final.1.000619.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.003637.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.164930.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hl1-s8-late-arrival.1.200821.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hm1-s8-hair-mv.1.210705.log",
@@ -206,6 +229,6 @@
       "maximum": 0.4969999999993888
     }
   },
-  "estimated_phase_seconds": 74.8,
-  "purpose": "6c: rt_hair_header_cam_gpu on (header camera from the GPU, the origin of the groom points), 0 frame watchdog trips in the zoom (lower) and after it (watch), rebase origin 0 in every sampled frame. Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the groom TLAS check and the first-seen frame lines: which candidate breaks the existing keys' strands. Then, same launch, rt_hair_pixel_lod off/on/off at the static zoomed-out camera: period line, strand G-buffer GPU ms, PNG bursts of the heads. STAGED, not authorized."
+  "estimated_phase_seconds": 74.3,
+  "purpose": "6f: the dense sampler (rt_hair_dense_sample=1) says per card-marked pixel of the zoom why it kept no strand (predicted.json dense_sampler_6f: one signature per candidate); trips reported, not gated. 6c: rt_hair_header_cam_gpu on (header camera from the GPU, the origin of the groom points), 0 frame watchdog trips in the zoom (lower) and after it (watch), rebase origin 0 in every sampled frame. Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the groom TLAS check and the first-seen frame lines: which candidate breaks the existing keys' strands. Then, same launch, rt_hair_pixel_lod off/on/off at the static zoomed-out camera: period line, strand G-buffer GPU ms, PNG bursts of the heads. STAGED, not authorized."
 }

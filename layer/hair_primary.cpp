@@ -106,7 +106,7 @@ uint64_t g_logged_pipes = 0;
 // later. With them the keys and whether each one's G-buffer variant ran in the counted frame.
 constexpr uint32_t kCountSlots = 4;
 static_assert(kCountSlots == hair_primary::kHoldCountSlots, "the hold age counts one full readback ring");
-struct CountSlot { uint64_t frame = 0, gframe = 0, rec = 0; bool valid = false, uni = false; uint32_t tag = 0;
+struct CountSlot { uint64_t frame = 0, gframe = 0, rec = 0; bool valid = false, uni = false, dense = false; uint32_t tag = 0;
                    uint64_t keys[hair_primary::kMaxGrooms] = {};
                    uint8_t lods[hair_primary::kMaxGrooms] = {};
                    bool drew[hair_primary::kMaxGrooms] = {}; VkBuffer rb = VK_NULL_HANDLE; VkDeviceMemory rb_mem = VK_NULL_HANDLE;
@@ -307,7 +307,7 @@ bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* w
 bool make_readback(CountSlot& s) {
   DeviceData* dd = g_dd;
   VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-  bci.size = hair_primary::kCountBytesAll;
+  bci.size = hair_primary::kCountBytesAll + hair_primary::kDenseBytesAll;   // 6f: the dense samples behind the counts
   bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   if (dd->vk.CreateBuffer(dd->device, &bci, nullptr, &s.rb) != VK_SUCCESS) return false;
   VkMemoryRequirements req;
@@ -371,6 +371,93 @@ bool count_pipeline(int v) {
   g_cnt_pipe = pipe;
   g_cnt_gen = blob.generation;
   return true;
+}
+
+// 6f rt_hair_dense_sample: the judged frame's samples (common/hair_primary.h DenseSample), copied from the tail of the
+// pixel record behind the counts. Per period DenseStats; per sample a line for moving and watchdog frames.
+bool g_cfg_dense = false;
+hair_primary::DenseStats g_dense;
+struct DenseAnchor { uint32_t tag = 0, prev_tag = 0; double pos[3] = {}, prev[3] = {}; };
+std::unordered_map<uint64_t, DenseAnchor> g_dense_anchor;   // by draw key: its groom's anchor in the world, last sample
+std::unordered_map<uint64_t, uint64_t> g_dense_first;       // by draw key: the first judged G-buffer frame that drew it
+float g_dense_cam[3] = {};                                  // the G-buffer camera of the last sampled frame, and its tag
+uint32_t g_dense_cam_tag = 0, g_dense_lines = 0;
+constexpr uint32_t kDenseLines = 600, kDensePairTags = 4;   // per session; a pair of samples at most this many tags apart
+void dense_frame(const CountSlot& s, const GbFrame& gf, bool tripped) {
+  using namespace hair_primary;
+  const uint32_t* w = s.map + kCountBytesAll / 4;
+  DenseSample smp[kDenseSamples];
+  const DenseSample* first = nullptr;
+  for (uint32_t i = 0; i < kDenseSamples; ++i) {
+    smp[i] = dense_parse(w + i * kDenseWords, gf.tag);
+    if (smp[i].valid) { if (!first) first = smp + i; }
+    else if (w[i * kDenseWords + 1] == gf.tag) ++g_dense.torn;
+  }
+  for (uint32_t k = 0; k < kDrawSlots; ++k) if (gf.draw_keys[k]) g_dense_first.emplace(gf.draw_keys[k], gf.frame);
+  if (!first) return;
+  ++g_dense.frames;
+  // The camera step per frame from the cameras the GPU read (not the CPU's labels): unknown after a gap.
+  float step = -1.0f;
+  const uint32_t dt = gf.tag - g_dense_cam_tag;
+  if (g_dense_cam_tag && dt >= 1 && dt <= kDensePairTags) {
+    float d2 = 0;
+    for (int i = 0; i < 3; ++i) d2 += (first->cam[i] - g_dense_cam[i]) * (first->cam[i] - g_dense_cam[i]);
+    step = std::sqrt(d2) / float(dt);
+  }
+  std::memcpy(g_dense_cam, first->cam, sizeof g_dense_cam);
+  g_dense_cam_tag = gf.tag;
+  const bool moving = step > kDenseMovingStep;
+  for (uint32_t i = 0; i < kDenseSamples; ++i) {
+    const DenseSample& d = smp[i];
+    if (!d.valid) continue;
+    const uint64_t key = gf.draw_keys[d.slot];
+    float drift = -1.0f;
+    uint32_t drift_tag = 0;
+    if (key && d.owner_row != 0xFF) {
+      double a[3];
+      d.anchor_world(a);
+      // The first sample of a key in this frame moves the key's anchor on; every sample compares with the frame before.
+      DenseAnchor& last = g_dense_anchor[key];
+      if (last.tag != gf.tag) {
+        last.prev_tag = last.tag; std::memcpy(last.prev, last.pos, sizeof last.prev);
+        last.tag = gf.tag; std::memcpy(last.pos, a, sizeof a);
+      }
+      if (last.prev_tag && gf.tag - last.prev_tag <= kDensePairTags) {
+        double d2 = 0;
+        for (int j = 0; j < 3; ++j) d2 += (a[j] - last.prev[j]) * (a[j] - last.prev[j]);
+        drift = float(std::sqrt(d2));
+        drift_tag = last.prev_tag;
+      }
+    }
+    if (step >= 0) g_dense.add(d, moving, drift);
+    if ((moving || tripped) && g_dense_lines < kDenseLines) {
+      ++g_dense_lines;
+      const auto fs = g_dense_first.find(key);
+      log_stats("[hair primary] dense sample: G-buffer frame %llu%s px (%u %u) slot %u key %04llx LOD %d, key first drawn %lld "
+          "frames before: %s%s%s; origin %.4f m, ray against view x projection %.3f mrad, card %.3f m, hit %.3f m, band %.3f m, "
+          "strand point %.1f mm off its ray (-1: none); hit row %d (slot %d), own row %d of %u; anchor moved %.4f m in the "
+          "world since tag %u (-1: no pair), card %.3f m from its anchor; camera step %.3f m",
+          (unsigned long long)gf.frame, tripped ? " (watchdog)" : "", d.x, d.y, d.slot, (unsigned long long)(key >> 48),
+          d.owner_row < kMaxGrooms ? int(s.lods[d.owner_row]) : -1,
+          fs == g_dense_first.end() ? -1ll : (long long)gf.frame - (long long)fs->second, dense_reason_name(d.reason),
+          d.reused ? ", reused entry" : "", d.priv ? ", private trace" : "", d.origin_m(), double(d.sin_angle) * 1e3, d.t_card,
+          d.t_hit, d.band, d.off_ray >= 0 ? double(d.off_ray) * 1e3 : -1.0, d.hit() ? int(d.hit_row) : -1,
+          d.hit_slot == 0xFF ? -1 : int(d.hit_slot), d.owner_row == 0xFF ? -1 : int(d.owner_row), d.rows, drift, drift_tag,
+          d.card_to_anchor(), step);
+    }
+  }
+}
+void dense_side(const hair_primary::DenseStats::Side& d, char* out, size_t size) {
+  using hair_primary::DenseReason;
+  auto r = [&](DenseReason x) { return (unsigned long long)d.reason[size_t(x)]; };
+  std::snprintf(out, size, "%llu samples: accepted %llu, no strand on the ray %llu, strand of another draw %llu, segment or "
+      "pool bound %llu, outside the card band %llu, no point UVs %llu, tips %llu; reused entries %llu; "
+      "largest: origin %.4f m, ray against view x projection %.3f mrad, strand point off its ray %.1f mm fresh / %.1f mm "
+      "reused, anchor moved %.4f m in the world (%llu pairs), card %.3f m from its anchor",
+      (unsigned long long)d.n, r(DenseReason::Accepted), r(DenseReason::Miss), r(DenseReason::Owner), r(DenseReason::Segment),
+      r(DenseReason::CardBand), r(DenseReason::NoUv), r(DenseReason::Tips),
+      (unsigned long long)d.reused, d.max_origin, double(d.max_sin) * 1e3, double(d.max_off_fresh) * 1e3,
+      double(d.max_off_reused) * 1e3, d.max_drift, (unsigned long long)d.drifts, d.max_card_anchor);
 }
 
 // g_mu held, outside a render pass, before this publish's header update and SwapGate::publish. Reads the oldest
@@ -459,6 +546,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
       g_seen.evidence_frame = gf->frame;
       // 5h dropouts and the frame watchdog (item 19): the swapped draws of the judged frame against their card pixels
       // (same pass, same tag). The trace counts are of that frame's window too: always attributed (item 4).
+      bool wd_tripped = false;
       g_watchdog.begin();
       g_draw_watchdog.begin();
       for (uint32_t k = 0; k < hair_primary::kDrawSlots; ++k) {
@@ -492,6 +580,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
               (unsigned long long)hair_primary::kWatchdogFrames);
       }
       if (g_watchdog.judge(gf->frame)) {
+        wd_tripped = true;
         ++g_watchdog_period;
         g_switches.watchdog_trip(gf->frame, g_watchdog.accepted, g_watchdog.card, g_watchdog.bound(), g_watchdog.good,
                                  g_watchdog.bad);
@@ -511,6 +600,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
               g_seen.rebase.origin_m, g_seen.rebase.along_m, g_seen.rebase.card_m, g_seen.rebase.hit_m,
               hair_primary::stamp_name(g_seen.stamp), (long long)g_seen.stamp_tag, (unsigned long long)(gf->pub_frame + 1));
       }
+      if (s.dense) dense_frame(s, *gf, wd_tripped);   // 6f
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
     // (submission order). No strike from it; logged so a live run shows how often (rate-limited).
@@ -568,6 +658,22 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
                             nullptr);
   const VkBufferCopy c{0, 0, hair_primary::kCountBytesAll};
   dd->vk.CmdCopyBuffer(cmd, g_counts.b, s.rb, 1, &c);
+  // 6f rt_hair_dense_sample: the samples the last G-buffer's fragments stored behind the pixel record (device-local),
+  // copied behind the counts; its own barriers, nothing recorded with the key off.
+  s.dense = g_cfg_dense && g_pixels.size >= VkDeviceSize(g_last_n) * 24 + hair_primary::kDenseBytesAll;
+  if (s.dense) {
+    VkMemoryBarrier db{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    db.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    db.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &db, 0, nullptr, 0,
+                              nullptr);
+    const VkBufferCopy dc{VkDeviceSize(g_last_n) * 24, hair_primary::kCountBytesAll, hair_primary::kDenseBytesAll};
+    dd->vk.CmdCopyBuffer(cmd, g_pixels.b, s.rb, 1, &dc);
+    db.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    db.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &db, 0, nullptr, 0,
+                              nullptr);
+  }
   s.gframe = counted ? gf.frame : 0;
   for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
     s.keys[k] = counted ? gf.keys[k] : g_last_keys[k];
@@ -1116,6 +1222,9 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     // 5u rt_hair_groom_nearest: the candidate-filtered nearest-strand trace, compiled in when the key is on at pipeline
     // creation (header flag kFlagNearest then switches it live; the velocity FS has no constant 1047).
     const uint32_t nearest = cfg_int("rt_hair_groom_nearest", 0) != 0 ? 1u : 0u;
+    // 6f rt_hair_dense_sample: constant 1052 of the per-slot G-buffer variants, added only when the key is on at
+    // pipeline creation (key off: the specialization as before).
+    const uint32_t dense = pass == Pass::Gbuffer && cfg_int("rt_hair_dense_sample", 0) != 0 ? 1u : 0u;
     // 5y rt_hair_mv_card: the card-motion path of the velocity variant, compiled in when the key is on at pipeline
     // creation (header flags kFlagMvCardFallback / kFlagMvCardAll then switch it live); off: the specialization as before.
     const uint32_t mv_card = pass == Pass::Velocity && cfg_int("rt_hair_mv_card", 0) != 0 ? 1u : 0u;
@@ -1147,11 +1256,12 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       stages[size_t(fs)].pSpecializationInfo = &spec;
       // G-buffer: strands write their own depth on top of whatever the prepass left (no card depth there).
       // Velocity: the strand depth the G-buffer wrote passes, nearer geometry does not; no writes.
-      char t[240];
+      char t[320];
       std::snprintf(t, sizeof t, "[hair primary] %s hair pipeline: native depth test %u write %u compare %d -> strands test 1 "
-                    "write %u compare GREATER_OR_EQUAL; nearest-strand trace compiled in (specialization 1047) %u",
+                    "write %u compare GREATER_OR_EQUAL; nearest-strand trace compiled in (specialization 1047) %u; dense "
+                    "samples (specialization 1052) %u",
                     pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable, ds->depthWriteEnable,
-                    int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer), pass == Pass::Gbuffer ? nearest : 0u);
+                    int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer), pass == Pass::Gbuffer ? nearest : 0u, dense);
       if (pass == Pass::Gbuffer) g_nearest_compiled = int(nearest);
       notes.push_back(std::string("pipe:") + t);
       dsv.depthTestEnable = VK_TRUE;
@@ -1206,12 +1316,14 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       dsv.front = ds->front; dsv.back = ds->back;
       // Pipeline specialization supplies exact draw-key attribution before tracing,
       // without changing the game's descriptor or push-constant layouts.
-      const uint32_t words[6] = {spec_words[0], spec_words[1], k, coverage, shading_space, nearest};
-      const VkSpecializationMapEntry map[6] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
-                                               {shader_variant::kSpecIdHairGroomCoverage, 12, 4},
-                                               {shader_variant::kSpecIdHairShadingSpace, 16, 4},
-                                               {shader_variant::kSpecIdHairGroomNearest, 20, 4}};
-      const VkSpecializationInfo draw_spec{nearest ? 6u : 5u, map, sizeof words, words};
+      const uint32_t words[7] = {spec_words[0], spec_words[1], k, coverage, shading_space, nearest, dense};
+      VkSpecializationMapEntry map[7] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
+                                         {shader_variant::kSpecIdHairGroomCoverage, 12, 4},
+                                         {shader_variant::kSpecIdHairShadingSpace, 16, 4},
+                                         {shader_variant::kSpecIdHairGroomNearest, 20, 4}};
+      uint32_t map_n = nearest ? 6u : 5u;
+      if (dense) map[map_n++] = {shader_variant::kSpecIdHairDenseSample, 24, 4};
+      const VkSpecializationInfo draw_spec{map_n, map, dense ? sizeof words : sizeof words - 4, words};
       stages[size_t(fs)].pSpecializationInfo = &draw_spec;
       dsv.depthWriteEnable = VK_TRUE;
       vci.pColorBlendState = ci.pColorBlendState;
@@ -1996,8 +2108,11 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (width != g_px_w || height != g_px_h || !g_pixels.b) {
     release(g_pixels);
     g_px_w = g_px_h = 0;
-    if (!make(g_pixels, hair_primary::coverage_bytes(width, height),
-              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, "hair primary pixels")) {
+    // 6f: the dense samples live behind the entries and markers (always allocated: 6 KB; written only by a variant
+    // specialized with kSpecIdHairDenseSample).
+    if (!make(g_pixels, hair_primary::coverage_bytes(width, height) + hair_primary::kDenseBytesAll,
+              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+              "hair primary pixels")) {
       log("[hair primary] pixel record %ux%u could not be allocated: hair keeps its cards", width, height);
       g_gate.clear();
       return;
@@ -2139,6 +2254,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   g_coverage.latch = cfg_int("rt_hair_swap_latch", 0) != 0;               // 5t: a failed key waits for a new footprint
   if (!g_coverage.latch) g_coverage.latched.clear();
   g_cfg_union = cfg_int("rt_hair_coverage_union", 0) != 0;               // 5u: judge every accepted strand pixel
+  g_cfg_dense = cfg_int("rt_hair_dense_sample", 0) != 0;                  // 6f: copy and log the dense samples
   g_coverage.confirm = cfg_int("rt_hair_coverage_confirm", 0) != 0;       // 5u: two bad measurements in a row
   g_coverage.min_pixels = cfg_int("rt_hair_coverage_min_pixels", 0) != 0; // 5u audit: < 64 card pixels: no evidence
   if (!g_coverage.confirm) g_coverage.bad_run.clear();
@@ -2263,6 +2379,16 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         "rt_hair_header_cam_gpu %d", stats_period(300), (unsigned long long)g_rebase.sampled,
         (unsigned long long)g_rebase.moved, g_rebase.max_m, cfg_int("rt_hair_header_cam_gpu", 0) != 0 ? 1 : 0);
     g_rebase = hair_primary::RebaseStats{};
+    if (g_cfg_dense) {   // 6f
+      char still[720], moving[720];
+      dense_side(g_dense.side[0], still, sizeof still);
+      dense_side(g_dense.side[1], moving, sizeof moving);
+      log_stats("[hair primary] dense samples (last %u frames, rt_hair_dense_sample 1): %llu sampled frames, %llu torn "
+          "samples; still: %s | moving (camera step over %.2f m a frame, from the G-buffer cameras): %s",
+          stats_period(300), (unsigned long long)g_dense.frames, (unsigned long long)g_dense.torn, still,
+          double(hair_primary::kDenseMovingStep), moving);
+      g_dense = hair_primary::DenseStats{};
+    }
     log_stats("[hair primary] build stamp (last %u frames): counted G-buffer frames whose groom points and BLASes were of "
         "the applied publish's build %llu, of a newer build %llu (older TLAS and rows over refit BLASes), of an older "
         "build %llu, not read %llu", stats_period(300), (unsigned long long)g_stamp_n[1], (unsigned long long)g_stamp_n[2],

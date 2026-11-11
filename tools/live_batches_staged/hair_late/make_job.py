@@ -34,6 +34,9 @@ HAIR = ("rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,r
         # were converted with) instead of the CPU read, which lags under motion (hc1 234025: origin exactly 0 with the
         # copy, 1-12 cm without; hf1 073932 zoom: 0.496 m). rt_hair_stale_publish compares two CPU reads: off here.
         "rt_hair_header_cam_gpu=1,rt_hair_stale_publish=0,"
+        # 6f: the dense sampler (specialization 1052 of the strand G-buffer variants, read at pipeline creation): what
+        # decided card-marked pixels of every hair draw, logged for the moving and watchdog frames and per period.
+        "rt_hair_dense_sample=1,"
         # part 2 (branch claude/hair-pixel-lod, 5v): off until its windows
         "rt_hair_pixel_lod=0,rt_hair_pixel_lod_k=1.0")
 SET = ("preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,"
@@ -115,6 +118,8 @@ def make_job(plan):
             # Q1: the nearest-strand trace compiled in and its header flag on
             "\\[hair primary\\] G-buffer hair pipeline: .*nearest-strand trace compiled in \\(specialization 1047\\) 1",
             "\\[hair primary\\] nearest-strand trace: header flag 1 .*specialization 1047 in the strand G-buffer pipelines 1",
+            # 6f: the dense sampler compiled into the strand G-buffer variants
+            "\\[hair primary\\] G-buffer hair pipeline: .*dense samples \\(specialization 1052\\) 1",
         ] + [rf"\[pan\] burst {s} complete: \d+ frames, \d+ samples, transport ok" for s in SERIALS.values()],
         # The observables, as events in their windows (not startup producers: the arrival is what the phase change
         # triggers): the first-seen lines in "lower", the TLAS check period line in "lower" and "watch".
@@ -153,6 +158,17 @@ def make_job(plan):
              "select": "\\[hair primary\\] build stamp \\(last",
              "match": "applied publish's build \\d+, of a newer build \\d+ .*, not read [0-9]\\b",
              "windows": ["lower", "watch"], "period_frames": 60, "min": 1},
+            # 6f: the dense samples (predicted.json dense_sampler_6f): the period line with sampled frames in lower and
+            # watch (the still side is the baseline of the moving side), and the per-sample lines of the zoom.
+            {"name": "the dense sample period line in lower and watch, with sampled frames",
+             "select": "\\[hair primary\\] dense samples \\(last",
+             "match": "rt_hair_dense_sample 1\\): [1-9][0-9]* sampled frames, .* still: \\d+ samples: .* \\| moving .*: \\d+ samples: ",
+             "windows": ["lower", "watch"], "period_frames": 60, "min": 1},
+            {"name": "dense sample lines of the zoom's moving frames in lower",
+             "select": "\\[hair primary\\] dense sample: G-buffer frame",
+             "match": "origin -?[0-9.]+ m, ray against view x projection [0-9.]+ mrad, card [0-9.]+ m, hit -?[0-9.]+ m, .*"
+                      "anchor moved -?[0-9.]+ m in the world .* camera step [0-9.]+ m",
+             "windows": ["lower"], "event": True, "min": 1},
             {"name": "the groom TLAS check period line in both windows",
              "select": "\\[hair primary\\] groom TLAS check \\(last", "match": "G-buffer submits checked",
              "windows": ["watch"], "event": True, "min": 1},
@@ -177,7 +193,9 @@ def make_job(plan):
         ],
         "live_flow": {"expected_fps": 30, "settings_latency_s": 1, "trace_stall_s": 3},
         "estimated_phase_seconds": sum(p["seconds"] for p in plan),
-        "purpose": "6c: rt_hair_header_cam_gpu on (header camera from the GPU, the origin of the groom points), 0 frame "
+        "purpose": "6f: the dense sampler (rt_hair_dense_sample=1) says per card-marked pixel of the zoom why it kept no "
+                   "strand (predicted.json dense_sampler_6f: one signature per candidate); trips reported, not gated. "
+                   "6c: rt_hair_header_cam_gpu on (header camera from the GPU, the origin of the groom points), 0 frame "
                    "watchdog trips in the zoom (lower) and after it (watch), rebase origin 0 in every sampled frame. "
                    "Natural late hair arrival at S8 (161106's 'lower' phase change), nearest-strand trace on, with the "
                    "groom TLAS check and the first-seen frame lines: which candidate breaks the existing keys' strands. "
