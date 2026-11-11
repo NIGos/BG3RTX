@@ -1540,6 +1540,96 @@ struct RebaseStats {
   }
 };
 
+// 6f rt_hair_dense_sample (kSpecIdHairDenseSample; shaders/rt/hair_primary_gbuffer.hlsl HpDense): what decided card-marked
+// strand fragments, sampled on the GPU. kDenseSlotSamples samples per draw slot (so every swapped or probed draw of a
+// frame has its own, last writer wins) of kDenseBytes each, stored after the pixel record (device-local) and copied
+// out with the counts of the next build. Words: 0 pixel (x | y << 16), 1 the header tag, 2 slot | reason << 8 |
+// flags << 16 (1 the pixel entry was already sealed with this tag: traced by an earlier fragment or recording; 4 a
+// private trace of a probe draw), 3 the entry's row << 24 | segment, 4-6 the ray origin (hp_rebase), 7 the card
+// distance, 8-10 the ray direction, 11 the hit distance (-1 none), 12-14 the G-buffer camera, 15 the card band, 16-18
+// the first point of the draw's own groom row (the anchor, in the build's camera-relative frame), 19 the sine of the
+// angle between the ray and the pixel's direction from the same block's view and projection, 20 the stored strand
+// point's distance from the ray (-1 none), 21 owner row | hit row's slot << 8 | rows << 16, 22 the card depth, 23 a
+// checksum (two fragments may store one sample at once: a torn one is dropped).
+constexpr uint32_t kDenseSlotSamples = 4, kDenseSamples = kDrawSlots * kDenseSlotSamples, kDenseWords = 24;
+constexpr uint32_t kDenseBytes = kDenseWords * 4, kDenseBytesAll = kDenseSamples * kDenseBytes;   // 96, 6144
+enum class DenseReason : uint8_t { Accepted, Miss, Owner, Segment, CardBand, NoUv, Tips, Count };
+inline const char* dense_reason_name(DenseReason r) {
+  static const char* const names[] = {"accepted", "no strand on the ray", "strand of another draw", "segment or pool bound",
+                                      "outside the card band", "no point UVs", "tips"};
+  return r < DenseReason::Count ? names[size_t(r)] : "?";
+}
+inline uint32_t dense_mix(uint32_t x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+inline uint32_t dense_checksum(const uint32_t w[kDenseWords]) {
+  uint32_t sum = 0x9e3779b9u;
+  for (uint32_t i = 0; i + 1 < kDenseWords; ++i) sum = dense_mix(sum ^ w[i]);
+  return sum;
+}
+struct DenseSample {
+  bool valid = false, reused = false, priv = false;
+  uint32_t x = 0, y = 0, tag = 0, slot = 0, hit_row = 0xFF, hit_seg = 0, owner_row = 0xFF, hit_slot = 0xFF, rows = 0;
+  DenseReason reason = DenseReason::Count;
+  float org[3] = {}, dir[3] = {}, cam[3] = {}, anchor[3] = {};
+  float t_card = -1, t_hit = -1, band = -1, sin_angle = 0, off_ray = -1, depth = 0;
+  bool hit() const { return hit_row != 0xFF; }
+  float origin_m() const { return std::sqrt(org[0] * org[0] + org[1] * org[1] + org[2] * org[2]); }
+  // World positions in double (the camera is hundreds of metres from the world origin): the anchor is relative to the
+  // header camera = G-buffer camera - origin; the card point is on the ray from the G-buffer camera.
+  void anchor_world(double out[3]) const { for (int i = 0; i < 3; ++i) out[i] = double(cam[i]) - double(org[i]) + double(anchor[i]); }
+  void card_world(double out[3]) const { for (int i = 0; i < 3; ++i) out[i] = double(cam[i]) + double(dir[i]) * double(t_card); }
+  float card_to_anchor() const {
+    if (owner_row == 0xFF) return -1.0f;
+    double a[3], c[3], d2 = 0;
+    anchor_world(a); card_world(c);
+    for (int i = 0; i < 3; ++i) d2 += (a[i] - c[i]) * (a[i] - c[i]);
+    return float(std::sqrt(d2));
+  }
+};
+// tag: the judged G-buffer frame's header tag. Not valid: never written, another frame's, torn, or malformed.
+inline DenseSample dense_parse(const uint32_t w[kDenseWords], uint32_t tag) {
+  DenseSample s;
+  if (!tag || w[1] != tag || w[kDenseWords - 1] != dense_checksum(w)) return s;
+  const uint32_t reason = (w[2] >> 8) & 0xFF, flags = w[2] >> 16;
+  if (reason >= uint32_t(DenseReason::Count) || (w[2] & 0xFF) >= kDrawSlots) return s;
+  s.valid = true;
+  s.x = w[0] & 0xFFFF; s.y = w[0] >> 16; s.tag = w[1]; s.slot = w[2] & 0xFF;
+  s.reason = DenseReason(reason);
+  s.reused = (flags & 1) != 0; s.priv = (flags & 4) != 0;
+  if (w[3] != 0xFFFFFFFFu) { s.hit_row = w[3] >> 24; s.hit_seg = w[3] & 0xFFFFFF; }
+  std::memcpy(s.org, w + 4, 12); std::memcpy(&s.t_card, w + 7, 4);
+  std::memcpy(s.dir, w + 8, 12); std::memcpy(&s.t_hit, w + 11, 4);
+  std::memcpy(s.cam, w + 12, 12); std::memcpy(&s.band, w + 15, 4);
+  std::memcpy(s.anchor, w + 16, 12); std::memcpy(&s.sin_angle, w + 19, 4); std::memcpy(&s.off_ray, w + 20, 4);
+  s.owner_row = w[21] & 0xFF; s.hit_slot = (w[21] >> 8) & 0xFF; s.rows = w[21] >> 16;
+  std::memcpy(&s.depth, w + 22, 4);
+  return s;
+}
+// Per period, split by the camera step of the sample's frame (the G-buffer cameras of consecutive tags, as the GPU read
+// them). The 6e candidates read off it (docs/RTX_HAIR_PRIMARY.md 6f): the groom points displaced in the world = anchor
+// drift while moving; a reused pixel entry of another camera = reused samples whose strand point is off their ray; a
+// camera block whose matrices disagree = sine; a slot or key map of another publish = "strand of another draw".
+constexpr float kDenseMovingStep = 0.02f;   // metres per frame: twice the card band's fixed term (hair_primary_max_radius)
+struct DenseStats {
+  struct Side {
+    uint64_t n = 0, reason[size_t(DenseReason::Count)] = {}, reused = 0, drifts = 0;
+    float max_sin = 0, max_off_fresh = 0, max_off_reused = 0, max_drift = 0, max_card_anchor = 0, max_origin = 0;
+  } side[2];   // [0] still, [1] moving
+  uint64_t torn = 0, frames = 0;
+  // drift_m: the anchor's world displacement since the previous frame's sample of the same draw key (< 0: none).
+  void add(const DenseSample& s, bool moving, float drift_m) {
+    if (!s.valid) return;
+    Side& d = side[moving ? 1 : 0];
+    ++d.n;
+    ++d.reason[size_t(s.reason)];
+    if (s.reused) ++d.reused;
+    d.max_sin = (std::max)(d.max_sin, s.sin_angle);
+    d.max_origin = (std::max)(d.max_origin, s.origin_m());
+    if (s.off_ray >= 0) (s.reused ? d.max_off_reused : d.max_off_fresh) = (std::max)(s.reused ? d.max_off_reused : d.max_off_fresh, s.off_ray);
+    if (drift_m >= 0) { ++d.drifts; d.max_drift = (std::max)(d.max_drift, drift_m); }
+    d.max_card_anchor = (std::max)(d.max_card_anchor, s.card_to_anchor());
+  }
+};
+
 // 6a rt_hair_stale_publish (docs/RTX_HAIR_PRIMARY.md 6a, 6b). The submit-time check: the distance between the applied
 // publish's build camera and the G-buffer's own camera, measured from the G-buffer's camera UBO (+208, read at the
 // submit; -1 unknown). Over kStaleCameraTol the frame draws its cards (card mode of every recorded slot) instead of

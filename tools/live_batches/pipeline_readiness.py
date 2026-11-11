@@ -100,6 +100,8 @@ TABLE["rt_hair_coverage_union"] = [GENERIC]
 TABLE["rt_hair_groom_nearest"] = []
 # 5y: specialization 1049 of the strand velocity pipelines (created with the key at startup; live it is a header flag).
 TABLE["rt_hair_mv_card"] = []
+# 6f: specialization 1052 of the strand G-buffer pipelines (created with the key at startup).
+TABLE["rt_hair_dense_sample"] = []
 
 # Settings which schedule observations or change CPU/log policy, without
 # selecting pipelines. Unknown rendering keys require explicit completion evidence.

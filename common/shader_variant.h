@@ -73,6 +73,9 @@ enum SpecId : unsigned {
   // rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md 3.4): the scene TLAS by address from the scene stamp
   // (rt/rt_common.hlsli RT_TRACE_SCENE); added only when on, so key-off pipelines keep their specialization.
   kSpecIdSceneHandout = 1051,
+  // 6f rt_hair_dense_sample: per-fragment decision samples of the strand G-buffer variant (rt/hair_primary_gbuffer);
+  // a diagnostic, added to the specialization only when on.
+  kSpecIdHairDenseSample = 1052,
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;

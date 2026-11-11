@@ -44,7 +44,7 @@
     "label": "lower",
     "kind": "static",
     "speed": "static",
-    "seconds": 6.8,
+    "seconds": 6.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -63,7 +63,8 @@
       "\\[hair groom\\] frame \\d+ \\(a hair draw first seen",
       "\\[hair primary\\] header safety \\(last",
       "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] build stamp \\(last"
+      "\\[hair primary\\] build stamp \\(last",
+      "\\[hair primary\\] dense samples \\(last"
     ],
     "wait_log_timeout": 30
   },
@@ -71,7 +72,7 @@
     "label": "watch",
     "kind": "static",
     "speed": "static",
-    "seconds": 6.8,
+    "seconds": 6.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -87,7 +88,8 @@
     "wait_stats": [
       "\\[hair primary\\] header safety \\(last",
       "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] build stamp \\(last"
+      "\\[hair primary\\] build stamp \\(last",
+      "\\[hair primary\\] dense samples \\(last"
     ],
     "wait_log_timeout": 30
   },
@@ -110,7 +112,7 @@
     "label": "pl-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 6.8,
+    "seconds": 6.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -162,7 +164,7 @@
     "label": "pl-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 6.8,
+    "seconds": 6.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -200,7 +202,7 @@
     "label": "pl-off2",
     "kind": "static",
     "speed": "static",
-    "seconds": 6.8,
+    "seconds": 6.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,

@@ -92,5 +92,32 @@
     "result": "5 trips (2448-2452), every one 'of the applied publish's build'; period lines 40-60 same, 0 newer, 0 older, 0 not read.",
     "prediction_missed": "second_defect_6d expected 'of a newer build'. Disproved: header, TLAS, points and BLASes are of one build.",
     "next": "docs/RTX_HAIR_PRIMARY.md 6e: refit ruled out from existing runs; three candidates left; the dense sampler is the next instrument (not built)."
+  },
+  "offline_6f": {
+    "written": "2026-11-11, before the job was regenerated; no live since 003637",
+    "candidate_1_view_projection": "By code the G-buffer side cannot disagree with itself: card point, ray direction, hit depth and card band all come from the draw's own camera block (gCam.vp). The points are the exact inverse of the prepass block's VP as its vertex shader applied it (xfb_to_world), so a jitter or projection difference between the two blocks moves no point. Left open only: the prepass block rewritten between its draws and the conversion, or a block whose VP is not view x projection.",
+    "candidate_2_entry_reuse": "Ruled out for 003637's trips: G-buffer labels 2448-2452 each found the build stamp of their own label (5 of 5) and the builds are logged once per label 2447-2462, so no two G-buffers shared a label (and its seal) there. 000345 has a build label gap (2178 -> 2180) at its long frame: not ruled out for that one frame.",
+    "candidate_3_game_lod": "In all 8 hl1 logs a new hair draw is first seen at the first trip frame or the one before and again 7 frames later (003637: 2447, 2454, 2456; trips 2448-2452). The arrivals are unmatched draws (not swapped); rows 12 -> 12, 0 rows with another key, 0 full BLAS builds in the trip frames; the loss lasts 5-7 frames and follows the step (000345: 2178/2179 trip after the long frame with no arrival). A coincidence of the zoom start, not the cause of the per-step loss.",
+    "decided": "None of the three is shown to be the cause; no fix. The dense sampler decides."
+  },
+  "dense_sampler_6f": {
+    "written": "2026-11-11, before the job was regenerated",
+    "key": "rt_hair_dense_sample=1 (specialization 1052 of the strand G-buffer variants; restart)",
+    "lines": [
+      "[hair primary] dense sample: G-buffer frame ... (one per sample, moving and watchdog frames, 600 per session)",
+      "[hair primary] dense samples (last N frames, rt_hair_dense_sample 1): ... still: ... | moving ...: ..."
+    ],
+    "baseline_still": "still side: accepted is most samples; origin 0.0000 m; ray against view x projection under 0.01 mrad (float noise); fresh strand point within 10 mm of its ray (the radius cap); anchor moved a few mm (idle animation); card within about 0.5 m of its anchor.",
+    "signatures_moving": {
+      "points_displaced_in_the_world (candidate 1 as left open, or any stale point data)": "anchor moved a multiple of 0.01 m per frame on the moving side (near the camera step: whole stale frame; a fraction growing with the card distance: a rotation), 0 when still; rejects are 'outside the card band' with |hit - card| near that drift, or 'no strand on the ray' for the far LOD 2 grooms; sine 0, fresh points on their rays.",
+      "camera_block_inconsistent (candidate 1, matrix form)": "ray against view x projection over 0.1 mrad on the moving side and float noise when still.",
+      "entry_reuse (candidate 2)": "reused entries on the moving side whose strand point is centimetres to decimetres off its ray (fresh ones stay within 10 mm); anchor does not move.",
+      "game_lod_or_new_key (candidate 3)": "rejects only on samples whose key was first drawn under about 10 frames before, or whose card is metres from its anchor (cards of another mesh or character); the other keys are accepted while moving.",
+      "slot_or_key_map_of_another_publish": "'strand of another draw' dominates the moving side for whole draws (hit row's slot differs from the draw's slot) with anchors still and points on their rays.",
+      "trace_or_acceleration_structure": "'no strand on the ray' on the moving side with the anchor still (under 0.01 m), origin 0, sine 0 and the card as far from its anchor as when still: the points are right and the ray is right, the BLAS/TLAS query is not."
+    },
+    "expected": "Unknown which; the predecessor's evidence (loss grows with the step, far LOD 2 grooms lose everything, gone when still, one build) fits 'points displaced' or 'trace' best. Trips are expected again (5-7 in lower): reported, not gated.",
+    "cost": "per sampled card fragment (a quarter of the card-marked pixels) one 4x4 inverse and 96 bytes stored; one 6 KB copy and two barriers per build. Read the strand G-buffer GPU line of lower against 003637's 0.206 ms.",
+    "invalid_if": "no 'dense samples' period line with sampled frames in lower and watch, or the pipeline line does not say specialization 1052 1."
   }
 }

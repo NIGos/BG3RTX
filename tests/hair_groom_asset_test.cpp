@@ -489,6 +489,65 @@ static void test_build_stamp() {
   CHECK(stamp_entry(2173) == kStampRingOffset + (2173 % kStampRing) * 8 && stamp_entry(2173) + 8 <= kStampBytes);
   CHECK(stamp_entry(2173 + kStampRing) == stamp_entry(2173));
 }
+// 6f rt_hair_dense_sample: one sample as shaders/rt/hair_primary_gbuffer.hlsl HpDense::put packs it, the checksum that
+// drops a torn one, and the per-period split the candidates of 6e are read from.
+static void test_dense_sample() {
+  using namespace hair_primary;
+  CHECK(kDenseBytes == 96 && kDenseBytesAll == 6144 && kDenseSamples == 64);
+  auto pack = [](uint32_t tag, uint32_t slot, uint32_t reason, uint32_t flags, uint32_t hit, const float org[3], float t_card,
+                 const float dir[3], float t_hit, const float cam[3], float band, const float anchor[3], float sine,
+                 float off, uint32_t owner, uint32_t hit_slot, uint32_t* w) {
+    w[0] = 640u | (360u << 16); w[1] = tag; w[2] = slot | (reason << 8) | (flags << 16); w[3] = hit;
+    std::memcpy(w + 4, org, 12); std::memcpy(w + 7, &t_card, 4); std::memcpy(w + 8, dir, 12); std::memcpy(w + 11, &t_hit, 4);
+    std::memcpy(w + 12, cam, 12); std::memcpy(w + 15, &band, 4); std::memcpy(w + 16, anchor, 12);
+    std::memcpy(w + 19, &sine, 4); std::memcpy(w + 20, &off, 4);
+    w[21] = owner | (hit_slot << 8) | (12u << 16);
+    const float depth = 0.01f;
+    std::memcpy(w + 22, &depth, 4);
+    w[23] = dense_checksum(w);
+  };
+  const float org[3] = {0, 0, 0}, dir[3] = {0, 0, -1}, cam[3] = {-220.0f, 8.6f, -202.7f}, anchor[3] = {0.1f, 0.2f, -10.0f};
+  uint32_t w[kDenseWords];
+  pack(2448, 3, 4, 1, (5u << 24) | 1234u, org, 10.0f, dir, 10.4f, cam, 0.03f, anchor, 0.0f, 0.25f, 5, 3, w);
+  DenseSample s = dense_parse(w, 2448);
+  CHECK(s.valid && s.x == 640 && s.y == 360 && s.slot == 3 && s.reason == DenseReason::CardBand && s.reused && !s.priv);
+  CHECK(s.hit() && s.hit_row == 5 && s.hit_seg == 1234 && s.owner_row == 5 && s.hit_slot == 3 && s.rows == 12);
+  CHECK(s.t_card == 10.0f && s.t_hit == 10.4f && s.band == 0.03f && s.off_ray == 0.25f && s.origin_m() == 0.0f);
+  CHECK(std::fabs(s.card_to_anchor() - std::sqrt(0.01f + 0.04f)) < 1e-4f);   // card at (0, 0, -10), anchor at (0.1, 0.2, -10)
+  CHECK(!dense_parse(w, 2449).valid);                  // another frame's sample
+  CHECK(!dense_parse(w, 0).valid);
+  w[9] ^= 1u;
+  CHECK(!dense_parse(w, 2448).valid);                  // torn: two fragments stored at once
+  w[9] ^= 1u;
+  uint32_t zero[kDenseWords] = {};
+  CHECK(!dense_parse(zero, 2448).valid);               // never written
+  uint32_t bad[kDenseWords];
+  pack(2448, 3, 9, 0, 0xFFFFFFFFu, org, 10.0f, dir, -1.0f, cam, -1.0f, anchor, 0.0f, -1.0f, 5, 0xFF, bad);
+  CHECK(!dense_parse(bad, 2448).valid);                // a reason outside the enum
+  uint32_t miss[kDenseWords];
+  pack(2448, 2, 1, 4, 0xFFFFFFFFu, org, 9.0f, dir, -1.0f, cam, -1.0f, anchor, 0.002f, -1.0f, 0xFF, 0xFF, miss);
+  const DenseSample m = dense_parse(miss, 2448);
+  CHECK(m.valid && m.reason == DenseReason::Miss && !m.hit() && m.priv && !m.reused && m.card_to_anchor() == -1.0f);
+  // The anchor in the world does not depend on which camera the points are relative to.
+  const float org2[3] = {0.5f, 0, 0}, anchor2[3] = {0.6f, 0.2f, -10.0f};   // header camera 0.5 m behind in x
+  uint32_t w2[kDenseWords];
+  pack(2448, 3, 0, 0, (5u << 24) | 7u, org2, 10.0f, dir, 10.0f, cam, 0.03f, anchor2, 0.0f, 0.001f, 5, 3, w2);
+  double a1[3], a2[3];
+  s.anchor_world(a1);
+  dense_parse(w2, 2448).anchor_world(a2);
+  CHECK(std::fabs(a1[0] - a2[0]) < 1e-5 && std::fabs(a1[1] - a2[1]) < 1e-5 && std::fabs(a1[2] - a2[2]) < 1e-5);
+  DenseStats st;
+  st.add(s, true, 0.4f);                               // moving: a reused entry 25 cm off its ray, the anchor 40 cm away
+  st.add(m, true, -1.0f);
+  st.add(dense_parse(w2, 2448), false, 0.003f);
+  st.add(dense_parse(zero, 2448), true, 1.0f);         // not valid: not counted
+  CHECK(st.side[1].n == 2 && st.side[1].reason[size_t(DenseReason::CardBand)] == 1 && st.side[1].reason[size_t(DenseReason::Miss)] == 1);
+  CHECK(st.side[1].reused == 1 && st.side[1].max_off_reused == 0.25f && st.side[1].max_off_fresh == 0.0f);
+  CHECK(st.side[1].max_drift == 0.4f && st.side[1].drifts == 1 && st.side[1].max_sin == 0.002f);
+  CHECK(st.side[0].n == 1 && st.side[0].reason[size_t(DenseReason::Accepted)] == 1 && st.side[0].max_off_fresh == 0.001f);
+  CHECK(st.side[0].max_drift == 0.003f && st.side[0].max_origin == 0.5f);
+  CHECK(std::string(dense_reason_name(DenseReason::Owner)) == "strand of another draw");
+}
 // 6a/6b rt_hair_stale_publish: the submit-time camera check. hl1 210357's trip frames are the moved case; hf2 225504's
 // policy bug (every frame "camera not known", drawn as cards) is the unknown case, which must trace as before.
 static void test_stale_publish() {
@@ -1332,7 +1391,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_stale_publish();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};

@@ -36,6 +36,11 @@
 static const uint hair_primary_flag_nearest = 64u;   // common/hair_primary.h kFlagNearest
 static const uint hair_primary_flag_macro_normal = 16u;   // common/hair_primary.h kFlagMacroNormal
 static const uint hair_primary_flag_tangent_world = 32u;  // common/hair_primary.h kFlagTangentWorld
+// 6f (rt_hair_dense_sample, common/shader_variant.h kSpecIdHairDenseSample): 0: nothing of it runs; 1: card-marked
+// fragments of a quarter of the pixels store what decided them (common/hair_primary.h kDenseBytes: 4 samples per draw
+// slot, last writer wins, checksum in the last word) after the pixel record: device-local, the layer copies the
+// samples out with the counts of the next build. Diagnostic only: no output depends on it.
+[[vk::constant_id(1052)]] const uint kHairDenseSample = 0u;
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
 [[vk::constant_id(1102)]] const uint kDrawSlot = 16u;
@@ -248,6 +253,58 @@ NativeMaterial native_material(float2 uv, float2 dx, float2 dy, float4 aux) {
   return m;
 }
 
+// 6f: one dense sample. reason: 0 accepted, 1 no strand on the ray, 2 the strand's row is another draw's, 3 segment or
+// pool bound, 4 outside the card band, 5 no point UVs, 6 tips (common/hair_primary.h DenseReason).
+struct HpDense {
+  uint64_t rec, at, pool;
+  uint2 px;
+  uint tag, flags, hit, grooms, pool_bytes;
+  float3 org, dir;
+  float t_card, t_hit, band, off_ray, depth;
+  void put(uint reason) {
+    // The row of this draw's slot (the first one) and its first point: where the groom is, in the build's frame.
+    uint owner = 0xFFu;
+    float3 anchor = 0.0.xxx;
+    for (uint k = 0u; k < min(grooms, 64u) && owner == 0xFFu; ++k)
+      if (vk::RawBufferLoad<uint>(rec + hair_primary_key_map_offset + k * 4u, 4) == kDrawSlot) owner = k;
+    if (owner != 0xFFu) {
+      const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + owner * 16u, 16);
+      if (hp_pool_ok(uint64_t(row.x), 12u, pool_bytes)) anchor = asfloat(vk::RawBufferLoad<uint3>(pool + uint64_t(row.x), 4));
+    }
+    const uint hit_row = hit >> 24;
+    uint hit_slot = 0xFFu;
+    if (hit != hair_primary_no_strand && hit_row < min(grooms, 64u))
+      hit_slot = vk::RawBufferLoad<uint>(rec + hair_primary_key_map_offset + hit_row * 4u, 4) & 0xFFu;
+    // The pixel's direction from the same block's view and projection instead of its view-projection: the two agree
+    // (sine 0) when the three matrices are of one camera. Clip xy / w of the ray's point at infinity, through the
+    // inverse projection, rotated back by the view.
+    const float4 c = mul(float4(dir, 0.0), gCam.vp);
+    const float4 vh = mul(float4(c.xy / c.w, 1.0, 1.0), hp_inverse4(gCam.proj));
+    const float3 dir2 = normalize(mul((float3x3)gCam.view, vh.xyz / vh.w));
+    uint w[24];
+    w[0] = px.x | (px.y << 16);
+    w[1] = tag;
+    w[2] = kDrawSlot | (reason << 8) | (flags << 16);
+    w[3] = hit;
+    w[4] = asuint(org.x); w[5] = asuint(org.y); w[6] = asuint(org.z);
+    w[7] = asuint(t_card);
+    w[8] = asuint(dir.x); w[9] = asuint(dir.y); w[10] = asuint(dir.z);
+    w[11] = asuint(t_hit);
+    w[12] = asuint(gCam.position.x); w[13] = asuint(gCam.position.y); w[14] = asuint(gCam.position.z);
+    w[15] = asuint(band);
+    w[16] = asuint(anchor.x); w[17] = asuint(anchor.y); w[18] = asuint(anchor.z);
+    w[19] = asuint(length(cross(dir, dir2)));
+    w[20] = asuint(off_ray);
+    w[21] = owner | (hit_slot << 8) | (min(grooms, 0xFFFFu) << 16);
+    w[22] = asuint(depth);
+    uint sum = 0x9e3779b9u;
+    for (uint i = 0u; i < 23u; ++i) sum = hp_mix(sum ^ w[i]);
+    w[23] = sum;
+    for (uint j = 0u; j < 6u; ++j)
+      vk::RawBufferStore<uint4>(at + j * 16u, uint4(w[j * 4u], w[j * 4u + 1u], w[j * 4u + 2u], w[j * 4u + 3u]), 16);
+  }
+};
+
 struct Out {
   float4 rt0 : SV_Target0;
   float4 rt1 : SV_Target1;
@@ -335,6 +392,16 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const uint64_t pool = addr2(ld2(rec + 24u)), pixels = addr2(ld2(rec + 32u));
   const uint pool_bytes = ld(rec + 56u);
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
+  bool dense = false;   // 6f: constant 0 leaves it false
+  HpDense ds = (HpDense)0;
+  if (kHairDenseSample != 0u && card_marked) {
+    const uint pick = hp_mix(px.x ^ hp_mix(px.y ^ hp_mix(tag)));
+    dense = (pick & 3u) == 0u;
+    ds.rec = rec;
+    ds.at = marker_pixels + uint64_t(width) * height * 24u + uint64_t(kDrawSlot * 4u + ((pick >> 2) & 3u)) * 96u;
+    ds.px = px; ds.tag = tag; ds.hit = hair_primary_no_strand; ds.grooms = grooms; ds.pool_bytes = pool_bytes; ds.pool = pool;
+    ds.org = org; ds.dir = dir; ds.t_card = t_card; ds.t_hit = -1.0; ds.band = -1.0; ds.off_ray = -1.0; ds.depth = pos.z;
+  }
   const uint64_t at = pixels + uint64_t(px.y * width + px.x) * hair_primary_pixel_bytes;
   const uint64_t crumbs = hp_crumbs(rec);
   const uint64_t pixel_end = pixels + uint64_t(width) * height * hair_primary_pixel_bytes, pool_end = pool + pool_bytes;
@@ -343,8 +410,9 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     hp_crumb_note(crumbs, 1u, pool);
     hp_crumb_note(crumbs, 2u, pixels);
   }
-  if (!hp_crumb_ok(crumbs, 1u, at, 16u, pixels, pixel_end)) { discard; return o; }
+  if (!hp_crumb_ok(crumbs, 1u, at, 16u, pixels, pixel_end)) { if (dense) ds.put(3u); discard; return o; }
   uint4 e = vk::RawBufferLoad<uint4>(at, 16);
+  if (e.w == hp_seal(e.xyz, tag)) ds.flags |= 1u;   // 6f: traced by an earlier fragment (or recording) with this tag
   if (e.w != hp_seal(e.xyz, tag)) {
     // The first fragment of the pixel traces for the slots that swap this frame (the single ray, or the M3.2 pair) and
     // seals the entry, so later fragments, velocity and count read it.
@@ -373,22 +441,29 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     float t_hit;
     e.xyz = hp_pixel(rec, org, dir, pos.xy, view, inv, px, tag, 1u << kDrawSlot, grooms, pool, pool_bytes, crumbs,
                      pool_end, skipped, t_hit);
+    ds.flags = 4u;   // 6f: a private trace (never a reused entry)
   }
-  if (e.x == hair_primary_no_strand) { discard; return o; }
+  ds.hit = e.x;
+  if (e.x == hair_primary_no_strand) { if (dense) ds.put(1u); discard; return o; }
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
-  if (k >= grooms || ld(rec + hair_primary_key_map_offset + k * 4u) != kDrawSlot) { discard; return o; }   // the cached entry is validated like a fresh hit (stores of a pixel are not atomic)
+  if (k >= grooms || ld(rec + hair_primary_key_map_offset + k * 4u) != kDrawSlot) { if (dense) ds.put(2u); discard; return o; }   // the cached entry is validated like a fresh hit (stores of a pixel are not atomic)
   const float v = asfloat(e.y);
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
   uint i0;
-  if (!hp_segment(pool, pool_bytes, row, seg, i0)) { discard; return o; }
-  if (!hp_crumb_ok(crumbs, 4u, hp_at(pool, row.x, i0, 12u), 24u, pool, pool_end)) { discard; return o; }
+  if (!hp_segment(pool, pool_bytes, row, seg, i0)) { if (dense) ds.put(3u); discard; return o; }
+  if (!hp_crumb_ok(crumbs, 4u, hp_at(pool, row.x, i0, 12u), 24u, pool, pool_end)) { if (dense) ds.put(3u); discard; return o; }
   const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
   const float seg_len2 = dot(p1 - p0, p1 - p0);
-  if (!(seg_len2 > 1e-20)) { discard; return o; }   // a zero-length segment has no tangent (item 17; the parser rejects them)
+  if (!(seg_len2 > 1e-20)) { if (dense) ds.put(3u); discard; return o; }   // a zero-length segment has no tangent (item 17; the parser rejects them)
   const float4 hh = mul(float4(ndc, asfloat(e.z), 1.0), inv);
-  if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, sqrt(seg_len2))) { discard; return o; }
-  if (row.y == 0u) { discard; return o; }   // no point UVs (the layer publishes a row without them only for a card-kept draw)
-  if (!hp_crumb_ok(crumbs, 5u, hp_at(pool, row.y, i0, 8u), 16u, pool, pool_end)) { discard; return o; }
+  if (dense) {   // 6f: the hit distance, the band it must fall in, and the stored strand point's distance from this pixel's ray
+    ds.t_hit = length(hh.xyz / hh.w);
+    ds.band = (hair_primary_max_radius + 0.5 * sqrt(seg_len2)) / max(cos_card, 1e-6) + foot;
+    ds.off_ray = length(cross(lerp(p0, p1, asfloat(e.y)) - org, dir));
+  }
+  if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, sqrt(seg_len2))) { if (dense) ds.put(4u); discard; return o; }
+  if (row.y == 0u) { if (dense) ds.put(5u); discard; return o; }   // no point UVs (the layer publishes a row without them only for a card-kept draw)
+  if (!hp_crumb_ok(crumbs, 5u, hp_at(pool, row.y, i0, 8u), 16u, pool, pool_end)) { if (dense) ds.put(3u); discard; return o; }
   const float2 uv0 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0, 8u), 4));
   const float2 uv1 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0 + 1u, 8u), 4));
   const float2 uv = lerp(uv0, uv1, v);
@@ -399,8 +474,9 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
 
   // ---- the native material (42a95e17ec3adc51:118-195) at the strand's UV ----
   const NativeMaterial m = native_material(uv, dx, dy, aux);
-  if ((ld(rec + 60u) & hair_primary_flag_tips) != 0u && !hp_tips_keep(m.alpha, pos.xy, tag, aux.x)) { discard; return o; }
+  if ((ld(rec + 60u) & hair_primary_flag_tips) != 0u && !hp_tips_keep(m.alpha, pos.xy, tag, aux.x)) { if (dense) ds.put(6u); discard; return o; }
   vk::RawBufferStore<uint>(marker + 4u, packed_marker, 4); // after every rejection, cache remains reusable
+  if (dense) ds.put(0u);
 
   float3 rt0_n = n_view, rt3_t = t_view;
   if (kHairShadingSpace != 0u) {   // dead as a whole at constant 0
