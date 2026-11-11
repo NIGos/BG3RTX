@@ -43,16 +43,16 @@ int wmain(int argc, wchar_t** argv) {
     write(root / L"bg3rtx_launcher.ini", "NEVER_COLLECT_ME");
     write(root / L"sl_logs" / L"sl.log", "Bearer abcdefghi\n");
     write(root / L"sl_logs" / L"private.bin", "NEVER_COLLECT_ME");
-    // Old timestamp: stale data must be explicitly labelled.
+    // Old timestamp: stale data must be explicitly labelled. The previous session's log is old by design: not stale.
     HANDLE old = CreateFileW((root / L"bg3rtx.prev.log").c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     FILETIME oldtime{}; SYSTEMTIME year{}; year.wYear = 2020; year.wMonth = 1; year.wDay = 1; SystemTimeToFileTime(&year, &oldtime);
     SetFileTime(old, nullptr, nullptr, &oldtime); CloseHandle(old);
     const auto source_time = fs::last_write_time(root / L"bg3rtx.log");
     d::Request r; r.install_root = root; r.issue = "Issue token=not-public"; r.system_text = "GPU fixture";
     auto s = d::prepare_report(r);
-    check(s.status == d::Status::Partial, "stale report is partial");
+    check(s.status == d::Status::Complete, "an old previous-session log does not make a report partial");
     check(entry(s, "CONTENTS.txt") && entry(s, "system/system.txt"), "manifest and hardware exist");
-    check(all(s).find("older than 24 hours") != std::string::npos, "stale labelled");
+    check(all(s).find("older than 24 hours") == std::string::npos, "previous-session log not labelled stale");
     check(all(s).find("OtherPerson") == std::string::npos && all(s).find("secret-value") == std::string::npos, "paths/credentials redacted");
     check(all(s).find("NEVER_COLLECT_ME") == std::string::npos, "allowlist excludes launcher ini and binary");
     check(all(s).find("not-public") == std::string::npos, "issue sanitized");
@@ -60,7 +60,12 @@ int wmain(int argc, wchar_t** argv) {
     check(fs::last_write_time(root / L"bg3rtx.log") == source_time, "source last-write unchanged");
     check(all(s).find("CRC32") != std::string::npos, "defaults identity");
     FILETIME current{}; GetSystemTimeAsFileTime(&current);
-    old = CreateFileW((root / L"bg3rtx.prev.log").c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    // The files that should be current stay "Partial" and labelled when old.
+    old = CreateFileW((root / L"bg3rtx.log").c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    SetFileTime(old, nullptr, nullptr, &oldtime); CloseHandle(old);
+    auto stale = d::prepare_report(r);
+    check(stale.status == d::Status::Partial && all(stale).find("older than 24 hours") != std::string::npos, "old current log: partial and labelled");
+    old = CreateFileW((root / L"bg3rtx.log").c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     SetFileTime(old, nullptr, nullptr, &current); CloseHandle(old);
     auto complete = d::prepare_report(r);
     check(complete.status == d::Status::Complete, "all allowlisted inputs available gives complete report");

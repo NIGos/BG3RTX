@@ -267,7 +267,9 @@ Snapshot prepare_report(const Request& r, Progress cb) {
     ULARGE_INTEGER t{}, today{}; t.LowPart = info.ftLastWriteTime.dwLowDateTime; t.HighPart = info.ftLastWriteTime.dwHighDateTime;
     today.LowPart = now.dwLowDateTime; today.HighPart = now.dwHighDateTime;
     // Logs only: settings and VERSION.txt are as old as the install, which made every report "Partial" after a day.
-    if ((i < 2 || i >= 5) && today.QuadPart > t.QuadPart && today.QuadPart - t.QuadPart > 24ull * 60 * 60 * 10000000) {
+    // A previous-session log (bg3rtx.prev.log, bg3rtx.<tag>.prev.log) is old by design, so it is never stale.
+    const bool previous_session = label.find(".prev.log") != std::string::npos;
+    if ((i < 2 || i >= 5) && !previous_session && today.QuadPart > t.QuadPart && today.QuadPart - t.QuadPart > 24ull * 60 * 60 * 10000000) {
       info_text += "; older than 24 hours (may be stale)"; note(label + ": older than 24 hours; check session timestamp");
     }
     if (i == 0) {

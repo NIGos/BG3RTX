@@ -359,7 +359,7 @@ bool save_state(State& s, std::wstring* err) {
     if (err) *err = L"Settings could not be read. Close and retry before saving.";
     return false;
   }
-  std::string text = st::render_user_ini(s.user_text, s.preset, s.values, forced_keys(s));
+  std::string text = st::render_user_ini(s.user_text, s.preset, s.values, forced_keys(s), st::layers_dev(s.base, st::parse_ini(s.user_text)), &s.loaded);
   if (!write_file_atomic(user_ini_path(), text, err)) return false;
   s.user_text = text;
   s.user = st::parse_ini(text);
