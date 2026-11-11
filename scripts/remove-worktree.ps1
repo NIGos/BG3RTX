@@ -4,7 +4,7 @@
 #   powershell -File scripts/remove-worktree.ps1 -Name <folder>
 param([Parameter(Mandatory = $true)][string]$Name)
 $ErrorActionPreference = 'Stop'
-$m = 'C:\Users\quali\Documents\Code Projects\BG3RTX'
+$m = Split-Path $PSScriptRoot  # the checkout that holds this script (the repo moved from C: to E: in 2026-11)
 $wt = Join-Path $m ".claude\worktrees\$Name"
 function SharedCount { (Get-ChildItem "$m\external" -Recurse -File).Count + (Get-ChildItem "$m\data\assetdb" -File).Count }
 $before = SharedCount
