@@ -1,5 +1,6 @@
 #pragma once
 #include "launcher.h"
+#include "version.h"
 #include <functional>
 #include "../../common/experimental_ab.h"
 
@@ -36,6 +37,7 @@ class Bridge {
   void set_restart_count(int value) { restart_count_ = std::max(0,value); }
   void set_game_path(std::string value) { game_path_ = std::move(value); }
   void set_mod_status(std::string value) { mod_status_ = std::move(value); }
+  void set_version(std::string value) { version_ = std::move(value); }
   int dirty() const;
   // dev=1: the developer Experimental disclosure. Release: the "Show experimental options" opt-in.
   bool dev = false, experimental = false;
@@ -53,7 +55,7 @@ class Bridge {
   int saved_preset_, preview_preset_ = -1;
   bg3::settings::KVList preview_keys_;
   std::vector<std::string> changes_, blocked_;
-  std::string preview_kind_, status_, game_path_, report_hint_, mod_status_ = "Not checked";
+  std::string preview_kind_, status_, game_path_, report_hint_, mod_status_ = "Not checked", version_ = display_version("");
   int restart_count_ = 0;
   bool can_play_ = false, report_visible_ = false, pending_play_ = false;
   GraphicsInspection inspection_;

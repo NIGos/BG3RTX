@@ -42,7 +42,8 @@ static st::Map effective_settings() {
   auto m=saved_settings();m["dlss5_nr_runtime"]=g.st.dlss5_runtime_path;for(int i=0;i<st::kKnobCount;++i){st::KVList v;st::knob_kvs(st::kKnobs[i],g.st.values[i],v);for(auto& kv:v)m[kv.first]=kv.second;}return m;
 }
 static bool opt_in() { return !g.dev && g.experimental; }
-static int dirty_count() {return std::max(int(g.ab_selection.pending || g.experimental!=g.saved_experimental),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir)+int(g.st.dlss5_runtime_path!=g.st.loaded_dlss5_runtime_path)+int(g.st.shortcuts[0]!=g.st.loaded_shortcuts[0])+int(g.st.shortcuts[1]!=g.st.loaded_shortcuts[1])+int(g.st.shortcuts[2]!=g.st.loaded_shortcuts[2]));}
+static int changed_shortcuts() {int n=0;for(size_t i=0;i<g.st.shortcuts.size();++i)n+=int(g.st.shortcuts[i]!=g.st.loaded_shortcuts[i]);return n;}
+static int dirty_count() {return std::max(int(g.ab_selection.pending || g.experimental!=g.saved_experimental),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir)+int(g.st.dlss5_runtime_path!=g.st.loaded_dlss5_runtime_path)+changed_shortcuts());}
 static bool needs_restart(const st::Map& a,const st::Map& b) {return launcher::ui_state::restart(a,b);}
 static std::string game_session() {
   HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);if(snapshot==INVALID_HANDLE_VALUE)return {};
@@ -75,7 +76,7 @@ static void footer() {
   auto preset=st::preset_values_for(g.st.preset,g.st.caps);int custom=0;
   for(int i=0;i<st::kKnobCount;++i)if(st::knob_visible(st::kKnobs[i],g.dev,opt_in())&&std::string(st::kKnobs[i].category)!="Support")custom+=g.st.values[i]!=preset[i];
   std::wstring note=!g.st.have_gpu?L"Compatibility not checked\nRecheck graphics in Help & support":custom?L"Custom: "+std::to_wstring(custom)+(custom==1?L" setting":L" settings"):L"Matches preset";
-  std::wstring header=L"BG3RTX "+widen(BG3RTX_PRODUCT_VERSION)+L" | "+(custom?L"Custom":widen(st::kPresetLabel[g.st.preset]))+L" | "+(g.st.have_gpu?widen(g.st.gpu.name):L"GPU not detected")+L" | "+(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?L"Mod files present":L"Mod files missing");
+  std::wstring header=L"BG3RTX "+widen(launcher::product_version())+L" | "+(custom?L"Custom":widen(st::kPresetLabel[g.st.preset]))+L" | "+(g.st.have_gpu?widen(g.st.gpu.name):L"GPU not detected")+L" | "+(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?L"Mod files present":L"Mod files missing");
   SetWindowTextW(control(g.wnd,HEADER),header.c_str());
   SetWindowTextW(control(g.wnd,NOTE),note.c_str());
   for(int p=0;p<st::kPresetCount;++p)SendMessageW(control(g.wnd,PRESET_LOW+p),BM_SETCHECK,!custom&&p==g.st.preset?BST_CHECKED:BST_UNCHECKED,0);

@@ -1,5 +1,6 @@
 """Independently parse the C++ bridge's JSON with the standard library."""
 import json
+import re
 import subprocess
 import sys
 
@@ -12,7 +13,8 @@ assert isinstance(state["report"]["files"], list)
 assert isinstance(state["frameGeneration"], str)
 print(f"Parsed {len(state['settings'])} settings; JSON control characters retained.")
 
-assert state["version"] == "0.9.5.0"
+# No package beside the test binary: the base version of tools/launcher/version.h, marked as a developer build.
+assert re.fullmatch(r"\d+\.\d+\.\d+\.\d+ \(developer build\)", state["version"]), state["version"]
 assert state["modStatus"] == "Not checked"
 for setting in state["settings"]:
     assert "Unknown" not in setting["cost"]
@@ -85,3 +87,17 @@ for setting in state["settings"]:
         assert setting["id"] in {"rt_intensity", "fps_cap"}
         bounds = (50, 100, 5, False, "%") if setting["id"] == "rt_intensity" else (30, 240, 1, True, "fps")
         assert tuple(setting[k] for k in ("min", "max", "step", "hasOff", "unit")) == bounds
+
+# The page's plain-browser sample (tools/launcher/ui/app.js, no WebView host) repeats table copy: it must be the
+# table's. It had drifted (old descriptions, RTX Hair still marked "restart") while the real cards moved on.
+import pathlib
+page = (pathlib.Path(__file__).resolve().parents[1] / "tools/launcher/ui/app.js").read_text(encoding="utf-8")
+block = page[page.index(" const settings=["):page.index("].map(([id,title")]
+rows = re.findall(r"""\['([a-z0-9_]+)',('[^']*'|"[^"]*"),'([^']*)',\[([^\]]*)\],-?\d+,('[^']*'|"[^"]*")\]""", block)
+by_id = {s["id"]: s for s in state["settings"]}
+assert len(rows) == len(by_id) and {r[0] for r in rows} == set(by_id), sorted(set(by_id) ^ {r[0] for r in rows})
+for ident, title, category, levels, description in rows:
+    real = by_id[ident]
+    assert title[1:-1] == real["title"] and category == real["category"] and description[1:-1] == real["description"], ident
+    assert re.findall(r"""'([^']*)'|"([^"]*)\"""", levels) == [(c["label"], "") if "'" not in c["label"] else ("", c["label"]) for c in real["choices"]], ident
+print("Sample data of the page matches the settings table.")

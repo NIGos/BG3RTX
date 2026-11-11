@@ -3,6 +3,8 @@
 #include "ui_state.h"
 #include "session_logging.h"
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 namespace st=bg3::settings;
 int main(int argc,char** argv){
   // --json [experimental|needs]: renderer fixtures (release opt-in shown; unmet requirements).
@@ -132,6 +134,90 @@ int main(int argc,char** argv){
     hb.handle(R"({"type":"set","id":"exp_native_coverage","value":0})");hb.handle(R"({"type":"save"})");
     hb.handle(R"({"type":"confirm"})");
     check(hs.values[shadows]==0&&hs.values[groom]==0&&hs.values[primary]==0);
+  }
+  // User report, installed 0.9.6-hairtest8: RTX Hair could not be turned off. The file (tests/fixtures/launcher/
+  // user_hairtest8.ini, the player's own, runtime path replaced) has the experimental opt-in with Strand hair edge
+  // resolve on Analytic coverage, which needs RTX Hair On; Save and Play (the page always sends policy "enable")
+  // turned RTX Hair back On to meet that need. Turning a prerequisite down now lowers what needs it instead.
+  {
+    auto slurp=[](const std::string& path){std::ifstream f(path,std::ios::binary);return std::string(std::istreambuf_iterator<char>(f),std::istreambuf_iterator<char>());};
+    const std::string root=BG3RTX_SOURCE_DIR;
+    const std::string user=slurp(root+"/tests/fixtures/launcher/user_hairtest8.ini");
+    check(!user.empty());
+    auto load=[&](launcher::State& u,const std::string& text){
+      u.caps=~0u;u.base_text=slurp(root+"/bg3rtx.ini")+slurp(root+"/data/release.ini");u.base=st::parse_ini(u.base_text);
+      u.user_text=text;u.user=st::parse_ini(text);st::Map raw;st::apply_layer(raw,u.base);st::apply_layer(raw,u.user);
+      u.values=u.loaded=st::knob_values(raw);u.preset=st::preset_from_id(st::lookup(u.user,"preset"));};
+    const int rtx=st::knob_index("exp_hair_groom_primary"),aa=st::knob_index("exp_hair_strand_aa");
+    for(const char* action:{"save","play"}){
+      launcher::State us;load(us,user);std::string file;int launched=0;
+      launcher::web::Hooks uh;
+      uh.save=[&](launcher::State& c,const st::KVList& required,std::string&){file=st::render_user_ini(c.user_text,c.preset,c.values,required);c.user_text=file;c.user=st::parse_ini(file);return true;};
+      uh.play=[&](std::string&){++launched;return true;};
+      launcher::web::Bridge ub(us,uh);ub.set_can_play(true);
+      check(us.preset==st::kUltra&&!ub.dev&&ub.experimental&&us.values[rtx]==1&&us.values[aa]==2&&ub.dirty()==0);
+      ub.handle(R"({"type":"set","id":"exp_hair_groom_primary","value":0})");
+      check(us.values[rtx]==0&&ub.dirty()==1);
+      const std::string review=ub.handle(std::string(action)=="save"?R"({"type":"save","policy":"enable"})":R"({"type":"play"})");
+      // The review lists the dependent going Off; it never offers RTX Hair On again.
+      check(review.find("Strand hair edge resolve: Analytic coverage \xE2\x86\x92 Off")!=std::string::npos);
+      check(review.find("RTX Hair: Off \xE2\x86\x92 On")==std::string::npos&&review.find("\"blocked\":[]")!=std::string::npos);
+      ub.handle(R"({"type":"confirm"})");
+      check(ub.dirty()==0&&us.values[rtx]==0&&us.values[aa]==0&&launched==int(std::string(action)=="play"));
+      // What the game and the next launcher start read back: Off, with no strand key left on.
+      launcher::State again;load(again,file);
+      check(again.values[rtx]==0&&again.values[aa]==0);
+      st::Map raw;st::apply_layer(raw,again.base);st::apply_layer(raw,again.user);
+      for(const auto& kv:st::kKnobs[rtx].choices[1].kv)if(kv.key)check(st::lookup(raw,kv.key)=="0");
+      check(st::lookup(raw,"rr_hair_strand_aa")=="0"&&st::lookup(raw,"experimental_options")=="1");
+      // Turning it back on in the same session is one click and one save, as before.
+      ub.handle(R"({"type":"set","id":"exp_hair_groom_primary","value":1})");
+      ub.handle(R"({"type":"save","policy":"enable"})");ub.handle(R"({"type":"confirm"})");
+      check(us.values[rtx]==1&&ub.dirty()==0);
+    }
+    // A dependent selected after the prerequisite was turned down raises it again (the newest choice wins).
+    launcher::State us;load(us,user);launcher::web::Hooks uh;uh.save=[](launcher::State&,const st::KVList&,std::string&){return true;};
+    launcher::web::Bridge ub(us,uh);
+    ub.handle(R"({"type":"set","id":"exp_hair_groom_primary","value":0})");
+    ub.handle(R"({"type":"set","id":"exp_hair_strand_aa","value":1})");
+    check(us.values[rtx]==1&&us.values[aa]==1);
+    // Unrelated unmet needs keep the "enable" policy: a file that already had the dependent without its prerequisite.
+    std::vector<int> v=st::preset_values(st::kUltra),saved=v;v[st::knob_index("rt_geometry")]=0;saved=v;
+    auto kept=st::preview_dependencies(v,st::code_defaults(),~0u,true,false,false,false,&saved);
+    check(kept.values[st::knob_index("rt_geometry")]>=1);
+    saved=st::preset_values(st::kUltra);
+    auto lowered=st::preview_dependencies(v,st::code_defaults(),~0u,true,false,false,false,&saved);
+    check(lowered.values[st::knob_index("rt_geometry")]==0&&lowered.values[st::knob_index("gi")]<=1&&lowered.blocked.empty());
+    check(st::enforce_needs(lowered.values).empty());   // nothing left that needs what was turned off
+  }
+  // Save with nothing to review writes at once (no "No settings change" dialog); a review or a failed write stays.
+  {
+    launcher::State ss;ss.caps=~0u;ss.base=st::code_defaults();ss.base["dev"]="0";ss.preset=st::kHigh;ss.values=st::preset_values(st::kHigh);
+    int writes=0;bool fail=false;launcher::web::Hooks sh;sh.save=[&](launcher::State&,const st::KVList&,std::string&){++writes;return !fail;};
+    launcher::web::Bridge sb(ss,sh);
+    sb.handle(R"({"type":"set","id":"rt_intensity","value":90})");
+    auto reply=sb.handle(R"({"type":"save","policy":"enable"})");
+    check(writes==1&&sb.dirty()==0&&reply.find("\"preview\":{\"kind\":\"\"")!=std::string::npos&&reply.find("\"status\":\"Saved.\"")!=std::string::npos);
+    sb.handle(R"({"type":"set","id":"rt_geometry","value":0})");   // Indirect lighting and others need it: a review
+    reply=sb.handle(R"({"type":"save","policy":"enable"})");
+    check(writes==1&&sb.dirty()>0&&reply.find("\"preview\":{\"kind\":\"save\"")!=std::string::npos);
+    sb.handle(R"({"type":"confirm"})");check(writes==2&&sb.dirty()==0&&ss.values[st::knob_index("rt_geometry")]==0);
+    fail=true;sb.handle(R"({"type":"set","id":"rt_intensity","value":80})");
+    reply=sb.handle(R"({"type":"save","policy":"enable"})");
+    check(writes==3&&sb.dirty()==1&&reply.find("\"preview\":{\"kind\":\"\"")!=std::string::npos&&reply.find("Settings not saved. Your edits are kept.")!=std::string::npos);
+  }
+  // Displayed version: line 1 of the package's VERSION.txt (scripts/package.ps1), BOM or not; anything else is a
+  // developer build of the base version. The bridge shows what the host read.
+  {
+    using launcher::display_version;
+    check(display_version("BG3RTX 0.9.6-hairtest8\r\ncommit cb8b2360\r\nlayer lean\r\n")=="0.9.6-hairtest8");
+    check(display_version("\xEF\xBB\xBF" "BG3RTX 1.0.0\n")=="1.0.0"&&display_version("BG3RTX beta-20261111-86ca572b-dirty")=="beta-20261111-86ca572b-dirty");
+    const std::string dev=BG3RTX_PRODUCT_VERSION " (developer build)";
+    check(display_version("")==dev&&display_version("BG3RTX ")==dev&&display_version("fixture-version\n")==dev&&display_version("BG3RTX <script>\n")==dev);
+    launcher::State vs;vs.base={{"dev","0"}};vs.values=st::preset_values(st::kHigh);launcher::web::Bridge vb(vs);
+    check(vb.state_json().find("\"version\":\""+dev+"\"")!=std::string::npos);
+    vb.set_version(display_version("BG3RTX 0.9.6-hairtest8\n"));
+    check(vb.state_json().find("\"version\":\"0.9.6-hairtest8\"")!=std::string::npos);
   }
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
   {
@@ -285,7 +371,7 @@ int main(int argc,char** argv){
   bridge.handle("{\"type\":\"discard\"}");check(bridge.dirty()==0);
   bridge.handle("{\"type\":\"preset\",\"value\":3}");check(s.preset==st::kLow);bridge.handle("{\"type\":\"cancel\"}");bridge.handle("{\"type\":\"confirm\"}");check(s.preset==st::kLow);
   bridge.handle("{\"type\":\"preset\",\"value\":3}");bridge.handle("{\"type\":\"confirm\"}");check(s.preset==st::kUltra);check(bridge.dirty()>0);
-  bridge.handle("{\"type\":\"save\"}");check(saves==0);bridge.handle("{\"type\":\"confirm\"}");check(saves==1);check(bridge.dirty()==0);
+  bridge.handle("{\"type\":\"save\"}");check(saves==1);bridge.handle("{\"type\":\"confirm\"}");check(saves==1);check(bridge.dirty()==0);   // nothing to review: one write, a stray confirm writes nothing
   bridge.handle("{\"type\":\"play\"}");check(plays==1);bridge.handle("{\"type\":\"play\"}");check(plays==1);
   json=bridge.state_json();
   check(json.find("Off-screen bounce light")!=std::string::npos);
@@ -315,9 +401,9 @@ int main(int argc,char** argv){
   int writes=0;launcher::web::Hooks dh;dh.save=[&](launcher::State&,const st::KVList&,std::string&){++writes;return true;};
   launcher::web::Bridge db(dependencies,dh);
   db.handle("{\"type\":\"set\",\"id\":\"frame_generation\",\"value\":1}");
-  // The selection raises Reflex at once and says so; Save still waits for the confirmation.
+  // The selection raises Reflex at once and says so; Save then has nothing left to review and writes.
   check(dependencies.values[st::knob_index("reflex")]==1);check(db.state_json().find("Also turned on: NVIDIA Reflex")!=std::string::npos);
-  auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==0);
+  auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==1);
   db.handle("{\"type\":\"confirm\"}");check(writes==1);check(dependencies.values[st::knob_index("reflex")]==1);
   db.handle("{\"type\":\"set\",\"id\":\"local_shadows\",\"value\":3}");
   int hidden_choice=st::knob_index("local_shadows");if(hidden_choice>=0)check(dependencies.values[hidden_choice]!=3);

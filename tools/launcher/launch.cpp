@@ -1,5 +1,6 @@
 // Paths, game detection, the launch environment and the settings state.
 #include "launcher.h"
+#include "version.h"
 
 #include <tlhelp32.h>
 
@@ -89,6 +90,10 @@ std::wstring exe_dir() {
 std::wstring root_dir() { return parent(exe_dir()); }
 std::wstring user_ini_path() { return root_dir() + L"\\bg3rtx_user.ini"; }
 std::wstring base_ini_path() { return root_dir() + L"\\bg3rtx.ini"; }
+const std::string& product_version() {
+  static const std::string version = [] { std::string text; read_file(root_dir() + L"\\VERSION.txt", text); return display_version(text); }();
+  return version;
+}
 static std::wstring launcher_ini_path() { return root_dir() + L"\\bg3rtx_launcher.ini"; }
 
 bool valid_game_dir(const std::wstring& dir) { return !dir.empty() && file_exists(dir + L"\\bin\\bg3.exe"); }
@@ -403,8 +408,12 @@ static bool set_lsx_int(std::string& text, const char* key, int value, bool only
 
 std::string guard_upscaler_text(const std::string& lsx, std::vector<std::string>* changes) {
   std::string text = lsx;
-  if (!set_lsx_int(text, "ResolutionUpscaleType", 3, false, changes)) return lsx;
-  if (!set_lsx_int(text, "DLSS2Mode", 2, true, changes)) return lsx;
+  // All or nothing: a file only one of the two edits fits is returned unchanged, with no change reported (the caller
+  // would otherwise back up and rewrite the same text, and say "set back to DLSS", at every launch).
+  if (!set_lsx_int(text, "ResolutionUpscaleType", 3, false, changes) || !set_lsx_int(text, "DLSS2Mode", 2, true, changes)) {
+    if (changes) changes->clear();
+    return lsx;
+  }
   return text;
 }
 

@@ -41,7 +41,7 @@ inline std::string validate_all(const std::string* values,int n=kCount){
 inline std::string validate(const std::string& rt,const std::string& nr){const std::string v[2]={rt,nr};return validate_all(v,2);}
 inline std::string validate(const std::string& rt,const std::string& nr,const std::string& hair){const std::string v[3]={rt,nr,hair};return validate_all(v,3);}
 // Editing must allow recovery when the other saved binding is invalid.
-// Save still validates the complete pair.
+// Save still validates the complete set.
 inline std::string validate_change(const std::string& value,const std::string& other){
   auto error=validate(value,"None");
   if(!error.empty())return error;

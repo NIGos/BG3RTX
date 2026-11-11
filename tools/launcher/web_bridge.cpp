@@ -152,7 +152,7 @@ void Bridge::set_compatibility(GraphicsInspection p,int selected){pending_play_=
 bool Bridge::save_preview(bool enable_required){
   auto shortcut_error=shortcuts_error(state_.shortcuts);
   if(!shortcut_error.empty()){blocked_={shortcut_error};preview_kind_="save";return false;}
-  auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental,opt_in());
+  auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental,opt_in(),&saved_);
   preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;ab_selection_.append(preview_keys_);blocked_=p.blocked;changes_.clear();
   for(int i:p.changed)changes_.push_back(change_line(i,state_.values[i],p.values[i]));
   for(auto& kv:p.required_keys){
@@ -178,7 +178,7 @@ std::string Bridge::handle(const std::string& message){
       // The release opt-in travels with the settings it unlocks; Off removes the key.
       if(!dev)candidate.user_text=with_raw_key(candidate.user_text,"experimental_options",experimental?"1":"");
       if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);state_.loaded_dlss5_runtime_path=state_.dlss5_runtime_path;state_.loaded_shortcuts=state_.shortcuts;ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;saved_experimental_=experimental;preview_kind_.clear();status_="Saved.";}
-      else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;}
+      else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;if(changes_.empty())preview_kind_.clear();}
     }
     if(pending_play_&&preview_kind_.empty()){
       pending_play_=false;std::string error;
@@ -229,7 +229,12 @@ std::string Bridge::handle(const std::string& message){
     }
   }
   else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;state_.shortcuts=state_.loaded_shortcuts;state_.dlss5_runtime_path=state_.loaded_dlss5_runtime_path;refresh_runtime();if(!dev)experimental=saved_experimental_;status_="Changes discarded.";}
-  else if(type=="save"){pending_play_=false;save_preview(get<std::string>(o,"policy")=="enable");}
+  else if(type=="save"){
+    // Nothing to review (no dependent change, no startup key, nothing blocked): save at once, as Play does. The
+    // review dialog used to open on every Save with "No settings change", which trained players to confirm unread.
+    pending_play_=false;
+    if(save_preview(get<std::string>(o,"policy")=="enable")&&changes_.empty())return handle("{\"type\":\"confirm\"}");
+  }
   else if(type=="play"){
     if(!can_play_)status_="Choose the game folder or close the running game to enable Play.";
     else{
@@ -292,7 +297,7 @@ std::string Bridge::state_json() const {
   out+="],\"gamePath\":"+q(game_path_)+",\"compatibility\":{\"gpu\":"+q(gpu)+",\"vram\":"+q(vram)+",\"memory\":"+q(compatibility_.memory_text)+",\"driver\":"+q(driver)+",\"warnings\":"+strings(warnings)+",\"details\":"+strings({compatibility_.hardware_text,compatibility_.driver_text,compatibility_.memory_text,compatibility_.adapter_text})+",\"selected\":"+std::to_string(selected_)+",\"adapters\":[";
   for(size_t i=0;i<inspection_.adapters.size();++i){if(i)out+=",";out+="{\"value\":"+std::to_string(i)+",\"label\":"+q(inspection_.adapters[i].gpu.name)+"}";}out+="]}";
   out+=",\"presetDescriptions\":[";for(int p=0;p<st::kPresetCount;++p){if(p)out+=",";out+=q(st::kPresetDesc[p]);}out+="]";
-  out+=",\"version\":"+q(BG3RTX_PRODUCT_VERSION)+",\"modStatus\":"+q(mod_status_);
+  out+=",\"version\":"+q(version_)+",\"modStatus\":"+q(mod_status_);
   out+=",\"shortcuts\":{";for(size_t i=0;i<kShortcutCount;++i){if(i)out+=",";out+=q(bg3::hotkeys::ids[i])+":"+q(state_.shortcuts[i]);}out+="}";
   // Defaults for the Hotkeys page's "Reset" line (the bridge resets; the page only shows them).
   out+=",\"shortcutDefaults\":{";for(size_t i=0;i<kShortcutCount;++i){if(i)out+=",";out+=q(bg3::hotkeys::ids[i])+":"+q(bg3::hotkeys::defaults[i]);}out+="}";

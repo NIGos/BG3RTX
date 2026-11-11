@@ -64,6 +64,13 @@ int wmain(int argc, wchar_t** argv) {
     SetFileTime(old, nullptr, nullptr, &current); CloseHandle(old);
     auto complete = d::prepare_report(r);
     check(complete.status == d::Status::Complete, "all allowlisted inputs available gives complete report");
+    // Settings and the version file are as old as the install: that is not a stale report.
+    for (const wchar_t* name : {L"bg3rtx.ini", L"bg3rtx_user.ini", L"VERSION.txt"}) {
+      old = CreateFileW((root / name).c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+      SetFileTime(old, nullptr, nullptr, &oldtime); CloseHandle(old);
+    }
+    auto installed = d::prepare_report(r);
+    check(installed.status == d::Status::Complete && all(installed).find("older than 24 hours") == std::string::npos, "old settings files do not make a report partial");
     write(root / L"bg3rtx.log", "[cfg] knobs: earlier-config\n[cfg] keys: old-key\n[cfg] knobs: latest-config\n[cfg] keys: new-key\n");
     auto latest = d::prepare_report(r);
     check(entry(latest, "settings/effective-log.txt")->text.find("earlier-config") == std::string::npos &&

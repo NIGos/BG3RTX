@@ -466,28 +466,28 @@ if(sample) {
  const choices=(labels)=>labels.map((label,value)=>({label,value,enabled:true,apply:'Applies after saving'}));
  const settings=[
  ['rr','DLSS Ray Reconstruction','Lighting',['Off','On'],1,'Reduces noise in ray-traced lighting.'],
- ['rt_geometry','Ray-tracing detail','Lighting',['Off','Solid surfaces','Include foliage'],2,'Includes solid surfaces, or foliage, grates and chains too, in ray-traced lighting and shadows.'],
- ['sun_shadows','Sun shadows','Lighting',['Visible surfaces','Ray-traced','Include hidden roofs'],2,'Adds sun shadows, including shadows from roofs and canopies hidden by the camera.'],
- ['gi','Indirect lighting','Lighting',['Off','Visible surfaces','Ray-traced','Ray-traced high'],3,'Adds bounced light and shading where surfaces meet, with less noise at the highest level.'],
+ ['rt_geometry','Ray-tracing detail','Lighting',['Off','Solid surfaces','Include foliage'],2,'Chooses what ray-traced lighting and shadows include: solid surfaces only, or also foliage, grates and chains.'],
+ ['sun_shadows','Sun shadows','Lighting',['Visible surfaces','Ray-traced','Include hidden roofs'],2,'Ray-traced sun shadows. Include hidden roofs also keeps shadows from roofs and canopies the game hides near the camera.'],
+ ['gi','Indirect lighting','Lighting',['Off','Visible surfaces','Ray-traced','Ray-traced high'],3,'Adds bounced light and soft shading where surfaces meet. The highest level traces two rays per pixel for less noise.'],
  ['local_shadows','Local light shadows','Lighting',['Off','Fast','Full'],2,'Adds shadows from torches, lamps and spells.'],
  ['rt_intensity','Mod lighting strength','Lighting',[],100,"Blends indirect lighting, local shadows and reflections toward the game's original appearance at lower values."],
- ['exp_hidden_surface','Off-screen bounce light','Lighting',['Off','Near','Far (6 m)'],2,"Adds bounced light from surfaces outside the camera's view."],
+ ['exp_hidden_surface','Off-screen bounce light','Lighting',['Off','Near','Far (6 m)'],2,"Adds bounced light and glow from surfaces outside the camera's view. Far carries sunlight bounce up to 6 m. About 0.6 ms for Near and 3–4 ms for Far on an RTX 5090."],
  ['box_lights','Interior light shadows','Lighting',['Off','On'],1,'Adds shadows from rectangular interior lights that are meant to cast them. About 0.13 ms on an RTX 5090 at Grymforge.'],
  ['rr_post_temporal','Depth of field and bloom smoothing','Surfaces',['Off','On'],1,'Blends background blur and bloom across frames to smooth fine edges. About 0.15 ms on an RTX 5090 in dialogue.'],
- ['exp_native_coverage','Hair shadows','Lighting',['Off','On'],1,"Adds shadows and contact shading from the game's hair, including on faces and necks."],
+ ['exp_native_coverage','Hair shadows','Lighting',['Off','On'],1,"Adds shadows and contact shading from the game's hair, including on faces and necks. About 2–6 ms in ray tracing and 3–9 ms in indirect lighting on an RTX 5090, depending on the scene."],
  ['exp_hair_groom_primary','RTX Hair','Lighting',['Off','On'],1,'Beta: shows hair as individual ray-traced strands instead of flat cards. A style gets strands after the game has shown it once and the launcher has converted it. Turns on and off while playing.'],
  ['hair_distant_detail','RTX Hair detail at distance','Lighting',['Off','1/4 (Standard)','1/8 (Sharper)'],0,'Traces fewer, wider strands for distant RTX Hair. The hair keeps its look and costs less. Changes while playing.'],
  ['hair_motion_stability','RTX Hair motion stability','Lighting',['Off','On'],0,'Reduces RTX Hair smearing and trails when characters or the camera move.'],
  ['exp_gi_rt_pipeline','Faster bounce light tracing','Performance',['Off','On'],1,"Traces the off-screen bounce light with the GPU's ray tracing pipeline instead of a compute pass: the same lighting, about 2 ms faster on an RTX 5090."],
  ['exp_gi_rt_pipeline_reorder','Bounce trace reordering','Performance',['Off','By hit kind','By hit kind and object'],1,'Sorts the bounce rays by what they hit before shading them (shader execution reordering): about 1.5 ms faster at the camp and 0.8 ms at the inn on top of the faster bounce light tracing, same lighting.'],
  ['reflections','Reflections','Surfaces',['Off','Glossy','Standard','Rough'],3,'Adds reflections to smooth surfaces and, at higher levels, rougher surfaces.'],
- ['exp_water','Water lighting','Surfaces',['Off','Reflections','Reflections and shadows','Include refraction'],3,'Adds water reflections, shadows and a distorted view of the riverbed or pool floor.'],
+ ['exp_water','Water lighting','Surfaces',['Off','Reflections','Reflections and shadows','Include refraction'],3,'Adds water reflections, shadows and, at the highest level, a refracted view of the riverbed or pool floor. About 0.5–0.7 ms on an RTX 5090 (estimate).'],
  ['frame_generation','Frame Generation','Performance',['Off','2x','3x','4x'],1,'Adds generated frames between rendered frames for smoother motion.'],
  ['fps_cap','Rendered frame limit','Performance',[],58,'Limits the frame rate before Frame Generation adds frames.'],
- ['reflex','NVIDIA Reflex','Performance',['Off','On','On + Boost'],1,'Reduces latency; frame generation requires On or Boost.'],
+ ['reflex','NVIDIA Reflex','Performance',['Off','On','On + Boost'],1,'Reduces the delay between your input and the image on screen.'],
  ['detailed_logging','Detailed logging','Support',['Off','On'],0,'Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.'],
- ['dlss5_nr','DLSS 5 Neural Rendering (experimental)','DLSS 5',['Off','On'],0,'Experimental: replaces the final image with a neural rendering pass. Needs Ray Reconstruction and your own runtime file.']
- ].map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(levels),cost:'Not measured (sample)',apply:['rt_geometry','exp_hidden_surface','exp_hair_groom_primary','exp_water','frame_generation','detailed_logging','dlss5_nr'].includes(id)?'Restart the game to apply':['rr','exp_gi_rt_pipeline_reorder'].includes(id)?'Applies after saving; may briefly pause':'Applies after saving',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
+ ['dlss5_nr','DLSS 5 Neural Rendering (experimental)','DLSS 5',['Off','On'],0,'(experimental) Neural relighting after Ray Reconstruction and before post effects and frame generation. Requires your own DLSS 5 runtime.']
+ ].map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(levels),cost:'Not measured (sample)',apply:['rt_geometry','exp_hidden_surface','exp_water','frame_generation','detailed_logging','dlss5_nr'].includes(id)?'Restart the game to apply':['rr','exp_gi_rt_pipeline_reorder'].includes(id)?'Applies after saving; may briefly pause':'Applies after saving',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
  // RTX Hair conversion: ?view=granny has the player's granny2.dll and All styles; ?view=hairerror a stopped run.
  const granny=sampleView==='granny',stopped=sampleView==='hairerror';
  const preparation={items:[
@@ -497,7 +497,7 @@ if(sample) {
   hair:{ready:412,captured:430,...(granny?{total:1530,source:'all',etaSeconds:7300}:{source:'seen',etaSeconds:2100}),finished:granny?412:430,needed:granny?1530:559,bytes:1.1e9,...(stopped?{error:'granny2.dll could not be loaded.'}:{})},
   granny:granny||stopped?{path:'C:\\Tools\\ExportTool\\granny2.dll',ok:true}:{path:'',ok:false},convertAllReason:granny||stopped?'':'Needs granny2.dll: choose it below.'};
  // The WebView host sends its review state (real settings table); a plain browser uses this sample.
- if(!window.chrome?.webview){render({type:'state',version:'0.9.5.0',modStatus:'Mod files present',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:true,gamePath:'C:\\Games\\Baldurs Gate 3',compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[],details:['Hardware ray tracing supported.','Driver 621.01 supported.']},settings,status:'1 unsaved change · Sample preview',
+ if(!window.chrome?.webview){render({type:'state',version:'Sample',modStatus:'Mod files present',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:true,gamePath:'C:\\Games\\Baldurs Gate 3',compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[],details:['Hardware ray tracing supported.','Driver 621.01 supported.']},settings,status:'1 unsaved change · Sample preview',
   shortcuts:{hotkey_rt_toggle:'Ctrl+Shift+F9',hotkey_dlss5:'Ctrl+Shift+F8',hotkey_rtx_hair:'Ctrl+Shift+F7'},shortcutDefaults:{hotkey_rt_toggle:'Ctrl+Shift+F9',hotkey_dlss5:'Ctrl+Shift+F8',hotkey_rtx_hair:'Ctrl+Shift+F7'},preparation});
  reviewView(false);}
 } else send('init');
