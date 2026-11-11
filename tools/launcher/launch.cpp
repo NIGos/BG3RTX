@@ -408,8 +408,12 @@ static bool set_lsx_int(std::string& text, const char* key, int value, bool only
 
 std::string guard_upscaler_text(const std::string& lsx, std::vector<std::string>* changes) {
   std::string text = lsx;
-  if (!set_lsx_int(text, "ResolutionUpscaleType", 3, false, changes)) return lsx;
-  if (!set_lsx_int(text, "DLSS2Mode", 2, true, changes)) return lsx;
+  // All or nothing: a file only one of the two edits fits is returned unchanged, with no change reported (the caller
+  // would otherwise back up and rewrite the same text, and say "set back to DLSS", at every launch).
+  if (!set_lsx_int(text, "ResolutionUpscaleType", 3, false, changes) || !set_lsx_int(text, "DLSS2Mode", 2, true, changes)) {
+    if (changes) changes->clear();
+    return lsx;
+  }
   return text;
 }
 

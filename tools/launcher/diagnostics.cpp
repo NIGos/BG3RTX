@@ -266,7 +266,8 @@ Snapshot prepare_report(const Request& r, Progress cb) {
     FILETIME now{}; GetSystemTimeAsFileTime(&now);
     ULARGE_INTEGER t{}, today{}; t.LowPart = info.ftLastWriteTime.dwLowDateTime; t.HighPart = info.ftLastWriteTime.dwHighDateTime;
     today.LowPart = now.dwLowDateTime; today.HighPart = now.dwHighDateTime;
-    if (today.QuadPart > t.QuadPart && today.QuadPart - t.QuadPart > 24ull * 60 * 60 * 10000000) {
+    // Logs only: settings and VERSION.txt are as old as the install, which made every report "Partial" after a day.
+    if ((i < 2 || i >= 5) && today.QuadPart > t.QuadPart && today.QuadPart - t.QuadPart > 24ull * 60 * 60 * 10000000) {
       info_text += "; older than 24 hours (may be stale)"; note(label + ": older than 24 hours; check session timestamp");
     }
     if (i == 0) {
