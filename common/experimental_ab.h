@@ -2,7 +2,7 @@
 #include "settings.h"
 
 namespace bg3::experimental_ab {
-// F9 always selects the master switch, independent of the saved target.
+// The all-ray-tracing hotkey (hotkey_rt_toggle) always selects the master switch, independent of the saved target.
 enum class HotkeyAction { None, Master, Experimental };
 inline HotkeyAction hotkey_action(bool master_edge, bool target_edge, bool enabled) {
   return !enabled ? HotkeyAction::None : master_edge ? HotkeyAction::Master :

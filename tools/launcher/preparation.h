@@ -1,6 +1,6 @@
 #pragma once
 // First-run preparation in the launcher (docs/RTX_HAIR_ROADMAP.md 2b): the strand groom conversion
-// (python -m tools.hair_groom.batch) and the shader compile before Play (BG3RTX.exe --precompile-shaders, which calls
+// (bin\bg3rtx_hairconv.exe) and the shader compile before Play (BG3RTX.exe --precompile-shaders, which calls
 // the layer's bg3rtx_precompile). Both run as BelowNormal child processes in job objects, so closing the launcher
 // stops them and their children. Launcher-only settings live in bg3rtx_launcher.ini (never game keys).
 #include <cstdint>

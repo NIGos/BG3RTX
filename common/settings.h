@@ -1931,7 +1931,7 @@ inline int suggest_preset(const Gpu& g) {
 // ---- writing bg3rtx_user.ini ----
 
 // Renders the user file: `preset=<base>` plus every knob whose value differs
-// from that preset, plus `forced` keys (hardware limits such as rt=0). Lines of
+// from that preset, plus `forced` keys (hotkeys, the DLSS 5 runtime file, hardware limits such as rt=0). Lines of
 // `existing` with keys the tools do not manage are kept, so hand edits survive;
 // so are the keys of knobs whose value is -1 (hand-edited, matching no choice).
 inline std::string render_user_ini(const std::string& existing, int base_preset, const std::vector<int>& values,
@@ -1977,7 +1977,7 @@ inline std::string render_user_ini(const std::string& existing, int base_preset,
   }
   if (!overrides.empty()) out += "\n# Changed from the preset\n" + overrides;
   if (!forced.empty()) {
-    out += "\n# Hardware limits (set by the launcher)\n";
+    out += "\n# Set by the launcher (in-game hotkeys, DLSS 5 runtime file, hardware limits)\n";
     for (auto& kv : forced) out += kv.first + "=" +
       (kv.second.find('#') == std::string::npos ? kv.second : "\"" + kv.second + "\"") + "\n";
   }

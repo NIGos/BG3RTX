@@ -1,4 +1,4 @@
-// Standalone CPU-only fixture; C2 may register this in CMake.
+// Standalone CPU-only fixture (CTest launcher_ui_state_test).
 #include "ui_state.h"
 #include <cstdio>
 int main() {
