@@ -190,6 +190,22 @@ int main(int argc,char** argv){
     check(lowered.values[st::knob_index("rt_geometry")]==0&&lowered.values[st::knob_index("gi")]<=1&&lowered.blocked.empty());
     check(st::enforce_needs(lowered.values).empty());   // nothing left that needs what was turned off
   }
+  // Save with nothing to review writes at once (no "No settings change" dialog); a review or a failed write stays.
+  {
+    launcher::State ss;ss.caps=~0u;ss.base=st::code_defaults();ss.base["dev"]="0";ss.preset=st::kHigh;ss.values=st::preset_values(st::kHigh);
+    int writes=0;bool fail=false;launcher::web::Hooks sh;sh.save=[&](launcher::State&,const st::KVList&,std::string&){++writes;return !fail;};
+    launcher::web::Bridge sb(ss,sh);
+    sb.handle(R"({"type":"set","id":"rt_intensity","value":90})");
+    auto reply=sb.handle(R"({"type":"save","policy":"enable"})");
+    check(writes==1&&sb.dirty()==0&&reply.find("\"preview\":{\"kind\":\"\"")!=std::string::npos&&reply.find("\"status\":\"Saved.\"")!=std::string::npos);
+    sb.handle(R"({"type":"set","id":"rt_geometry","value":0})");   // Indirect lighting and others need it: a review
+    reply=sb.handle(R"({"type":"save","policy":"enable"})");
+    check(writes==1&&sb.dirty()>0&&reply.find("\"preview\":{\"kind\":\"save\"")!=std::string::npos);
+    sb.handle(R"({"type":"confirm"})");check(writes==2&&sb.dirty()==0&&ss.values[st::knob_index("rt_geometry")]==0);
+    fail=true;sb.handle(R"({"type":"set","id":"rt_intensity","value":80})");
+    reply=sb.handle(R"({"type":"save","policy":"enable"})");
+    check(writes==3&&sb.dirty()==1&&reply.find("\"preview\":{\"kind\":\"\"")!=std::string::npos&&reply.find("Settings not saved. Your edits are kept.")!=std::string::npos);
+  }
   // Displayed version: line 1 of the package's VERSION.txt (scripts/package.ps1), BOM or not; anything else is a
   // developer build of the base version. The bridge shows what the host read.
   {
@@ -355,7 +371,7 @@ int main(int argc,char** argv){
   bridge.handle("{\"type\":\"discard\"}");check(bridge.dirty()==0);
   bridge.handle("{\"type\":\"preset\",\"value\":3}");check(s.preset==st::kLow);bridge.handle("{\"type\":\"cancel\"}");bridge.handle("{\"type\":\"confirm\"}");check(s.preset==st::kLow);
   bridge.handle("{\"type\":\"preset\",\"value\":3}");bridge.handle("{\"type\":\"confirm\"}");check(s.preset==st::kUltra);check(bridge.dirty()>0);
-  bridge.handle("{\"type\":\"save\"}");check(saves==0);bridge.handle("{\"type\":\"confirm\"}");check(saves==1);check(bridge.dirty()==0);
+  bridge.handle("{\"type\":\"save\"}");check(saves==1);bridge.handle("{\"type\":\"confirm\"}");check(saves==1);check(bridge.dirty()==0);   // nothing to review: one write, a stray confirm writes nothing
   bridge.handle("{\"type\":\"play\"}");check(plays==1);bridge.handle("{\"type\":\"play\"}");check(plays==1);
   json=bridge.state_json();
   check(json.find("Off-screen bounce light")!=std::string::npos);
@@ -385,9 +401,9 @@ int main(int argc,char** argv){
   int writes=0;launcher::web::Hooks dh;dh.save=[&](launcher::State&,const st::KVList&,std::string&){++writes;return true;};
   launcher::web::Bridge db(dependencies,dh);
   db.handle("{\"type\":\"set\",\"id\":\"frame_generation\",\"value\":1}");
-  // The selection raises Reflex at once and says so; Save still waits for the confirmation.
+  // The selection raises Reflex at once and says so; Save then has nothing left to review and writes.
   check(dependencies.values[st::knob_index("reflex")]==1);check(db.state_json().find("Also turned on: NVIDIA Reflex")!=std::string::npos);
-  auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==0);
+  auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==1);
   db.handle("{\"type\":\"confirm\"}");check(writes==1);check(dependencies.values[st::knob_index("reflex")]==1);
   db.handle("{\"type\":\"set\",\"id\":\"local_shadows\",\"value\":3}");
   int hidden_choice=st::knob_index("local_shadows");if(hidden_choice>=0)check(dependencies.values[hidden_choice]!=3);

@@ -178,7 +178,7 @@ std::string Bridge::handle(const std::string& message){
       // The release opt-in travels with the settings it unlocks; Off removes the key.
       if(!dev)candidate.user_text=with_raw_key(candidate.user_text,"experimental_options",experimental?"1":"");
       if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);state_.loaded_dlss5_runtime_path=state_.dlss5_runtime_path;state_.loaded_shortcuts=state_.shortcuts;ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;saved_experimental_=experimental;preview_kind_.clear();status_="Saved.";}
-      else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;}
+      else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;if(changes_.empty())preview_kind_.clear();}
     }
     if(pending_play_&&preview_kind_.empty()){
       pending_play_=false;std::string error;
@@ -229,7 +229,12 @@ std::string Bridge::handle(const std::string& message){
     }
   }
   else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;state_.shortcuts=state_.loaded_shortcuts;state_.dlss5_runtime_path=state_.loaded_dlss5_runtime_path;refresh_runtime();if(!dev)experimental=saved_experimental_;status_="Changes discarded.";}
-  else if(type=="save"){pending_play_=false;save_preview(get<std::string>(o,"policy")=="enable");}
+  else if(type=="save"){
+    // Nothing to review (no dependent change, no startup key, nothing blocked): save at once, as Play does. The
+    // review dialog used to open on every Save with "No settings change", which trained players to confirm unread.
+    pending_play_=false;
+    if(save_preview(get<std::string>(o,"policy")=="enable")&&changes_.empty())return handle("{\"type\":\"confirm\"}");
+  }
   else if(type=="play"){
     if(!can_play_)status_="Choose the game folder or close the running game to enable Play.";
     else{

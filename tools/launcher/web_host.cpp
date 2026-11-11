@@ -261,7 +261,11 @@ LRESULT CALLBACK window_proc(HWND window,UINT message,WPARAM w,LPARAM l) {
       if(h->bridge&&h->bridge->dirty()){
         int answer=action_dialog(window,L"Unsaved changes",L"Save changes before closing?",{{IDYES,L"Save"},{IDNO,L"Discard changes"},{IDCANCEL,L"Keep editing"}});
         if(answer==IDCANCEL)return 0;
-        if(answer==IDYES){send(*h,h->bridge->handle("{\"type\":\"save\"}"));return 0;}
+        if(answer==IDYES){
+          // The page's own Save request. Saved with nothing to review: close. Otherwise the review or the error stays open.
+          const auto reply=h->bridge->handle("{\"type\":\"save\",\"policy\":\"enable\"}");
+          if(h->bridge->dirty()){send(*h,reply);return 0;}
+        }
       }DestroyWindow(window);return 0;
     case WM_DESTROY:h->closed=true;KillTimer(window,1);KillTimer(window,2);KillTimer(window,3);PostQuitMessage(0);return 0;
   }return DefWindowProcW(window,message,w,l);

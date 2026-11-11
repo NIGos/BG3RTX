@@ -42,7 +42,8 @@ static st::Map effective_settings() {
   auto m=saved_settings();m["dlss5_nr_runtime"]=g.st.dlss5_runtime_path;for(int i=0;i<st::kKnobCount;++i){st::KVList v;st::knob_kvs(st::kKnobs[i],g.st.values[i],v);for(auto& kv:v)m[kv.first]=kv.second;}return m;
 }
 static bool opt_in() { return !g.dev && g.experimental; }
-static int dirty_count() {return std::max(int(g.ab_selection.pending || g.experimental!=g.saved_experimental),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir)+int(g.st.dlss5_runtime_path!=g.st.loaded_dlss5_runtime_path)+int(g.st.shortcuts[0]!=g.st.loaded_shortcuts[0])+int(g.st.shortcuts[1]!=g.st.loaded_shortcuts[1])+int(g.st.shortcuts[2]!=g.st.loaded_shortcuts[2]));}
+static int changed_shortcuts() {int n=0;for(size_t i=0;i<g.st.shortcuts.size();++i)n+=int(g.st.shortcuts[i]!=g.st.loaded_shortcuts[i]);return n;}
+static int dirty_count() {return std::max(int(g.ab_selection.pending || g.experimental!=g.saved_experimental),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir)+int(g.st.dlss5_runtime_path!=g.st.loaded_dlss5_runtime_path)+changed_shortcuts());}
 static bool needs_restart(const st::Map& a,const st::Map& b) {return launcher::ui_state::restart(a,b);}
 static std::string game_session() {
   HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);if(snapshot==INVALID_HANDLE_VALUE)return {};
