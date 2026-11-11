@@ -93,6 +93,9 @@ int main() {
         convert_all_reason("C:\\g\\granny2.dll", false, true).find("not found") != std::string::npos &&
         convert_all_reason("C:\\g\\granny2.dll", true, false).find("game folder") != std::string::npos &&
         convert_all_reason("C:\\g\\granny2.dll", true, true).empty(), "convert all reason");
+  // A folder written with a trailing backslash stays one argument (CommandLineToArgvW rules).
+  check(hair_command(L"C:\\b\\conv.exe", L"C:\\cap", L"C:\\out", L"C:\\rep", 1, true, L"D:\\Game\\", L"C:\\g\\granny2.dll").find(
+        L"--game \"D:\\Game\\\\\" --granny \"C:\\g\\granny2.dll\"") != std::wstring::npos, "trailing backslash stays one argument");
   check(hair_command(L"C:\\b\\conv.exe", L"C:\\cap", L"C:\\out", L"C:\\rep", 4, false, L"C:\\Game", L"") ==
             L"\"C:\\b\\conv.exe\" \"C:\\cap\" --out \"C:\\out\" --report-dir \"C:\\rep\" --threads 4 --jobs 1",
         "captures command");

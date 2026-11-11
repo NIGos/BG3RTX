@@ -266,7 +266,13 @@ std::string convert_all_reason(const std::string& granny, bool granny_ok, bool g
 std::wstring hair_command(const std::wstring& converter, const std::wstring& capture_dir, const std::wstring& groom_dir,
                           const std::wstring& report_dir, int threads, bool all, const std::wstring& game,
                           const std::wstring& granny) {
-  auto quote = [](const std::wstring& s) { return L"\"" + s + L"\""; };
+  // Trailing backslashes are doubled: game_dir=D:\Game\ would otherwise escape the closing quote and swallow the
+  // next argument (the converter then exits 2).
+  auto quote = [](const std::wstring& s) {
+    size_t n = 0;
+    while (n < s.size() && s[s.size() - 1 - n] == L'\\') ++n;
+    return L"\"" + s + std::wstring(n, L'\\') + L"\"";
+  };
   std::wstring cmd = quote(converter) + L" ";
   if (all) cmd += L"--all --game " + quote(game) + L" --granny " + quote(granny);
   else cmd += quote(capture_dir);
@@ -432,6 +438,7 @@ struct Manager::Impl {
   Child hair, shaders;
   int hair_jobs = 0, capture_count = 0;
   bool hair_done = false, hair_failed = false, shaders_started = false, hair_all = false;
+  bool hair_new_captures = false;   // captures changed while a run was active: it listed them at its start, so run again
   uint64_t capture_mtime = 0;
   std::string hair_error;
   bool granny_ok() const { return !s.granny.empty() && granny_name_ok(widen(s.granny)) && file_exists(widen(s.granny)); }
@@ -476,7 +483,7 @@ bool Manager::act(const std::string& action, int value) {
     m.s.convert_all = value != 0;
     m.hair_done = false; m.hair_failed = false;
   }
-  else if (action == "clearGranny") { m.s.granny.clear(); m.s.convert_all = false; }
+  else if (action == "clearGranny") { m.s.granny.clear(); m.s.convert_all = false; m.hair_done = false; }   // the source changed
   else return false;
   m.save();
   return true;
@@ -487,6 +494,7 @@ bool Manager::set_granny(const std::wstring& path) {
   if (path.empty() || !granny_name_ok(path) || !file_exists(path)) return false;
   m.s.granny = narrow(path);
   m.hair_failed = false;
+  m.hair_done = false;   // a saved "Convert all styles" becomes possible: a finished captures run must not block it
   m.save();
   return true;
 }
@@ -500,10 +508,13 @@ void Manager::tick(bool game_running) {
   // New captures (the game captured a style it drew without a groom) are work again.
   int count = 0;
   const uint64_t newest = captures(m.capture_dir, &count);
-  if (newest != m.capture_mtime || count != m.capture_count) { m.capture_mtime = newest; m.capture_count = count; m.hair_done = false; }
+  if (newest != m.capture_mtime || count != m.capture_count) {
+    m.capture_mtime = newest; m.capture_count = count; m.hair_done = false;
+    if (m.hair.active()) m.hair_new_captures = true;
+  }
   // Hair: bg3rtx_hairconv over the captures, oldest first (the order the game saw them), resumable by its state.
   if (m.hair.active() && !m.hair.running()) {
-    if (m.hair.exit_code == 0) m.hair_done = true;
+    if (m.hair.exit_code == 0) m.hair_done = !m.hair_new_captures;
     else { m.hair_failed = true; m.hair_error = hair_exit_error(int(m.hair.exit_code), last_line(m.report_dir + L"\\batch.log")); }
   }
   // Source: the styles the game captured, or (Convert all styles, with the player's granny2.dll) every style in the paks.
@@ -515,6 +526,7 @@ void Manager::tick(bool game_running) {
     CreateDirectoryW((m.report_dir.substr(0, m.report_dir.find_last_of(L'\\'))).c_str(), nullptr);
     CreateDirectoryW(m.report_dir.c_str(), nullptr);
     const std::wstring cmd = hair_command(m.converter, m.capture_dir, m.groom_dir, m.report_dir, threads, all, m.game, widen(m.s.granny));
+    m.hair_new_captures = false;
     if (m.hair.start(cmd, m.root, m.report_dir + L"\\batch.log")) { m.hair_jobs = threads; m.hair_all = all; }
     else { m.hair_failed = true; m.hair_error = "the converter could not be started"; }
   }
