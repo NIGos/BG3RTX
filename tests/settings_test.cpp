@@ -1691,6 +1691,42 @@ static void test_strand_bundle() {
     for (const auto& kv : expand_preset(pr)) preset[kv.first] = kv.second;
     CHECK(get(preset, "rt_hair_groom_primary") == "" || get(preset, "rt_hair_groom_primary") == "0");
   }
+  // Saving RTX Hair On with the part knob exp_hair_fibre Off. Release (dev=0): the bundle wins, the whole bundle is saved
+  // and loads back. Developer (dev=1): the saved part wins at load, and only that key differs.
+  {
+    std::vector<int> v = preset_values(kUltra);
+    v[knob_index("exp_hair_groom_primary")] = 1;
+    for (const auto& kv : p->choices[1].need) if (kv.knob) v[knob_index(kv.knob)] = std::max(v[knob_index(kv.knob)], kv.min_choice);
+    const int fibre = knob_index("exp_hair_fibre");
+    std::vector<int> loaded = v;   // the file as loaded: every part under the bundle reads On
+    for (int i = 0; i < kKnobCount; ++i) {
+      if (!kKnobs[i].dev_only) continue;
+      KVList kvs; knob_kvs(kKnobs[i], 1, kvs);
+      bool part = !kvs.empty();
+      for (auto& kv : kvs) { bool in_bundle = false; for (const KV& b : p->choices[1].kv) if (b.key && kv.first == b.key && kv.second == b.value) in_bundle = true; part = part && in_bundle; }
+      if (part) { v[i] = 1; loaded[i] = 1; }
+    }
+    v[fibre] = 0;
+    Map release = code_defaults(); release["experimental_options"] = "1";
+    Map saved = parse_ini(render_user_ini("", kUltra, v));
+    Map m = release; apply_layer(m, saved);
+    CHECK_EQ(get(m, "rt_hair_fibre"), "1"); CHECK(knob_value(*p, m) == 1);
+    Map dev = code_defaults(); dev["dev"] = "1";
+    const std::string text = render_user_ini("", kUltra, v, {{"dev", "1"}}, true, &loaded);
+    saved = parse_ini(text);
+    m = dev; apply_layer(m, saved);
+    CHECK_EQ(get(m, "rt_hair_fibre"), "0");
+    for (const KV& kv : p->choices[1].kv)
+      if (kv.key && std::string(kv.key) != "rt_hair_fibre") CHECK_EQ(std::string(kv.key) + "=" + get(m, kv.key), std::string(kv.key) + "=" + kv.value);
+    CHECK(knob_value(*p, m) == 1);
+    CHECK(text.find("rt_hair_fibre=") == text.rfind("rt_hair_fibre="));   // written once
+    // A part left alone while RTX Hair is turned On stays under the bundle; a file that already holds the part wins again.
+    std::vector<int> untouched = v; untouched[fibre] = loaded[fibre] = 0;
+    m = dev; apply_layer(m, parse_ini(render_user_ini("", kUltra, untouched, {{"dev", "1"}}, true, &loaded)));
+    CHECK_EQ(get(m, "rt_hair_fibre"), "1");
+    m = dev; apply_layer(m, parse_ini(render_user_ini("rt_hair_fibre=0\n", kUltra, untouched, {{"dev", "1"}}, true, &loaded)));
+    CHECK_EQ(get(m, "rt_hair_fibre"), "0");
+  }
   CHECK(knob_value(*p, parse_ini("rt_hair_groom_primary=1\n")) == 1);   // an old file migrates to the whole bundle
   CHECK(knob_value(*p, parse_ini("rt_hair_groom_primary=0\n")) == 0);
   // The bundle's individual keys are developer diagnostics (bg3rtx.ini only), no knob of their own.

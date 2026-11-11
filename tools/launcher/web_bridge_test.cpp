@@ -112,7 +112,7 @@ int main(int argc,char** argv){
     launcher::State hs;hs.caps=~0u;hs.base=st::code_defaults();hs.base["dev"]="1";hs.preset=st::kLow;
     hs.values.assign(st::kKnobCount,0);hs.values[st::knob_index("rt_geometry")]=2;
     std::string file;launcher::web::Hooks hh;
-    hh.save=[&](launcher::State& c,const st::KVList&,std::string&){file=st::render_user_ini("",c.preset,c.values);return true;};
+    hh.save=[&](launcher::State& c,const st::KVList&,std::string&){file=st::render_user_ini("",c.preset,c.values,{},st::layers_dev(c.base,{}),&c.loaded);c.loaded=c.values;return true;};
     launcher::web::Bridge hb(hs,hh);
     hb.handle(R"({"type":"experimental","value":true})");
     const int primary=st::knob_index("exp_hair_groom_primary"),groom=st::knob_index("exp_hair_groom"),
@@ -125,6 +125,18 @@ int main(int argc,char** argv){
     auto saved=st::parse_ini(file);
     for(const auto& kv:st::find_knob("exp_hair_groom_primary")->choices[1].kv)if(kv.key)check(st::lookup(saved,kv.key)==kv.value);
     check(st::lookup(saved,"rt_native_hair")=="1"&&st::lookup(saved,"rt_native_scalp")=="1");
+    // Developer mode: an explicitly saved part knob wins over the bundle (non-dev saves the bundle whole, see below).
+    hb.handle(R"({"type":"set","id":"exp_hair_fibre","value":1})");
+    hb.handle(R"({"type":"save","policy":"enable"})");hb.handle(R"({"type":"confirm"})");
+    check(st::lookup(st::parse_ini(file),"rt_hair_fibre")=="1");
+    hb.handle(R"({"type":"set","id":"exp_hair_fibre","value":0})");
+    hb.handle(R"({"type":"save","policy":"enable"})");hb.handle(R"({"type":"confirm"})");
+    {
+      auto part=st::parse_ini(file);st::Map loaded=st::code_defaults();loaded["dev"]="1";st::apply_layer(loaded,part);
+      check(st::lookup(part,"rt_hair_fibre")=="0"&&st::lookup(loaded,"rt_hair_fibre")=="0");
+      check(st::lookup(loaded,"rt_hair_groom_primary")=="1"&&st::lookup(loaded,"rt_hair_groom")=="1"&&st::lookup(loaded,"rt_hair_capture")=="1");
+      check(file.find("rt_hair_fibre=")==file.rfind("rt_hair_fibre="));   // the key is written once
+    }
     // A need that cannot be met (no linear swept spheres for Strand hair in RT lighting): today's behaviour, nothing raised.
     launcher::State ns=hs;ns.caps=~0u&~st::kCapLinearSweptSpheres;ns.values.assign(st::kKnobCount,0);ns.values[st::knob_index("rt_geometry")]=2;
     launcher::web::Bridge nb(ns,hh);nb.handle(R"({"type":"experimental","value":true})");

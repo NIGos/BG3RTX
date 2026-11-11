@@ -8,9 +8,8 @@
   Test: `launcher_web_bridge_test` loads the player's file (`tests/fixtures/launcher/user_hairtest8.ini`) over
   bg3rtx.ini + release.ini and runs set / save / play; 8 checks fail without the fix.
 - Version: the window showed the constant 0.9.5.0. It now shows line 1 of the package's `VERSION.txt`
-  (`tools/launcher/version.h` display_version); a developer tree shows "0.9.6.0 (developer build)". The constant
-  stays for the exe resource only, and `scripts/package.ps1` refuses a numbered `-Version` that does not start with
-  it. Tests: bridge test and `tests/launcher_version_test.py`.
+  (`tools/launcher/version.h` display_version); a developer tree shows "0.9.6.0 (developer build)". Tests: bridge
+  test and `tests/launcher_version_test.py`.
 - Save opened the review dialog every time, also with "No settings change". It now writes at once when there is
   nothing to review (as Play does). "Save" in the close prompt used the other dependency policy and left the
   window open; it now sends the Save button's request and closes once saved. Behaviour change: tell me to revert.
@@ -23,18 +22,19 @@
   test compares it with the bridge; the user file heading "Hardware limits" names what is under it (hotkeys, DLSS 5
   runtime file); stale comments (Python converter, "C2 may register", "F9", "pair"); the native fallback counts
   every hotkey in its unsaved count.
-- Key cross-check: all 103 keys the 60 knobs write, all 357 bg3rtx.ini keys and all 61 release.ini pins are named in
-  layer/core/common, except `dlss5_nr_runtime` and `game_dlss_guard`, which only the launcher reads (correct).
-  105 keys are read with `cfg_int`/`cfg_float` but have no line in bg3rtx.ini (developer and diagnostic keys).
-- No preset value, release profile rule or knob table entry changed. No ABI or shader change (variants delta 0).
+- Key cross-check: every knob, bg3rtx.ini and release.ini key is read by layer/core/common (launcher-only keys excepted).
+- No preset value, profile rule or knob table entry changed. No ABI or shader change (variants delta 0).
+Decisions (user, 2026-11-11):
+1. Save with nothing to review writes at once: kept.
+2. dev=1: a saved RTX Hair part knob (the exp_hair_* ones the On bundle also writes) wins over the bundle. Done in
+   `render_user_ini(..., dev, loaded)` (`common/settings.h`): a part changed since the last load or save, or already
+   set in the file, is saved and its key written once; a part left alone while RTX Hair is turned On stays under
+   the bundle. Release and non-dev are as before (bundle saved whole). Tests: `settings_test`, `launcher_web_bridge_test`.
+3. bg3rtx.prev.log (and tagged .prev.log files) never makes a report "Partial": it is the last session's log by
+   design. Other old logs still do. Test: `launcher_diagnostics_test`.
+4. Native fallback kept; its Overview page says RTX Hair preparation and its shortcut are only in the full window.
 
-Open, not changed:
-- With dev=1, the 14 strand part knobs that RTX Hair On bundles (exp_hair_fibre and others) cannot be saved Off while
-  RTX Hair is On: the bundle's keys win at the next load. Writing the part after the bundle breaks the test that
-  pins "RTX Hair On saves the whole bundle", so it needs a decision (which wins in developer A/B).
+Still open, not changed:
 - The hair card trusts a stale preparation.json: with the game running and "Also while playing" off, a new capture
   still reads "All needed styles are done".
-- The native fallback (`ui_product.h`, used without WebView2 or with `--native-ui`) has no RTX Hair hotkey field, no
-  preparation card and its own save review. Keep it, or reduce it to "install WebView2"?
-- Reports: "Partial" when bg3rtx.prev.log is older than 24 hours (a test pins it; probably too strict). Redaction
-  misses a game library path outside the Users folder and a bare user name.
+- Report redaction misses a game library path outside the Users folder and a bare user name.

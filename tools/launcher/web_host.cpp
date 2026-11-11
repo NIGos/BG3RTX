@@ -318,7 +318,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         if(!candidate.settings_readable){error="Settings could not be read. Close and retry before saving.";return false;}
         if(h.no_game){error="Review mode cannot write settings.";return false;}
         auto forced=forced_keys(candidate);forced.insert(forced.end(),required.begin(),required.end());
-        auto text=st::render_user_ini(candidate.user_text,candidate.preset,candidate.values,forced);
+        auto text=st::render_user_ini(candidate.user_text,candidate.preset,candidate.values,forced,st::layers_dev(candidate.base,st::parse_ini(candidate.user_text)),&candidate.loaded);
         auto after=candidate.base;st::apply_layer(after,st::parse_ini(text));
         bool pending=game_running()&&ui_state::restart(h.baseline,after);std::wstring err;
         if(!write_file_atomic(root_dir()+L"\\bg3rtx_ui.ini",ui_state::serialize(4,pending,h.session,h.baseline),&err)){error="Settings not saved. Restart information could not be saved.\n"+narrow(err);return false;}

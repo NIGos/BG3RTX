@@ -1470,6 +1470,11 @@ inline std::string lookup(const Map& m, const std::string& key) {
   return d ? d : "";
 }
 
+// dev=1 as the layers resolve it: the user file wins over the base.
+inline bool layers_dev(const Map& base, const Map& user) {
+  return dev_mode(user.count("dev") ? user.at("dev") : lookup(base, "dev"));
+}
+
 // `want` is the choice's value; "auto" also matches an explicit "1".
 inline bool same_value(const std::string& a, const std::string& want) {
   const std::string& b = want;
@@ -1934,8 +1939,16 @@ inline int suggest_preset(const Gpu& g) {
 // from that preset, plus `forced` keys (hotkeys, the DLSS 5 runtime file, hardware limits such as rt=0). Lines of
 // `existing` with keys the tools do not manage are kept, so hand edits survive;
 // so are the keys of knobs whose value is -1 (hand-edited, matching no choice).
+//
+// dev (the effective dev=1): a developer-only part knob (the exp_hair_* knobs that the RTX Hair On bundle also writes)
+// that the developer set explicitly is saved even when it equals the preset, and wins over the bundle: the key is
+// written once, with the part's value, so a developer A/B of one bundle key survives a save and a load. Explicit =
+// it differs from `loaded` (the values at the last load or save), or the existing file already sets its disagreeing
+// keys to its value. A part left alone while RTX Hair is turned On stays under the bundle. Without dev the bundle
+// is written whole as before.
 inline std::string render_user_ini(const std::string& existing, int base_preset, const std::vector<int>& values,
-                                   const KVList& forced = {}) {
+                                   const KVList& forced = {}, bool dev = false,
+                                   const std::vector<int>* loaded = nullptr) {
   std::vector<std::string> managed = {"preset"};
   for (int i = 0; i < kKnobCount; ++i)
     if (values[i] >= 0)
@@ -1965,11 +1978,47 @@ inline std::string render_user_ini(const std::string& existing, int base_preset,
   int p = base_preset < 0 || base_preset >= kPresetCount ? kHigh : base_preset;
   out += std::string("preset=") + kPresetId[p] + "\n";
   std::string overrides;
+  std::vector<char> part(kKnobCount, 0);   // dev: saved although equal to the preset, because it overrides a bundle key
+  if (dev) {
+    const Map file = parse_ini(existing);
+    Map written;
+    for (int i = 0; i < kKnobCount; ++i) {
+      if (values[i] < 0 || values[i] == kKnobs[i].preset[p]) continue;
+      KVList kvs; knob_kvs(kKnobs[i], values[i], kvs);
+      for (auto& kv : kvs) written[kv.first] = kv.second;
+    }
+    for (int i = 0; i < kKnobCount; ++i) {
+      const Knob& k = kKnobs[i];
+      if (!k.dev_only || values[i] < 0 || values[i] != k.preset[p]) continue;
+      KVList kvs; knob_kvs(k, values[i], kvs);
+      bool conflict = false, in_file = !kvs.empty();
+      for (auto& kv : kvs) {
+        if (written.count(kv.first) && !same_value(written[kv.first], kv.second)) conflict = true;
+        if (!file.count(kv.first) || !same_value(file.at(kv.first), kv.second)) in_file = false;
+      }
+      const bool changed = loaded && loaded->size() == values.size() && (*loaded)[i] != values[i];
+      if (conflict && (changed || in_file)) part[i] = 1;
+    }
+  }
   for (int i = 0; i < kKnobCount; ++i) {
     const Knob& k = kKnobs[i];
-    if (values[i] < 0 || values[i] == k.preset[p]) continue;
+    if (values[i] < 0 || (values[i] == k.preset[p] && !part[i])) continue;
     KVList kvs;
     knob_kvs(k, values[i], kvs);
+    if (!part[i]) {   // a part knob that overrides this key writes it instead
+      KVList keep;
+      for (auto& kv : kvs) {
+        bool overridden = false;
+        for (int j = 0; j < kKnobCount && !overridden; ++j) {
+          if (!part[j]) continue;
+          KVList other; knob_kvs(kKnobs[j], values[j], other);
+          for (auto& o : other) if (o.first == kv.first && !same_value(o.second, kv.second)) overridden = true;
+        }
+        if (!overridden) keep.push_back(kv);
+      }
+      kvs = keep;
+      if (kvs.empty()) continue;
+    }
     // Keys the preset's choice writes but this one does not (gi=0 vs the RT keys)
     // keep the preset's values: harmless, the choice's own keys decide.
     overrides += std::string("# ") + k.label + "\n";

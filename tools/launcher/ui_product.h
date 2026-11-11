@@ -156,6 +156,7 @@ static void rebuild() {
     label(g.body,valid_game_dir(g.dir)?L"Game found.":L"Game not found. Choose its folder to enable Play.",16,y,w,56);y+=64;
     label(g.body,widen(st::kPresetDesc[g.st.preset]),16,y,w,96);y+=104;
     if(g.stage<4){button(g.body,NEXT,g.stage==3?L"Finish setup":L"Continue",16,y,176);y+=48;}
+    label(g.body,L"This is the basic window. RTX Hair preparation and its keyboard shortcut are only in the full launcher window.",16,y,w,48);y+=56;
     // Same report flow as Help & support, linked from the first page.
     button(g.body,REPORT,L"Problem? Create a diagnostic report…",16,y,300);y+=48;
   } else if(g.tab==4) {
@@ -283,7 +284,7 @@ static bool save(bool) {
   auto forced=forced_keys(candidate);forced.insert(forced.end(),preview.required_keys.begin(),preview.required_keys.end());
   g.ab_selection.append(forced);
   if(!g.dev)forced.emplace_back("experimental_options",g.experimental?"1":"0");
-  auto text=st::render_user_ini(candidate.user_text,candidate.preset,candidate.values,forced);
+  auto text=st::render_user_ini(candidate.user_text,candidate.preset,candidate.values,forced,st::layers_dev(candidate.base,st::parse_ini(candidate.user_text)),&candidate.loaded);
   auto after=st::parse_ini(text);st::Map effective;st::apply_layer(effective,candidate.base);st::apply_layer(effective,after);
   bool old_pending=g.pending;g.pending=game_running()&&needs_restart(g.baseline,effective);
   std::wstring err;
