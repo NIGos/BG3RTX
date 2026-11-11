@@ -1751,6 +1751,37 @@ inline std::vector<int> presentation_values(const Map& effective, bool dev, bool
   return values;
 }
 
+// Turning a prerequisite down wins over what needs it: every knob whose choice needs a knob in `lowered` above its
+// current value drops to its highest choice that does not (transitively). Needs on other knobs are left to the
+// caller's policy. Hand-edited (-1) values are left alone. Returns the knobs it changed.
+inline std::vector<int> lower_dependents(std::vector<int>& values, std::vector<int> lowered) {
+  std::vector<int> changed;
+  auto blocked = [&](const Knob& k, int c) {
+    for (const Need& n : k.choices[c].need) {
+      if (!n.knob) continue;
+      const int j = knob_index(n.knob);
+      if (j >= 0 && values[j] >= 0 && values[j] < n.min_choice &&
+          std::find(lowered.begin(), lowered.end(), j) != lowered.end()) return true;
+    }
+    return false;
+  };
+  for (bool again = !lowered.empty(); again;) {
+    again = false;
+    for (int i = 0; i < kKnobCount; ++i) {
+      const Knob& k = kKnobs[i];
+      if (k.kind != Kind::Choice || values[i] <= 0 || values[i] >= choice_count(k)) continue;
+      int c = values[i];
+      while (c > 0 && blocked(k, c)) --c;
+      if (c == values[i]) continue;
+      values[i] = c;
+      again = true;
+      if (std::find(lowered.begin(), lowered.end(), i) == lowered.end()) lowered.push_back(i);
+      if (std::find(changed.begin(), changed.end(), i) == changed.end()) changed.push_back(i);
+    }
+  }
+  return changed;
+}
+
 struct DependencyPreview {
   std::vector<int> values;
   std::vector<int> changed; // Every adjusted card, including transitive dependencies.
@@ -1763,11 +1794,19 @@ struct DependencyPreview {
 inline DependencyPreview preview_dependencies(const std::vector<int>& edited, const Map& effective,
                                                unsigned caps, bool enable_required,
                                                bool dev = false, bool experimental = false,
-                                               bool opt_in = false) {
+                                               bool opt_in = false, const std::vector<int>* saved = nullptr) {
   DependencyPreview out{edited, {}, {}, {}};
   if (edited.size() != kKnobCount) { out.blocked.push_back("Settings could not be read. Reopen the launcher."); return out; }
   if (!enable_required) enforce_needs(out.values);
   else {
+    // `saved`: the values of the last save. A knob the player turned down since then stays down (RTX Hair Off came
+    // back On in 0.9.6 because Strand hair edge resolve needs it): its dependents are lowered, never the knob raised.
+    if (saved && saved->size() == edited.size()) {
+      std::vector<int> lowered;
+      for (int i = 0; i < kKnobCount; ++i)
+        if (kKnobs[i].kind == Kind::Choice && edited[i] >= 0 && edited[i] < (*saved)[i]) lowered.push_back(i);
+      lower_dependents(out.values, lowered);
+    }
     for (int pass = 0; pass < kKnobCount; ++pass) {
       bool changed = false;
       for (int i = 0; i < kKnobCount; ++i) {

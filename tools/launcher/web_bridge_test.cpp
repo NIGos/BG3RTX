@@ -3,6 +3,8 @@
 #include "ui_state.h"
 #include "session_logging.h"
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 namespace st=bg3::settings;
 int main(int argc,char** argv){
   // --json [experimental|needs]: renderer fixtures (release opt-in shown; unmet requirements).
@@ -132,6 +134,61 @@ int main(int argc,char** argv){
     hb.handle(R"({"type":"set","id":"exp_native_coverage","value":0})");hb.handle(R"({"type":"save"})");
     hb.handle(R"({"type":"confirm"})");
     check(hs.values[shadows]==0&&hs.values[groom]==0&&hs.values[primary]==0);
+  }
+  // User report, installed 0.9.6-hairtest8: RTX Hair could not be turned off. The file (tests/fixtures/launcher/
+  // user_hairtest8.ini, the player's own, runtime path replaced) has the experimental opt-in with Strand hair edge
+  // resolve on Analytic coverage, which needs RTX Hair On; Save and Play (the page always sends policy "enable")
+  // turned RTX Hair back On to meet that need. Turning a prerequisite down now lowers what needs it instead.
+  {
+    auto slurp=[](const std::string& path){std::ifstream f(path,std::ios::binary);return std::string(std::istreambuf_iterator<char>(f),std::istreambuf_iterator<char>());};
+    const std::string root=BG3RTX_SOURCE_DIR;
+    const std::string user=slurp(root+"/tests/fixtures/launcher/user_hairtest8.ini");
+    check(!user.empty());
+    auto load=[&](launcher::State& u,const std::string& text){
+      u.caps=~0u;u.base_text=slurp(root+"/bg3rtx.ini")+slurp(root+"/data/release.ini");u.base=st::parse_ini(u.base_text);
+      u.user_text=text;u.user=st::parse_ini(text);st::Map raw;st::apply_layer(raw,u.base);st::apply_layer(raw,u.user);
+      u.values=u.loaded=st::knob_values(raw);u.preset=st::preset_from_id(st::lookup(u.user,"preset"));};
+    const int rtx=st::knob_index("exp_hair_groom_primary"),aa=st::knob_index("exp_hair_strand_aa");
+    for(const char* action:{"save","play"}){
+      launcher::State us;load(us,user);std::string file;int launched=0;
+      launcher::web::Hooks uh;
+      uh.save=[&](launcher::State& c,const st::KVList& required,std::string&){file=st::render_user_ini(c.user_text,c.preset,c.values,required);c.user_text=file;c.user=st::parse_ini(file);return true;};
+      uh.play=[&](std::string&){++launched;return true;};
+      launcher::web::Bridge ub(us,uh);ub.set_can_play(true);
+      check(us.preset==st::kUltra&&!ub.dev&&ub.experimental&&us.values[rtx]==1&&us.values[aa]==2&&ub.dirty()==0);
+      ub.handle(R"({"type":"set","id":"exp_hair_groom_primary","value":0})");
+      check(us.values[rtx]==0&&ub.dirty()==1);
+      const std::string review=ub.handle(std::string(action)=="save"?R"({"type":"save","policy":"enable"})":R"({"type":"play"})");
+      // The review lists the dependent going Off; it never offers RTX Hair On again.
+      check(review.find("Strand hair edge resolve: Analytic coverage \xE2\x86\x92 Off")!=std::string::npos);
+      check(review.find("RTX Hair: Off \xE2\x86\x92 On")==std::string::npos&&review.find("\"blocked\":[]")!=std::string::npos);
+      ub.handle(R"({"type":"confirm"})");
+      check(ub.dirty()==0&&us.values[rtx]==0&&us.values[aa]==0&&launched==int(std::string(action)=="play"));
+      // What the game and the next launcher start read back: Off, with no strand key left on.
+      launcher::State again;load(again,file);
+      check(again.values[rtx]==0&&again.values[aa]==0);
+      st::Map raw;st::apply_layer(raw,again.base);st::apply_layer(raw,again.user);
+      for(const auto& kv:st::kKnobs[rtx].choices[1].kv)if(kv.key)check(st::lookup(raw,kv.key)=="0");
+      check(st::lookup(raw,"rr_hair_strand_aa")=="0"&&st::lookup(raw,"experimental_options")=="1");
+      // Turning it back on in the same session is one click and one save, as before.
+      ub.handle(R"({"type":"set","id":"exp_hair_groom_primary","value":1})");
+      ub.handle(R"({"type":"save","policy":"enable"})");ub.handle(R"({"type":"confirm"})");
+      check(us.values[rtx]==1&&ub.dirty()==0);
+    }
+    // A dependent selected after the prerequisite was turned down raises it again (the newest choice wins).
+    launcher::State us;load(us,user);launcher::web::Hooks uh;uh.save=[](launcher::State&,const st::KVList&,std::string&){return true;};
+    launcher::web::Bridge ub(us,uh);
+    ub.handle(R"({"type":"set","id":"exp_hair_groom_primary","value":0})");
+    ub.handle(R"({"type":"set","id":"exp_hair_strand_aa","value":1})");
+    check(us.values[rtx]==1&&us.values[aa]==1);
+    // Unrelated unmet needs keep the "enable" policy: a file that already had the dependent without its prerequisite.
+    std::vector<int> v=st::preset_values(st::kUltra),saved=v;v[st::knob_index("rt_geometry")]=0;saved=v;
+    auto kept=st::preview_dependencies(v,st::code_defaults(),~0u,true,false,false,false,&saved);
+    check(kept.values[st::knob_index("rt_geometry")]>=1);
+    saved=st::preset_values(st::kUltra);
+    auto lowered=st::preview_dependencies(v,st::code_defaults(),~0u,true,false,false,false,&saved);
+    check(lowered.values[st::knob_index("rt_geometry")]==0&&lowered.values[st::knob_index("gi")]<=1&&lowered.blocked.empty());
+    check(st::enforce_needs(lowered.values).empty());   // nothing left that needs what was turned off
   }
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
   {

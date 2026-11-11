@@ -152,7 +152,7 @@ void Bridge::set_compatibility(GraphicsInspection p,int selected){pending_play_=
 bool Bridge::save_preview(bool enable_required){
   auto shortcut_error=shortcuts_error(state_.shortcuts);
   if(!shortcut_error.empty()){blocked_={shortcut_error};preview_kind_="save";return false;}
-  auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental,opt_in());
+  auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental,opt_in(),&saved_);
   preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;ab_selection_.append(preview_keys_);blocked_=p.blocked;changes_.clear();
   for(int i:p.changed)changes_.push_back(change_line(i,state_.values[i],p.values[i]));
   for(auto& kv:p.required_keys){

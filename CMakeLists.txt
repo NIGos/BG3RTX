@@ -401,7 +401,7 @@ add_executable(launcher_ui_state_test tools/launcher/ui_state_test.cpp)
 add_test(NAME launcher_ui_state_test COMMAND launcher_ui_state_test)
 add_executable(launcher_web_bridge_test tools/launcher/web_bridge_test.cpp
   tools/launcher/web_bridge.cpp tools/launcher/compatibility.cpp)
-target_compile_definitions(launcher_web_bridge_test PRIVATE UNICODE _UNICODE)
+target_compile_definitions(launcher_web_bridge_test PRIVATE UNICODE _UNICODE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME launcher_web_bridge_test COMMAND launcher_web_bridge_test)
 add_executable(launcher_diagnostics_test tests/launcher_diagnostics_test.cpp
   tools/launcher/diagnostics.cpp tools/launcher/compatibility.cpp tools/launcher/gpu.cpp)
