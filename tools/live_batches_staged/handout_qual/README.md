@@ -1,0 +1,56 @@
+# handout_qual: qualify the scene handout in one live session (STAGED)
+
+Staged only: nothing is queued, launched or copied into a watched inbox. A live run needs the user's go for this
+batch. `predicted.json` was written before the jobs. Design and state: docs/SCENE_HANDOUT_DESIGN.md section 8.
+
+    py -3 -m tools.live_batches_staged.handout_qual.make_jobs
+    py -3 tools/live_batches/live_flow.py tools/live_batches_staged/handout_qual --preflight --tree .
+    py -3 tools/live_batches/live_flow.py tools/live_batches_staged/handout_qual --preflight --frozen
+
+Focused (`-Foreground`, no `window_mode`): the game takes the focus, so warn the user first. FG 3x. Every launch
+starts with `rt_scene_handout_layout=1` (restart key) and toggles the live key `rt_scene_handout` 0 / 2 / 0 inside
+the run. Each window: 60 frames in the state, an acknowledged stats reset, then the measured frames (120-frame
+periods). Each job's post command writes `<log>.perf.md` with `analyze.py`.
+
+| Job | Save | Windows (off-a / on / off-b each) | After load (lint model) |
+| --- | --- | --- | ---: |
+| hq-s8-ultra | Water Queens House | static 360; pan Q + E 240 each; RTX Hair pan Q + E; energy (3 float traces per state); primary-check pan Q + E | 616 s |
+| hq-inn-ultra | The Blushing Mermaid - 96h 39m | the same without the primary-check windows | 513 s at 11.7 fps (about half at 25 fps) |
+| hq-s8-high, hq-inn-high | both | static 360; pan Q + E 240 each | 154 s, 296 s |
+| hq-smoke-s8 | Water Queens House | handout on from launch: static, pan Q, pan E, static | 77 s |
+
+Run order: hq-smoke-s8 (does the device start with the layout and hand out at all), hq-s8-ultra, hq-inn-ultra,
+hq-s8-high, hq-inn-high. Add 100-120 s of loading per launch: about 35 minutes for the session.
+
+## What is judged (analyze.py, thresholds from the run itself)
+
+For each window group the ON median is compared with the OFF pair; noise = |off-b - off-a| of that group.
+
+- Deliverable: `scene wait mean` and rendered `frame time median` lower (a gain is ON below the OFF mean by more than
+  the noise); `frame time p99` not higher.
+- Unchanged GPU work: rt passes, GI, scene build, strand G-buffer equal within noise.
+- Counters, 0 in every ON window: wait timeouts, handout fallbacks, pairing mismatches, OMM downgrades,
+  hit-material fallbacks (query, camera). The queue gates check the same per period (`expect_every`).
+- The stale-scene detector: the handout is not a one-frame-old scene in order; only a fallback frame traces the
+  previous scene. So the detectors are fallbacks = 0 in the pan windows and the primary-ray check match in motion
+  (hq-s8-ultra `check-pan-*`): ON not lower than the OFF mean by more than the OFF a / b difference.
+- Energy (AGENTS.md): 3 float traces per state on a static camera with the exposure held; the ON mean of the
+  normalized scene colour must lie inside the range of the 6 OFF samples.
+- RTX Hair: the hair windows switch the RTX Hair On bundle live (provisioned at launch as in perf_ab); grooms
+  published and strand draws are rows of the table. A scene without converted grooms is inconclusive for hair.
+
+Not covered: a scripted character walk. The plan runner has static, pan and rotate phases only; animated characters
+are in view in both saves and are covered by the primary-ray match and the fallback counter. If the user wants the
+walk, they turn the launcher option on and walk a character while watching the contact shadows at the feet.
+
+## Smoke (hq-smoke-s8)
+
+The state the launcher writes: release policy (`dev=0`), `preset=ultra` with its 58 fps cap, the knob's two keys,
+RTX Hair On with distant detail 1/4 and motion stability, every other qualified key from the preset. Gates: handed
+out with 0 fallbacks, 0 wait timeouts, no opaque draw dropped, FG presented 3 per frame, no layout refusal.
+
+## Decision
+
+Qualified when every counter and equality gate passes in all five launches. On by default only if the rendered
+median gains more than the noise in at least one cost launch and loses in none (sh2 at S8 on 2026-11-09 gained
+0.4-0.6 ms: GPU-bound there).

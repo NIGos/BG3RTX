@@ -1,0 +1,312 @@
+{
+  "name": "hq-smoke-s8",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "timeout": 840.0,
+  "max_minutes": 14,
+  "repeat": 1,
+  "live_batch": "handout-qual",
+  "fail_fast": false,
+  "stop_on_dump": false,
+  "set": "preset=ultra,dev=0,experimental_options=1,fg=3,reflex=1,rt_capture_wide_split=1,headless=0,crash_dump=1,detailed_logging=1,cpu_timing=1,rt_stats_period_frames=120,rt_timing_frames=120,rt_scene_wait_log_frames=120,fg_state_every=120,dump_images=0,dump_raw=0,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,qa_exposure_hold=0,rt_scene_handout_layout=1,rt_scene_handout=2,rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_mv_card=2,rt_hair_pixel_lod_k=1.0,rt_hair_pixel_lod=1,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+  "args": [
+    "-RealPresent",
+    "-Foreground",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches_staged/handout_qual/plans/hq-smoke-s8.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[stats\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[mem\\]",
+    "\\[vram\\]",
+    "\\[cpu\\]",
+    "\\[bvh\\] last",
+    "\\[rt\\] scene",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "gi: trace pass",
+    "ls: local-light shadow pass GPU median",
+    "rf: reflection pass GPU median",
+    "\\[ngx\\] gpu RR:",
+    "\\[rrpost\\] gpu",
+    "\\[sl\\] gpu FG input copy:",
+    "\\[sl\\] DLSS-G frame",
+    "\\[water\\] \\w+ GPU",
+    "\\[hair primary\\] (?:frame|live|strand G-buffer)",
+    "\\[hair groom\\] (?:frame|pixel LOD)",
+    "\\[hair fibre\\]",
+    "\\[dlss5\\]",
+    "\\[crash\\]",
+    "VK_ERROR",
+    "\\[log\\]",
+    "\\[core\\] scene handout",
+    "\\[alpha\\] set 1 layout",
+    "\\[geo\\] RT capture",
+    "rt stats \\(",
+    "\\[trace\\]",
+    "\\[rrpost\\] exposure",
+    "\\[water\\] (?:reflections|compose)",
+    "\\[omm"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[cfg\\] settings read",
+    "\\[rt\\] \\+ scene handout layout: storage buffer, sampled image",
+    "\\[rt\\] scene handout layout on \\(set 1 update-after-bind\\)",
+    "\\[alpha\\] set 1 layout update-after-bind",
+    "\\[rt\\] scene handout: dummy TLAS \\(0 instances",
+    "\\[rt\\] scene handout: \\d+ frames, reserved",
+    "\\[ngx\\] RR create .*: Success"
+  ],
+  "expect_every": [
+    {
+      "name": "rt passes GPU ms in every window",
+      "select": "rt passes: GPU cost",
+      "match": "rt passes: GPU cost",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "GI GPU ms in every window",
+      "select": "gi: GPU cost",
+      "match": "gi: GPU cost",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene build GPU ms in every window",
+      "select": "\\[rt\\] scene build GPU",
+      "match": "\\[rt\\] scene build GPU",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene wait in every window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "\\[rt\\] scene wait: \\d+ frames",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "rendered frame time in every window",
+      "select": "\\[pace\\] rendered frame time over \\d+ frames",
+      "match": "\\[pace\\] rendered frame time over \\d+ frames",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "CPU submit in every window",
+      "select": "\\[watch\\] presents",
+      "match": "\\[watch\\] presents",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "VRAM used and budget in every window",
+      "select": "\\[mem\\] device-local VRAM",
+      "match": "\\[mem\\] device-local VRAM",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "RR GPU ms in every window",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "\\[ngx\\] gpu RR:",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "handout: every first RT query handed out in the ON windows",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "handed out [1-9]\\d*",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "handout: 0 fallbacks and 0 pairing mismatches in every ON window",
+      "select": "\\[rt\\] scene handout: \\d+ frames, reserved",
+      "match": "in order [1-9]\\d*, fallbacks 0 \\(.*\\), pairing mismatches 0,",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "handout: no hit-material fallback and no OMM downgrade in every ON window",
+      "select": "\\[rt\\] scene handout: \\d+ frames, reserved",
+      "match": "downgraded 0; .*\\(fallbacks: query 0, camera 0\\)",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene wait: 0 timeouts in every window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "capacity: no opaque draw dropped in every window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "hair period line in every hair window",
+      "select": "\\[hair primary\\] frame \\d+: ",
+      "match": "\\[hair primary\\] frame \\d+: ",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "FG 3x presented in every window",
+      "select": "\\[sl\\] DLSS-G frame \\d+: ",
+      "match": "presented per app frame 3",
+      "windows": [
+        "static-on-a",
+        "pan-on-q",
+        "pan-on-e",
+        "static-on-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "\\[log\\] reached \\d+ MB",
+    "\\[rt\\] scene handout layout off",
+    "\\[rt\\] scene handout: dummy TLAS (allocation|creation) failed",
+    "\\[layer\\] optional scene handout update-after-bind request failed"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] complete phases=5\\b",
+    "^Run ended: done"
+  ],
+  "live_flow": {
+    "expected_fps": 60,
+    "settings_latency_s": 1,
+    "trace_stall_s": 0,
+    "startup_only": [
+      "rt_scene_handout_layout",
+      "fg"
+    ],
+    "fps_windows": []
+  },
+  "estimated_phase_seconds": 76.896,
+  "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-smoke-s8.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
+  "post_gate": true,
+  "purpose": "Smoke of the launcher's Low-latency scene On state at S8: release policy, preset Ultra with its 58 fps cap, FG 3x, RTX Hair On with distant detail 1/4 and motion stability, the handout on from launch: handed out with 0 fallbacks and 0 wait timeouts in static and pan windows. STAGED, not authorized."
+}

@@ -480,6 +480,7 @@ if(sample) {
  ['hair_motion_stability','RTX Hair motion stability','Lighting',['Off','On'],0,'Reduces RTX Hair smearing and trails when characters or the camera move.'],
  ['exp_gi_rt_pipeline','Faster bounce light tracing','Performance',['Off','On'],1,"Traces the off-screen bounce light with the GPU's ray tracing pipeline instead of a compute pass: the same lighting, about 2 ms faster on an RTX 5090."],
  ['exp_gi_rt_pipeline_reorder','Bounce trace reordering','Performance',['Off','By hit kind','By hit kind and object'],1,'Sorts the bounce rays by what they hit before shading them (shader execution reordering): about 1.5 ms faster at the camp and 0.8 ms at the inn on top of the faster bounce light tracing, same lighting.'],
+ ['scene_handout','Low-latency scene','Performance',['Off','On'],0,'Experimental: the ray-traced lighting no longer waits for the scene build of each frame. Same image; less CPU waiting per frame.'],
  ['reflections','Reflections','Surfaces',['Off','Glossy','Standard','Rough'],3,'Adds reflections to smooth surfaces and, at higher levels, rougher surfaces.'],
  ['exp_water','Water lighting','Surfaces',['Off','Reflections','Reflections and shadows','Include refraction'],3,'Adds water reflections, shadows and, at the highest level, a refracted view of the riverbed or pool floor. About 0.5–0.7 ms on an RTX 5090 (estimate).'],
  ['frame_generation','Frame Generation','Performance',['Off','2x','3x','4x'],1,'Adds generated frames between rendered frames for smoother motion.'],

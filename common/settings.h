@@ -343,6 +343,20 @@ inline constexpr Knob kKnobs[] = {
     {"kind", "By hit kind", kCapRayQuery, {{"gi_rt_pipeline_reorder", "1"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch},
     {"object", "By hit kind and object", kCapRayQuery, {{"gi_rt_pipeline_reorder", "2"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch}},
    {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "About -1.5 ms at the camp, -0.8 ms at the inn", "Unknown", "RTX 5090, Ultra, live 2026-11-08 on top of the ray tracing pipeline trace: camp -1.5 / -1.6 ms (two runs), inn -0.8 ms (one clean window); scene energy unchanged. Shipped on the user's decision; the inn result is one window."}, "Needs Faster bounce light tracing. By hit kind is the default; by hit kind and object is the alternative. Without the GPU's reordering support the rays are traced unsorted."},
+  // Scene handout (docs/SCENE_HANDOUT_DESIGN.md; increments 1-5 merged 2026-11-09, never qualified): the lighting thread
+  // binds this frame's reserved scene slot instead of waiting for the scene build ("[rt] scene wait"). On writes the
+  // startup key (update-after-bind set 1, device features) and the live mode 2, so turning it on needs a game restart;
+  // Off is live (mode 0: the waiting path, whatever the device layout). Off in every preset and awaiting qualification
+  // (needs "Show Experimental") until tools/live_batches_staged/handout_qual has run. Without the layout on the device
+  // mode 2 does nothing (layer/rtscene.cpp handout_mode).
+  {"scene_handout", "Low-latency scene",
+   "Experimental: the ray-traced lighting no longer waits for the scene build of each frame. Same image; less CPU waiting per frame.",
+   Kind::Choice, Apply::Restart, "Restart the game to turn on; turns off while playing", false,
+   {{"off", "Off", 0, {{"rt_scene_handout_layout", "0"}, {"rt_scene_handout", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_scene_handout_layout", "1"}, {"rt_scene_handout", "2"}}, {{"rt_geometry", 1}}, {}, false, true, true, Apply::Restart}},
+   {}, {0, 0, 0, 0}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "None (CPU wait only)", "Under 1 MB", "RTX 5090, Ultra, Water Queens House, live 2026-11-09 (before the RTX Hair updates): wait per frame 4.4-5.1 ms to 0.5-0.7 ms, rendered frame time 24.6-25.2 ms to 24.2-24.6 ms (that scene is limited by the GPU), 0 fallbacks. No measurement yet at the inn, on High or with today's RTX Hair."},
+   "Not qualified yet: off in every preset. Today every frame's ray-traced lighting waits 3 to 9 ms for that frame's scene to be built. On removes the wait: the lighting is recorded at once and reads the scene when the GPU runs it, so the image is the same. How much frame rate this gives depends on the scene: little where the GPU is the limit. If a frame's scene is not ready in time, that frame uses the previous frame's scene (as it does today after a long wait): moving characters' shadows can lag by one frame in such frames. It changes how the game's graphics device is set up, so turning it on needs a game restart and it may behave differently on other drivers; turning it off works while playing. After the first restart the lighting shaders rebuild once (up to a minute, the usual path runs meanwhile)."},
+
   // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
   // stay off in every preset; hair origins and spill are developer-only until qualified.
   {"box_lights", "Interior light shadows",
@@ -1201,6 +1215,9 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "fg_present_metering") return true;
   // core/gi.cpp initialize_hair_origin persists the startup reservation across core reloads.
   if (key == "rt_hair_physical_origin") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // Scene handout: the update-after-bind set 1 layout and its device features exist only when the key is on at device
+  // creation (layer/rtscene.cpp); off needs no restart (rt_scene_handout=0 is live).
+  if (key == "rt_scene_handout_layout") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // 5y: specialization 1049 is compiled into the velocity pipelines only when rt_hair_mv_card is non-zero at their creation.
   if (key == "rt_hair_mv_card") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // rt_hair_groom_primary is live since 5m (docs/RTX_HAIR_PRIMARY.md): its startup parts are prepared on every capable device.

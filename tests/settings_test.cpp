@@ -433,7 +433,7 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 1);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 22));   // 22 release controls: RTX Hair joined (user, 0.9.5 release, 2026-11-08), then its distance detail and motion stability (2026-11-10)
+  CHECK(dev.size() == size_t(kKnobCount - 23));   // 22 release controls: RTX Hair joined (user, 0.9.5 release, 2026-11-08), then its distance detail and motion stability (2026-11-10)
   {  // SER (user decision 2026-11-08): on in every preset; choosing it in release raises the ray tracing pipeline trace.
     const int rt = knob_index("exp_gi_rt_pipeline"), ser = knob_index("exp_gi_rt_pipeline_reorder");
     for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[rt] == 1 && preset_values(p)[ser] == 1);
@@ -1210,7 +1210,9 @@ static void test_consolidation_policy() {
 static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
     "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water", "dlss5_nr",
-    "exp_hidden_surface", "exp_gi_rt_pipeline", "exp_gi_rt_pipeline_reorder", "box_lights", "rr_post_temporal", "exp_native_coverage",
+    "exp_hidden_surface", "exp_gi_rt_pipeline", "exp_gi_rt_pipeline_reorder",
+    "scene_handout",   // Low-latency scene: Performance, On awaits qualification (needs the experimental opt-in)
+    "box_lights", "rr_post_temporal", "exp_native_coverage",
     "exp_hair_groom_primary",   // RTX Hair: a release Lighting control since 0.9.5 (user request, 2026-11-08)
     "hair_distant_detail",   // RTX Hair detail at distance (user request, 2026-11-10)
     "hair_motion_stability",   // RTX Hair motion stability (user request, 2026-11-10)

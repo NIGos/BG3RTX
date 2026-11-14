@@ -277,6 +277,19 @@
        {"id": "kind", "label": "By hit kind", "apply": "hitch", "caps": ["ray_query"], "keys": {"gi_rt_pipeline_reorder": "1"}, "needs": {"exp_gi_rt_pipeline": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "object", "label": "By hit kind and object", "apply": "hitch", "caps": ["ray_query"], "keys": {"gi_rt_pipeline_reorder": "2"}, "needs": {"exp_gi_rt_pipeline": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "scene_handout", "label": "Low-latency scene",
+     "description": "Experimental: the ray-traced lighting no longer waits for the scene build of each frame. Same image; less CPU waiting per frame.",
+     "apply": "restart", "apply_note": "Restart the game to turn on; turns off while playing", "advanced": false, "experimental": false, "developer": false,
+     "category": "Performance", "summary": "Experimental: the ray-traced lighting no longer waits for the scene build of each frame. Same image; less CPU waiting per frame.",
+     "details": "Not qualified yet: off in every preset. Today every frame's ray-traced lighting waits 3 to 9 ms for that frame's scene to be built. On removes the wait: the lighting is recorded at once and reads the scene when the GPU runs it, so the image is the same. How much frame rate this gives depends on the scene: little where the GPU is the limit. If a frame's scene is not ready in time, that frame uses the previous frame's scene (as it does today after a long wait): moving characters' shadows can lag by one frame in such frames. It changes how the game's graphics device is set up, so turning it on needs a game restart and it may behave differently on other drivers; turning it off works while playing. After the first restart the lighting shaders rebuild once (up to a minute, the usual path runs meanwhile).",
+     "cost": {"status": "Measured", "gpu": "None (CPU wait only)", "vram": "Under 1 MB", "provenance": "RTX 5090, Ultra, Water Queens House, live 2026-11-09 (before the RTX Hair updates): wait per frame 4.4-5.1 ms to 0.5-0.7 ms, rendered frame time 24.6-25.2 ms to 24.2-24.6 ms (that scene is limited by the GPU), 0 fallbacks. No measurement yet at the inn, on High or with today's RTX Hair."},
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_scene_handout_layout": "0", "rt_scene_handout": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_scene_handout_layout": "1", "rt_scene_handout": "2"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
+     ]},
     {"id": "box_lights", "label": "Interior light shadows",
      "description": "Adds shadows from rectangular interior lights that are meant to cast them. About 0.13 ms on an RTX 5090 at Grymforge.",
      "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,

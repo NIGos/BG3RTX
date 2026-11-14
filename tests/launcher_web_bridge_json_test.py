@@ -53,11 +53,11 @@ expected = {
               "RTX Hair detail at distance",   # hair_distant_detail (user request, 2026-11-10)
               "RTX Hair motion stability"],   # hair_motion_stability (user request, 2026-11-10)
  "Surfaces": ["Reflections", "Water lighting", "Depth of field and bloom smoothing"],
- "Performance": ["Frame Generation", "Rendered frame limit", "NVIDIA Reflex", "Faster bounce light tracing", "Bounce trace reordering"],   # gi_rt_pipeline, qualified 2026-11-08
+ "Performance": ["Frame Generation", "Rendered frame limit", "NVIDIA Reflex", "Faster bounce light tracing", "Bounce trace reordering", "Low-latency scene"],   # gi_rt_pipeline, qualified 2026-11-08
  "Support": ["Detailed logging"],
  "DLSS 5": ["DLSS 5 Neural Rendering (experimental)"],
 }
-assert len(state["settings"]) == 22   # 17 + exp_gi_rt_pipeline + reorder (2026-11-08) + RTX Hair (0.9.5) + its distance detail and motion stability
+assert len(state["settings"]) == 23   # + scene_handout (Low-latency scene, 2026-11-14); 22 = 17 + exp_gi_rt_pipeline + reorder (2026-11-08) + RTX Hair (0.9.5) + its distance detail and motion stability
 for page, labels in expected.items():
     assert {s["title"] for s in state["settings"] if s["category"] == page} == set(labels)
 assert not state["developer"] and not state["experimental"]
@@ -78,6 +78,7 @@ choices = {
  "exp_water": ["Off", "Reflections", "Reflections and shadows", "Include refraction"],
  "frame_generation": ["Off", "2x", "3x", "4x"], "reflex": ["Off", "On", "On + Boost"],
  "exp_gi_rt_pipeline": ["Off", "On"],
+ "scene_handout": ["Off", "On"],
  "exp_gi_rt_pipeline_reorder": ["Off", "By hit kind", "By hit kind and object"],
 }
 for setting in state["settings"]:

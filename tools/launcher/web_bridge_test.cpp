@@ -280,7 +280,7 @@ int main(int argc,char** argv){
       const auto before=s.values;bridge.handle("{\"type\":\"set\",\"id\":\""+std::string(k.id)+"\",\"value\":"+std::to_string(c)+"}");check(s.values==before);
     }
   }
-  check(visible==22);   // 17 + exp_gi_rt_pipeline and exp_gi_rt_pipeline_reorder (2026-11-08) + RTX Hair (0.9.5 release) + its distance detail and motion stability (2026-11-10)
+  check(visible==23);   // + scene_handout (Low-latency scene, 2026-11-14); 22 = 17 + exp_gi_rt_pipeline and exp_gi_rt_pipeline_reorder (2026-11-08) + RTX Hair (0.9.5 release) + its distance detail and motion stability (2026-11-10)
   // RTX Hair (0.9.5, user request): a fresh release profile on capable hardware turns it on with one click on the
   // Lighting page; every prerequisite is raised (none hidden left Off) and Save writes the whole strand bundle.
   {

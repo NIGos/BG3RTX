@@ -1,0 +1,34 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-14, branch claude/handout-ready. STAGED, not queued, not authorized.",
+  "question": "Does the scene handout (rt_scene_handout_layout=1 at start, rt_scene_handout=2 live; launcher: Performance, Low-latency scene) remove the '[rt] scene wait' without changing the image, and how much rendered frame time does that give at the inn and at Water Queens House (S8), on Ultra and High, with and without RTX Hair?",
+  "what_it_is": "Not a one-frame-old scene: in order, the lighting traces this frame's scene exactly as with the wait (the build fills the reserved slot before the same vkQueueSubmit). Only a fallback frame (build not in the submit, failed, never came) traces the previous frame's scene, as a wait timeout does today. So the artefact detector is the fallback counter and the primary-ray match, not an image guess.",
+  "reference": {
+    "today_off_20261114": {"inn_ultra_wait_mean_ms": "7.9-9.6 (opt-profile-inn 131746, perf-ab-inn 135354), 0 timeouts", "s8_wait_mean_ms": "3.2-5.6"},
+    "sh2_on_20261109": {"s8_ultra_wait_mean_ms": "ON 0.47-0.69 (static 0.06) vs OFF 4.4-5.1", "frame_median_ms": "ON 24.2-24.6 vs OFF 24.6-25.2 (GPU-bound)", "fallbacks": 0, "pairing_mismatches": 0, "water_on_the_handout": "59/60"},
+    "note": "sh2 ran before the RTX Hair pixel LOD, header camera GPU copy, row/slot stability and rt_hair_mv_card work, and before the VRAM guard latch. Its logs are gone (pruned); the numbers are from docs/archive/PROGRESS_CODEX_2026-11-11.md."
+  },
+  "noise_rule": "Every threshold is the OFF repeat of the same run: noise(metric) = |off-b - off-a| of the same window group; a delta below it is not a finding. No tuned number.",
+  "jobs": {
+    "hq-s8-ultra, hq-inn-ultra": {
+      "windows": "per group off-a / on / off-b: static (stock cards), pan Q then E (same path forth and back in every state), hair-static and hair-pan (RTX Hair On bundle live), energy (static, 3 float traces each, qa_exposure_hold=1), check-pan (rt_stats + rt_primary_check, moving camera).",
+      "scene_wait": "OFF: S8 3-6 ms static, 5-8 ms in the pans; inn 8-10 ms. ON: every first query handed out; mean under 0.1 ms static and under 1.0 ms in the pans (sh2: 0.47-0.69; the rest is frames whose first RT query came before the capture began). 0 timeouts in every window.",
+      "handout_line_on": "reserved and handed out close to the frames of the period, in order = handed out, fallbacks 0 (not committed 0, build failed 0, order 0, dropped 0), pairing mismatches 0, hit material fallbacks query 0 and camera 0, OMM downgraded 0, in every ON period after the 60-frame settle. Gate: 0 fallbacks in every ON window, pans included.",
+      "frame_time": "rendered median ON lower than the OFF mean by 0 to the OFF wait mean. Expected S8: 0.3-0.8 ms (GPU-bound, as sh2). Expected inn: 1-5 ms if the lighting thread is on the critical path there (GPU passes about 30 ms/frame at the inn on Ultra, so the GPU may hide most of it); p99 not higher than OFF beyond noise. A gain inside the noise in every scene means the handout is correct but not worth a default.",
+      "gpu": "rt passes, GI, scene build, RR GPU ms ON equal to OFF within noise (the handout changes no GPU work; one 8-byte stamp load per query).",
+      "one_frame_old_detector": "check-pan windows: primary-ray check match ON >= min(OFF a, OFF b) - |OFF a - OFF b|. A scene one frame old in motion would drop the match by tens of points (rt_scene_wait=0: 33% vs 97%, TRACK_D). Characters: the inn and S8 have animated characters in view; a walk cannot be scripted (the plan runner has static, pan and rotate only), so skinned motion is covered by the same match and by fallbacks 0.",
+      "energy": "mean of the normalized pre-post scene colour (dumps.json float mean / pre-exposure) of the 3 ON traces inside [min, max] of the 6 OFF traces (same static view, same shading).",
+      "hair": "hair windows: grooms published > 0 and G-buffer strand draws > 0 in OFF and ON alike (the strand path has its own header TLAS and same-frame publish; the handout does not touch it), the same handout and wait gates, strand G-buffer GPU ms equal within noise. A scene without converted grooms reports 0 in both: then the hair windows repeat the stock result (INCONCLUSIVE for hair, not a failure)."
+    },
+    "hq-s8-high, hq-inn-high": {
+      "windows": "static and pan Q / E, off-a / on / off-b, stock cards. High has no native hit materials and no cascade casters: the handout without the commit-time query.",
+      "expect": "the same wait, handout-line, GPU and frame-time rules; OFF wait about 2-4 ms (High builds less); hit material queries at the commit 0."
+    },
+    "hq-smoke-s8": {
+      "design": "The release policy (dev=0), preset=ultra as the launcher writes it, the knob's keys from launch (rt_scene_handout_layout=1, rt_scene_handout=2), RTX Hair On with distant detail 1/4 and motion stability, FG 3x, the preset's 58 fps cap: static, pan Q, pan E, static.",
+      "expect": "handed out in every period, fallbacks 0, 0 wait timeouts, 0 opaque draws dropped, water reflections traced, FG ratio 3.00, VRAM guard normal, no '[rt] scene handout layout off', no device loss. Proves the knob's two keys survive the release policy."
+    }
+  },
+  "decision": "Qualified (knob may lose its Experimental mark) when every correctness gate passes in all five launches. On by default only if the rendered median gains more than the noise in at least one of the four cost launches and loses in none.",
+  "known_limits": "Frames keep waiting: legacy single-BLAS builds, a first RT query before the capture began, two frames after a pipeline without constant 1051 ran (toggle). A toggle rebuilds every gi/ and water pipeline with constant 1051 (the warm phases absorb it).",
+  "disk": "logs plus 9 traces per Ultra launch (PNG width 1280, no raw dumps): under 0.3 GB for the batch."
+}
