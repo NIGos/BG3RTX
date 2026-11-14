@@ -1,4 +1,4 @@
-# claude/queue-corpus
+## claude/queue-corpus
 
 - Bug: `scripts/test-queue.ps1` pruned every log older than 3 days at start. After 3 idle days the preflight
   saw `VALID corpus: 0 logs` and refused every job (`corpus: no readable VALID logs`), 2026-11-14.
