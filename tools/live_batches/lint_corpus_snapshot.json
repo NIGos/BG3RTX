@@ -87519,6 +87519,22 @@
     "\\[geo\\] rt_capture_wide_split on": [
       0,
       null
+    ],
+    "\\[hair primary\\] G-buffer hair pipeline: .*dense samples \\(specialization 1052\\) 1": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] G-buffer hair pipeline: .*card fill \\(specialization 1053\\) 1": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] card fill: header flag 1 .*pipelines 1 .*draws its card; frame watchdog reports only": [
+      0,
+      null
+    ],
+    "\\[hair primary\\] card fill: header flag 0 .*is discarded; frame watchdog switches to cards": [
+      0,
+      null
     ]
   }
 }
