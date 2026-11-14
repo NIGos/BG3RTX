@@ -1,0 +1,325 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 20.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 20.0,
+    "motion_end": 20.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[auto\\] scene ready"
+    ],
+    "wait_log_timeout": 120
+  },
+  {
+    "label": "warm-lod",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 4.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=1,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation "
+    ],
+    "wait_log_timeout": 40
+  },
+  {
+    "label": "warm-not",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 4.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=0,rt_hair_groom_ao_t=0,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 40,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "warm-groomrt",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 4.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=0,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 40,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "warm-off",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 4.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 40,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "off-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 16.578,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 16.578,
+    "motion_end": 16.578,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=0",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[pace\\] rendered frame time over \\d+ frames",
+      "\\[watch\\] presents",
+      "\\[mem\\] device-local VRAM",
+      "\\[ngx\\] gpu RR:",
+      "\\[hair primary\\] frame \\d+: ",
+      "\\[sl\\] DLSS-G frame \\d+: "
+    ],
+    "wait_log_timeout": 30
+  },
+  {
+    "label": "on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 16.578,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 16.578,
+    "motion_end": 16.578,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[pace\\] rendered frame time over \\d+ frames",
+      "\\[watch\\] presents",
+      "\\[mem\\] device-local VRAM",
+      "\\[ngx\\] gpu RR:",
+      "\\[hair primary\\] frame \\d+: ",
+      "\\[sl\\] DLSS-G frame \\d+: "
+    ],
+    "wait_log_timeout": 40,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "lod",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 16.578,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 16.578,
+    "motion_end": 16.578,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=1,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[pace\\] rendered frame time over \\d+ frames",
+      "\\[watch\\] presents",
+      "\\[mem\\] device-local VRAM",
+      "\\[ngx\\] gpu RR:",
+      "\\[hair primary\\] frame \\d+: ",
+      "\\[sl\\] DLSS-G frame \\d+: "
+    ],
+    "wait_log_timeout": 30
+  },
+  {
+    "label": "not",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 16.578,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 16.578,
+    "motion_end": 16.578,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=0,rt_hair_groom_ao_t=0,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[pace\\] rendered frame time over \\d+ frames",
+      "\\[watch\\] presents",
+      "\\[mem\\] device-local VRAM",
+      "\\[ngx\\] gpu RR:",
+      "\\[hair primary\\] frame \\d+: ",
+      "\\[sl\\] DLSS-G frame \\d+: "
+    ],
+    "wait_log_timeout": 40,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "groomrt",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 16.578,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 16.578,
+    "motion_end": 16.578,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=1,rt_hair_groom_primary=0,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[pace\\] rendered frame time over \\d+ frames",
+      "\\[watch\\] presents",
+      "\\[mem\\] device-local VRAM",
+      "\\[ngx\\] gpu RR:",
+      "\\[hair primary\\] frame \\d+: ",
+      "\\[sl\\] DLSS-G frame \\d+: "
+    ],
+    "wait_log_timeout": 40,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "off-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 16.578,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 16.578,
+    "motion_end": 16.578,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=0",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[pace\\] rendered frame time over \\d+ frames",
+      "\\[watch\\] presents",
+      "\\[mem\\] device-local VRAM",
+      "\\[ngx\\] gpu RR:",
+      "\\[hair primary\\] frame \\d+: ",
+      "\\[sl\\] DLSS-G frame \\d+: "
+    ],
+    "wait_log_timeout": 40,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  }
+]
