@@ -1,5 +1,63 @@
 # RTX hair, primary: the visible hair becomes strands
 
+## Current state (summary of 2026-11-14; the dated sections below are the history and are unchanged)
+
+What the path is today:
+- A hair style with a converted groom file is drawn as strands. The game's hair draws keep their vertex stage; their
+  fragment shaders in the G-buffer and velocity passes are replaced by a strand variant that traces one camera ray per
+  fragment into the groom TLAS (sections 1 and 2). Styles without a groom file, scalps and accessories stay the game's cards.
+- The same strands are in the ray-traced scene: shadows, AO, bounced light and reflections, with fibre shading (section 3).
+- The strand header is applied only at the 5-target scene G-buffer pass, its camera is copied on the GPU, and coverage
+  evidence does not expire by age (6g to 6k). These three ended the cards and holes under camera motion.
+- It turns on and off while playing (5m): launcher Lighting, RTX Hair, or the in-game key `hotkey_rtx_hair`
+  (Ctrl+Shift+F7, master key `rt_hair`, default 1).
+- Grooms come from the launcher's Preparation (Home page): styles the game showed are captured and converted;
+  "All styles" needs the player's own granny2.dll (docs/RTX_HAIR_ROADMAP.md).
+
+Controls and their keys (common/settings.h; every hair key is 0 in bg3rtx.ini unless noted):
+
+| Launcher control | Presets | Keys |
+|---|---|---|
+| RTX Hair (`exp_hair_groom_primary`, Beta) | Off in every preset, live | On writes the 26-key bundle below |
+| RTX Hair detail at distance (`hair_distant_detail`) | Full in every preset, live | `rt_hair_pixel_lod` 0 / 1, `rt_hair_pixel_lod_small_keep` 0.25 / 0.125 |
+| RTX Hair motion stability (`hair_motion_stability`) | Off, Off, On, On; restart to turn on | `rt_hair_mv_card` 0 / 2 (2 in bg3rtx.ini) |
+| Strand hair edge resolve (`exp_hair_strand_aa`, Experimental page) | Off | `rr_hair_strand_aa` 0 / 1 / 2 |
+
+The RTX Hair On bundle (26 keys, all written 1; old user files get the newer ones on load):
+`rt_hair_groom_primary`, `rt_hair_groom_primary_order`, `rt_hair_groom_primary_current`, `rt_hair_primary_frame_tag`,
+`rt_hair_groom_lod_keep`, `rt_hair_primary_hold`, `rt_hair_tangent_world`, `rt_hair_groom`, `rt_hair_groom_shadow_t`,
+`rt_hair_groom_ao_t`, `rt_hair_groom_cascade_drop`, `rt_hair_fibre`, `rt_hair_fibre_gi`, `rt_hair_fibre_spec`,
+`rt_hair_fibre_mapped`, `rr_hair_guides`, `rt_hair_physical_origin`, `rt_hair_capture`, `rt_hair_coverage_union`,
+`rt_hair_coverage_confirm`, `rt_hair_slot_stable`, `rt_hair_live_warmup`, `rt_hair_groom_nearest`,
+`rt_hair_header_cam_gpu`, `rt_hair_header_scene_pass`, `rt_hair_coverage_keep`.
+Only `rt_hair_physical_origin` still needs a restart when the game started with RTX Hair off.
+
+Outside the bundle:
+- `rt_hair_card_fill` 0: Advanced option, no visible gain (pairs in `docs/hair_fill/`).
+- `rt_hair_dense_sample` 0 and `rt_hair_debug_late_arrival` 0: diagnostics (release pins them 0).
+- `rt_hair_warmup` 1, `rt_hair_primary_passes` 15, `rt_hair_pixel_lod_k` 1.0: defaults that are not switches.
+- `rt_hair_shared_key`, `rt_hair_groom_tips`, `rt_hair_groom_coverage`, `rt_hair_coverage_footprint`,
+  `rt_hair_macro_normal`, `rt_hair_groom_crowd_ksegments`, `rt_hair_receiver_guard`: 0, developer A/B only.
+- Removed with their code on 2026-11-14 (6k; old files still load): `rt_hair_stale_publish`, `rt_hair_row_stable`,
+  `rt_hair_watchdog_draw`, `rt_hair_watchdog_one_key`, `rt_hair_swap_latch`, `rt_hair_coverage_min_pixels`.
+
+Evidence (Water Queens House, S8): live hx1 202905, every bundle window 0 strands to cards, 0 frames on cards, 0 watchdog
+trips; a head entering the view shows cards for typically 3 frames. hx1 194658: strand draws 97.4 to 99.1% of the hair
+draws. Cost: strand G-buffer 0.13 to 0.35 ms; the three stability keys are CPU only.
+
+Open:
+- The preset decision: RTX Hair is Off in every preset until the user decides.
+- Styles without a groom file stay cards (S8: index counts 3399 and 7086). They need conversion.
+- Hitch frames (two scene passes in one present interval) are fixed offline only (CTest `test_header_pass`); never seen
+  live. Two card runs of 6 and 9 frames in hx1 202905 are unexplained.
+- Pixel LOD: the camera BLAS is not compacted (about 16 MB per groom); above 60 px the k rule over-covers about 15%.
+- Staged live job: `tools/live_batches_staged/hair_stable/` (hx1). Status of the other staged jobs:
+  `tools/live_batches_staged/README.md`.
+
+Where to read: stability 6g to 6k; live switch 5m; pixel LOD 5v; motion vectors 5y; edge resolve 5n; fail-safes 5b.
+
+## Original introduction (2026-11-03)
+
 2026-11-03. Roadmap step 6 (docs/RTX_HAIR_ROADMAP.md), started on the user's decision after the trial build:
 "i capelli mi sembrano sempre card based", so the strand groom in secondary rays alone is not enough.
 Key `rt_hair_groom_primary` (experimental, off, restart required, needs `rt_hair_groom=1`). Matched styles only; scalp,

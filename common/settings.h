@@ -146,6 +146,9 @@ struct Knob {
   const char* details = "";
 };
 
+// Copy rule (launcher detail panel): desc, details and the Cost texts of a knob a player can see (not dev_only, or in
+// kOptInKnobs) are read by players. Plain English: what it does, what it costs, when it applies, what it needs. Key
+// names, phase numbers, test names and qualification history stay in the comments here and in docs/.
 // Apply audit: core/gi.cpp reads lighting/strength each frame; refresh() builds variants on demand.
 // layer/ngx.cpp switches RR with a history reset. streamline.cpp reflex_apply() and framecap.cpp
 // read latency/cap live. geocapture.cpp init fixes rt_alpha/hair/tileset strides; hit_material.cpp
@@ -259,7 +262,7 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"dlss5_nr", "0"}}, {}, {}, false, false, false, Apply::Restart},
     {"on", "On", kCapDlss, {{"dlss5_nr", "1"}}, {{"rr", 1}}, {}, false, false, true, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "Ray Reconstruction before post effects"}}, false, "DLSS 5", {},
-   "Experimental and off in every preset. Requires Ray Reconstruction before post effects and a compatible user-provided nvngx_dlssnr.dll. The launcher prepares the runtime before Play; custom or unsigned runtimes are identified in the log and may be rejected by NVIDIA (0xbad0000b). Restart after changing this option or the runtime file."},
+   "Off in every preset. Needs DLSS Ray Reconstruction and your own DLSS 5 runtime file (nvngx_dlssnr.dll); BG3RTX does not include one. The launcher prepares the file before Play. NVIDIA may refuse a file it has not signed; the log then says so. Changing this option or the file needs a game restart."},
 
   {"water_surface_fresnel", "Water surface reflections",
    "Experimental: works out the reflection at the water surface separately from the water's depth colour. Mostly visible at the edges of shallow pools; open water barely changes.",
@@ -270,18 +273,18 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Needs Water lighting. Turning it on needs a game restart; turning it off applies while you play. Compare the reflections on shallow pools."},
 
   {"fg_destroy_wait_exact", "Frame generation pacing test",
-   "Experimental: may reduce frame generation stutter when the game replaces temporary images. Cost and smoothness are unqualified.",
+   "Experimental: may reduce Frame Generation stutter when the game replaces temporary images. Not tested for cost or smoothness yet.",
    Kind::Choice, Apply::Live, "Applies after saving.", false,
    {{"off", "Standard", 0, {{"fg_destroy_wait_exact", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "Deferred", kCapFg, {{"fg_destroy_wait_exact", "1"}}, {{"frame_generation", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Compare smoothness while turning in the same scene. Experimental; disabled in every preset."},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Off in every preset. Needs Frame Generation. Compare smoothness while turning the camera in the same scene."},
 
   {"fg_present_metering", "Multi-frame presentation test",
-   "Experimental: enables an optional driver presentation capability for frame generation. Smoothness and cost are unqualified.",
+   "Experimental: lets the graphics driver pace the generated frames. Not tested for smoothness or cost yet.",
    Kind::Choice, Apply::Restart, "Restart to apply.", false,
    {{"off", "Standard", 0, {{"fg_present_metering", "0"}}, {}, {}, false, false, false, Apply::Restart},
     {"on", "Driver metering", kCapMfg, {{"fg_present_metering", "1"}}, {{"frame_generation", 1}}, {}, false, true, true, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Requires Frame generation and a game restart. Compare 3x smoothness in the same scene. Disabled in every preset."},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Off in every preset. Needs Frame Generation and a game restart. Compare smoothness at 3x in the same scene."},
 
   // om3 qualified the fine-LOD policy; om4 qualified the dynamic micromap bake (2026-11-03).
   // Keep the legacy ids for saved GUI selections. Hardware and local masks remain prerequisites.
@@ -332,7 +335,7 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "May briefly pause the first time while the pipeline builds", false,
    {{"off", "Off", 0, {{"gi_rt_pipeline", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"gi_rt_pipeline", "1"}}, {}, {}, false, false, false, Apply::Live}},
-   {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves about 2 ms", "Under 1 MB", "RTX 5090, Ultra, live 2026-11-08: GI trace -2.0 ms at the inn (12.0 to 9.95 ms) and -2.1 ms at the camp; scene energy unchanged within noise."}, "Traces the off-screen bounce light with the GPU's ray tracing pipeline instead of a compute pass. Applies to Off-screen bounce light: without it this option does nothing. The first time, the pipeline builds for up to a minute while the usual trace keeps running. Without the GPU's ray tracing pipeline and reordering features the usual trace runs."},
+   {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves about 2 ms", "Under 1 MB", "RTX 5090, Ultra, 2026-11-08: 2.0 ms saved at the inn and 2.1 ms at the camp. Brightness unchanged."}, "Traces Off-screen bounce light with the graphics card's ray tracing pipeline; without that option this one does nothing. The first time, the pipeline builds for up to a minute while the usual tracing keeps running. Graphics cards without this feature keep the usual tracing."},
 
   // Shader execution reordering on the raygen trace: on by default (user decision 2026-11-08, "Yes, turn it on"). Live: camp
   // -1.5 / -1.6 ms in two runs, inn -0.8 ms in one clean window; the committed two-scene rule was not met (inn unproven).
@@ -342,7 +345,7 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"gi_rt_pipeline_reorder", "0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"kind", "By hit kind", kCapRayQuery, {{"gi_rt_pipeline_reorder", "1"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch},
     {"object", "By hit kind and object", kCapRayQuery, {{"gi_rt_pipeline_reorder", "2"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch}},
-   {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves about 0.8 to 1.5 ms", "Unknown", "RTX 5090, Ultra, live 2026-11-08 on top of the ray tracing pipeline trace: camp -1.5 / -1.6 ms (two runs), inn -0.8 ms (one clean window); scene energy unchanged. Shipped on the user's decision; the inn result is one window."}, "Sorts the bounce rays by what they hit before shading them (shader execution reordering). Needs Faster bounce light tracing. By hit kind is the default; by hit kind and object is the alternative. Without the GPU's reordering support the rays are traced unsorted."},
+   {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves about 0.8 to 1.5 ms", "Unknown", "RTX 5090, Ultra, 2026-11-08, on top of Faster bounce light tracing: 1.5 ms saved at the camp, 0.8 ms at the inn. Brightness unchanged."}, "Groups the bounce rays by what they hit before shading them, which the graphics card does faster. Needs Faster bounce light tracing. By hit kind is the default; By hit kind and object is an alternative to compare. Graphics cards without this feature trace the rays ungrouped."},
   // Scene handout (docs/SCENE_HANDOUT_DESIGN.md; increments 1-5 merged 2026-11-09): the lighting thread binds this
   // frame's reserved scene slot instead of waiting for the scene build ("[rt] scene wait"). On writes the startup key
   // (update-after-bind set 1, device features) and the live mode 2, so turning it on needs a game restart; Off is live
@@ -358,8 +361,8 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Restart, "Restart the game to turn on; turns off while playing", false,
    {{"off", "Off", 0, {{"rt_scene_handout_layout", "0"}, {"rt_scene_handout", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_scene_handout_layout", "1"}, {"rt_scene_handout", "2"}, {"rt_scene_handout_hit_wait", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves 0 to 0.5 ms", "Under 1 MB", "RTX 5090, live 2026-11-14 (focused, Frame Generation 3x, Off/On/Off in one run). Water Queens House, Ultra: scene wait 3.5 to 0.3 ms, rendered frame time unchanged (21.6 against 21.3 to 21.5 ms: the GPU is the limit), hit lighting and scene energy equal to Off, 0 fallbacks. High: about 0.5 ms saved (12.1 to 11.6 ms). The inn on Ultra is being measured again: the earlier 2.5 to 3.5 ms there was mostly bounce lighting work the first version skipped."},
-   "Today every frame's ray-traced lighting waits 3 to 9 ms for that frame's scene to be built. On removes the wait: the lighting is recorded at once and reads the scene when the GPU runs it, so the image is the same. How much frame rate this gives depends on the scene: none where the GPU is the limit (Water Queens House on Ultra), about 0.5 ms on High. On in High and Ultra. If a frame's scene is not ready in time, that frame uses the previous frame's scene (as it does today after a long wait): moving characters' shadows can lag by one frame in such frames. It changes how the game's graphics device is set up, so turning it on needs a game restart and it may behave differently on other drivers; turning it off works while playing. After the first restart the lighting shaders rebuild once (up to a minute, the usual path runs meanwhile)."},
+   {}, {0, 0, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves 0 to 0.5 ms", "Under 1 MB", "RTX 5090, Frame Generation 3x, 2026-11-14. Water Queens House on High: 12.1 to 11.6 ms per frame. On Ultra the frame time is unchanged there (21.6 against 21.3 to 21.5 ms) and at the inn (30.1 against 30.0 ms). Lighting and brightness equal to Off."},
+   "Normally each frame's ray-traced lighting waits 3 to 9 ms until that frame's scene is ready. On removes the wait; the image stays the same. It saves about 0.5 ms per frame on High, and nothing where the graphics card is already the limit (the tested scenes on Ultra). On in High and Ultra. If a frame's scene is late, that frame uses the previous one, so shadows of moving characters can lag by one frame. Turning it on needs a game restart; turning it off applies while you play. After the first restart the lighting shaders rebuild once, for up to a minute."},
 
   // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
   // stay off in every preset; hair origins and spill are developer-only until qualified.
@@ -400,7 +403,7 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Restart},
     {"tilesets", "+ Tilesets", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "1"}},
      {{"rt_geometry", 2}}, {"rt_native_tileset"}, true, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 1}, false, {{"rt","1","Ray-tracing support"},{"rt_alpha","1","Foliage capture"},{"rt_bvh_split","1","Scene cache"}}, false, "Lighting", {"Measured", "Ray tracing 2.3–6.3 ms; indirect light 3.2–8.8 ms", "Unknown", "Recorded RTX 5090 increases: 2.3–6.3 ms in the ray-tracing pass and 3.2–8.8 ms in indirect-light tracing, depending on scene."}, "Needs Ray-tracing detail: Include foliage. Turning it on needs a game restart, and the first start may pause while shaders compile. Visible hair stays the game's own hair."},
+   {}, {0, 0, 0, 1}, false, {{"rt","1","Ray-tracing support"},{"rt_alpha","1","Foliage capture"},{"rt_bvh_split","1","Scene cache"}}, false, "Lighting", {"Measured", "Ray tracing 2.3–6.3 ms; indirect light 3.2–8.8 ms", "Unknown", "RTX 5090: 2.3–6.3 ms more in ray tracing and 3.2–8.8 ms more in indirect lighting, depending on the scene."}, "Needs Ray-tracing detail: Include foliage. Turning it on needs a game restart, and the first start may pause while shaders compile. Visible hair stays the game's own hair."},
 
   {"exp_hair_groom", "RTX Hair in ray-traced lighting",
    "Experimental: uses individual strands for hair shadows and reflected light.",
@@ -450,7 +453,7 @@ inline constexpr Knob kKnobs[] = {
       {"rt_hair_live_warmup", "1"}, {"rt_hair_groom_nearest", "1"}, {"rt_hair_header_cam_gpu", "1"},
       {"rt_hair_header_scene_pass", "1"}, {"rt_hair_coverage_keep", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Beta: supported, off in every preset. A style gets strands after the game has shown it once and the launcher has converted it; until then it keeps the game's look. Turns on and off while playing. Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified. It turns on and off while playing, also with its keyboard shortcut (Ctrl+Shift+F7 by default); if the game started with RTX Hair off, the physical hair ray origins need a game restart."},
+   {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Beta: off in every preset. Replaces the game's flat hair cards with individual strands, on screen and in shadows, reflections and bounced light. A hair style gets strands after the game has shown it once and the launcher has converted it (Home, Preparation); until then it keeps the game's look. Turns on and off while you play, also with its in-game key. If the game was started with RTX Hair off, part of the strand lighting waits for the next game start. The cost depends on how much hair is on screen and is not measured across scenes yet."},
   // Distant RTX Hair detail (docs/RTX_HAIR_PRIMARY.md 5v, user request 2026-11-10): the release control of the pixel LOD.
   // 1/4 and 1/8 are rt_hair_pixel_lod_small_keep (common/hair_groom_budget.h pixel_lod_level). Off in every preset until
   // the final qualification live; to make 1/4 the default, see docs/progress/claude-hair-detail-knob.md.
@@ -464,8 +467,8 @@ inline constexpr Knob kKnobs[] = {
     {"eighth", "1/8 (Sharper)", kCapRayQuery | kCapLinearSweptSpheres,
      {{"rt_hair_pixel_lod", "1"}, {"rt_hair_pixel_lod_small_keep", "0.125"}}, {}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, false, {}, false, "Lighting",
-   {"Measured", "Saves about 0.08 ms (1/4) or 0.10 ms (1/8)", "About 75-100 MB", "RTX 5090, one scene with 13 characters at a distance (2026-11-10). Not yet qualified."},
-   "Only changes RTX Hair. Full traces every strand at every distance. 1/4 (Standard): small, distant heads trace down to a quarter of their strands, each drawn wider so the hair covers the same area; the outline stays as it is today. 1/8 (Sharper): those heads trace an eighth; finer-looking and slightly cheaper, but the hair outline is about 2% fuller than physically correct. Switch while watching a character a few metres away."},
+   {"Measured", "Saves about 0.08 ms (1/4) or 0.10 ms (1/8)", "About 75-100 MB", "RTX 5090, one scene with 13 distant characters (2026-11-10). Measured in one scene only."},
+   "Only changes RTX Hair. Full traces every strand at every distance. 1/4 (Standard) traces a quarter of the strands on small, distant heads and draws each one wider, so the hair covers the same area. 1/8 (Sharper) traces an eighth: it looks finer and costs slightly less, but the outline of the hair is about 2% fuller than it should be. Applies while you play: switch while watching a character a few metres away."},
 
   // RTX Hair motion stability (docs/RTX_HAIR_PRIMARY.md 5y, user request 2026-11-10): the release control of the strand
   // motion fix. On is rt_hair_mv_card=2 (every strand pixel takes its card's own skinned motion); mode 1 is disproved
@@ -478,7 +481,7 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rt_hair_mv_card", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres, {{"rt_hair_mv_card", "2"}}, {}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 1, 1}, false, {}, false, "Lighting", {},
-   "Only changes RTX Hair. Strand pixels take the motion of the hair they belong to, so the denoiser stops dragging old hair behind moving heads. Turning it on takes effect after a game restart (the hair motion shaders are prepared when the game starts); turning it off works while playing. Watch a character walk or turn the camera."},
+   "Only changes RTX Hair. Each strand follows the motion of the hair it belongs to, so old hair is no longer dragged behind moving heads. On in High and Ultra. Turning it on needs a game restart; turning it off applies while you play. To see it, watch a character walk or turn the camera."},
 
   {"exp_hair_fibre", "Physical strand shading",
    "Experimental: gives on-screen hair brighter, warmer shading.",
@@ -651,7 +654,7 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rr_hair_strand_aa", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"untag", "Strands unresolved", kCapDlss, {{"rr_hair_strand_aa", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live},
     {"coverage", "Analytic coverage", kCapDlss, {{"rr_hair_strand_aa", "2"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "How on-screen strand edges enter Ray Reconstruction. The game's hair dither resolve no longer mixes strands by the hair cards' dither pattern; with Analytic coverage, thin strands at the edges are blended with their background instead of flickering. Appearance and cost are unqualified. 5n: compare strand edges against the background in Test Dialogue1 (hair silhouette, flyaway strands): dithering at the edges should be gone with Analytic coverage."},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Changes how the edges of RTX Hair are smoothed. With Analytic coverage, thin strands at the edge of the hair are blended with what is behind them instead of flickering. Strands unresolved is a step in between, for comparison. Needs RTX Hair. Look and cost are not tested yet: compare loose strands against a bright background in a dialogue."},
   {"exp_hair_pool_trim", "Retire unused hair snapshots",
    "Reclaims unused hair capture memory.",
    Kind::Choice, Apply::Live, "live", false,

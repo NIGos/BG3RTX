@@ -10,6 +10,7 @@ Set-StrictMode -Version 2
 $install = Join-Path $TestRoot 'setup installed beta'
 $keyName = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{8A32895E-1307-462E-B807-BE5B8072A9F5}_is1'
 function Require([bool]$ok, [string]$message) { if (-not $ok) { throw $message } }
+. (Join-Path $PSScriptRoot '..\app-control.ps1')
 function AppsEntries {
   foreach ($view in @([Microsoft.Win32.RegistryView]::Registry32, [Microsoft.Win32.RegistryView]::Registry64)) {
     $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser, $view)
@@ -24,13 +25,16 @@ function AppsEntries {
 }
 function Execute([string]$exe, [string]$arguments) {
   Write-Host "[$(Get-Date -Format HH:mm:ss)] Setup test: $exe $arguments"
-  $process = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru -WindowStyle Hidden
+  # A fresh, unsigned Setup is what Smart App Control blocks: say so instead of a bare start failure or exit code.
+  $blocked = Get-SmartAppControlHint (Split-Path $exe -Leaf)
+  try { $process = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru -WindowStyle Hidden }
+  catch { throw ("Setup could not be started: $($_.Exception.Message) $blocked").Trim() }
   $handle = $process.Handle
   $watch = [Diagnostics.Stopwatch]::StartNew()
   while (-not $process.WaitForExit(1000)) {
     if ($watch.Elapsed.TotalSeconds -ge 30) { Write-Host 'Setup test still running'; $watch.Restart() }
   }
-  Require ($process.ExitCode -eq 0) "Setup process failed: $($process.ExitCode)"
+  Require ($process.ExitCode -eq 0) ("Setup process failed: $($process.ExitCode). $blocked").Trim()
   if ((Split-Path $exe -Leaf) -eq 'unins000.exe') {
     # Inno can delegate final cleanup to a temporary copy of the uninstaller.
     $cleanup = [Diagnostics.Stopwatch]::StartNew()

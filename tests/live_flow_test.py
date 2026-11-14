@@ -1176,5 +1176,19 @@ class QueueCorpusFallbackTests(unittest.TestCase):
         self.assertEqual(len(keep), 9)
 
 
+class WholeTreeSummaryTests(unittest.TestCase):
+    def test_historical_findings_are_counted_apart(self):
+        active = {Path('a/jobs/x.json'), Path('a/jobs/y.json')}
+        results = {'a/jobs/x.json': dict(problems=[]), 'a/jobs/y.json': dict(problems=['windows: late']),
+                   'old/jobs/z.json': dict(problems=['warmup: none']), 'old/jobs/w.json': dict(problems=[])}
+        self.assertEqual(f.split_counts(results, active), (2, 1, 2, 1))
+
+    def test_every_active_job_exists(self):
+        # The inventory names the jobs held to today's rules: a moved or deleted job must leave it too.
+        missing = [str(p) for p in f.active_job_files() if not p.is_file()]
+        self.assertEqual(missing, [])
+        self.assertTrue(f.active_job_files())
+
+
 if __name__ == "__main__":
     unittest.main()

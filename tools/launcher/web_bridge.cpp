@@ -136,6 +136,12 @@ std::string change_line(int i,int from,int to){
   return std::string(st::kKnobs[i].label)+": "+label(i,from)+" \xE2\x86\x92 "+label(i,to)+
     (st::transition_apply(st::kKnobs[i],from,to)==st::Apply::Restart?" (after a game restart)":"");
 }
+// The value the On button of a slider with Off starts from: the highest preset that sets one, else the minimum
+// (the rendered frame limit starts at Ultra's 58 fps, not at 30).
+int on_value(const st::Knob& k){
+  for(int p=st::kPresetCount-1;p>=0;--p)if(k.preset[p]>0)return k.preset[p];
+  return k.slider.min;
+}
 // How a change reaches the running game, in the page's words. Every click is written at once (no Save).
 const char* apply_text(st::Apply mode,bool release){
   if(!release)return st::apply_label(mode,false);
@@ -207,6 +213,9 @@ std::string Bridge::handle(const std::string& message){
   auto type=get<std::string>(o,"type");
   auto refresh_runtime=[&](){if(hooks_.dlss5RuntimeStatus)state_.dlss5_runtime_status=hooks_.dlss5RuntimeStatus(state_.dlss5_runtime_path);};
   if(type=="init"||type=="state")return state_json();
+  // A message belongs to the action that produced it: the next action starts clean (opening or closing the report
+  // dialog keeps it, so "Report saved" stays readable).
+  if(type!="report"&&type!="closeReport"&&type!="notices")status_.clear();
   // Retry: the write that failed, exactly as it was (no dialog is opened again).
   if(type=="retry"){if(has_retry_){const Pending a=retry_;commit(a.next,a.experimental,a.keys,a.headline,a.anchor,a.undoable);}return state_json();}
   if(type=="dismiss"){notice_.clear();notice_also_.clear();can_undo_=false;write_error_.clear();has_retry_=false;return state_json();}
@@ -253,6 +262,8 @@ std::string Bridge::handle(const std::string& message){
     for(int i=0;i<st::kKnobCount;++i)if(!shown(st::kKnobs[i])||std::string(st::kKnobs[i].category)=="Support")next.values[i]=state_.values[i];
     st::KVList keys;std::string blocked;
     if(!resolve(next,next.values,keys,blocked)){status_=std::string("Preset ")+st::kPresetLabel[p]+" was not applied. "+blocked;return state_json();}
+    // The preset already in the file, unchanged: nothing to write and nothing to undo.
+    if(p==state_.preset&&next.values==state_.values&&keys.empty())return state_json();
     if(commit(std::move(next),experimental,keys,std::string("Preset ")+st::kPresetLabel[p]+" applied",{}))remembered_.clear();
   }else if(type=="experimental"){
     bool on=get<bool>(o,"value");
@@ -344,7 +355,7 @@ std::string Bridge::state_json() const {
         for(auto& n:k.required_on)if(n.key&&c>=n.min_choice){if(!requirements.empty())requirements+="; ";requirements+=std::string("needs ")+n.label;}
       }else{reason=release_reason(k,c,state_.caps,state_.values);requirements=release_requirements(k,c);}
       out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(apply_text(st::transition_apply(k,value,c),!developer))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
-    out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
+    out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"onValue\":"+std::to_string(on_value(k))+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
   }
   std::string gpu=inspection_.adapters.size()>1?"GPU not chosen":"GPU not detected",vram="Not detected",driver="Driver not detected";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Driver not detected":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}
   auto fg=st::lookup(effective(),"fg");std::string fg_label=fg=="0"?"Off":fg=="2"?"2x":fg=="3"?"3x":fg=="4"?"4x":"Unknown";

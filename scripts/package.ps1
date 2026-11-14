@@ -29,10 +29,14 @@ $root = Split-Path $PSScriptRoot
 
 # A numbered package must match the launcher's version resource (tools\launcher\version.h): the 0.9.6 test packages
 # shipped a BG3RTX.exe that still said 0.9.5.0. The window itself shows VERSION.txt, written below.
+$versionHeader = Join-Path $root 'tools\launcher\version.h'
+$headerBase = ''
+if (Test-Path -LiteralPath $versionHeader -PathType Leaf) {
+  $headerBase = [regex]::Match((Get-Content -LiteralPath $versionHeader -Raw),
+    '#define BG3RTX_PRODUCT_VERSION "(\d+\.\d+\.\d+)\.\d+"').Groups[1].Value
+}
 if ($Version -match '^(\d+\.\d+\.\d+)') {
   $packageBase = $matches[1]
-  $headerBase = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'tools\launcher\version.h') -Raw),
-    '#define BG3RTX_PRODUCT_VERSION "(\d+\.\d+\.\d+)\.\d+"').Groups[1].Value
   if ($packageBase -ne $headerBase) {
     throw "package version $Version does not match tools\launcher\version.h ($headerBase): update BG3RTX_PRODUCT_VERSION and BG3RTX_PRODUCT_VERSION_NUM, rebuild, then package"
   }
@@ -141,6 +145,18 @@ if (-not $Diagnostics) {
     & (Join-Path $PSScriptRoot "build.ps1") -ReleaseLayer
   }
   if (-not $DryRun -and -not (Test-Path (Join-Path $layerBin "VkLayer_bg3rtx.dll"))) { throw "no lean layer in $layerBin (run without -NoBuild)" }
+}
+
+# The executable must carry the header's version too: a BG3RTX.exe built before version.h was changed would ship the
+# old number in its file properties (the guard at the top only reads the header).
+if (-not $DryRun -and $headerBase) {
+  $exePath = Join-Path $bin "BG3RTX.exe"
+  if (Test-Path -LiteralPath $exePath -PathType Leaf) {
+    $exeVersion = [string](Get-Item -LiteralPath $exePath).VersionInfo.ProductVersion
+    if (-not $exeVersion.StartsWith($headerBase + ".")) {
+      throw "bin\BG3RTX.exe carries version '$exeVersion' but tools\launcher\version.h says $headerBase : rebuild the launcher (.\scripts\build.ps1 -Launcher), then package"
+    }
+  }
 }
 
 # Never replace/recursively clean a previous package: it could contain a junction.

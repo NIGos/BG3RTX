@@ -49,7 +49,11 @@ Get-QueueBuildIdentity $Tree
  # Assert the actual entry/setup/prelaunch ordering and absence of the old
  # automatic prior-run process kill, rather than only testing an unused helper.
  $source=Get-Content (Join-Path $repo 'scripts/auto-run.ps1') -Raw
- Check ($source -match 'Assert-QueueLaunchProcesses\s*\$game = @\(&') 'process guard is immediately before actual launch'
+ # Only the process-local overlay policy (environment variables and one log line, added 2026-11-05) may sit between
+ # the last guard and the launch: nothing that starts a process, waits or calls another script.
+ $launchAt=$source.IndexOf('$game = @(&');$guardAt=if($launchAt -gt 0){$source.LastIndexOf('Assert-QueueLaunchProcesses',$launchAt)}else{-1}
+ $between=if($guardAt -gt 0){$source.Substring($guardAt+27,$launchAt-$guardAt-27)}else{'Start-Process'}
+ Check ($between.Length -lt 800 -and $between -notmatch 'Start-Process|Start-Sleep|WaitFor|Wait-Process|Invoke-|(?m)^\s*[&.]\s') 'process guard is immediately before actual launch'
  Check ($source -match 'Assert-QueueLaunchProcesses\s*Remove-Item \$pidFile') 'process guard precedes stale PID cleanup and shared setup'
  Check ($source -notmatch '\$p\.CloseMainWindow\(\)') 'prior-run process is never closed by PID file'
  $child=Join-Path $fake 'validate.ps1'

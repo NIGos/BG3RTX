@@ -41,7 +41,8 @@ Open:
 
 Launcher controls (Lighting page): "RTX Hair detail at distance" (Off / 1/4 / 1/8, presets Off, live) and "RTX Hair motion
 stability" (`rt_hair_mv_card=2`, On in High and Ultra, restart).
-Staged hair jobs: `tools/live_batches_staged/hair_stable/` (hx1, current). hc1, hk1, hl1, hf2 are historical; pl1 is not current.
+Staged jobs and their state: `tools/live_batches_staged/README.md` (hx1 in `hair_stable/` is current; hc1, hk1, hl1 and
+hf2 were removed with their dead keys; pl1 needs regeneration).
 
 ## Scene handout ("Low-latency scene")
 
@@ -55,7 +56,6 @@ Staged hair jobs: `tools/live_batches_staged/hair_stable/` (hx1, current). hc1, 
   So the afternoon's +4.4 ms was external load (the user was using the PC).
 - Open: GI trace reads 0.2-0.4 ms lower with the handout in that rerun (EXPLAIN). It was equal in hq-s8-modes 205520.
 - Open: the benefit in CPU-bound scenes is unmeasured. Both qualified scenes are GPU-bound on Ultra.
-- SCENE_HANDOUT_DESIGN 8.8 still lists the +4.4 ms FAIL as never re-examined: update it with the rerun.
 - Other unshipped optimisations worth a live: `rt_mesh_budget_own` (rv3 rerun), `rt_as_cap_occupied` (rv5), camera BLAS compaction.
 
 ## Performance investigation (morning)
@@ -80,8 +80,12 @@ Staged hair jobs: `tools/live_batches_staged/hair_stable/` (hx1, current). hc1, 
 ## Launcher
 
 - "Direction A" with instant apply (no Save; dependency notice with Undo; restart badge) is in the installed app.
-- Not yet reviewed by the user in the real window. The native fallback UI is unchanged (still has Save).
-- Detail-panel copy is still long for some settings. Design docs: `docs/ui_rework/`.
+- Not yet reviewed by the user in the real window. Offline review of 2026-11-14 (branch claude/consol-tools): every
+  page and state rendered in headless Edge at three sizes (`node tools/launcher/ui_shots.js <out dir>`, set in
+  `docs/ui_rework/shots_review/`); the detail texts are rewritten for players; the launcher sends the page a state only
+  when it changed and suspends the WebView while minimised (the suspend is not yet seen in the real window).
+- The native fallback UI (no WebView2) keeps Save and says so in its title and status line.
+- Design docs: `docs/ui_rework/`.
 
 ## Housekeeping
 
