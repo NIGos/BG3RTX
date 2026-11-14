@@ -343,19 +343,20 @@ inline constexpr Knob kKnobs[] = {
     {"kind", "By hit kind", kCapRayQuery, {{"gi_rt_pipeline_reorder", "1"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch},
     {"object", "By hit kind and object", kCapRayQuery, {{"gi_rt_pipeline_reorder", "2"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch}},
    {}, {1, 1, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves about 0.8 to 1.5 ms", "Unknown", "RTX 5090, Ultra, live 2026-11-08 on top of the ray tracing pipeline trace: camp -1.5 / -1.6 ms (two runs), inn -0.8 ms (one clean window); scene energy unchanged. Shipped on the user's decision; the inn result is one window."}, "Sorts the bounce rays by what they hit before shading them (shader execution reordering). Needs Faster bounce light tracing. By hit kind is the default; by hit kind and object is the alternative. Without the GPU's reordering support the rays are traced unsorted."},
-  // Scene handout (docs/SCENE_HANDOUT_DESIGN.md; increments 1-5 merged 2026-11-09, never qualified): the lighting thread
-  // binds this frame's reserved scene slot instead of waiting for the scene build ("[rt] scene wait"). On writes the
-  // startup key (update-after-bind set 1, device features) and the live mode 2, so turning it on needs a game restart;
-  // Off is live (mode 0: the waiting path, whatever the device layout). Off in every preset and awaiting qualification
-  // (needs "Show Experimental") until tools/live_batches_staged/handout_qual has run. Without the layout on the device
-  // mode 2 does nothing (layer/rtscene.cpp handout_mode).
+  // Scene handout (docs/SCENE_HANDOUT_DESIGN.md; increments 1-5 merged 2026-11-09): the lighting thread binds this
+  // frame's reserved scene slot instead of waiting for the scene build ("[rt] scene wait"). On writes the startup key
+  // (update-after-bind set 1, device features) and the live mode 2, so turning it on needs a game restart; Off is live
+  // (mode 0: the waiting path, whatever the device layout). Qualified live 2026-11-14 (handout_qual: inn Ultra 30.0 to
+  // 26.5 ms, S8 Ultra 20.9 to 19.9 ms, 0 fallbacks) and On in High and Ultra by user decision ("Si, accendilo"), Off in
+  // Low and Medium. A normal Performance control (not an opt-in knob): release resets never touch it. Without the layout
+  // on the device mode 2 does nothing (layer/rtscene.cpp handout_mode). Open: the S8 energy -0.72% (3 traces per state).
   {"scene_handout", "Low-latency scene",
-   "Experimental: lighting stops waiting for each frame's scene build. Same image, less CPU wait.",
+   "Fewer waits for the ray-traced scene, higher frame rate. Same image.",
    Kind::Choice, Apply::Restart, "Restart the game to turn on; turns off while playing", false,
    {{"off", "Off", 0, {{"rt_scene_handout_layout", "0"}, {"rt_scene_handout", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_scene_handout_layout", "1"}, {"rt_scene_handout", "2"}}, {{"rt_geometry", 1}}, {}, false, true, true, Apply::Restart}},
-   {}, {0, 0, 0, 0}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "None (CPU wait only)", "Under 1 MB", "RTX 5090, Ultra, Water Queens House, live 2026-11-09 (before the RTX Hair updates): wait per frame 4.4-5.1 ms to 0.5-0.7 ms, rendered frame time 24.6-25.2 ms to 24.2-24.6 ms (that scene is limited by the GPU), 0 fallbacks. No measurement yet at the inn, on High or with today's RTX Hair."},
-   "Not qualified yet: off in every preset. Today every frame's ray-traced lighting waits 3 to 9 ms for that frame's scene to be built. On removes the wait: the lighting is recorded at once and reads the scene when the GPU runs it, so the image is the same. How much frame rate this gives depends on the scene: little where the GPU is the limit. If a frame's scene is not ready in time, that frame uses the previous frame's scene (as it does today after a long wait): moving characters' shadows can lag by one frame in such frames. It changes how the game's graphics device is set up, so turning it on needs a game restart and it may behave differently on other drivers; turning it off works while playing. After the first restart the lighting shaders rebuild once (up to a minute, the usual path runs meanwhile)."},
+    {"on", "On", kCapRayQuery, {{"rt_scene_handout_layout", "1"}, {"rt_scene_handout", "2"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves about 1 to 3.5 ms", "Under 1 MB", "RTX 5090: about 1 ms at Water Queens House, 2.5 to 3.5 ms at the inn on Ultra. Live 2026-11-14 (focused, Frame Generation 3x, Off/On/Off in one run): inn 30.0 to 26.5 ms (scene wait 8.5 to 3.0 ms), inn with RTX Hair 31.1 to 28.6 ms, S8 20.9 to 19.9 ms; Water Queens House about 1 ms (2026-11-09). 0 fallbacks. Scene energy: inn +0.11%, S8 -0.72% (open, repeat planned)."},
+   "Today every frame's ray-traced lighting waits 3 to 9 ms for that frame's scene to be built. On removes the wait: the lighting is recorded at once and reads the scene when the GPU runs it, so the image is the same. How much frame rate this gives depends on the scene: about 1 ms where the GPU is the limit, 2.5 to 3.5 ms at the inn on Ultra. On in High and Ultra. If a frame's scene is not ready in time, that frame uses the previous frame's scene (as it does today after a long wait): moving characters' shadows can lag by one frame in such frames. It changes how the game's graphics device is set up, so turning it on needs a game restart and it may behave differently on other drivers; turning it off works while playing. After the first restart the lighting shaders rebuild once (up to a minute, the usual path runs meanwhile)."},
 
   // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
   // stay off in every preset; hair origins and spill are developer-only until qualified.
@@ -1094,8 +1095,8 @@ inline constexpr KV kDefaults[] = {
     {"se_unhook", "1"},
     {"rt_order_trace", "0"},
     {"rt_scene_wait", "1"},
-    {"rt_scene_handout_layout", "0"},
-    {"rt_scene_handout", "0"},
+    {"rt_scene_handout_layout", "1"},
+    {"rt_scene_handout", "2"},
     {"cpu_timing", "0"},
     {"perf_submit_batch", "0"},
     {"rt_alpha_stream", "1"},

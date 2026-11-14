@@ -299,14 +299,39 @@ shaders/rt/rt_common.hlsli; layer/rtscene.cpp gained only the build-camera UBO a
 No incompatibility found, so no code fix. Not proven live: pixel LOD, header camera GPU copy, `rt_hair_mv_card`,
 row / slot stability and the guard latch together with the handout (they share no state with it).
 
-### 8.5 Qualification (staged, not run)
+### 8.5 Qualification (live 2026-11-14, handout_qual) and default
 
-`tools/live_batches_staged/handout_qual/` (predicted.json first, README.md): five launches in one session, 0 / 2 / 0
-inside each run, thresholds from the OFF repeat. Offline on 2026-11-14: scene_handout_test, scene_handout_gpu_fixture,
-frame_replay_test (self-test 4c) and the whole suite pass; this branch changes no shader (variants.txt delta 0).
+Focused, FG 3x, in-run OFF / ON / OFF, RTX 5090 (logs `captures/queue/logs/hq-*.1.*.log.perf.md`):
+
+| Scene | Frame time OFF -> ON | Scene wait OFF -> ON |
+|---|---|---|
+| Inn, Ultra pan | 30.0 -> 26.5 ms | 8.5 -> 3.0 ms |
+| Inn, Ultra pan, RTX Hair | 31.1 -> 28.6 ms | |
+| S8, Ultra static / pan | 20.9 -> 19.9 / 20.8 -> 19.8 ms | 3.7 -> 0 ms |
+| S8, Ultra pan, RTX Hair | 22.1 -> 21.2 ms | |
+| S8, High pan | about 12.1 -> 11.6 ms | |
+| Inn, High | capped at 16.65 ms, no visible change | 4.4 -> 0 ms |
+
+Fallbacks 0 and pairing mismatches 0 in every window. Energy (3 traces per state): inn +0.11%, S8 -0.72% against an OFF
+spread of 647.8-656.6: borderline and OPEN. Staged to decide it: `hq-s8-energy` (8 traces per state) and `hq-s8-check`
+(primary-ray match in motion, split out of hq-s8-ultra). Four of five jobs were formally INVALID: some pan windows had
+no complete period (pans are now 3 periods) and the analyzer judged the per-pass costs "equal" although they fell (now
+"not higher beyond noise").
+
+User decision 2026-11-14 ("Si, accendilo"): On by default in High and Ultra, Off in Low and Medium. The control is a
+normal Performance control (Frame rate group, not experimental): the release policy and `data/release.ini` do not touch
+it, `bg3rtx.ini` carries the High values (`rt_scene_handout_layout=1`, `rt_scene_handout=2`).
+
+What a player gets: the preset row is Off / Off / On / On. A user file with only `preset=high` or `preset=ultra`
+(the launcher's file) expands to On at the next game start, with no edit (the layout key is read at device creation,
+so it takes effect after the restart); Low and Medium expand to Off; a file with no preset follows the packaged
+`bg3rtx.ini` (High: On). A player's own choice in the launcher survives. settings_test `test_scene_handout` pins all of it.
+
+Check in game: restart on High or Ultra; the log has `[rt] scene handout` lines with 0 fallbacks and `[rt] scene wait`
+lines near 0 ms; Performance > Low-latency scene Off (live) shows the OFF frame time to compare.
 
 ### 8.6 Launcher
 
-Performance page, "Low-latency scene" (`scene_handout`): Off / On. On writes `rt_scene_handout_layout=1` and
-`rt_scene_handout=2`, needs a game restart (Off is live), is marked Experimental (needs "Show Experimental") and is Off
-in every preset until the batch above has run.
+Performance page, Frame rate group, "Low-latency scene" (`scene_handout`): Off / On. On writes
+`rt_scene_handout_layout=1` and `rt_scene_handout=2`, needs a game restart (Off is live). Cost chip: saves about 1 to
+3.5 ms (about 1 ms at Water Queens House, 2.5 to 3.5 ms at the inn on Ultra, RTX 5090).

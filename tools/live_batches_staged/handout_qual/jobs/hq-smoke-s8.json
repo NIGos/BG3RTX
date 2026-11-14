@@ -305,7 +305,7 @@
     ],
     "fps_windows": []
   },
-  "estimated_phase_seconds": 76.896,
+  "estimated_phase_seconds": 86.312,
   "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-smoke-s8.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
   "post_gate": true,
   "purpose": "Smoke of the launcher's Low-latency scene On state at S8: release policy, preset Ultra with its 58 fps cap, FG 3x, RTX Hair On with distant detail 1/4 and motion stability, the handout on from launch: handed out with 0 fallbacks and 0 wait timeouts in static and pan windows. STAGED, not authorized."

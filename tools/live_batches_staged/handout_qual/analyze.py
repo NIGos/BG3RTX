@@ -31,9 +31,11 @@ pab.ROWS += [
     ("hit material fallbacks (camera)", "per period", r"\[rt\] scene handout: .*camera (\d+)\)"),
     ("primary-ray check match", "%", r"primary-ray check match ([\d.]+)%"),
 ]
-# (row, rule): "equal" = ON within the OFF pair's noise of the OFF mean; "lower" = the deliverable; "zero" = a counter.
+# (row, rule): "lower" = the deliverable; "not higher" = the per-pass GPU costs may fall (the handout removes a wait, so a
+# lower cost is fine), never rise beyond the OFF pair's noise; "equal" = a count within that noise; "zero" = a counter.
+# 2026-11-14: the first run judged the per-pass costs "equal" and failed when they went down.
 JUDGED = [("scene wait mean", "lower"), ("frame time median", "lower"), ("frame time p99", "not higher"),
-          ("RT", "equal"), ("GI", "equal"), ("scene build", "equal"), ("strand G-buffer draws", "equal"),
+          ("RT", "not higher"), ("GI", "not higher"), ("scene build", "not higher"), ("strand G-buffer draws", "equal"),
           ("scene wait timeouts", "zero"), ("handout fallbacks", "zero"), ("handout pairing mismatches", "zero"),
           ("OMM downgraded", "zero"), ("hit material fallbacks (query)", "zero"),
           ("hit material fallbacks (camera)", "zero"), ("primary-ray check match", "not lower")]

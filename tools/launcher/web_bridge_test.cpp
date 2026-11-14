@@ -388,11 +388,11 @@ int main(int argc,char** argv){
     check(hidden.find("\"id\":\"water_surface_fresnel\"")==std::string::npos);
     ob.handle("{\"type\":\"undo\"}");
     check(ob.experimental&&os.values[st::knob_index("water_surface_fresnel")]==1&&os_saves==4&&saved_text.find("experimental_options=1\n")!=std::string::npos);
-    // An unqualified choice of a qualified setting (Low-latency scene) needs the opt-in and goes Off with it.
+    // Low-latency scene is a qualified Performance control: the opt-in switch leaves it alone, in both directions.
     const int scene=st::knob_index("scene_handout");
     ob.handle("{\"type\":\"set\",\"id\":\"scene_handout\",\"value\":1}");check(os.values[scene]==1);
-    ob.handle("{\"type\":\"experimental\",\"value\":false}");check(os.values[scene]==0&&os.values[st::knob_index("water_surface_fresnel")]==0);
-    ob.handle("{\"type\":\"set\",\"id\":\"scene_handout\",\"value\":1}");check(os.values[scene]==0);
+    ob.handle("{\"type\":\"experimental\",\"value\":false}");check(os.values[scene]==1&&os.values[st::knob_index("water_surface_fresnel")]==0);
+    ob.handle("{\"type\":\"set\",\"id\":\"scene_handout\",\"value\":0}");check(os.values[scene]==0);
     // A saved opt-in is restored on the next launch.
     launcher::State again=os;again.user={{"experimental_options","1"}};again.values[st::knob_index("water_surface_fresnel")]=1;
     launcher::web::Bridge ab2(again);check(ab2.experimental&&again.values[st::knob_index("water_surface_fresnel")]==1);

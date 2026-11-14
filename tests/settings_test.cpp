@@ -1211,7 +1211,7 @@ static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
     "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water", "dlss5_nr",
     "exp_hidden_surface", "exp_gi_rt_pipeline", "exp_gi_rt_pipeline_reorder",
-    "scene_handout",   // Low-latency scene: Performance, On awaits qualification (needs the experimental opt-in)
+    "scene_handout",   // Low-latency scene: Performance, On in High and Ultra (user decision 2026-11-14)
     "box_lights", "rr_post_temporal", "exp_native_coverage",
     "exp_hair_groom_primary",   // RTX Hair: a release Lighting control since 0.9.5 (user request, 2026-11-08)
     "hair_distant_detail",   // RTX Hair detail at distance (user request, 2026-11-10)
@@ -1429,6 +1429,56 @@ static void test_hair_motion_stability() {
     CHECK(knob_value(*k, m) == (p == kHigh || p == kUltra ? 1 : 0));
   }
   m = code_defaults(); apply_layer(m, release);
+  CHECK(knob_value(*k, m) == 1);
+}
+
+// Low-latency scene (scene_handout, user decision 2026-11-14, handout_qual): a normal Performance control (not an opt-in
+// knob), Off / On = rt_scene_handout_layout 0 / 1 with rt_scene_handout 0 / 2. On needs a restart, Off is live. Off in Low
+// and Medium, On in High and Ultra. No release pin turns it off and the release policy leaves the selection alone.
+static void test_scene_handout() {
+  const Knob* k = find_knob("scene_handout");
+  CHECK(k && !k->dev_only && !k->experimental && k->kind == Kind::Choice && knob_visible(*k, false) && !opt_in_knob(*k));
+  if (!k) return;
+  CHECK_EQ(k->category, "Performance");
+  CHECK(choice_count(*k) == 2);
+  const char* want[2] = {"rt_scene_handout_layout=0 rt_scene_handout=0 ", "rt_scene_handout_layout=1 rt_scene_handout=2 "};
+  for (int c = 0; c < 2; ++c) {
+    KVList kvs; knob_kvs(*k, c, kvs);
+    std::string s; for (const auto& kv : kvs) s += kv.first + "=" + kv.second + " ";
+    CHECK_EQ(s, want[c]);
+    CHECK_EQ(choice_maturity(*k, c), "qualified");
+  }
+  CHECK(transition_apply(*k, 0, 1) == Apply::Restart && transition_apply(*k, 1, 0) == Apply::Live);
+  for (int p = 0; p < kPresetCount; ++p)
+    CHECK(preset_values(p)[knob_index("scene_handout")] == (p == kHigh || p == kUltra ? 1 : 0));
+  CHECK(knob_value(*k, code_defaults()) == 1);   // High = the developer defaults
+  const Map release = parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini") + read_file(BG3RTX_SOURCE_DIR "/data/release.ini"));
+  CHECK(release.count("rt_scene_handout") && release.at("rt_scene_handout") == "2");   // no release pin turns it off
+  // A release player per preset: a file with only a preset line (the existing user files) gets On in High and Ultra
+  // at the next game start without any edit, Off in Low and Medium.
+  for (int p = 0; p < kPresetCount; ++p) {
+    Map m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini(std::string("preset=") + kPresetId[p] + "\n"));
+    CHECK_EQ(get(m, "dev"), "0");
+    const bool on = p == kHigh || p == kUltra;
+    CHECK(knob_value(*k, m) == (on ? 1 : 0));
+    CHECK_EQ(get(m, "rt_scene_handout_layout"), on ? "1" : "0");
+    CHECK_EQ(get(m, "rt_scene_handout"), on ? "2" : "0");
+    Map again = m; enforce_release_policy(again); CHECK(again == m);
+    // experimental_options=0 or 1 does not change it
+    for (const char* e : {"0", "1"}) {
+      Map x = code_defaults(); apply_layer(x, release);
+      apply_layer(x, parse_ini(std::string("preset=") + kPresetId[p] + "\nexperimental_options=" + e + "\n"));
+      CHECK(knob_value(*k, x) == (on ? 1 : 0));
+    }
+  }
+  // The player's own choice survives in every preset, and a release profile alone follows bg3rtx.ini (High): On.
+  for (int c = 0; c < 2; ++c) {
+    Map user = parse_ini("preset=ultra\n");
+    KVList kvs; knob_kvs(*k, c, kvs); for (const auto& kv : kvs) user[kv.first] = kv.second;
+    Map m = code_defaults(); apply_layer(m, release); apply_layer(m, user);
+    CHECK(knob_value(*k, m) == c);
+  }
+  Map m = code_defaults(); apply_layer(m, release);
   CHECK(knob_value(*k, m) == 1);
 }
 
@@ -1788,6 +1838,7 @@ int main(int argc, char** argv) {
   test_release_rtx_hair();
   test_hair_distant_detail();
   test_hair_motion_stability();
+  test_scene_handout();
   test_dlss5_native_setting();
   test_detailed_logging();
   test_release_fg_diagnostics();

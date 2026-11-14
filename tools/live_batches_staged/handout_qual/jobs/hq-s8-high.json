@@ -324,7 +324,7 @@
     ],
     "fps_windows": []
   },
-  "estimated_phase_seconds": 154.054,
+  "estimated_phase_seconds": 182.302,
   "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-s8-high.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
   "post_gate": true,
   "purpose": "Scene handout at Water Queens House, High, FG 3x, uncapped, focused: rt_scene_handout 0 / 2 / 0 in static and pan windows (no native hit materials, no cascade casters). STAGED, not authorized."

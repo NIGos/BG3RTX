@@ -408,7 +408,7 @@
     ],
     "fps_windows": []
   },
-  "estimated_phase_seconds": 512.892,
+  "estimated_phase_seconds": 636.06,
   "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-inn-ultra.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
   "post_gate": true,
   "purpose": "Scene handout at The Blushing Mermaid - 96h 39m, Ultra, FG 3x, uncapped, focused: rt_scene_handout 0 / 2 / 0 in static and pan windows with stock cards, pan windows with RTX Hair On, three float traces per state for the energy check. Per window: scene wait, handout fallbacks, rendered frame time median and p99, every GPU cost line. STAGED, not authorized."

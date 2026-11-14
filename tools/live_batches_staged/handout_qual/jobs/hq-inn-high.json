@@ -324,7 +324,7 @@
     ],
     "fps_windows": []
   },
-  "estimated_phase_seconds": 295.732,
+  "estimated_phase_seconds": 357.316,
   "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-inn-high.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
   "post_gate": true,
   "purpose": "Scene handout at The Blushing Mermaid - 96h 39m, High, FG 3x, uncapped, focused: rt_scene_handout 0 / 2 / 0 in static and pan windows (no native hit materials, no cascade casters). STAGED, not authorized."
