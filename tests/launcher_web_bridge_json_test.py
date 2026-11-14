@@ -93,9 +93,12 @@ for setting in state["settings"]:
 # table's. It had drifted (old descriptions, RTX Hair still marked "restart") while the real cards moved on.
 import pathlib
 page = (pathlib.Path(__file__).resolve().parents[1] / "tools/launcher/ui/app.js").read_text(encoding="utf-8")
-block = page[page.index(" const settings=["):page.index("].map(([id,title")]
+block = page[page.index(" const settings=["):page.index("].filter(x=>x[2]!=='Experimental'")]
 rows = re.findall(r"""\['([a-z0-9_]+)',('[^']*'|"[^"]*"),'([^']*)',\[([^\]]*)\],-?\d+,('[^']*'|"[^"]*")\]""", block)
-by_id = {s["id"]: s for s in state["settings"]}
+# The sample also lists the opt-in options (shown with ?experimental); compare with the opt-in state.
+state_opt_in = json.loads(subprocess.check_output([sys.argv[1], "--json", "experimental"], encoding="utf-8"))
+assert {r[0] for r in rows if r[2] != "Experimental"} == {s["id"] for s in state["settings"]}
+by_id = {s["id"]: s for s in state_opt_in["settings"]}
 assert len(rows) == len(by_id) and {r[0] for r in rows} == set(by_id), sorted(set(by_id) ^ {r[0] for r in rows})
 for ident, title, category, levels, description in rows:
     real = by_id[ident]
