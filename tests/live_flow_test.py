@@ -1109,5 +1109,64 @@ class ReadinessBudgetTests(unittest.TestCase):
         j["timeout"] = 900
         self.assertIn("duration: timeout does not cover plan + readiness allowance", f.lint(j, p, [dict(path="synthetic", lines=[])])["problems"])
 
+class QueueCorpusFallbackTests(unittest.TestCase):
+    JOB = Path(__file__).resolve().parents[1] / "tools/live_batches/opt_profile/jobs/opt-profile-s8.json"
+
+    def run_main(self, *extra):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = f.main([str(self.JOB), "--preflight", "--tree", str(self.JOB.parents[3].parent), *extra])
+        return code, out.getvalue()
+
+    def test_empty_live_corpus_falls_back_to_frozen_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            empty = Path(tmp) / "results.jsonl"
+            empty.write_text("", encoding="utf-8")
+            code, text = self.run_main("--results", str(empty), "--cache", str(Path(tmp) / "c.json"))
+            frozen_code, _ = self.run_main("--frozen")
+        self.assertIn("live corpus empty: using the frozen snapshot", text)
+        self.assertNotIn("no readable VALID logs", text)
+        self.assertEqual(code, frozen_code)
+
+    def test_keep_list_keeps_newest_three_valid_logs_per_save_and_siblings(self):
+        import os
+        import time
+        from tools.live_batches import keep_logs
+        with tempfile.TemporaryDirectory() as tmp:
+            q = Path(tmp) / "captures/queue"
+            logs = q / "logs"
+            logs.mkdir(parents=True)
+            old = time.time() - 10 * 86400
+            rows = []
+            for i in range(5):
+                stem = f"run{i}"
+                for suffix in (".log", ".runner.txt", ".status.json"):
+                    p = logs / (stem + suffix)
+                    p.write_text("x", encoding="utf-8")
+                    os.utime(p, (old, old))
+                rows.append(dict(valid=True, job=f"j{i}", save="A", start=f"2026-11-0{i + 1}",
+                                 log=str(logs / (stem + ".log"))))
+            stray = logs / "stray.log"
+            stray.write_text("x", encoding="utf-8")
+            os.utime(stray, (old, old))
+            fresh = logs / "fresh.txt"
+            fresh.write_text("x", encoding="utf-8")
+            (q / "results.jsonl").write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+            empty_inventory = Path(tmp) / "inv"
+            empty_inventory.mkdir()
+            removed, keep = keep_logs.prune(logs, q / "results.jsonl", inventory=empty_inventory)
+            left = {p.name for p in logs.iterdir()}
+        for i in (2, 3, 4):
+            for suffix in (".log", ".runner.txt", ".status.json"):
+                self.assertIn(f"run{i}{suffix}", left)
+        for i in (0, 1):
+            self.assertFalse([n for n in left if n.startswith(f"run{i}.")])
+        self.assertNotIn("stray.log", left)
+        self.assertIn("fresh.txt", left)
+        self.assertEqual(len(keep), 9)
+
+
 if __name__ == "__main__":
     unittest.main()

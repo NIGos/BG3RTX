@@ -1034,7 +1034,13 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.newest < 1:
         ap.error("--newest must be positive")
-    if a.frozen:
+    frozen = a.frozen
+    if not frozen:
+        index = corpus(a.results, a.cache, a.newest)
+        if not index["entries"] and not a.replay_only:
+            print("live corpus empty: using the frozen snapshot", flush=True)
+            frozen = True
+    if frozen:
         if a.replay_only:
             ap.error('--frozen cannot replay historical logs')
         from tools.live_batches import lint_snapshot
@@ -1043,7 +1049,6 @@ def main(argv=None):
                      valid_logs=snapshot['valid_logs'])
         print(f"Frozen VALID snapshot: {snapshot['valid_logs']} logs; no raw corpus cache", flush=True)
     else:
-        index = corpus(a.results, a.cache, a.newest)
         fps_windows.configure(index["entries"])
         configure_trace_exports(index["entries"])
         readiness_budget.configure(index["entries"])
@@ -1099,7 +1104,7 @@ def main(argv=None):
                 print(f"{job.get('name', path.stem)}: {finding}", flush=True)
             if a.preflight:
                 result["problems"] += launch_problems(job, duration)
-            if not index["entries"] and not a.frozen:
+            if not index["entries"] and not frozen:
                 result["problems"].append("corpus: no readable VALID logs; regex validation has no evidence")
         except (OSError, ValueError, KeyError, TypeError) as e:
             result = dict(problems=[f"job/plan: {e}"])
@@ -1117,7 +1122,7 @@ def main(argv=None):
         else:
             write(a.report, report)
     index["matches"] = memo
-    if not a.frozen:
+    if not frozen:
         write(a.cache, index)
     unproven = sum(bool(r.get("replay", {}).get("problems")) for r in report["jobs"].values())
     print(f"replay gates: {len(report['jobs'])} jobs, {unproven} with unsatisfied historical evidence (see report)", flush=True)

@@ -102,7 +102,13 @@ function Write-Record {
 # Per-run logs; pruned after 3 days (docs: disk hygiene).
 $logs = Join-Path $q "logs"
 New-Item -ItemType Directory -Force $logs | Out-Null
-Get-ChildItem $logs -File -ErrorAction SilentlyContinue | Where-Object LastWriteTime -lt (Get-Date).AddDays(-3) | Remove-Item -ErrorAction SilentlyContinue
+# Keeps the newest 3 VALID logs per save (and siblings) so the preflight corpus never empties.
+$pyPrune = if (Get-Command py -ErrorAction SilentlyContinue) { 'py' } else { 'python' }
+$pyPruneArgs = @(); if ($pyPrune -eq 'py') { $pyPruneArgs += '-3' }
+$keepTool = Join-Path $PSScriptRoot '..\tools\live_batches\keep_logs.py'
+$pruned = $false
+try { & $pyPrune @pyPruneArgs $keepTool $logs --results (Join-Path $q 'results.jsonl') --days 3 2>&1 | ForEach-Object { Write-Host "$_" }; $pruned = ($LASTEXITCODE -eq 0) } catch {}
+if (-not $pruned) { Write-Warning 'log prune skipped: keep_logs.py failed (evidence logs are never deleted blindly)' }
 $script:sess = $null
 
 function Assert-QueueActive {
