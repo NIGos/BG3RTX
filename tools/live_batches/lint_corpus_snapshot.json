@@ -85493,6 +85493,35 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[core\\] GI far \\(\\d+ frames\\)",
+        "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[rt\\] scene handout: \\d+ frames, reserved"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -88291,6 +88320,14 @@
       null
     ],
     "\\[core\\] scene handout: .*hit material passes on the committed scene [1-9]": [
+      0,
+      null
+    ],
+    "\\[core\\] GI far \\(\\d+ frames\\)": [
+      0,
+      null
+    ],
+    "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+": [
       0,
       null
     ]

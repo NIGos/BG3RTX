@@ -28,7 +28,8 @@
     "serial": 0,
     "set": "rt_scene_handout=0,rt_hair=0,rr_hair_strand_aa=0,rt_stats=0,rt_primary_check=0,rt_stats_period_frames=120,qa_exposure_hold=1,rt_scene_handout_hit_wait=0",
     "wait_log": [
-      "\\[core\\] scene handout: .*hit material passes on the committed scene [1-9]"
+      "\\[core\\] GI far \\(\\d+ frames\\)",
+      "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
     ],
     "wait_log_timeout": 40
   },
@@ -79,6 +80,18 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
+  },
+  {
+    "label": "producer-sanity-warm-m2",
+    "kind": "static",
+    "seconds": 1.1,
+    "capture_at": 0,
+    "serial": 0,
+    "set": "rt_scene_handout=2,rt_hair=0,rr_hair_strand_aa=0,rt_stats=0,rt_primary_check=0,rt_stats_period_frames=120,qa_exposure_hold=1,rt_scene_handout_hit_wait=0",
+    "wait_log": [
+      "\\[rt\\] scene handout: \\d+ frames, reserved"
+    ],
+    "wait_log_timeout": 40
   },
   {
     "label": "warm-fix",
@@ -193,7 +206,7 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[core\\] GI far \\(\\d+ frames\\)",
-      "\\[core\\] GI hit direct lights \\(\\d+ frames\\)"
+      "\\[rt\\] scene wait: \\d+ frames"
     ],
     "wait_log_timeout": 30
   },
@@ -252,7 +265,7 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[core\\] GI far \\(\\d+ frames\\)",
-      "\\[core\\] GI hit direct lights \\(\\d+ frames\\)"
+      "\\[rt\\] scene wait: \\d+ frames"
     ],
     "wait_log_timeout": 30
   },
@@ -310,6 +323,8 @@
     "settle_frames": 60,
     "stats_reset": true,
     "wait_stats": [
+      "\\[core\\] GI far \\(\\d+ frames\\)",
+      "\\[rt\\] scene wait: \\d+ frames",
       "\\[rt\\] scene handout: \\d+ frames, reserved"
     ],
     "wait_log_timeout": 30
@@ -363,7 +378,7 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[core\\] GI far \\(\\d+ frames\\)",
-      "\\[core\\] GI hit direct lights \\(\\d+ frames\\)",
+      "\\[rt\\] scene wait: \\d+ frames",
       "\\[rt\\] scene handout: \\d+ frames, reserved"
     ],
     "wait_log_timeout": 30
@@ -423,7 +438,7 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[core\\] GI far \\(\\d+ frames\\)",
-      "\\[core\\] GI hit direct lights \\(\\d+ frames\\)"
+      "\\[rt\\] scene wait: \\d+ frames"
     ],
     "wait_log_timeout": 30
   },

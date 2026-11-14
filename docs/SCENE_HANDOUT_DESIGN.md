@@ -397,3 +397,9 @@ trace GPU ms and the hit lines per state. Predicted: mode 1 and the fix inside t
 If the fix's wait is close to the OFF wait, the handout gains nothing with native hit materials. The alternative that
 keeps the whole gain: record the query in a layer-owned command buffer inserted into the submit before the first
 handout user (after the capture and the G-buffer material buffers). Larger host change; decide after the live.
+
+Gates since 2026-11-14 (user rule, `tools/live_batches/sane_gates.py`): the -0.20% is EXPLAIN (beyond noise, under the
+0.5% visibility floor), the GI trace drop is EXPLAIN (a cost drop the handout does not predict; inn Ultra: RT -3.5 and
+GI -3.4 ms in the pans, the same dropped work). Re-read of today's logs: smoke, S8 High and inn High PASS; S8 energy
+and inn Ultra EXPLAIN; S8 Ultra FAIL on the hair-pan frame time p99 (+4.4 ms, ON periods 25.5 / 32.0 / 30.4 against
+OFF 25.0-27.1), to be looked at with the fix run.

@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from scripts.queue_gates import stamped_lines, windows, complete_period_lines
 from tools.live_batches import live_flow as flow
+from tools.live_batches import sane_gates as sane
 from tools.live_batches.release_qual.analyze_final import COSTS
 from tools.live_batches.opt_profile.analyze import EXTRA
 
@@ -86,12 +87,13 @@ def report(job, plan, measured, guard, guard_all, wide_split):
     labels = [p["label"] for p in plan if p.get("frames")]
     fibre = sorted({n for row in measured.values() for n in row if n.startswith("hair fibre ")})
     names = [(n, u) for n, u, _ in ROWS] + [(n, "ms") for n in fibre]
-    errors = [f"{label}: no acknowledged window" for label in labels if label not in measured]
-    errors += [f"{label}: {name} has {len(measured[label].get(name, []))} complete periods (< 2)"
-               for label in labels if label in measured for name in REQUIRED if len(measured[label].get(name, [])) < 2]
+    # User rule 2026-11-14 (tools/live_batches/sane_gates.py): a window with fewer than 2 complete periods is not
+    # judged; the run is INVALID only when no window is, or when the OFF pair (its noise) is not.
+    judged, short = sane.split_windows(labels, measured, lambda label: REQUIRED, 2)
     noise = "off-a" in labels and "off-b" in labels
+    errors = [] if judged and (not noise or {"off-a", "off-b"} <= set(judged)) else short or ["no window with complete periods"]
     unfocused = str(job.get("window_mode", "")).startswith("visible_unfocused")
-    text = [f"# {job['name']} ({job['save']})", "",
+    text = [f"# {job['name']} ({job['save']})", ""] + [f"- not judged: {n}" for n in short] + ["",
             "Median [min-max] nPeriods of the complete 120-frame periods per window" +
             (" (unfocused: frame time is the 30 fps cap, not a cost)." if unfocused else " (focused, no frame cap)."), "",
             "| Line | Unit | " + " | ".join(labels) + (" | off-b - off-a (noise) |" if noise else " |"),

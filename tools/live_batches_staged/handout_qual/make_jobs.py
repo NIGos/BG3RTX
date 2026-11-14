@@ -184,20 +184,15 @@ def modes():
                   f"2 with rt_scene_handout_hit_wait=1 / 0, {ENERGY_TRACES} float traces per state and a short rt_stats window "
                   "each. Mode 1 and the fix inside the OFF range; mode 2 reproduces the -0.20% (unpublished commit-time "
                   "hit-material query). Reports the scene wait and the GI trace GPU ms of every state.")
+    # Runner gates: only "the measured lines exist" in every hit window (user rule 2026-11-14). The values (qualified
+    # hits, timeouts, fallbacks, the fix taking the committed scene) are judged by analyze.py hit_checks.
     stats = dict(period_frames=60, sample_frames=60, min=1)
-    qualified = [w for w in hit if w != "hit-m2"]
-    j["expect_every"] = [
-        pab.every("native hit GI qualified with the lighting query", "\\[core\\] GI far \\(\\d+ frames\\)",
-                  "ambient kept at qualified hits 0\\.\\d*[1-9]", qualified, **stats),
-        pab.every("GI hit direct lights traced", "\\[core\\] GI hit direct lights \\(\\d+ frames\\)",
-                  "light rays traced [1-9]\\d*", qualified, **stats),
-        pab.every("scene wait: 0 timeouts in every hit window", WAIT, "got this frame's scene, 0 timeouts", hit, **stats),
-        pab.every("handout: 0 fallbacks in the handout windows", HANDOUT,
-                  "fallbacks 0 \\(.*\\), pairing mismatches 0,", ["hit-m2", "hit-fix"], **stats),
-    ]
+    far = "\\[core\\] GI far \\(\\d+ frames\\)"
+    j["expect_every"] = [pab.every("GI far line in every hit window", far, far, hit, **stats),
+                         pab.every("scene wait line in every hit window", WAIT, WAIT, hit, **stats),
+                         pab.every("handout line in the handout windows", HANDOUT, HANDOUT, ["hit-m2", "hit-fix"], **stats)]
     j["patterns"] = j["patterns"] + ["GI far \\(", "GI hit direct", "\\[hit material (?:submit|query)\\]"]
-    j["expect"] += ["\\[core\\] GI hit direct lights \\(\\d+ frames\\): light rays traced [1-9]",
-                    "\\[core\\] scene handout: .*hit material passes on the committed scene [1-9]"]
+    j["expect"] += [far, "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"]
     j["energy_expect"] = {"m2": "lower"}   # analyze.py: the predicted loss is reported, not judged
     return plan, j
 

@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 2137,
+  "timeout": 2165,
   "max_minutes": 14,
   "repeat": 1,
   "live_batch": "handout-qual",
@@ -71,17 +71,18 @@
     "\\[ngx\\] RR create .*: Success",
     "\\[trace\\] frame \\d+ written",
     "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
-    "\\[core\\] GI hit direct lights \\(\\d+ frames\\): light rays traced [1-9]",
-    "\\[core\\] scene handout: .*hit material passes on the committed scene [1-9]"
+    "\\[core\\] GI far \\(\\d+ frames\\)",
+    "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
   ],
   "expect_every": [
     {
-      "name": "native hit GI qualified with the lighting query",
+      "name": "GI far line in every hit window",
       "select": "\\[core\\] GI far \\(\\d+ frames\\)",
-      "match": "ambient kept at qualified hits 0\\.\\d*[1-9]",
+      "match": "\\[core\\] GI far \\(\\d+ frames\\)",
       "windows": [
         "hit-off-a",
         "hit-m1",
+        "hit-m2",
         "hit-fix",
         "hit-off-b"
       ],
@@ -90,12 +91,13 @@
       "min": 1
     },
     {
-      "name": "GI hit direct lights traced",
-      "select": "\\[core\\] GI hit direct lights \\(\\d+ frames\\)",
-      "match": "light rays traced [1-9]\\d*",
+      "name": "scene wait line in every hit window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "\\[rt\\] scene wait: \\d+ frames",
       "windows": [
         "hit-off-a",
         "hit-m1",
+        "hit-m2",
         "hit-fix",
         "hit-off-b"
       ],
@@ -104,9 +106,9 @@
       "min": 1
     },
     {
-      "name": "handout: 0 fallbacks in the handout windows",
+      "name": "handout line in the handout windows",
       "select": "\\[rt\\] scene handout: \\d+ frames, reserved",
-      "match": "fallbacks 0 \\(.*\\), pairing mismatches 0,",
+      "match": "\\[rt\\] scene handout: \\d+ frames, reserved",
       "windows": [
         "hit-m2",
         "hit-fix"
@@ -129,7 +131,7 @@
     "\\[layer\\] optional scene handout update-after-bind request failed"
   ],
   "expect_runner": [
-    "\\[motion-plan\\] complete phases=18\\b",
+    "\\[motion-plan\\] complete phases=19\\b",
     "^Run ended: done"
   ],
   "live_flow": {
@@ -171,7 +173,7 @@
       "logs": 1
     }
   },
-  "estimated_phase_seconds": 317.42,
+  "estimated_phase_seconds": 318.52,
   "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-s8-modes.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
   "post_gate": true,
   "purpose": "Scene handout energy by mode at S8, Ultra, FG 3x, focused, static, exposure held: rt_scene_handout 0 / 1 / 2 / 2 with rt_scene_handout_hit_wait=1 / 0, 8 float traces per state and a short rt_stats window each. Mode 1 and the fix inside the OFF range; mode 2 reproduces the -0.20% (unpublished commit-time hit-material query). Reports the scene wait and the GI trace GPU ms of every state. STAGED, not authorized.",

@@ -30,6 +30,11 @@ hq-s8-high, hq-inn-high. Add 100-120 s of loading per launch: about 35 minutes f
 
 ## What is judged (analyze.py, thresholds from the run itself)
 
+Verdicts follow `tools/live_batches/sane_gates.py` (user rule 2026-11-14): FAIL only beyond the OFF noise and a
+materiality floor in the bad direction (cost max(0.1 ms, 1%), energy 0.5%, match 1 point; event counters at 0);
+under the floor INFO; an unpredicted cost drop or an energy difference under the floor is EXPLAIN, listed first;
+a window with no complete period is not judged, and the run is INVALID only without a decisive window.
+
 For each window group the ON median is compared with the OFF pair; noise = |off-b - off-a| of that group.
 
 - Deliverable: `scene wait mean` and rendered `frame time median` lower (a gain is ON below the OFF mean by more than

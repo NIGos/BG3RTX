@@ -31,7 +31,7 @@ def float_samples(run, phase, count=3):
         if not v or isinstance(v[0], str) or v[1] or not v[2] or v[0] <= 0 or not np.isfinite([v[0], v[2]]).all():
             raise ValueError(phase+': missing/nonfinite float colour or exposure')
         values.append(v)
-    if len(values) != count:
+    if count is not None and len(values) != count:   # None: the caller judges what the phase has
         raise ValueError(f'{phase}: {len(values)} float samples, {count} expected')
     return values
 
