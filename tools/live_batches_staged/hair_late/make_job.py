@@ -1,5 +1,9 @@
 """hair_late (branch claude/hair-arrival-cause, docs/RTX_HAIR_PRIMARY.md 5u): STAGED, not queued, not authorized.
 
+HISTORICAL since 2026-11-14 (docs/RTX_HAIR_PRIMARY.md 6k): hl1 sets rt_hair_row_stable and rt_hair_stale_publish;
+both keys are removed (the cause was the decal pass taking the header's label, 6h). Kept for the record of its runs
+(164930 to 003637); not to be queued. The job still lints (the keys stay known to pipeline_readiness).
+
     py -3 -m tools.live_batches_staged.hair_late.make_job
 
 hl1 161106: the strands of the existing keys failed (frame watchdog at G-buffer frames 1992-1998) at the frame the game

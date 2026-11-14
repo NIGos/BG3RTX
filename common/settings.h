@@ -424,7 +424,7 @@ inline constexpr Knob kKnobs[] = {
     // other transitions and every other key are live. rt_hair=0 (hotkey_rtx_hair) makes this whole list read 0.
     // 5u (user decision 2026-11-10, live hs1 095322 and 103633): the union coverage count, the confirmed coverage
     // failure, the stable character slots and the warm-up after a live switch are part of On. Their own Advanced
-    // knobs stay for A/B. rt_hair_coverage_min_pixels stays out (its prediction failed in 103633).
+    // knobs stay for A/B.
     // 5u (live hs1 133243): the nearest-strand trace (rt_hair_groom_nearest) too. It is compiled into the strand
     // pipelines at their creation, so a game started with RTX Hair off needs a restart for it (the old trace until then).
     // 6g (2026-11-14, the user's play log of 0.9.6-hairtest13): the strand header's camera copied on the GPU
@@ -593,13 +593,6 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_coverage_keep", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "6i 2026-11-14: S8, zoom in fast with the mouse wheel until heads leave the screen, wait two seconds, zoom out: with On the heads that come back show strands at once instead of cards for a third of a second."},
 
-  {"exp_hair_watchdog_draw", "Strand hair: per-draw watchdog",
-   "Experimental: when a hair style's strands lose coverage, only that style falls back to its cards, and only after two frames in a row, instead of every style for one bad frame. Unqualified.",
-   Kind::Choice, Apply::Live, "live", true,
-   {{"off", "Off", 0, {{"rt_hair_watchdog_draw", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_watchdog_draw", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5i item 11: turn the camera in S8 or Test Dialogue1 with several characters in view: with On a hair style that flashes to cards no longer takes the others with it."},
-
   {"exp_hair_shared_key", "Strand hair: shared style key",
    "Experimental: when two characters wear the same hair style, their hair turns to strands only when both have their strands ready, instead of one character's hair losing its cards with nothing drawn in their place. Unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -607,33 +600,12 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_shared_key", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5i 2026-11-09: two characters with the same hair style in view (S8), turn the camera: with On their hair should no longer flash to cards."},
 
-  {"exp_hair_row_stable", "Strand hair: stable strand rows",
-   "Experimental: each character's strands keep their place in the strand tables while the camera moves or a new character appears, instead of being reordered every frame (holes in every character's hair for a few frames). Unqualified.",
-   Kind::Choice, Apply::Live, "live", true,
-   {{"off", "Off", 0, {{"rt_hair_row_stable", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_row_stable", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5w 2026-11-10: several characters in view (S8), zoom with the wheel: with On their hair should no longer show holes at the start of the zoom."},
-
   {"exp_hair_slot_stable", "Strand hair: stable character slots",
    "Experimental: when two characters wear the same hair style, each keeps its own strands when the game changes the order it draws them in, instead of the two swapping for a frame (a one-frame hole in the hair). Unqualified.",
    Kind::Choice, Apply::Live, "live", true,
    {{"off", "Off", 0, {{"rt_hair_slot_stable", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_slot_stable", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5s 2026-11-10: two characters with the same hair style in view (S8), camera still: with On the one-frame holes in their hair should stop."},
-
-  {"exp_hair_watchdog_one_key", "Strand hair: one-style watchdog",
-   "Experimental: when one hair style loses its strands in a frame while the others keep theirs, only that style falls back to its cards instead of every style. Unqualified.",
-   Kind::Choice, Apply::Live, "live", true,
-   {{"off", "Off", 0, {{"rt_hair_watchdog_one_key", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_watchdog_one_key", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5i 2026-11-09: turn the camera in S8 with several characters in view: with On one style that flashes to cards no longer takes the others with it."},
-
-  {"exp_hair_swap_latch", "Strand hair: no strand retries",
-   "Experimental: a hair style whose strands failed the coverage check keeps its cards until its size on screen changes, instead of trying the strands again a moment later (hair that flickers between strands and cards with a still camera). Unqualified.",
-   Kind::Choice, Apply::Live, "live", true,
-   {{"off", "Off", 0, {{"rt_hair_swap_latch", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_swap_latch", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5t 2026-11-10: still camera, characters at a distance whose hair flickers between strands and cards: with On each hair settles on strands or on cards and stays there until the camera or the character moves."},
 
   {"exp_hair_coverage_union", "Strand hair: coverage check on every strand pixel",
    "Experimental: the check that decides between strands and cards counts every strand pixel, as its limit was derived, instead of only the strand pixels that land on an opaque card pixel (which drops for small, distant characters and sends their hair back to cards). Unqualified.",
@@ -648,13 +620,6 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rt_hair_coverage_confirm", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_coverage_confirm", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5u 2026-11-10: S8, still camera: with On the one-frame card flashes stop; the '[hair primary] switches' line shows card runs of 1 frame gone."},
-
-  {"exp_hair_coverage_min_pixels", "Strand hair: no coverage check on tiny hair",
-   "Experimental: hair drawn on fewer than 64 pixels is not measured (its count says nothing), so tiny distant hair stays on cards steadily instead of trying strands every half second. Unqualified.",
-   Kind::Choice, Apply::Live, "live", true,
-   {{"off", "Off", 0, {{"rt_hair_coverage_min_pixels", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_coverage_min_pixels", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5u audit 2026-11-10: S8, still camera, very distant characters: with On their hair stays cards without switching; the switches line shows no 'coverage stale' switches."},
 
   {"exp_hair_live_warmup", "Strand hair: warm-up after turning RTX Hair on",
    "Experimental: after RTX Hair is turned on while playing, the hair keeps its cards until every hair style is rebuilt and settled, as after a level load, instead of showing strands while they are still being rebuilt. Unqualified.",
@@ -1005,17 +970,11 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_header_cam_gpu", "0"},
     {"rt_hair_header_scene_pass", "0"},
     {"rt_hair_coverage_keep", "0"},
-    {"rt_hair_stale_publish", "0"},
     {"rt_hair_mv_card", "2"},
-    {"rt_hair_watchdog_draw", "0"},
     {"rt_hair_shared_key", "0"},
     {"rt_hair_slot_stable", "0"},
-    {"rt_hair_row_stable", "0"},
-    {"rt_hair_watchdog_one_key", "0"},
-    {"rt_hair_swap_latch", "0"},
     {"rt_hair_coverage_union", "0"},
     {"rt_hair_coverage_confirm", "0"},
-    {"rt_hair_coverage_min_pixels", "0"},
     {"rt_hair_live_warmup", "0"},
     {"rt_hair_card_fill", "0"},
     {"rt_hair_debug_late_arrival", "0"},

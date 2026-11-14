@@ -1,5 +1,9 @@
 """hair_cam (claude/hair-header-cam, docs/RTX_HAIR_PRIMARY.md 5i item 11): STAGED, not queued (no live permission yet).
 
+HISTORICAL since 2026-11-14 (docs/RTX_HAIR_PRIMARY.md 6k): hc1 and hk1 set rt_hair_watchdog_draw and
+rt_hair_watchdog_one_key and expect their log text; both keys and that text are removed. Kept for the record of the
+runs (hc1 234025); not to be queued. The jobs still lint (the keys stay known to pipeline_readiness).
+
 One launch at Water Queens House (S8), the rv3 view (release defaults + RTX Hair keys, camera lowered 10 notches),
 identical right/left turns with an in-run A/B of the two live keys:
   off-a (0,0) -> cam (rt_hair_header_cam_gpu=1) -> draw (rt_hair_watchdog_draw=1) -> both (1,1) -> off-b (0,0).

@@ -125,17 +125,19 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     # header choice, LOD and coverage policy, the existing cascade clone, the capture writer. No pipeline is selected.
     "rt_hair_groom_primary_current rt_hair_primary_frame_tag rt_hair_groom_lod_keep rt_hair_primary_hold "
     "rt_hair_tangent_world rt_hair_groom_cascade_drop rt_hair_capture rt_hair_warmup "
-    # 5i item 11: the per-draw watchdog policy, and the header camera copy with the layer's existing camera UBO copy
+    # 5i item 11: the header camera copy with the layer's existing camera UBO copy
     # (geocapture geo_ubo_copy, built once at its first use: a job exercises the key in a warm phase). No core pipeline.
-    "rt_hair_watchdog_draw rt_hair_header_cam_gpu "
-    # 5i shared draw key: the groom rows' key filter (bvhsplit) and the one-key frame watchdog (hair_primary). CPU only.
-    "rt_hair_shared_key rt_hair_watchdog_one_key "
-    # 5t: the coverage gate latch (hair_primary CoverageGate). CPU only.
-    "rt_hair_swap_latch "
+    "rt_hair_header_cam_gpu "
+    # 5i shared draw key: the groom rows' key filter (bvhsplit). CPU only.
+    "rt_hair_shared_key "
+    # Removed 2026-11-14 (docs/RTX_HAIR_PRIMARY.md 6k): no code reads these keys. They stay known here only so that
+    # the historical staged jobs that set them (hair_cam, hair_late, hair_final, hair_pixel_lod) still lint.
+    "rt_hair_watchdog_draw rt_hair_watchdog_one_key rt_hair_swap_latch rt_hair_coverage_min_pixels "
+    "rt_hair_row_stable rt_hair_stale_publish "
     # 5u: two bad coverage measurements in a row (hair_primary CoverageGate::confirm). CPU only.
     "rt_hair_coverage_confirm "
-    # 5u audit: the gate's evidence floor and the live-on warm-up window (hair_primary). CPU only.
-    "rt_hair_coverage_min_pixels rt_hair_live_warmup "
+    # 5u audit: the live-on warm-up window (hair_primary). CPU only.
+    "rt_hair_live_warmup "
     # 5u: the late-arrival test aid (hair_primary LateArrival, bvhsplit groom match). CPU only.
     "rt_hair_debug_late_arrival "
     # 5v: the camera strand LOD pick and its camera BLAS/TLAS (bvhsplit, host side).

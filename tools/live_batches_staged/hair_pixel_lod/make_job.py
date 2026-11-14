@@ -1,6 +1,10 @@
 """hair_pixel_lod (branch claude/hair-pixel-lod-small, docs/RTX_HAIR_PRIMARY.md 5v small heads): STAGED, not queued,
 not authorized.
 
+NOT CURRENT since 2026-11-14 (docs/RTX_HAIR_PRIMARY.md 6k): pl1 sets rt_hair_row_stable, which is removed (the key
+is ignored), and its bundle predates rt_hair_header_scene_pass and rt_hair_coverage_keep. Regenerate it from the
+RTX Hair On bundle of common/settings.h before any use. The job still lints.
+
     py -3 -m tools.live_batches_staged.hair_pixel_lod.make_job
 
 hl1 200821 showed every head at S8's zoomed-out camera is 6-53 px, so the 60 px floor left every groom at camera level 0.

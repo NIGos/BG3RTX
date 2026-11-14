@@ -1525,11 +1525,32 @@ static void test_release_rtx_hair() {
     return m;
   };
   // On (the user's 0.9.5-beta file): the whole bundle survives; strand keys outside it are still reset.
-  Map on = on_map(hair, 1); on["rt_hair_groom_tips"] = "1"; on["rt_hair_watchdog_draw"] = "1";
+  Map on = on_map(hair, 1); on["rt_hair_groom_tips"] = "1"; on["rt_hair_shared_key"] = "1";
   Map m = merged(on);
   CHECK_EQ(get(m, "dev"), "0"); CHECK(knob_value(hair, m) == 1);
   for (const KV& kv : hair.choices[1].kv) if (kv.key) CHECK_EQ(std::string(kv.key) + "=" + get(m, kv.key), std::string(kv.key) + "=" + kv.value);
-  CHECK_EQ(get(m, "rt_hair_groom_tips"), "0"); CHECK_EQ(get(m, "rt_hair_watchdog_draw"), "0");
+  CHECK_EQ(get(m, "rt_hair_groom_tips"), "0"); CHECK_EQ(get(m, "rt_hair_shared_key"), "0");
+  {   // 6k: a file written before 2026-11-14 may hold the six removed strand keys. It loads, the keys are carried and
+      // read by nothing (no default, no knob, no choice writes them), and the bundle is whole.
+    static const char* const removed[] = {"rt_hair_stale_publish", "rt_hair_row_stable", "rt_hair_watchdog_draw",
+                                          "rt_hair_watchdog_one_key", "rt_hair_swap_latch", "rt_hair_coverage_min_pixels"};
+    Map old_file = on_map(hair, 1);
+    for (const char* key : removed) old_file[key] = "1";
+    const Map with = merged(old_file), without = merged(on_map(hair, 1));
+    CHECK(knob_value(hair, with) == 1);
+    for (const auto& kv : without) CHECK_EQ(kv.first + "=" + get(with, kv.first.c_str()), kv.first + "=" + kv.second);
+    CHECK(with.size() == without.size() + 6);
+    const Map defaults = code_defaults();
+    for (const char* key : removed) {
+      CHECK(!defaults.count(key));
+      for (const auto& k : kKnobs)
+        for (int c = 0; c < choice_count(k); ++c)
+          for (const KV& kv : k.choices[c].kv) CHECK(!kv.key || std::string(kv.key) != key);
+    }
+    for (const char* id : {"exp_hair_watchdog_draw", "exp_hair_row_stable", "exp_hair_watchdog_one_key", "exp_hair_swap_latch",
+                           "exp_hair_coverage_min_pixels"})
+      CHECK(find_knob(id) == nullptr);
+  }
   CHECK_EQ(get(m, "rt_hair"), "1");   // the Ctrl+Shift+F7 master is a separate key (layer/util.cpp hair_gated)
   // Off with the rest of the bundle left at 1: every developer-owned key is reset, as before.
   Map off = on; off["rt_hair_groom_primary"] = "0"; off["rt_hair_capture"] = "0";
@@ -1712,7 +1733,7 @@ static void test_strand_bundle() {
   }
   // Untested strand options stay out of the bundle.
   for (const char* key : {"rt_hair_groom_tips", "rt_hair_groom_coverage", "rt_hair_macro_normal", "rt_hair_coverage_footprint",
-                          "rt_hair_coverage_min_pixels", "rt_hair_swap_latch"})
+                          "rt_hair_card_fill", "rt_hair_dense_sample"})
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=<missing>");
   // 5m: the one startup reservation left in the bundle. A game started with RTX Hair off shows the restart banner for
   // it (launcher ui_state::restart_count against the session baseline); the rest of the bundle applies live.

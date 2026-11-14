@@ -622,19 +622,6 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_coverage_keep": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_coverage_keep": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
-    {"id": "exp_hair_watchdog_draw", "label": "Strand hair: per-draw watchdog",
-     "description": "Experimental: when a hair style's strands lose coverage, only that style falls back to its cards, and only after two frames in a row, instead of every style for one bad frame. Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: when a hair style's strands lose coverage, only that style falls back to its cards, and only after two frames in a row, instead of every style for one bad frame. Unqualified.",
-     "details": "5i item 11: turn the camera in S8 or Test Dialogue1 with several characters in view: with On a hair style that flashes to cards no longer takes the others with it.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_watchdog_draw": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_watchdog_draw": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
     {"id": "exp_hair_shared_key", "label": "Strand hair: shared style key",
      "description": "Experimental: when two characters wear the same hair style, their hair turns to strands only when both have their strands ready, instead of one character's hair losing its cards with nothing drawn in their place. Unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
@@ -648,19 +635,6 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_shared_key": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_shared_key": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
-    {"id": "exp_hair_row_stable", "label": "Strand hair: stable strand rows",
-     "description": "Experimental: each character's strands keep their place in the strand tables while the camera moves or a new character appears, instead of being reordered every frame (holes in every character's hair for a few frames). Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: each character's strands keep their place in the strand tables while the camera moves or a new character appears, instead of being reordered every frame (holes in every character's hair for a few frames). Unqualified.",
-     "details": "5w 2026-11-10: several characters in view (S8), zoom with the wheel: with On their hair should no longer show holes at the start of the zoom.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_row_stable": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_row_stable": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
     {"id": "exp_hair_slot_stable", "label": "Strand hair: stable character slots",
      "description": "Experimental: when two characters wear the same hair style, each keeps its own strands when the game changes the order it draws them in, instead of the two swapping for a frame (a one-frame hole in the hair). Unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
@@ -673,32 +647,6 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_slot_stable": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_slot_stable": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "exp_hair_watchdog_one_key", "label": "Strand hair: one-style watchdog",
-     "description": "Experimental: when one hair style loses its strands in a frame while the others keep theirs, only that style falls back to its cards instead of every style. Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: when one hair style loses its strands in a frame while the others keep theirs, only that style falls back to its cards instead of every style. Unqualified.",
-     "details": "5i 2026-11-09: turn the camera in S8 with several characters in view: with On one style that flashes to cards no longer takes the others with it.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_watchdog_one_key": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_watchdog_one_key": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "exp_hair_swap_latch", "label": "Strand hair: no strand retries",
-     "description": "Experimental: a hair style whose strands failed the coverage check keeps its cards until its size on screen changes, instead of trying the strands again a moment later (hair that flickers between strands and cards with a still camera). Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: a hair style whose strands failed the coverage check keeps its cards until its size on screen changes, instead of trying the strands again a moment later (hair that flickers between strands and cards with a still camera). Unqualified.",
-     "details": "5t 2026-11-10: still camera, characters at a distance whose hair flickers between strands and cards: with On each hair settles on strands or on cards and stays there until the camera or the character moves.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_swap_latch": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_swap_latch": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_coverage_union", "label": "Strand hair: coverage check on every strand pixel",
      "description": "Experimental: the check that decides between strands and cards counts every strand pixel, as its limit was derived, instead of only the strand pixels that land on an opaque card pixel (which drops for small, distant characters and sends their hair back to cards). Unqualified.",
@@ -725,19 +673,6 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_coverage_confirm": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_coverage_confirm": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "exp_hair_coverage_min_pixels", "label": "Strand hair: no coverage check on tiny hair",
-     "description": "Experimental: hair drawn on fewer than 64 pixels is not measured (its count says nothing), so tiny distant hair stays on cards steadily instead of trying strands every half second. Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: hair drawn on fewer than 64 pixels is not measured (its count says nothing), so tiny distant hair stays on cards steadily instead of trying strands every half second. Unqualified.",
-     "details": "5u audit 2026-11-10: S8, still camera, very distant characters: with On their hair stays cards without switching; the switches line shows no 'coverage stale' switches.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_coverage_min_pixels": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_coverage_min_pixels": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_live_warmup", "label": "Strand hair: warm-up after turning RTX Hair on",
      "description": "Experimental: after RTX Hair is turned on while playing, the hair keeps its cards until every hair style is rebuilt and settled, as after a level load, instead of showing strands while they are still being rebuilt. Unqualified.",

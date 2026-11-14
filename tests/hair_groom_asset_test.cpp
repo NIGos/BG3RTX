@@ -254,16 +254,14 @@ static void test_coverage_hold() {
     CHECK(strict.why(8, 105) == CoverageGate::Why::Stale);
   }
 }
-// 5t: the strand/card switch counter of the lean period line, and rt_hair_swap_latch.
+// 5t: the strand/card switch counter of the lean period line.
 static void test_swap_transitions() {
   using namespace hair_primary;
-  CHECK(switch_cause(Refusal::Watchdog, false) == SwitchCause::FrameWatchdog);
-  CHECK(switch_cause(Refusal::Watchdog, true) == SwitchCause::KeyWatchdog);
-  CHECK(switch_cause(Refusal::CoverLow, false) == SwitchCause::CoverLow);
-  CHECK(switch_cause(Refusal::CoverInvalidated, false) == SwitchCause::CoverStale);
-  CHECK(switch_cause(Refusal::CoverLatched, false) == SwitchCause::Latched);
-  CHECK(switch_cause(Refusal::Applied, false) == SwitchCause::NotApplied);
-  CHECK(switch_cause(Refusal::NotDropped, false) == SwitchCause::Other);
+  CHECK(switch_cause(Refusal::Watchdog) == SwitchCause::FrameWatchdog);
+  CHECK(switch_cause(Refusal::CoverLow) == SwitchCause::CoverLow);
+  CHECK(switch_cause(Refusal::CoverInvalidated) == SwitchCause::CoverStale);
+  CHECK(switch_cause(Refusal::Applied) == SwitchCause::NotApplied);
+  CHECK(switch_cause(Refusal::NotDropped) == SwitchCause::Other);
   const uint64_t a = 0x85b9ull << 48, b = 0x5eabull << 48, c = 0x7029ull << 48;
   SwapTransitions t;
   // The frame watchdog cycle: 6 strand frames (the verdict latency), kWatchdogFrames card frames, twice. Key b is
@@ -310,13 +308,15 @@ static void test_swap_transitions() {
   t.watchdog_trip(2860, 2, 4938, 0.8913, 0, 2);
   CHECK(t.wd_trips == 2 && t.wd_bad == 3 && t.wd_good == 3 && t.wd_lost == 1 && t.wd_frame == 2860);
   char line[2000];
-  t.format(line, 2);
+  t.format(line);
   const std::string s = line;
-  CHECK(s.find(" 7 strands->cards (frame watchdog 4, key watchdog 0, coverage low 1,") == 0);
+  // 6k: the whole cause list, as the hx1 gates match it (tools/live_batches_staged/hair_stable/make_job.py NO_SWITCH).
+  CHECK(s.find(" 7 strands->cards (frame watchdog 4, coverage low 1, coverage high 0, coverage stale/none/invalidated 0, "
+               "header not applied (camera gate, order) 0, live toggle 1, other 1), 7 cards->strands; ") == 0);
   CHECK(s.find("live toggle 1, other 1), 7 cards->strands;") != std::string::npos);
   CHECK(s.find("strand runs 7: 1/6/6 frames (min/median/max), card runs 7: 1/28/28;") != std::string::npos);
   CHECK(s.find("frame watchdog trips 2 (their draws under own bound 3, above 3; frames under a tenth of the card "
-               "pixels 1; last: frame 2860, 2/4938, bound 0.8913), key watchdog trips 0; latched keys 2;") != std::string::npos);
+               "pixels 1; last: frame 2860, 2/4938, bound 0.8913); worst keys ") != std::string::npos);
   CHECK(s.find(" 7029: 6, ") < s.find(" 5eab: 4, ") && s.find(" 5eab: 4, ") < s.find(" 85b9: 4, 0.605..0.879 (2), 0.935..0.935 (1), 310..455;"));
   char tiny[32];
   t.format(tiny);   // a short buffer truncates, never overruns
@@ -331,81 +331,12 @@ static void test_swap_transitions() {
   CHECK(std::string(line).find(" 0 strands->cards (") == 0 && std::string(line).find("worst keys") != std::string::npos &&
         std::string(line).rfind(" none") == std::strlen(line) - 5);
 }
-// rt_hair_swap_latch: a key whose own strands measured outside its bound is retried by the gate as soon as a card-frame
-// (probe) measurement passes; with the latch it keeps its cards until its footprint moves by more than the count noise.
-static void test_swap_latch() {
-  using namespace hair_primary;
-  CHECK(!CoverageGate::footprint_changed(440, 428) && !CoverageGate::footprint_changed(428, 440));   // 12 <= 20.98 + 20.69
-  CHECK(CoverageGate::footprint_changed(520, 428) && CoverageGate::footprint_changed(340, 428));
-  const uint64_t key = 0x9861;
-  for (bool latch : {false, true}) {
-    CoverageGate c;
-    c.hold = true;
-    c.latch = latch;
-    c.observe(key, 100, 430, 398, false);
-    CHECK(c.allow(key, 101));
-    c.swapped(key, 101);
-    c.observe(key, 101, 430, 372, true);   // 0.865: inside the bound of a swapping key (0.82): no latch
-    CHECK(c.allow(key, 102) && c.latched.empty());
-    c.swapped(key, 102);
-    c.observe(key, 102, 430, 260, true);   // 0.60: its strands failed
-    CHECK(c.why(key, 103) == (latch ? CoverageGate::Why::Latched : CoverageGate::Why::Low));
-    c.observe(key, 106, 428, 398, false);  // on cards, the probe passes the strict bound again
-    CHECK(c.allow(key, 107) == !latch);    // off: the retry (strands again, then the next verdict)
-    if (!latch) { CHECK(c.latched.empty() && c.latches == 0); continue; }
-    CHECK(c.latched.at(key) == 428 && c.latches == 1);
-    c.observe(key, 107, 440, 410, false);  // the same footprint within its count noise: still cards
-    CHECK(c.why(key, 108) == CoverageGate::Why::Latched);
-    c.observe(key, 108, 430, 250, true);   // a swapped frame still in flight fails again: one latch, a new reference
-    CHECK(c.latches == 1 && c.latched.at(key) == 0);
-    c.observe(key, 109, 428, 398, false);
-    c.observe(key, 110, 0, 0, false);      // not in view: no evidence
-    CHECK(c.why(key, 111) == CoverageGate::Why::Latched);
-    c.observe(key, 111, 520, 480, false);  // the character came closer: released, the gate judges the new measurement
-    CHECK(c.releases == 1 && c.latched.empty() && c.allow(key, 112));
-    c.observe(key, 112, 520, 300, true);
-    CHECK(!c.latched.empty());
-    c.clear();
-    CHECK(c.latched.empty());
-  }
-  CHECK(coverage_refusal(CoverageGate::Why::Latched) == Refusal::CoverLatched &&
-        std::string(refusal_name(Refusal::CoverLatched)) == "coverage latched");
-  // Without the hold or the footprint bound the failure is judged by the strict bound.
-  CoverageGate strict;
-  strict.latch = true;
-  strict.observe(key, 100, 430, 372, true);   // 0.865 < 0.891
-  CHECK(strict.why(key, 101) == CoverageGate::Why::Latched);
-}
 // 5u rt_hair_coverage_union: the gate judges U (every accepted strand pixel of the slot) instead of S (only those inside
 // the card markers); the count shader gives U >= S for every slot (the pixels S counts are a subset). Protections: a key
 // that passes today passes with the key on, in every gate mode, with the same switches; a key without strands still fails.
-// 5u audit. rt_hair_coverage_min_pixels: hs1 095322 key 5364 (1..55 card pixels, ratio up to 6.0) no longer cycles; keys
-// at >= 64 card pixels get the same answers. rt_hair_live_warmup: LoadGuard::restart opens the level-load window.
+// 5u audit. rt_hair_live_warmup: LoadGuard::restart opens the level-load window.
 static void test_coverage_audit() {
   using namespace hair_primary;
-  for (bool on : {false, true}) {
-    CoverageGate g;
-    g.hold = true;
-    g.min_pixels = on;
-    g.observe(0x5364, 100, 40, 41);              // a tiny draw: ratio 1.03 of 40 pixels
-    CHECK(g.why(0x5364, 101) == (on ? CoverageGate::Why::None : CoverageGate::Why::Ok));
-    g.observe(0x5364, 101, 5, 30, true);         // 6.0 of 5 pixels
-    CHECK(on ? g.latest.find(0x5364) == g.latest.end() : g.latest.at(0x5364).card == 5);
-    g.observe(0x5364, 102, 64, 62);              // at the floor: evidence again
-    CHECK(g.allow(0x5364, 103));
-  }
-  uint32_t seed = 99;
-  auto rnd = [&](uint32_t n) { seed = seed * 1664525u + 1013904223u; return (seed >> 8) % n; };
-  for (int i = 0; i < 5000; ++i) {   // >= 64 card pixels: identical answers with the key on
-    CoverageGate off, on;
-    off.hold = on.hold = rnd(2) != 0;
-    on.min_pixels = true;
-    const uint64_t card = 64 + rnd(9000), strand = rnd(uint32_t(card * 11 / 10) + 1);
-    const bool sw = rnd(2) != 0;
-    if (sw) { off.swapped(3, 100); on.swapped(3, 100); }
-    off.observe(3, 100, card, strand, sw); on.observe(3, 100, card, strand, sw);
-    CHECK(off.why(3, 101) == on.why(3, 101));
-  }
   LoadGuard lg;
   CHECK(lg.observe(0xD, 10, 1) && lg.quiet(11));
   CHECK(lg.settle(10 + 1, true) == false);
@@ -606,70 +537,21 @@ static void test_dense_sample() {
   CHECK(st.side[0].max_drift == 0.003f && st.side[0].max_origin == 0.5f);
   CHECK(std::string(dense_reason_name(DenseReason::Owner)) == "strand of another draw");
 }
-// 6a/6b rt_hair_stale_publish: the submit-time camera check. hl1 210357's trip frames are the moved case; hf2 225504's
-// policy bug (every frame "camera not known", drawn as cards) is the unknown case, which must trace as before.
-static void test_stale_publish() {
-  using namespace hair_primary;
-  CHECK(stale_publish(2617, 2618, 0.524f) == Stale::Moved);
-  CHECK(stale_publish(2621, 2622, 0.342f) == Stale::Moved);
-  CHECK(stale_publish(2618, 2618, 0.5f) == Stale::Moved);      // a measured move counts whatever the labels say
-  CHECK(stale_publish(2617, 2618, 0.0f) == Stale::SameCamera);
-  CHECK(stale_publish(2617, 2618, kStaleCameraTol) == Stale::SameCamera);   // inside the card band's fixed term
-  CHECK(stale_publish(2617, 2618, 0.0101f) == Stale::Moved);
-  CHECK(stale_publish(2618, 2618, 0.0f) == Stale::Own);
-  // Unknown camera (not measured, no publish camera, NaN): never cards, whatever k is (hf2: k = 1 by label in 60 of 60).
-  CHECK(stale_publish(1191, 1192, -1.0f) == Stale::Unknown);
-  CHECK(stale_publish(1192, 1192, -1.0f) == Stale::Unknown);
-  CHECK(stale_publish(0, 2618, 0.0f) == Stale::Unknown);
-  CHECK(stale_publish(2617, 2618, std::nanf("")) == Stale::Unknown);
-  DrawSlots slots;
-  slots.keys[0] = 0x8424ull << 48; slots.keys[3] = 0x3efaull << 48; slots.keys[15] = 0xad91ull << 48;
-  const uint32_t recorded = (1u << 0) | (1u << 3) | (1u << 15);
-  CHECK(stale_card_slots(true, Stale::Moved, slots) == recorded);
-  CHECK(stale_card_slots(true, Stale::Unknown, slots) == 0);   // the hf2 bug: unknown traced as before
-  CHECK(stale_card_slots(true, Stale::Own, slots) == 0 && stale_card_slots(true, Stale::SameCamera, slots) == 0);
-  CHECK(stale_card_slots(false, Stale::Moved, slots) == 0);   // key off: no behaviour change in any frame
-  const uint32_t m = slot_masks(recorded & ~stale_card_slots(true, Stale::Moved, slots), recorded);
-  CHECK((m & 0xFFFFu) == 0 && (m >> 16) == recorded);
-  // Frame indexing (6b): the G-buffer's label frame N is frame_index + 1 at its recording, a build's label frame_index
-  // at the build; the build labelled N is normally noted after G-buffer N's submit, so a lookup by N finds nothing at
-  // the submit and the decision must not depend on it (the measured UBO camera alone decides).
-  CameraSteps c;
-  const float cam0[3] = {-220.008f, 8.643f, -202.684f};
-  c.note(1191, cam0);
-  CHECK(!c.find(1192) && c.find(1191));
-  CHECK(stale_publish(1191, 1192, camera_distance(cam0, cam0)) == Stale::SameCamera);   // still camera, k = 1: traced
-  // Why a camera was not measured: no draw, no binding, not mapped, a VP that is not camera-relative.
-  CHECK(stale_why(false, false, false, -1.0f) == StaleWhy::NoDraw);
-  CHECK(stale_why(true, false, false, -1.0f) == StaleWhy::NoBinding);
-  CHECK(stale_why(true, true, false, -1.0f) == StaleWhy::NotMapped);
-  CHECK(stale_why(true, true, true, 3.0f) == StaleWhy::EyeOff && stale_why(true, true, true, -1.0f) == StaleWhy::EyeOff);
-  CHECK(stale_why(true, true, true, 0.0f) == StaleWhy::Measured);
-  // The lookup is tried at any main-view hair draw (swapped or not), a bounded number of times per header.
-  CHECK(stale_ubo_wanted(false, 0) && stale_ubo_wanted(false, kStaleUboTries - 1));
-  CHECK(!stale_ubo_wanted(true, 0) && !stale_ubo_wanted(false, kStaleUboTries));
-  const float a[3] = {-217.835f, 15.327f, -197.319f}, b[3] = {-217.835f, 15.327f, -196.795f};
-  CHECK(std::fabs(camera_distance(a, b) - 0.524f) < 1e-3f && camera_distance(a, a) == 0.0f);
-  CHECK(std::string(stale_name(Stale::Moved)) == "camera moved since the publish");
-  CHECK(std::string(stale_why_name(StaleWhy::NoBinding)) == "no camera UBO binding");
-}
 static void test_coverage_union() {
   using namespace hair_primary;
   uint32_t seed = 12345;
   auto rnd = [&](uint32_t n) { seed = seed * 1664525u + 1013904223u; return (seed >> 8) % n; };
-  // 1. Monotone: for any measurement, any mode, an Ok with S stays Ok with U >= S (and the latch never fires more).
+  // 1. Monotone: for any measurement, any mode, an Ok with S stays Ok with U >= S.
   for (int i = 0; i < 20000; ++i) {
     const uint64_t card = 64 + rnd(20000), inside = rnd(uint32_t(card) + 1), uni = inside + rnd(uint32_t(card / 4) + 1);
     const bool swapped = rnd(2) != 0;
-    for (int mode = 0; mode < 8; ++mode) {
+    for (int mode = 0; mode < 4; ++mode) {
       CoverageGate off, on;
       off.hold = on.hold = (mode & 1) != 0;
       off.footprint = on.footprint = (mode & 2) != 0;
-      off.latch = on.latch = (mode & 4) != 0;
       if (swapped) { off.swapped(7, 100); on.swapped(7, 100); }
-      off.observe(7, 100, card, inside, swapped);
-      on.observe(7, 100, card, uni, swapped, inside);
-      CHECK(on.latches <= off.latches);
+      off.observe(7, 100, card, inside);
+      on.observe(7, 100, card, uni, inside);
       if (off.why(7, 101) == CoverageGate::Why::Ok) CHECK(on.why(7, 101) == CoverageGate::Why::Ok);
       // The upper bound is judged on S in both: U above kCoverMax with S inside it is no refusal.
       if (on.why(7, 101) == CoverageGate::Why::High) CHECK(off.why(7, 101) == CoverageGate::Why::High);
@@ -685,8 +567,8 @@ static void test_coverage_union() {
     for (uint64_t f = 100; f < 400; ++f)
       for (const K& k : ks) {
         const uint64_t inside = k.card * (900 + rnd(90)) / 1000, uni = inside + k.card * rnd(80) / 1000;   // 0.90-0.99
-        off.observe(k.key, f, k.card, inside, off.is_swapping(k.key, f));
-        on.observe(k.key, f, k.card, uni, on.is_swapping(k.key, f), inside);
+        off.observe(k.key, f, k.card, inside);
+        on.observe(k.key, f, k.card, uni, inside);
         const bool a = off.allow(k.key, f + 1), b = on.allow(k.key, f + 1);
         CHECK(a && b);
         off.swapped(k.key, f + 1); on.swapped(k.key, f + 1);
@@ -698,16 +580,16 @@ static void test_coverage_union() {
   {
     CoverageGate off, on;
     off.hold = on.hold = true;
-    off.observe(0x55, 100, 600, 372); on.observe(0x55, 100, 600, 576, false, 372);
+    off.observe(0x55, 100, 600, 372); on.observe(0x55, 100, 600, 576, 372);
     CHECK(off.why(0x55, 101) == CoverageGate::Why::Low && on.allow(0x55, 101));
     // The safety net: a key whose strands are missing (U = S = 0) or far too few is refused with the key on too.
     on.swapped(0x66, 100);
-    on.observe(0x66, 100, 600, 0, true, 0);
+    on.observe(0x66, 100, 600, 0, 0);
     CHECK(on.why(0x66, 101) == CoverageGate::Why::Low);
-    on.observe(0x67, 100, 5000, 2500, false, 2400);   // U/C 0.5
+    on.observe(0x67, 100, 5000, 2500, 2400);   // U/C 0.5
     CHECK(on.why(0x67, 101) == CoverageGate::Why::Low);
     // U over the upper bound with S inside it: Ok (the upper side keeps today's count).
-    on.observe(0x68, 100, 5000, 6000, false, 4900);
+    on.observe(0x68, 100, 5000, 6000, 4900);
     CHECK(on.allow(0x68, 101));
   }
   // 4. Frame watchdog fed the judged count: three distant draws (S 0.62, U 0.96) trip it today, not with the key; a
@@ -715,14 +597,11 @@ static void test_coverage_union() {
   {
     Watchdog off, on;
     off.begin(); on.begin();
-    for (uint64_t k = 1; k <= 3; ++k) { off.draw(600, 372, 600, k); on.draw(600, 576, 600, k); }
+    for (uint64_t k = 1; k <= 3; ++k) { off.draw(600, 372, 600); on.draw(600, 576, 600); }
     CHECK(off.judge(100) && !on.judge(100));
     Watchdog lost;
-    lost.begin(); lost.draw(600, 0, 600, 1); lost.draw(900, 3, 900, 2);
+    lost.begin(); lost.draw(600, 0, 600); lost.draw(900, 3, 900);
     CHECK(lost.judge(100));
-    DrawWatchdog dw;   // per draw: a key with U = 0 trips after two frames, a healthy distant key never
-    for (uint64_t f = 100; f < 103; ++f) { dw.begin(); dw.draw(1, 600, 0, 600); dw.draw(2, 600, 576, 600); dw.judge(f); }
-    CHECK(dw.active(1, 103) && !dw.active(2, 103));
   }
   // 5. The lean footprint line: bins, the judged ratio, own-bound fails, and the dropout classes.
   {
@@ -763,17 +642,17 @@ static void test_coverage_union() {
     g.confirm = confirm;
     g.observe(0xbe12, 100, 5700, 5480);
     CHECK(g.allow(0xbe12, 101));
-    for (uint64_t f = 101; f < 105; ++f) { g.swapped(0xbe12, f); g.observe(0xbe12, f, 5700, 5480, true); }
+    for (uint64_t f = 101; f < 105; ++f) { g.swapped(0xbe12, f); g.observe(0xbe12, f, 5700, 5480); }
     g.swapped(0xbe12, 105);
-    g.observe(0xbe12, 105, 5730, 0, true);   // the exchange frame
+    g.observe(0xbe12, 105, 5730, 0);   // the exchange frame
     CHECK(g.why(0xbe12, 106) == (confirm ? CoverageGate::Why::Ok : CoverageGate::Why::Low));
     g.swapped(0xbe12, 106);
-    g.observe(0xbe12, 106, 5700, 5470, true);
+    g.observe(0xbe12, 106, 5700, 5470);
     CHECK(g.allow(0xbe12, 107));
     g.swapped(0xbe12, 107);
-    g.observe(0xbe12, 107, 5700, 0, true);
+    g.observe(0xbe12, 107, 5700, 0);
     g.swapped(0xbe12, 108);
-    g.observe(0xbe12, 108, 5700, 0, true);     // a real loss: two in a row
+    g.observe(0xbe12, 108, 5700, 0);     // a real loss: two in a row
     CHECK(g.why(0xbe12, 109) == CoverageGate::Why::Low);
     CoverageGate cards;                        // not swapping: the start decision is the strict one, unconfirmed
     cards.hold = true;
@@ -962,7 +841,7 @@ static void test_coverage_keep() {
     CHECK(g.why(0x22a2, 100) == Why::None);            // the first swap always needs a measurement
     g.observe(0x22a2, 100, 2869, 2900);
     uint64_t f = 101;
-    for (; f < 148; ++f) { CHECK(g.allow(0x22a2, f)); g.swapped(0x22a2, f); g.observe(0x22a2, f, 2869, 2900, true); }
+    for (; f < 148; ++f) { CHECK(g.allow(0x22a2, f)); g.swapped(0x22a2, f); g.observe(0x22a2, f, 2869, 2900); }
     // The draw leaves the screen but is still submitted: measurements without card pixels replace nothing.
     int stale_at = -1;
     for (int i = 0; i < 120; ++i, ++f) {
@@ -987,7 +866,7 @@ static void test_coverage_keep() {
     CHECK(g.allow(0x12e9, 403));
     // A swapping key that then fails still goes to cards on its second bad measurement, at any age of the first proof.
     f += 300;
-    for (int i = 0; i < 2; ++i, ++f) { if (g.allow(0x22a2, f)) g.swapped(0x22a2, f); g.observe(0x22a2, f, 2869, 900, true); }
+    for (int i = 0; i < 2; ++i, ++f) { if (g.allow(0x22a2, f)) g.swapped(0x22a2, f); g.observe(0x22a2, f, 2869, 900); }
     CHECK(g.why(0x22a2, f) == Why::Low);
     g.clear();                                         // a level load: every key starts again
     CHECK(g.why(0x22a2, f) == Why::None);
@@ -1011,7 +890,7 @@ static void test_card_fill() {
     g.observe(0x58da, 100, 3300, 3200);
     CHECK(g.allow(0x58da, 101));
     uint64_t f = 101;
-    for (; f < 104; ++f) { g.swapped(0x58da, f); g.observe(0x58da, f, 3300, 3200, true); }
+    for (; f < 104; ++f) { g.swapped(0x58da, f); g.observe(0x58da, f, 3300, 3200); }
     const uint64_t loss[5] = {1932, 2193, 2491, 2731, 364};   // hl1 003637, G-buffer frames 2448-2452
     for (uint64_t s : loss) {
       if (g.allow(0x58da, f)) g.swapped(0x58da, f);
@@ -1021,13 +900,13 @@ static void test_card_fill() {
     CHECK(g.why(0x58da, f) == (fill ? CoverageGate::Why::Ok : CoverageGate::Why::Low));
     if (!fill) continue;
     g.swapped(0x58da, f);
-    g.observe(0x58da, f, 3300, 3200, true);   // the dolly ends: the run is over
+    g.observe(0x58da, f, 3300, 3200);   // the dolly ends: the run is over
     CHECK(g.bad_run[0x58da] == 0 && g.allow(0x58da, f + 1));
     ++f;
     for (uint32_t i = 0; i < kFillConfirm; ++i, ++f) {   // a sustained loss (a groom that does not fit its cards)
       CHECK(g.allow(0x58da, f));
       g.swapped(0x58da, f);
-      g.observe(0x58da, f, 3300, 1000, true);
+      g.observe(0x58da, f, 3300, 1000);
     }
     CHECK(g.why(0x58da, f) == CoverageGate::Why::Low);
     CoverageGate cards;                        // a key on cards: the strict start decision, as without the fill
@@ -1039,7 +918,7 @@ static void test_card_fill() {
     cards.observe(0x77, 101, 3300, 3200);
     CHECK(cards.allow(0x77, 102));
     cards.swapped(0x77, 102);
-    cards.observe(0x77, 102, 3300, 3200 + 3300, true, 3300 * 2);   // strands far outside the cards (coverage high)
+    cards.observe(0x77, 102, 3300, 3200 + 3300, 3300 * 2);   // strands far outside the cards (coverage high)
     CHECK(cards.why(0x77, 103) == CoverageGate::Why::Ok);           // one measurement of a held key: not yet confirmed
     CHECK(cards.why(0x77, 102 + kHoldFrames + 1) == CoverageGate::Why::Stale);
   }
@@ -1305,46 +1184,6 @@ static void test_watchdog() {
   CHECK(!n.judge(10));
   n.begin(); n.draw(0, 0, 30);   // too little evidence
   CHECK(!n.judge(10));
-  // rt_hair_watchdog_draw: per draw key, kWatchdogDrawBad bad judged frames in a row; only that key holds its cards.
-  static_assert(kWatchdogDrawBad == 2, "one header per G-buffer frame: a one-publish fault makes one bad frame");
-  DrawWatchdog dw;
-  dw.begin(); dw.draw(1, 5000, 300, 5000); dw.draw(2, 5000, 4800, 5000);   // the frame watchdog trips on this frame
-  CHECK(dw.judge(100) == 0 && !dw.active(1, 101) && !dw.active(2, 101));   // one bad frame of draw 1: no trip
-  dw.begin(); dw.draw(1, 5000, 4700, 5000); dw.draw(2, 5000, 4800, 5000);   // draw 1 recovered: its run restarts
-  CHECK(dw.judge(101) == 0);
-  dw.begin(); dw.draw(1, 5000, 300, 5000);
-  CHECK(dw.judge(102) == 0);
-  dw.begin(); dw.draw(1, 5000, 300, 5000);
-  CHECK(dw.judge(102) == 0);   // the same G-buffer frame judged again: not a second frame
-  dw.begin(); dw.draw(1, 5000, 300, 5000); dw.draw(2, 5000, 4800, 5000);
-  CHECK(dw.judge(103) == 1 && dw.active(1, 103) && dw.active(1, 103 + kWatchdogFrames - 1) &&
-        !dw.active(1, 103 + kWatchdogFrames) && !dw.active(2, 104) && dw.trips == 1);
-  dw.begin(); dw.draw(3, 430, 360, 430);   // 0.837: inside its own footprint bound
-  dw.judge(104); dw.begin(); dw.draw(3, 430, 360, 430);
-  CHECK(dw.judge(105) == 0 && !dw.active(3, 106));
-  DrawWatchdog du;   // markers missing: counted only when no swapped draw of the frame left one (as the frame watchdog)
-  du.begin(); du.draw(4, 0, 0, 5000); du.draw(5, 4000, 3900, 4000);
-  du.judge(10); du.begin(); du.draw(4, 0, 0, 5000); du.draw(5, 4000, 3900, 4000);
-  CHECK(du.judge(11) == 0 && !du.active(4, 12));
-  du.begin(); du.draw(4, 0, 0, 5000); du.judge(12); du.begin(); du.draw(4, 0, 0, 5000);
-  CHECK(du.judge(13) == 1 && du.active(4, 14));
-  du.begin(); du.draw(6, 0, 0, 30); du.judge(20); du.begin(); du.draw(6, 0, 0, 30);   // too little evidence
-  CHECK(du.judge(21) == 0 && !du.active(6, 22));
-  // rt_hair_watchdog_one_key (5i, hc1 2026-11-09): one key under its bound next to a passing draw cards that key only;
-  // off, or two bad keys, or no passing draw: the frame trips as before.
-  Watchdog ok;
-  ok.one_key = true;
-  ok.begin(); ok.draw(39907, 0, 39907, 0x7a27); ok.draw(21336, 20500, 21336, 0x27af);   // total 0.35: the frame would trip
-  CHECK(!ok.judge(200) && !ok.active(201) && ok.key_active(0x7a27, 201) && ok.key_active(0x7a27, 200 + kWatchdogFrames - 1) &&
-        !ok.key_active(0x7a27, 200 + kWatchdogFrames) && !ok.key_active(0x27af, 201) && ok.spared == 1 && ok.trips == 0);
-  ok.begin(); ok.draw(5000, 300, 5000, 1); ok.draw(5000, 200, 5000, 2); ok.draw(5000, 4800, 5000, 3);   // two bad keys
-  CHECK(ok.judge(210) && ok.active(211));
-  ok = Watchdog{}; ok.one_key = true;
-  ok.begin(); ok.draw(5000, 300, 5000, 1);   // the only swapped draw: no passing draw to spare it by
-  CHECK(ok.judge(220) && ok.active(221));
-  Watchdog off;   // key off: the hc1 frame trips every draw
-  off.begin(); off.draw(39907, 0, 39907, 0x7a27); off.draw(21336, 20500, 21336, 0x27af);
-  CHECK(off.judge(200) && off.active(201) && off.spared == 0);
   // rt_hair_shared_key: two draws share key 7, one groom row published -> key 7 withheld; complete keys stay.
   {
     uint64_t rows[3] = {7, 9, 0};
@@ -1433,68 +1272,6 @@ static void test_round3() {
     s.publish(before, 2);
     CHECK(upgrade_plan(s, after, true).card_slots == 0);
     CHECK(upgrade_plan(s, dropped, true).card_slots == (1u << s.find(0xA0)));   // the old behaviour: card mode
-  }
-  {   // rt_hair_row_stable (5w): the hl1 164930 arrival replayed. 12 grooms in rows, then the camera moves: one groom
-      // leaves (its hold freed), the game alternates the draw order every frame, three newcomers arrive one by one.
-    GroomRows rows;
-    const uint64_t lag = 8;
-    uint64_t at[kMaxGrooms] = {}, before[kMaxGrooms] = {};   // the groom in each row of this build and the one before
-    uint32_t row_of_groom[32] = {};                          // groom id (1..) -> its row while live
-    bool live_before[32] = {};
-    uint32_t moved = 0, mismatched = 0, reused_early = 0, row_count = 0;
-    uint32_t left_row = kMaxGrooms;
-    for (uint64_t frame = 100; frame < 140; ++frame) {
-      std::vector<uint64_t> live;
-      for (uint64_t g = 1; g <= 12; ++g) if (frame < 110 || g != 4) live.push_back(g);   // groom 4 leaves at 110
-      for (uint64_t g = 13; g <= 15; ++g) if (frame >= 111 + (g - 13) * 2) live.push_back(g);   // newcomers
-      if (frame >= 130) live.push_back(16);   // a late groom, after the lag: may take groom 4's row
-      if (frame >= 110 && frame % 2) std::reverse(live.begin(), live.end());   // the capture order alternates
-      if (frame >= 110 && frame % 3 == 0) std::swap(live[1], live[5]);
-      uint32_t out[kMaxGrooms];
-      row_count = rows.assign(live.data(), uint32_t(live.size()), frame, lag, out);
-      std::memcpy(before, at, sizeof at);
-      std::memset(at, 0, sizeof at);
-      bool live_now[32] = {};
-      for (size_t i = 0; i < live.size(); ++i) {
-        CHECK(out[i] < row_count && at[out[i]] == 0);   // one groom per row
-        at[out[i]] = live[i];
-        if (live_before[live[i]] && row_of_groom[live[i]] != out[i]) ++moved;
-        if (live[i] == 4) left_row = out[i];
-        if (live[i] >= 13 && frame < 110 + lag && out[i] == left_row) ++reused_early;
-        row_of_groom[live[i]] = out[i];
-        live_now[live[i]] = true;
-      }
-      // The consumer: a hit on instance k of this build's TLAS read with the previous build's header rows (and the
-      // reverse) names the same groom whenever both hold one there.
-      for (uint32_t k = 0; k < kMaxGrooms; ++k) if (at[k] && before[k] && at[k] != before[k]) ++mismatched;
-      std::memcpy(live_before, live_now, sizeof live_now);
-    }
-    CHECK(moved == 0 && mismatched == 0 && reused_early == 0 && rows.early == 0);
-    CHECK(left_row < 12 && at[left_row] == 16);   // the freed row went to the groom that arrived after the lag
-    CHECK(row_count == 15);                       // 11 + 3 newcomers in new rows + the late one in the freed row
-    // The key-off order for the same sequence (position in the list) moves rows: the bug this replaces.
-    {
-      const uint64_t f0[3] = {1, 2, 3}, f1[3] = {3, 2, 1};
-      CHECK(f0[0] != f1[0]);
-      GroomRows r;
-      uint32_t a[3], b[3];
-      CHECK(r.assign(f0, 3, 1, lag, a) == 3 && r.assign(f1, 3, 2, lag, b) == 3);
-      CHECK(a[0] == b[2] && a[1] == b[1] && a[2] == b[0]);
-    }
-    // A groom that returns within the lag takes its own row back; every row taken: the oldest freed one, counted.
-    {
-      GroomRows r;
-      uint64_t all[kMaxGrooms];
-      uint32_t out[kMaxGrooms];
-      for (uint32_t i = 0; i < kMaxGrooms; ++i) all[i] = 100 + i;
-      CHECK(r.assign(all, kMaxGrooms, 1, lag, out) == kMaxGrooms && out[7] == 7);
-      CHECK(r.assign(all, 7, 2, lag, out) == 7);                       // rows 7.. leave
-      const uint64_t back[2] = {107, 999};                             // 107 returns, 999 is new: no row is past the lag
-      CHECK(r.assign(back, 2, 3, lag, out) == 9 && out[0] == 7 && out[1] == 8 && r.early == 1);
-      const uint64_t twice[2] = {5, 5};                                // one key twice in a build: two rows
-      GroomRows d;
-      CHECK(d.assign(twice, 2, 1, lag, out) == 2 && out[0] != out[1]);
-    }
   }
   // M1: previous points only when the slot's last update was the previous build frame.
   CHECK(groom_prev_points(2, 99, 100) && !groom_prev_points(2, 97, 100) && !groom_prev_points(2, 0, 100));
@@ -1672,7 +1449,7 @@ int main() {  test_round3();
   test_prepass_gbuffer_bootstrap();
   test_entering_head(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish(); test_card_fill(); test_header_pass(); test_coverage_keep();
+  test_swap_transitions(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_card_fill(); test_header_pass(); test_coverage_keep();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
