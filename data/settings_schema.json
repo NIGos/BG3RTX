@@ -596,6 +596,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_header_cam_gpu": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_header_cam_gpu": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_header_scene_pass", "label": "Strand hair: header at the hair's own pass",
+     "description": "Experimental: the strand data of a frame is applied only at the pass that draws the hair, never at the decal pass after it. Removes strands missing on heads away from the screen centre while the camera moves fast. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: the strand data of a frame is applied only at the pass that draws the hair, never at the decal pass after it. Removes strands missing on heads away from the screen centre while the camera moves fast. Unqualified.",
+     "details": "6h 2026-11-14: S8, zoom in and out fast with the mouse wheel: with On the far heads and the heads at the screen edge keep their strands while the camera moves.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_header_scene_pass": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_header_scene_pass": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_watchdog_draw", "label": "Strand hair: per-draw watchdog",
      "description": "Experimental: when a hair style's strands lose coverage, only that style falls back to its cards, and only after two frames in a row, instead of every style for one bad frame. Unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,

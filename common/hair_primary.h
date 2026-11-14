@@ -969,6 +969,41 @@ inline Dropout dropout_reason(uint32_t card, uint32_t accepted, uint32_t last_ca
 inline uint32_t gbuffer_tag(bool frame_tags, uint32_t publish_tag, uint64_t gbuffer_frame) {
   return frame_tags ? uint32_t(gbuffer_frame) : publish_tag;
 }
+// rt_hair_header_scene_pass (docs/RTX_HAIR_PRIMARY.md 6h): which pass of a frame applies the groom header. Two passes of
+// a frame write the G-buffer targets against the G-buffer depth (docs/FRAME_MAP.md): the scene G-buffer pass (5 colour
+// targets: the hair draws are in it) and the decal pass after it (4). The header is applied once per frame label
+// (frame_index + 1), and frame_index advances at a present on another thread: when that present falls between the two
+// passes of frame g, the decal pass of g opens the next label and the scene pass of g + 1 finds it taken. Its hair
+// draws then trace the header the decal pass applied: the publish of frame g (its TLAS and rows) after the build of
+// g + 1 rewrote the points, refit the BLASes and copied the camera in place. Rays, points and strands are right, the
+// TLAS instance boxes are one camera step old: a ray misses every groom whose box moved off it (hx1 180928: accepted
+// share 0.79 under 0.1 m of step x sin(angle from the view axis), 0.16 at 0.3-0.5 m, 0 above).
+// With the key only the scene pass applies. Skipped: a scene pass whose label another scene pass took (two G-buffer
+// frames inside one present interval, after a hitch): it still runs on the header of the frame before.
+constexpr uint32_t kScenePassTargets = 5;   // docs/FRAME_MAP.md: G-buffer 5 colour targets, decal pass 4
+enum class HeaderPass : uint8_t { NotGbuffer, Decal, Apply, Taken, Count };
+inline HeaderPass header_pass(uint32_t color_count, bool scene_only, uint64_t applied_frame, uint64_t frame) {
+  if (color_count < 4) return HeaderPass::NotGbuffer;
+  if (scene_only && color_count < kScenePassTargets) return HeaderPass::Decal;
+  return applied_frame == frame ? HeaderPass::Taken : HeaderPass::Apply;
+}
+// The strand swap of a G-buffer or velocity draw needs its frame's header applied: label now + 1 (the pass recorded in
+// the present interval of its draws). With rt_hair_header_scene_pass the scene pass keeps the label of its own
+// interval, so a velocity draw recorded after the present (the decal pass no longer opens the next label) finds the
+// label now: still its own frame's apply (the next scene pass has not been recorded).
+inline bool header_applied_for(uint64_t applied_frame, uint64_t now, bool velocity, bool scene_only) {
+  return applied_frame == now + 1 || (scene_only && velocity && applied_frame == now);
+}
+// The period line's counters (layer/hair_primary.cpp hair_primary_before_pass). taken_decal: scene passes whose label
+// the decal pass had taken (key off: the frames that trace the publish before); taken_scene: by another scene pass.
+struct HeaderPassStats {
+  uint64_t scene = 0, decal = 0, decal_skipped = 0, taken_decal = 0, taken_scene = 0;
+  void add(HeaderPass h, bool scene_pass, bool applied_by_decal) {
+    if (h == HeaderPass::Decal) ++decal_skipped;
+    else if (h == HeaderPass::Apply) ++(scene_pass ? scene : decal);
+    else if (h == HeaderPass::Taken && scene_pass) ++(applied_by_decal ? taken_decal : taken_scene);
+  }
+};
 // The header's flags word (Header::flags, word 15) of packed header bytes.
 inline uint32_t header_flags(const uint8_t* bytes) {
   uint32_t f;

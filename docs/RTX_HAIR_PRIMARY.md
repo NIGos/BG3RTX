@@ -1915,7 +1915,7 @@ pipeline creation):
 - Layer (`dense_frame`, common/hair_primary.h `dense_parse`, `DenseStats`): the camera step comes from the G-buffer
   cameras of consecutive tags as the GPU read them (no CPU label); the anchor is put in the world (double) and compared
   with the same key's anchor of the frame before; LOD and "key first drawn N frames before" per sample. Lines:
-  `[hair primary] dense sample: G-buffer frame ...` for moving (step over 0.02 m) and watchdog frames, 600 a session;
+  `[hair primary] dense sample: G-buffer frame ...` for moving (step over 0.02 m) and watchdog frames, 600 a session (6h: 96 per stats period);
   `[hair primary] dense samples (last N frames, rt_hair_dense_sample 1): ... still: ... | moving ...`.
   The pipeline line ends "dense samples (specialization 1052) 0/1". CTest hair_groom_asset_test test_dense_sample.
 - Signatures on the moving side (the still side is the baseline: accepted, origin 0, sine at float noise, fresh points
@@ -2019,6 +2019,95 @@ PNG of the dolly), the same dolly with the fill off in the same run (5-7 trips e
   fast with the wheel and pan: no hole, no head popping to cards.
 - If the gate holds, add `rt_hair_card_fill` to the On bundle. Strands in every moving frame need the cause the
   dense samples name and its fix, then one more dolly window.
+
+## 6h. The dolly loss named: the decal pass took the header's label (offline 2026-11-14, branch claude/hair-residual: key rt_hair_header_scene_pass, off; READY_FOR_LIVE)
+
+Live hx1 180928 (S8, 12 of 12 phases; INVALID for two job faults, see the end). Numbers:
+- Card fill on (in-fill, watch-fill, out-fill, orbit-r, orbit-l): every switches line has frame watchdog 0, key
+  watchdog 0, coverage low 0 and 0 frames with every draw on cards: 6g's gate held. 3 single-key switches of other
+  causes (coverage stale or none 2, other 1; keys first drawn in the window). The losses are still there under the
+  fill: 12 reported trips in the dolly in (95 draws under their bound, 17 above; the tripped frames kept 55-80% of
+  their card pixels as strands), 10 in the dolly out.
+- Card fill off (in-off): 6 trips, 10 switches to cards, 28 of 61 frames with every draw on cards.
+- Dense samples of card-marked pixels. Still: accepted 84-88%, no strand on the ray 4.1-5.0%, outside the card band
+  8-13%. Moving: in-fill 53% / 37% / 10% (786 samples), out-fill 63% / 28% / 9% (1055), in-off 59% / 25% / 16%
+  (1120). Slow orbit 80-86% accepted. Strand of another draw, segment bound, no UVs, tips: 0 everywhere.
+- Cost of the fill: strand G-buffer draws 0.30 ms (watch-fill, 4 timed frames) against 0.39 ms (watch-off, 7); the
+  still windows before spread 0.17-0.29 ms. Nothing above the noise (occluded window).
+
+What the 600 sample lines of the dolly say (frames 2752-2767, camera step 0.17-1.13 m):
+- Origin 0.0000 m and ray against view x projection 0.000 mrad in all 600. Anchors still: median 1.3 mm, p90 5.6 mm
+  (one key on two rows jumps 1.1 m between its two characters). The card is 0.14 m from its anchor, as when still.
+  Keys first drawn 650-950 frames before. Where a ray hits, the stored point is under 1 mm off it.
+- 266 lines are "no strand on the ray". The loss follows the camera step times the sine of the pixel's angle from
+  the view axis (the sideways shift of a box one step behind along the view axis): accepted 0.79 under 0.1 m, 0.57 at
+  0.10-0.15 m, 0.29 at 0.15-0.30 m, 0.16 at 0.3-0.5 m, 0 of 11 above 0.5 m. Far heads lose first because they sit at
+  the top and the sides of the screen.
+- So P1 (anchor), P2 (anchor at the camera), P3 (sine), P4 (key age), P6 (other draw) are out. P5 fits, with the part
+  6e dismissed: points, BLAS primitives and rays are of this frame, the boxes the traversal enters are of the frame
+  before. The TLAS traced is the publish before.
+
+Cause (read from the code, checked against the run):
+- `hair_primary_before_pass` applies the header once per frame label (frame_index + 1) at the first pass with 4 or
+  more colour targets on the G-buffer depth. Two passes of a frame match (docs/FRAME_MAP.md): the scene G-buffer pass
+  (5 targets, the hair draws) and the decal pass after it (4). frame_index advances at a present on another thread.
+  When that present falls between the two passes of frame g, the decal pass of g opens the next label and the scene
+  pass of g + 1 finds it taken: no header copy, no submit upgrade.
+- Its hair then traces the header the decal pass applied: the publish of frame g (TLAS, rows, tag), after the build of
+  g + 1 rewrote the points, refit the BLASes and copied the camera in place. Instance boxes one camera step old over
+  current BLASes: a ray misses every groom whose box moved off it. When still nothing shows.
+- Checks: the rows each sampled frame read on the GPU are those of build label - 1 (row order of 11 frames against
+  the `[hair groom] frame` lines). The build stamp is copied at the apply, here the decal pass's, so it read "same
+  build" (6e); 6d's candidate was right. `counted frames with adjacent-tag pixels` 13-19 of 60 in the still windows
+  is the same phase without motion. The trace dump of the run has both passes (one with 5 colour targets, one
+  with 4, same images).
+- Second, smaller defect in the same run: tags 2754 and 2757 were each written by two G-buffer frames (labels 2753
+  and 2756 by none): two scene passes in one present interval, after hitches (6 groom LODs decoded in the dolly,
+  47-94 ms each on the render thread). The second pass is skipped by the same once-per-label rule, runs on the first
+  one's header and reuses its sealed entries: hits 0.25-0.57 m behind the card, points 12-161 mm off the ray
+  (9 of 39 and 9 of 34 samples accepted).
+
+Fix: `rt_hair_header_scene_pass` (off; Advanced knob "Strand hair: header at the hair's own pass"; CPU only, live).
+- `hair_primary::header_pass`: with the key only the scene G-buffer pass (5 colour targets) applies the header.
+- `hair_primary::header_applied_for`: with the key a velocity draw also accepts the label of the present interval
+  before (the decal pass no longer opens the next label; its frame's apply is still the last one).
+- Not a pure fix: it changes which label the velocity draws and the count see when the present falls between the
+  two passes. So a key, toggled inside the staged run. No shader change: shaders/variants.txt delta 0, no ABI change.
+- Not fixed: two scene passes in one present interval (the hitch frames). Counted on the new line. The right fix is
+  a header per scene pass recording with its own tag (the label is used by the draw gates, the count and the frame
+  ring: not a small change); the hitch itself is the synchronous LOD decode.
+- New period line (detailed logging): `[hair primary] header pass (last N frames, rt_hair_header_scene_pass K):
+  applied at the scene G-buffer pass A, at the decal pass D (decal passes passed over P); scene G-buffer passes
+  without their own header: label taken by the decal pass S ..., by another scene pass T ...`.
+- Dense sample lines: 96 per stats period (one of a slot's four cells per frame in turn) instead of 600 a session:
+  the first 16 moving frames used them all up.
+- CTest hair_groom_asset_test test_header_pass: the passes of 60 frames in recording order with the present before,
+  between and after the two passes. Present between: key off 59 of 60 frames trace the publish before, key on 0, no
+  velocity draw refused. Present elsewhere: no change with the key. Two frames in one interval: 1 stale frame with
+  and without the key. settings_test and schema updated.
+- Cost: none on the GPU (one header copy per frame as before).
+
+Card fill verdict (`rt_hair_card_fill` into the On bundle): the gate held and the cost is in the noise, but it is not
+needed for what it was built for once the cause above is gone, and it changes the still image (4-5% of the card
+pixels show the card; the 1280 px PNGs show no hole and cannot show a seam). Prepared as its own commit on branch
+`claude/hair-fill-bundle` for the user's decision; the next run dumps the still image with and without it at full
+width.
+
+hx1 regenerated (predicted.json first, with the result above): one launch, about 110 s of phases.
+- Job faults fixed: a dolly window is one stats period of 180 frames (the 60-frame out-fill ended after 1.7 s, before
+  the tenth notch: no wheel line); the sample line pattern allows `camera step -1.000 m` (no pair after a tag gap:
+  74 of 600 lines); PNG traces only in still windows (a trace stalls 2.5 s).
+- Windows: an unjudged dolly first (LOD uploads), then key on without the fill (in-fix, out-fix), key on with the
+  fill (in-fill, watch-fill, out-fill, orbits), the still image without the fill, last key off (in-base, out-base).
+- Gates, expect_every: key on: "applied at the decal pass 0" and "label taken by the decal pass 0" in every window;
+  in the four dollies the switches line with frame watchdog 0, key watchdog 0, coverage low 0, 0 frames with every
+  draw on cards and "frame watchdog trips 0" (strands in every frame). Key off: "label taken by the decal pass" 1 or
+  more in both dollies.
+- If the strand gate fails with "by another scene pass" above 0, the hitch frames are what is left.
+- Lint 0 failing (frozen; the live corpus is empty in a worktree), snapshot appended only, merge_scope tooling 0.
+- User check after a go: S8, RTX Hair On, Advanced "Strand hair: header at the hair's own pass" On; zoom in and out
+  fast with the wheel: the far heads and the heads at the screen edge keep their strands.
+- If the live confirms it: add the key to the On bundle.
 
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings

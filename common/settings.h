@@ -572,6 +572,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_header_cam_gpu", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5i item 11: turn the camera in Test Dialogue1 or S8 while watching the hair: with On the strands should stay strands instead of flashing to cards."},
 
+  {"exp_hair_header_scene_pass", "Strand hair: header at the hair's own pass",
+   "Experimental: the strand data of a frame is applied only at the pass that draws the hair, never at the decal pass after it. Removes strands missing on heads away from the screen centre while the camera moves fast. Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_header_scene_pass", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_header_scene_pass", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "6h 2026-11-14: S8, zoom in and out fast with the mouse wheel: with On the far heads and the heads at the screen edge keep their strands while the camera moves."},
+
   {"exp_hair_watchdog_draw", "Strand hair: per-draw watchdog",
    "Experimental: when a hair style's strands lose coverage, only that style falls back to its cards, and only after two frames in a row, instead of every style for one bad frame. Unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -982,6 +989,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_pixel_lod_small_keep", "0.25"},
     {"rt_hair_primary_frame_tag", "0"},
     {"rt_hair_header_cam_gpu", "0"},
+    {"rt_hair_header_scene_pass", "0"},
     {"rt_hair_stale_publish", "0"},
     {"rt_hair_mv_card", "2"},
     {"rt_hair_watchdog_draw", "0"},

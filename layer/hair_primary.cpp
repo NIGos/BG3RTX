@@ -262,6 +262,10 @@ constexpr uint64_t kKeyForgetFrames = 600;
 int g_cfg_passes = 15;                   // rt_hair_primary_passes, read at each publish (round 3 L5)
 bool g_cfg_cascade_drop = false;            // rt_hair_groom_cascade_drop, likewise
 uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
+// 6h rt_hair_header_scene_pass: only the scene G-buffer pass (5 colour targets, the hair draws) applies the header,
+// never the decal pass after it. g_applied_decal: the label g_applied_frame was taken by a decal pass (key off).
+bool g_cfg_scene_pass = false, g_applied_decal = false;
+hair_primary::HeaderPassStats g_header_pass;
 std::unordered_set<uint64_t> g_live_keys;   // the keys of the header the G-buffer reads (order mode: swaps need them)
 uint64_t g_order_none = 0;                  // G-buffer passes with no publish ordered before them (no swap)
 void apply_header(VkCommandBuffer cmd, const StagedHeader& st, int slot = -1, uint32_t tag = 0);
@@ -390,7 +394,9 @@ std::unordered_map<uint64_t, DenseAnchor> g_dense_anchor;   // by draw key: its 
 std::unordered_map<uint64_t, uint64_t> g_dense_first;       // by draw key: the first judged G-buffer frame that drew it
 float g_dense_cam[3] = {};                                  // the G-buffer camera of the last sampled frame, and its tag
 uint32_t g_dense_cam_tag = 0, g_dense_lines = 0;
-constexpr uint32_t kDenseLines = 600, kDensePairTags = 4;   // per session; a pair of samples at most this many tags apart
+// 6h: sample lines per stats period (hx1 180928: 600 a session were used up by the first 16 moving frames, none left
+// for the other windows), one of a slot's four cells per frame in turn; a pair of samples at most this many tags apart.
+constexpr uint32_t kDenseLines = 96, kDensePairTags = 4;
 void dense_frame(const CountSlot& s, const GbFrame& gf, bool tripped) {
   using namespace hair_primary;
   const uint32_t* w = s.map + kCountBytesAll / 4;
@@ -438,7 +444,7 @@ void dense_frame(const CountSlot& s, const GbFrame& gf, bool tripped) {
       }
     }
     if (step >= 0) g_dense.add(d, moving, drift);
-    if ((moving || tripped) && g_dense_lines < kDenseLines) {
+    if ((moving || tripped) && g_dense_lines < kDenseLines && (i & 3u) == (gf.tag & 3u)) {
       ++g_dense_lines;
       const auto fs = g_dense_first.find(key);
       log_stats("[hair primary] dense sample: G-buffer frame %llu%s px (%u %u) slot %u key %04llx LOD %d, key first drawn %lld "
@@ -1046,6 +1052,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_first_pub.clear(); g_warm = Warm{};
   g_order = false;
   g_applied_frame = g_published = 0;
+  g_applied_decal = false;
   g_pass_of.clear();
   g_mods.clear();
   g_inst_mods.clear();
@@ -1758,8 +1765,18 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_dd || p.width != g_px_w || p.height != g_px_h) return;
   const uint64_t frame = frame_index() + 1;
-  if (g_applied_frame == frame) return;   // once per frame: every G-buffer pass of the frame reads one header
+  // Once per frame label. 6h: with rt_hair_header_scene_pass never at the decal pass (it took the next label when a
+  // present fell between the two passes, and the next frame's hair then traced the publish before over this build's
+  // BLASes); read here, so the key switches live.
+  const bool scene_key = cfg_int("rt_hair_header_scene_pass", 0) != 0;
+  if (scene_key != g_cfg_scene_pass) g_header_pass = hair_primary::HeaderPassStats{};   // a period line counts one state
+  g_cfg_scene_pass = scene_key;
+  const bool scene_pass = p.color_count >= hair_primary::kScenePassTargets;
+  const hair_primary::HeaderPass hpass = hair_primary::header_pass(p.color_count, g_cfg_scene_pass, g_applied_frame, frame);
+  g_header_pass.add(hpass, scene_pass, g_applied_decal);
+  if (hpass != hair_primary::HeaderPass::Apply) return;
   g_applied_frame = frame;
+  g_applied_decal = !scene_pass;
   hair_primary::Staged picks[kStaged];
   const bool frame_tags = cfg_int("rt_hair_primary_frame_tag", 0) != 0;
   for (int i = 0; i < kStaged; ++i) {
@@ -1954,7 +1971,8 @@ static bool hair_primary_swap_locked(VkCommandBuffer cmd, CmdState* s, const Dra
   {   // rt_hair_primary_passes (diagnostic bitmask, default 15): 1 G-buffer, 2 velocity, 4 prepass clone, 8 coverage probe
     if (!(passes & (pass == Pass::Gbuffer ? 1 : pass == Pass::Velocity ? 2 : 4))) { allowed = false; refuse(Refusal::Passes); }
   }
-  if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) {
+  if (g_order && pass != Pass::Prepass &&
+      (!hair_primary::header_applied_for(g_applied_frame, now, pass == Pass::Velocity, g_cfg_scene_pass) || !g_live_keys.count(key))) {
     allowed = false; refuse(Refusal::Applied);
   }
   // The prepass drops the card depth only after a G-buffer pass applied a header holding the key: the most recent
@@ -2419,6 +2437,16 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         "rt_hair_header_cam_gpu %d", stats_period(300), (unsigned long long)g_rebase.sampled,
         (unsigned long long)g_rebase.moved, g_rebase.max_m, cfg_int("rt_hair_header_cam_gpu", 0) != 0 ? 1 : 0);
     g_rebase = hair_primary::RebaseStats{};
+    {   // 6h: which pass applied the header, and the scene passes that ran on another pass's header
+      const hair_primary::HeaderPassStats& hs = g_header_pass;
+      log_stats("[hair primary] header pass (last %u frames, rt_hair_header_scene_pass %d): applied at the scene G-buffer "
+          "pass %llu, at the decal pass %llu (decal passes passed over %llu); scene G-buffer passes without their own "
+          "header: label taken by the decal pass %llu (their hair traced the publish before over this build's BLASes), "
+          "by another scene pass %llu (two G-buffer frames in one present interval)",
+          stats_period(300), int(g_cfg_scene_pass), (unsigned long long)hs.scene, (unsigned long long)hs.decal,
+          (unsigned long long)hs.decal_skipped, (unsigned long long)hs.taken_decal, (unsigned long long)hs.taken_scene);
+      g_header_pass = hair_primary::HeaderPassStats{};
+    }
     if (g_cfg_dense) {   // 6f
       char still[720], moving[720];
       dense_side(g_dense.side[0], still, sizeof still);
@@ -2428,6 +2456,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
           stats_period(300), (unsigned long long)g_dense.frames, (unsigned long long)g_dense.torn, still,
           double(hair_primary::kDenseMovingStep), moving);
       g_dense = hair_primary::DenseStats{};
+      g_dense_lines = 0;
     }
     log_stats("[hair primary] build stamp (last %u frames): counted G-buffer frames whose groom points and BLASes were of "
         "the applied publish's build %llu, of a newer build %llu (older TLAS and rows over refit BLASes), of an older "
