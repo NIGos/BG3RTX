@@ -496,6 +496,11 @@ void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
   // Shrinks already obey the sampled cap; a new cap only restricts growth.
   if(wanted>c.xfb.size)wanted=(std::max)(c.xfb.size,(std::min)(wanted,elastic_cap(cascade)));
   if(wanted==c.xfb.size)return;
+  // Grow in steps of at least 1/8 (capture_budget::elastic_growth) when the larger step fits the budget too.
+  if(wanted>c.xfb.size){
+    const uint64_t stepped=capture_budget::elastic_growth(c.xfb.size,wanted,elastic_cap(cascade));
+    if(stepped>wanted && vram_fits(cascade?vram_guard::kCascade:vram_guard::kRtCapture,stepped))wanted=stepped;
+  }
   if(wanted>c.xfb.size && !vram_allow(cascade?vram_guard::kCascade:vram_guard::kRtCapture,wanted,
                      cascade?"elastic cascade capture":"elastic RT capture")){
     deferred("growth budget refused");return;

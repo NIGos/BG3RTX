@@ -135,6 +135,20 @@ inline uint64_t elastic_capacity(uint64_t demand,uint64_t storage_limit,uint64_t
  demand=(std::min)(demand,kMeshPoolHardCap);
  return (std::min)((std::max)(step,(demand+demand/4+step-1)/step*step),cap);
 }
+// A growth replaces the whole buffer, and the old one stays allocated next to it for four fence-covered
+// frames. A target that creeps up in 16 MiB quanta therefore reallocated 1.4-1.8 GiB ten times in 13 s in
+// the user's log of 2026-11-14 (22:15:10-23: 1408 -> 1456 -> 1568 -> 1680 -> 1744 -> 1776 -> 1792 -> 1808
+// -> 1824 -> 1840 MiB; the VRAM guard went LOW at 22:15:14 with "RT capture 3520 MB", old + new). A growth
+// is at least 1/8 of the current size (in quanta, under `cap`): that sequence takes 3 replacements, ending
+// at 2016 MiB. The shrink rule needs peak + 25% to fit, so it never undoes a surplus of 12.5%. A `wanted`
+// above the cap is returned as it is (the caller's own clamp and refusal decide).
+inline uint64_t elastic_growth(uint64_t current,uint64_t wanted,uint64_t cap){
+ if(wanted<=current)return wanted;
+ const uint64_t quantum=16*mib;
+ const uint64_t step=(current/8+quantum-1)/quantum*quantum;
+ if(current>UINT64_MAX-step)return wanted;
+ return (std::max)(wanted,(std::min)(current+step,cap));
+}
 // Producer-boundary replacement can be blocked by the previous detached soup
 // for four fence-covered frames. Include the next producer interval as well:
 // RT observes each frame (5 steps); a cascade slot each third frame (3 steps).

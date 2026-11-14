@@ -3,8 +3,10 @@
 #include "assetdb.h"
 #include "../common/hair_groom_v3.h"
 #include "../common/hair_groom_lzms.h"
+#include "../common/async_capture_queue.h"
 #include <windows.h>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -169,6 +171,41 @@ bool read_lod(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod&
   ok = ok && parse_lod(bytes.data(), bytes.size(), at, l.asset.indices / 3, lod) && at == bytes.size();
   if (!ok) bytes.clear();
   return ok;
+}
+
+namespace {
+struct DecodeJob { const Loaded* l; uint32_t index; };
+struct Decoded { std::vector<uint8_t> bytes; Lod lod; };   // `lod` views into `bytes` (a move keeps them valid)
+using DecodeKey = std::pair<uint64_t, uint32_t>;           // index id, LOD
+std::mutex g_decode_mu;
+DecodeSlots<DecodeKey, Decoded> g_decode_slots;
+AsyncCaptureQueue<DecodeJob>* g_decode_queue = nullptr;    // never destroyed: no join under the loader lock
+}  // namespace
+
+LodDecode read_lod_async(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod& lod, uint64_t now) {
+  using Ask = DecodeSlots<DecodeKey, Decoded>::Ask;
+  const DecodeKey key{l.asset.index_id, index};
+  Decoded d;
+  std::unique_lock lock(g_decode_mu);
+  const Ask a = g_decode_slots.ask(key, now, &d);
+  if (a == Ask::Ready) { bytes = std::move(d.bytes); lod = d.lod; return LodDecode::Ready; }
+  if (a == Ask::Failed) return LodDecode::Failed;
+  if (a != Ask::Start) return LodDecode::Pending;
+  if (!g_decode_queue) {
+    HMODULE self = nullptr;   // keep the layer loaded while the worker exists
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                       reinterpret_cast<LPCSTR>(&read_lod_async), &self);
+    g_decode_queue = new AsyncCaptureQueue<DecodeJob>(8, [](DecodeJob&& job) {
+      static thread_local bool low = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL) != 0;
+      (void)low;
+      Decoded out;
+      const bool ok = read_lod(*job.l, job.index, out.bytes, out.lod);
+      std::lock_guard done(g_decode_mu);
+      g_decode_slots.finish({job.l->asset.index_id, job.index}, ok, std::move(out));
+    });
+  }
+  if (!g_decode_queue->submit({&l, index})) g_decode_slots.cancel(key);
+  return LodDecode::Pending;
 }
 namespace {
 }  // namespace

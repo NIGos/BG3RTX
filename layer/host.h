@@ -1063,6 +1063,8 @@ void fault_instance_destroyed(VkInstance inst);
 // layout hard cap for required RT capture, `fallback` when off.
 // vram_take_ask: bytes this yielder should free now (0 when not low), cleared by the call.
 bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap = false);
+// The same headroom test without granting, counting or logging (a caller probing an optional larger size).
+bool vram_fits(int consumer, uint64_t bytes);
 uint64_t vram_cap(int consumer, uint64_t fallback);
 uint64_t vram_take_ask(int yield);
 bool vram_guard_on();

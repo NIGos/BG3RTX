@@ -509,6 +509,8 @@ add_executable(pak_uv_join_test tests/pak_uv_join_test.cpp layer/shader_cache.cp
 add_test(NAME pak_uv_join_test COMMAND pak_uv_join_test)
 add_executable(hair_groom_asset_test tests/hair_groom_asset_test.cpp)
 add_test(NAME hair_groom_asset_test COMMAND hair_groom_asset_test)
+add_executable(hair_groom_decode_test tests/hair_groom_decode_test.cpp)
+add_test(NAME hair_groom_decode_test COMMAND hair_groom_decode_test)
 # .hgrm v3 (common/hair_groom_v3.h, LZMS via the Windows Compression API) against the Python reference decode.
 add_executable(hair_groom_v3_test tests/hair_groom_v3_test.cpp)
 add_test(NAME hair_groom_v3_test COMMAND hair_groom_v3_test ${CMAKE_SOURCE_DIR}/tests/fixtures/hair_v3)
