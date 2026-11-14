@@ -341,7 +341,10 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         if(h.no_game||game_running()||!valid_game_dir(h.game)){error="Choose the game folder or close the running game to enable Play.";return false;}
         DWORD pid{};std::wstring err,note;if(!launcher::dlss5::stage(h.state,h.game,note,err)){error=narrow(err);return false;}
         auto guard_note=guard_game_upscaler(h.state);if(!guard_note.empty())note+=L"\n"+guard_note;
-        bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?(std::string("Game started. ")+narrow(note)):std::string("The game could not start. See Help & support.\n")+narrow(err)+"\n"+narrow(note);return ok;
+        bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);
+        // The game is starting: stop the shader precompile and (unless "Also while playing") the hair converter now,
+        // not at the next 2 s tick, so they do not compete with the level load.
+        if(ok&&h.prep)h.prep->tick(true);error=ok?(std::string("Game started. ")+narrow(note)):std::string("The game could not start. See Help & support.\n")+narrow(err)+"\n"+narrow(note);return ok;
       };
       hooks.reportHint=[] {return session_logging::hint(root_dir());};
       hooks.prepareReport=[&h](const std::string& issue,bool logs,bool settings,bool system,bool save){

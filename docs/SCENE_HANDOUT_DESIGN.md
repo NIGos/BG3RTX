@@ -1,7 +1,10 @@
 # Scene handout: remove the `[rt] scene wait` (design, 2026-11-09)
 
-Status (2026-11-14): increments 1-5 are built and merged, off by default, never qualified. Current state, compatibility
-and the qualification batch: section 8. Sections 1-7 are the design as written on 2026-11-09 (branch
+Current state (2026-11-14 evening): qualified and On by default in High and Ultra (launcher: Performance, Low-latency
+scene; keys `rt_scene_handout_layout=1`, `rt_scene_handout=2`, always with `rt_scene_handout_hit_wait=1`), Off in Low
+and Medium. Scene wait 3.5 to 0.3 ms at S8 and 8.5 to 2.9 ms at the inn; frame time unchanged on Ultra (GPU-bound),
+about 0.5 ms shorter on High; 0 fallbacks; energy equal. Open: the benefit in CPU-bound scenes, and a GI trace that
+read 0.2 to 0.4 ms lower in one rerun (8.8). Compatibility, the qualification runs and the decisions: section 8. Sections 1-7 are the design as written on 2026-11-09 (branch
 `claude/scene-handout-design`); the notes under the table of section 5 record what each increment changed. It answers the four blockers of the
 2026-11-08 review (docs/TRACK_D_SCENE_BUILD.md, "Scene wait growth", branch claude/opt-scene-handout).
 
@@ -466,6 +469,12 @@ hq-inn-fix EXPLAIN (RT and GI 1.5 ms lower in the `rt_stats` hit window, not a f
 
 Open:
 - The benefit in CPU-bound scenes is unmeasured (both qualified scenes are GPU-bound on Ultra).
-- The FAIL of `hq-s8-ultra.1.160909` on the hair-pan frame time p99 (+4.4 ms; it still fails under the refined rule)
-  was never re-examined. That run predates the fix and its per-state columns may be shifted (its energy OFF b scene
-  wait reads 0.000 ms), so the number is not trusted either way.
+- GI trace reads 0.2 to 0.4 ms lower with the handout in the rerun below (static -0.36, pan -0.22, energy windows
+  -0.38 ms; verdict EXPLAIN). It was equal in hq-s8-modes 205520. An unpredicted drop is not a gain until its cause
+  is known (energy and ray counts were equal in both runs).
+
+Closed (2026-11-14 evening): the FAIL of `hq-s8-ultra.1.160909` on the hair-pan frame time p99 (+4.4 ms) was
+re-examined with the rerun `hq-s8-ultra.1.215258` (PC idle, 26 of 26 phases, with the hit wait fix): no failure.
+Scene wait 3.4-3.7 to 0.16-0.24 ms; hair-pan frame time p99 +1.2 ms inside a noise of 6.0 ms. The +4.4 ms of the
+afternoon run was external load: the user was using the PC. Frame time measured while the PC is in use is not
+evidence.

@@ -50,7 +50,7 @@ Select a row to see what it does, its GPU cost, when it takes effect, what it ne
 | Surfaces | Post effects | Depth of field and bloom smoothing | Off / On | At once; needs Ray Reconstruction |
 | Performance | Frame rate | Frame Generation | Off / 2x / 3x / 4x | On or off: restart; 2x/3x/4x: at once |
 | Performance | Frame rate | NVIDIA Reflex | Off / On / On + Boost | At once; Frame Generation needs On or On + Boost |
-| Performance | Frame rate | Rendered frame limit | Off / 30-240 fps, step 1 | At once (when you release the slider); counts rendered frames |
+| Performance | Frame rate | Rendered frame limit | Off / 30-240 fps, step 1 | At once (when you release the slider); counts rendered frames; On starts at 58 fps |
 | Performance | Frame rate | Low-latency scene | Off / On | On: restart; Off: at once; On in High and Ultra (user decision 2026-11-14), always with the hit wait fix. Removes most of the scene wait (3.5 to 0.3 ms at Water Queens House, 8.5 to 2.9 ms at the inn, Ultra); frame time unchanged on Ultra in both (GPU-bound), about 0.5 ms saved on High at Water Queens House; 0 fallbacks, same brightness. Not yet measured in CPU-bound scenes |
 | Performance | Tracing speed | Faster bounce light tracing | Off / On | At once; same image, on in every preset |
 | Performance | Tracing speed | Bounce trace reordering | Off / By hit kind / By hit kind and object | At once, may briefly pause |

@@ -11,7 +11,7 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Hold `captures/queue/results.md` open (`tail -f` included): it stopped the runner once.
 - Archive, delete or clean a checkout that has NTFS junctions to shared folders
   (`external/`, `data/assetdb`). Cleanup followed them and emptied the SDKs once.
-  Remove worktrees only with `scripts/remove-worktree.ps1 -Name <folder>` (unlinks junctions with
+  Remove worktrees only with the main checkout's `scripts/remove-worktree.ps1 -Name <folder>` (unlinks junctions with
   `[IO.Directory]::Delete(path,$false)`, checks the shared file count before and after; `cmd /c rmdir` from bash
   once failed silently and emptied the SDKs again on 2026-10-31). Never a recursive delete; then check
   the targets still exist.
@@ -132,7 +132,8 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Keep what a test or comparison still reads (the current replay pack, gate baselines); delete superseded
   packs and analysed raw dumps. Superseded generated data (old catalogues, intermediate packs) may be
   deleted without asking once a newer verified version is in use; never junction targets or `D:\BG3_Tools`.
-- Lint every job before queuing it (`tools/live_batches/live_flow.py`, lands with bundle6): forbid patterns
+- Lint every job before queuing it (`tools/live_batches/live_flow.py`; the whole-tree run gates the active jobs and
+  counts the historical ones apart): forbid patterns
   against recent valid logs, windows longer than the stats period, warm-up before measured windows.
 
 ## Coordinating agents (lessons of 2026-11-01)
