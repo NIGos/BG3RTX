@@ -4,13 +4,13 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 2165,
+  "timeout": 2187,
   "max_minutes": 14,
   "repeat": 1,
   "live_batch": "handout-qual",
   "fail_fast": false,
   "stop_on_dump": false,
-  "set": "preset=ultra,dev=1,fg=3,fps_cap=0,reflex=1,rt_capture_wide_split=1,headless=0,crash_dump=1,detailed_logging=1,cpu_timing=1,rt_stats_period_frames=120,rt_timing_frames=120,rt_scene_wait_log_frames=120,fg_state_every=120,dump_images=1,dump_png_width=1280,dump_raw=0,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,qa_exposure_hold=1,rt_scene_handout_layout=1,rt_scene_handout=0,rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_header_cam_gpu=1,rt_hair_mv_card=2,rt_hair_pixel_lod_k=1.0,rr_hair_strand_aa=0,rt_scene_handout_hit_wait=0",
+  "set": "preset=ultra,dev=1,fg=3,fps_cap=0,reflex=1,rt_capture_wide_split=1,headless=0,crash_dump=1,detailed_logging=1,cpu_timing=1,rt_stats_period_frames=120,rt_timing_frames=120,rt_scene_wait_log_frames=120,fg_state_every=120,dump_images=1,dump_png_width=1280,dump_raw=0,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,qa_exposure_hold=1,rt_scene_handout_layout=1,rt_scene_handout=0,rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_header_cam_gpu=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=1,rt_hair_mv_card=2,rt_hair_pixel_lod_k=1.0,rr_hair_strand_aa=0,rt_scene_handout_hit_wait=0",
   "args": [
     "-RealPresent",
     "-Foreground",
@@ -152,28 +152,29 @@
           0
         ],
         "fps": 5.3976250449758,
-        "windows": 16,
+        "windows": 37,
         "logs": [
-          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1-s8-hair-stable.1.190905.log"
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1-s8-hair-stable.1.190905.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1-s8-hair-stable.1.194658.log"
         ]
       }
     ],
     "trace_export": {
       "seconds": 0.34300000000803266,
       "quantile": 0.95,
-      "samples": 2,
+      "samples": 6,
       "maximum": 0.34300000000803266
     },
     "trace_capture_stall": {
-      "seconds": 4.5812,
-      "source": "hx1-s8-hair-stable.1.190905.log",
+      "seconds": 5.17137,
+      "source": "hx1-s8-hair-stable.1.194658.log",
       "quantile": 0.95,
-      "samples": 2,
-      "maximum": 4.5812,
-      "logs": 1
+      "samples": 6,
+      "maximum": 5.17137,
+      "logs": 2
     }
   },
-  "estimated_phase_seconds": 318.52,
+  "estimated_phase_seconds": 340.52,
   "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-s8-modes.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
   "post_gate": true,
   "purpose": "Scene handout energy by mode at S8, Ultra, FG 3x, focused, static, exposure held: rt_scene_handout 0 / 1 / 2 / 2 with rt_scene_handout_hit_wait=1 / 0, 8 float traces per state and a short rt_stats window each. Mode 1 and the fix inside the OFF range; mode 2 reproduces the -0.20% (unpublished commit-time hit-material query). Reports the scene wait and the GI trace GPU ms of every state. STAGED, not authorized.",

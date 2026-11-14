@@ -1044,10 +1044,8 @@ std::unordered_set<uint64_t> g_groom_logged_unmatched;
 std::unordered_set<uint32_t> g_groom_uv_seen;
 uint64_t g_groom_first_seen = 0;
 uint64_t g_groom_prev_keys[hair_primary::kMaxGrooms] = {};
-hair_primary::GroomRows g_groom_rows;
 // 5y (rt_hair_mv_card): published groom rows per window by previous-points state (hair_primary::PrevRow).
-uint64_t g_prev_rows[size_t(hair_primary::PrevRow::Count)] = {};   // rt_hair_row_stable: each groom's row while it is live
-bool g_row_stable = false;
+uint64_t g_prev_rows[size_t(hair_primary::PrevRow::Count)] = {};   // 5y: published groom rows by previous-points state
 bool g_pixel_lod = false;   // rt_hair_pixel_lod (docs/RTX_HAIR_PRIMARY.md 5v): this capture's camera BLAS and TLAS
 uint32_t g_groom_prev_n = 0;   // (index count, verdict) of unmatched hair draws, logged once
 
@@ -2307,9 +2305,6 @@ void bvh_begin_capture(VkCommandBuffer) {
   g_dyn_seen.clear();
   g_slot_stable = cfg_int("rt_hair_slot_stable", 0) != 0;
   {
-    const bool stable = cfg_int("rt_hair_row_stable", 0) != 0;
-    if (stable != g_row_stable) g_groom_rows = {};
-    g_row_stable = stable;
     // rt_hair_pixel_lod off: the camera arrays leave the pool (slots drop their camera BLAS as their draws are built).
     const bool pixel_lod = cfg_int("rt_hair_pixel_lod", 0) != 0;
     if (!pixel_lod && g_pixel_lod) {
@@ -4230,30 +4225,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // Each written row's primary key (groom_primary_key below), decided before the instances: rt_hair_shared_key
       // clears a key that fewer rows than this capture's hair draws carry (two characters with one hairstyle, one of
       // their grooms out of this publish): both draws keep their cards and the rows their 0x01 mask this frame.
-      // rt_hair_row_stable: a groom keeps its row (instance index, header row, InstInfo row) while it is live, whatever
-      // the order of the dynamic draws (hair_primary::GroomRows); the rows between live grooms are inactive instances.
-      // Off: the position in groom_work, as before.
+      // A groom's row (instance index, header row, InstInfo row) is its position among the live entries of groom_work.
       std::vector<uint32_t> row_of(groom_work.size(), UINT32_MAX);
       uint32_t rows = 0;
-      {
-        uint64_t live[kGroomMax];
-        uint32_t live_work[kGroomMax], live_rows[kGroomMax], live_n = 0;
-        for (size_t i = 0; i < groom_work.size() && live_n < kGroomMax; ++i)
-          if (groom_work[i].card != UINT32_MAX) { live[live_n] = groom_work[i].key; live_work[live_n++] = uint32_t(i); }
-        if (g_row_stable) {
-          const uint32_t early = g_groom_rows.early;
-          rows = g_groom_rows.assign(live, live_n, now + 1, kSceneSlots, live_rows);
-          if (g_groom_rows.early != early && logging::stats_enabled(cfg_int))
-            log_stats("[hair groom] frame %llu: %u groom rows reused before %u build frames passed (every row taken)",
-                      (unsigned long long)now, g_groom_rows.early - early, kSceneSlots);
-          std::memset(gi, 0, size_t(rows) * sizeof(VkAccelerationStructureInstanceKHR));   // reference 0: inactive
-          std::memset(info_out + n * 4, 0, size_t(rows) * 16);
-        } else {
-          for (uint32_t j = 0; j < live_n; ++j) live_rows[j] = j;
-          rows = live_n;
-        }
-        for (uint32_t j = 0; j < live_n; ++j) row_of[live_work[j]] = live_rows[j];
-      }
+      for (size_t i = 0; i < groom_work.size() && rows < kGroomMax; ++i)
+        if (groom_work[i].card != UINT32_MAX) row_of[i] = rows++;
       // rt_hair_pixel_lod: the camera groom TLAS's instances at the same rows (inactive gaps included).
       VkAccelerationStructureInstanceKHR* ci = nullptr;
       if (g_pixel_lod && hp_on && ensure_tlas(slot, kGroomMax, &g_cam_tlas[slot]) &&
