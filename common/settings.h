@@ -94,7 +94,7 @@ struct Choice {
   const char* id;
   const char* label;
   unsigned caps;   // Cap bits
-  KV kv[24];        // keys this choice writes (key == nullptr ends the list)
+  KV kv[32];        // keys this choice writes (key == nullptr ends the list)
   Need need[3];    // dependencies on other knobs (knob == nullptr ends the list)
   // Migration of a file whose keys match no choice exactly (written before the knob became one
   // level choice, or hand-edited): the highest choice one of whose `mark` keys has this choice's
@@ -430,6 +430,9 @@ inline constexpr Knob kKnobs[] = {
     // 6g (2026-11-14, the user's play log of 0.9.6-hairtest13): the strand header's camera copied on the GPU
     // (rt_hair_header_cam_gpu). Without it every frame watchdog trip of that session had its ray origin one camera step
     // off (72 trips in 2927 hair frames, a third of them on cards); lives hc1 234025 and hl1 000345 / 003637 ran with it.
+    // 6i (2026-11-14, live hx1 190905): the strand header applied only at the scene G-buffer pass
+    // (rt_hair_header_scene_pass). Without it the decal pass took the label in 31-42 of 60 frames and the hair traced the
+    // publish before: 9 frame watchdog trips and 21 switches to cards in the two control dollies, 0 and 0 with it.
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores,
      {{"rt_hair_groom_primary", "1"}, {"rt_hair_groom_primary_order", "1"}, {"rt_hair_groom_primary_current", "1"},
       {"rt_hair_primary_frame_tag", "1"}, {"rt_hair_groom_lod_keep", "1"}, {"rt_hair_primary_hold", "1"},
@@ -438,7 +441,8 @@ inline constexpr Knob kKnobs[] = {
       {"rt_hair_fibre_gi", "1"}, {"rt_hair_fibre_spec", "1"}, {"rt_hair_fibre_mapped", "1"},
       {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"},
       {"rt_hair_coverage_union", "1"}, {"rt_hair_coverage_confirm", "1"}, {"rt_hair_slot_stable", "1"},
-      {"rt_hair_live_warmup", "1"}, {"rt_hair_groom_nearest", "1"}, {"rt_hair_header_cam_gpu", "1"}},
+      {"rt_hair_live_warmup", "1"}, {"rt_hair_groom_nearest", "1"}, {"rt_hair_header_cam_gpu", "1"},
+      {"rt_hair_header_scene_pass", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Beta: supported, off in every preset. A style gets strands after the game has shown it once and the launcher has converted it; until then it keeps the game's look. Turns on and off while playing. Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified. It turns on and off while playing, also with its keyboard shortcut (Ctrl+Shift+F7 by default); if the game started with RTX Hair off, the physical hair ray origins need a game restart."},
   // Distant RTX Hair detail (docs/RTX_HAIR_PRIMARY.md 5v, user request 2026-11-10): the release control of the pixel LOD.
@@ -578,6 +582,13 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rt_hair_header_scene_pass", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_header_scene_pass", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "6h 2026-11-14: S8, zoom in and out fast with the mouse wheel: with On the far heads and the heads at the screen edge keep their strands while the camera moves."},
+
+  {"exp_hair_coverage_keep", "Strand hair: keep the last coverage verdict",
+   "Experimental: a hair whose strands passed their coverage check keeps them while it is off the screen or hidden, instead of returning to cards after a second without a measurement. Removes the cards a head shows for a few frames when it comes back into view. Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_coverage_keep", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_coverage_keep", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "6i 2026-11-14: S8, zoom in fast with the mouse wheel until heads leave the screen, wait two seconds, zoom out: with On the heads that come back show strands at once instead of cards for a third of a second."},
 
   {"exp_hair_watchdog_draw", "Strand hair: per-draw watchdog",
    "Experimental: when a hair style's strands lose coverage, only that style falls back to its cards, and only after two frames in a row, instead of every style for one bad frame. Unqualified.",
@@ -990,6 +1001,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_primary_frame_tag", "0"},
     {"rt_hair_header_cam_gpu", "0"},
     {"rt_hair_header_scene_pass", "0"},
+    {"rt_hair_coverage_keep", "0"},
     {"rt_hair_stale_publish", "0"},
     {"rt_hair_mv_card", "2"},
     {"rt_hair_watchdog_draw", "0"},

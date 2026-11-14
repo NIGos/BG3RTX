@@ -368,7 +368,8 @@ constexpr uint64_t kHoldCountSlots = 4, kHoldFrames = kFreshFrames + kHoldCountS
 // A tag applied by two G-buffer frames cannot identify a measured frame.
 struct GbFrame { uint64_t frame = 0; uint32_t tag = 0; uint64_t keys[kMaxGrooms] = {}, draw_keys[kDrawSlots] = {};
                  uint32_t swapped_slots = 0;
-                 uint64_t pub_frame = 0; };   // 5z: the build frame of the publish applied at submit (0: not known)   // draw slots whose G-buffer draw this frame was swapped to strands
+                 uint64_t pub_frame = 0;
+                 uint32_t pass = 0; };   // 6i: the serial of the scene pass recording that applied (HeaderLabels::pass)   // 5z: the build frame of the publish applied at submit (0: not known)   // draw slots whose G-buffer draw this frame was swapped to strands
 inline const GbFrame* unique_frame(const GbFrame* frames, uint32_t n, uint32_t tag, bool& ambiguous) {
   const GbFrame* found = nullptr;
   ambiguous = false;
@@ -463,6 +464,16 @@ struct CoverageGate {
   // it is read (5-6 frames later) that frame's hole is already shown and the card frame it causes is a second artefact.
   // Count noise at the bound fails two measurements in a row at p^2 instead of p. A real loss still fails on the second.
   bool confirm = false;
+  // rt_hair_coverage_keep (off; docs/RTX_HAIR_PRIMARY.md 6i): evidence does not expire by age. A draw without card
+  // pixels in the counted frames (off the screen or hidden; under the hold such a measurement replaces nothing) had
+  // its last verdict turn "stale" after kHoldFrames and went to cards unseen; a draw the game culled came back with
+  // stale evidence. Both then showed their cards for the 8-10 frames a new probe measurement takes when they came back
+  // into view (hx1 190905: a "coverage stale" strands->cards switch in 3 of 7 moving windows with the scene pass
+  // header, key 22a2 at the screen edge; 2-3 cards->strands switches per dolly, card runs of 10 frames). With the key
+  // the last measurement stays the verdict until a newer one, an invalidation, a latch or a watchdog replaces it: a key
+  // that passed keeps its strands, a key that failed keeps its cards and its probe. The first swap of a key still
+  // needs a measurement (None), and so does every key after a level load (clear()).
+  bool keep = false;
   std::unordered_map<uint64_t, uint32_t> bad_run;
   static constexpr uint32_t kCoverConfirm = 2;
   // 6g rt_hair_card_fill: the run a held key needs (kCoverConfirm, or kFillConfirm while the per-pixel card fill runs).
@@ -524,7 +535,8 @@ struct CoverageGate {
     const auto bad = incomplete.find(key);
     if (bad != incomplete.end() && e.frame <= bad->second) return Why::Invalidated;
     const bool held = use_hold && is_swapping(key, now);
-    if (!e.frame || now < e.frame || now - e.frame > (held ? kHoldFrames : kFreshFrames) || !e.card) return Why::Stale;
+    const bool aged = now >= e.frame && now - e.frame > (held ? kHoldFrames : kFreshFrames);
+    if (!e.frame || now < e.frame || (aged && !keep) || !e.card) return Why::Stale;
     if (held || (footprint && use_hold)) {
       const double s = cover_sigma(e.strand, e.card);
       bound = (std::min)(bound, kCoverRatioMin - s);
@@ -966,8 +978,13 @@ inline Dropout dropout_reason(uint32_t card, uint32_t accepted, uint32_t last_ca
 // back to the same publish: different grooms, not recorded, build after the G-buffer): N + 1 then reuses N's entries,
 // traced with N's camera, jitter and pose (holes and stale strands while anything moves) and its markers merge with N's
 // (ambiguous evidence, coverage invalidated, cards for a while). With the key: the G-buffer frame itself, unique.
-inline uint32_t gbuffer_tag(bool frame_tags, uint32_t publish_tag, uint64_t gbuffer_frame) {
-  return frame_tags ? uint32_t(gbuffer_frame) : publish_tag;
+// last_tag (6i): the last tag given this way. Two scene G-buffer pass recordings in one present interval share the frame
+// label; the second takes the next tag, and the tags run one ahead of the labels until a label has no G-buffer frame.
+// Never a tag twice: a second recording with the first one's tag reuses its sealed entries (hx1 180928: tags 2754 and
+// 2757, hits 0.25-0.57 m behind the card).
+inline uint32_t gbuffer_tag(bool frame_tags, uint32_t publish_tag, uint64_t gbuffer_frame, uint32_t last_tag = 0) {
+  if (!frame_tags) return publish_tag;
+  return last_tag && last_tag >= uint32_t(gbuffer_frame) ? last_tag + 1u : uint32_t(gbuffer_frame);
 }
 // rt_hair_header_scene_pass (docs/RTX_HAIR_PRIMARY.md 6h): which pass of a frame applies the groom header. Two passes of
 // a frame write the G-buffer targets against the G-buffer depth (docs/FRAME_MAP.md): the scene G-buffer pass (5 colour
@@ -978,14 +995,21 @@ inline uint32_t gbuffer_tag(bool frame_tags, uint32_t publish_tag, uint64_t gbuf
 // g + 1 rewrote the points, refit the BLASes and copied the camera in place. Rays, points and strands are right, the
 // TLAS instance boxes are one camera step old: a ray misses every groom whose box moved off it (hx1 180928: accepted
 // share 0.79 under 0.1 m of step x sin(angle from the view axis), 0.16 at 0.3-0.5 m, 0 above).
-// With the key only the scene pass applies. Skipped: a scene pass whose label another scene pass took (two G-buffer
-// frames inside one present interval, after a hitch): it still runs on the header of the frame before.
+// With the key only the scene pass applies, and every scene pass recording does (6i): a scene pass whose label another
+// recording's scene pass took (two G-buffer frames inside one present interval, after a hitch; the scene build runs
+// once per label, so both trace the same publish) applies the header again with its own tag (Again; gbuffer_tag) and
+// takes over the label's bookkeeping (GbFrame, pending header). Without that it ran on the first one's header and
+// reused the entries the first one sealed, traced with the first one's camera and jitter.
+// other_recording: the pass is recorded in another command buffer recording than the last apply (the same pass begun
+// twice in one recording is not a new G-buffer frame).
 constexpr uint32_t kScenePassTargets = 5;   // docs/FRAME_MAP.md: G-buffer 5 colour targets, decal pass 4
-enum class HeaderPass : uint8_t { NotGbuffer, Decal, Apply, Taken, Count };
-inline HeaderPass header_pass(uint32_t color_count, bool scene_only, uint64_t applied_frame, uint64_t frame) {
+enum class HeaderPass : uint8_t { NotGbuffer, Decal, Apply, Taken, Again, Count };
+inline HeaderPass header_pass(uint32_t color_count, bool scene_only, uint64_t applied_frame, uint64_t frame,
+                              bool other_recording = false) {
   if (color_count < 4) return HeaderPass::NotGbuffer;
   if (scene_only && color_count < kScenePassTargets) return HeaderPass::Decal;
-  return applied_frame == frame ? HeaderPass::Taken : HeaderPass::Apply;
+  if (applied_frame != frame) return HeaderPass::Apply;
+  return scene_only && other_recording ? HeaderPass::Again : HeaderPass::Taken;
 }
 // The strand swap of a G-buffer or velocity draw needs its frame's header applied: label now + 1 (the pass recorded in
 // the present interval of its draws). With rt_hair_header_scene_pass the scene pass keeps the label of its own
@@ -996,12 +1020,42 @@ inline bool header_applied_for(uint64_t applied_frame, uint64_t now, bool veloci
 }
 // The period line's counters (layer/hair_primary.cpp hair_primary_before_pass). taken_decal: scene passes whose label
 // the decal pass had taken (key off: the frames that trace the publish before); taken_scene: by another scene pass.
+// again (6i): second scene pass recordings of a present interval that applied their own header and tag.
 struct HeaderPassStats {
-  uint64_t scene = 0, decal = 0, decal_skipped = 0, taken_decal = 0, taken_scene = 0;
+  uint64_t scene = 0, decal = 0, decal_skipped = 0, taken_decal = 0, taken_scene = 0, again = 0;
   void add(HeaderPass h, bool scene_pass, bool applied_by_decal) {
     if (h == HeaderPass::Decal) ++decal_skipped;
     else if (h == HeaderPass::Apply) ++(scene_pass ? scene : decal);
+    else if (h == HeaderPass::Again) ++again;
     else if (h == HeaderPass::Taken && scene_pass) ++(applied_by_decal ? taken_decal : taken_scene);
+  }
+};
+// 6i: the label state of hair_primary_before_pass (layer/hair_primary.cpp, g_mu held), as one rule the test replays.
+// applied_frame: frame_index + 1 of the last pass that applied (or refused); cmd/recording: that pass's command buffer
+// recording; pass: its serial (GbFrame::pass and the pending header carry it: a G-buffer frame's submit only updates
+// the bookkeeping of its own pass, not that of a later pass that took over the same label); tag: the last frame tag.
+struct HeaderLabels {
+  uint64_t applied_frame = 0, cmd = 0, recording = 0;
+  bool applied_decal = false;
+  uint32_t pass = 0, tag = 0;
+  // The pass that begins now; true: it applies a header (a publish permitting) under label `frame`.
+  bool begin(uint32_t color_count, bool scene_only, uint64_t frame, uint64_t pass_cmd, uint64_t pass_recording,
+             HeaderPassStats& stats) {
+    const HeaderPass h = header_pass(color_count, scene_only, applied_frame, frame,
+                                     pass_cmd != cmd || pass_recording != recording);
+    stats.add(h, color_count >= kScenePassTargets, applied_decal);
+    if (h != HeaderPass::Apply && h != HeaderPass::Again) return false;
+    applied_frame = frame;
+    applied_decal = color_count < kScenePassTargets;
+    cmd = pass_cmd; recording = pass_recording;
+    ++pass;
+    return true;
+  }
+  // The tag of the header this pass applies (header word 0; the entries and markers of its fragments are sealed with it).
+  uint32_t seal(bool frame_tags, uint32_t publish_tag) {
+    const uint32_t t = gbuffer_tag(frame_tags, publish_tag, applied_frame, tag);
+    if (frame_tags) tag = t;
+    return t;
   }
 };
 // The header's flags word (Header::flags, word 15) of packed header bytes.

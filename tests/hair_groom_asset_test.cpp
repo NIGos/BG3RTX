@@ -4,6 +4,8 @@
 #include "../common/hair_groom_budget.h"
 #include "../common/hair_primary.h"
 #include "../common/strand_snapshot.h"
+#include <set>
+#include <map>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -773,32 +775,51 @@ static void test_coverage_footprint() {
 // 6h rt_hair_header_scene_pass: the passes of a frame in recording order (scene G-buffer pass with the hair draws, decal
 // pass, velocity draws), with the present that advances frame_index at a given place. The publish a frame's hair traces:
 // its own (the submit upgrade of the header applied at its scene pass) or the one the last apply left on the GPU.
-struct HeaderPassRun { int stale = 0, hair = 0, velocity_refused = 0; hair_primary::HeaderPassStats st; };
-static HeaderPassRun header_pass_run(bool scene_only, int present_after, int frames, int double_at = -1) {
+// 6i: every frame's scene pass is its own command buffer recording. The model keeps what the GPU would hold: the frame
+// whose pass applied the header last, its tag, and which frame first sealed pixel entries with each tag (a later frame
+// with the same tag reuses them instead of tracing). skip_at: that frame's present comes twice (a label with no
+// G-buffer frame), which lets the tags meet the labels again.
+struct HeaderPassRun {
+  int stale = 0, hair = 0, velocity_refused = 0, reused = 0, tag_twice = 0, pass_twice = 0;
+  uint32_t last_tag = 0; uint64_t last_label = 0;
+  hair_primary::HeaderPassStats st;
+};
+static HeaderPassRun header_pass_run(bool scene_only, int present_after, int frames, int double_at = -1, int skip_at = -1) {
   using namespace hair_primary;
   HeaderPassRun r;
-  uint64_t fi = 100, applied = 0;
-  bool applied_decal = false;
-  int on_gpu = -1;   // the publish (frame number) of the header on the GPU
+  uint64_t fi = 100;
+  HeaderLabels labels;
+  std::map<uint32_t, int> sealed_by;   // tag -> the frame whose fragments sealed entries with it first
+  std::set<uint32_t> passes;
+  int on_gpu = -1;   // the frame whose pass applied the header on the GPU
+  uint32_t tag_on_gpu = 0;
   for (int g = 0; g < frames; ++g) {
     // present_after: 0 before the scene pass, 1 between the scene and the decal pass, 2 after the decal pass,
-    // 3 after the velocity draws. double_at: that frame's present comes only after the next frame's passes.
+    // 3 after the velocity draws. double_at: that frame's present does not come (a hitch: two G-buffer frames in
+    // one present interval).
     auto present = [&](int at) { if (present_after == at && g != double_at) ++fi; };
+    auto pass = [&](uint32_t targets) {
+      if (!labels.begin(targets, scene_only, fi + 1, 1, uint64_t(g) * 2 + (targets < kScenePassTargets), r.st)) return;
+      on_gpu = g;   // upgraded to this frame's build at its submit
+      tag_on_gpu = labels.seal(true, uint32_t(fi + 1));
+      r.tag_twice += sealed_by.count(tag_on_gpu) != 0;
+      r.pass_twice += !passes.insert(labels.pass).second;
+    };
     present(0);
-    HeaderPass h = header_pass(kScenePassTargets, scene_only, applied, fi + 1);
-    r.st.add(h, true, applied_decal);
-    if (h == HeaderPass::Apply) { applied = fi + 1; applied_decal = false; on_gpu = g; }   // upgraded to this frame's build
+    if (g == skip_at) ++fi;
+    pass(kScenePassTargets);
     ++r.hair;
     r.stale += on_gpu != g;
+    const auto first = sealed_by.emplace(tag_on_gpu, g).first;   // the scene pass's hair fragments trace or reuse
+    r.reused += first->second != g;
     present(1);
-    h = header_pass(4, scene_only, applied, fi + 1);
-    r.st.add(h, false, applied_decal);
-    if (h == HeaderPass::Apply) { applied = fi + 1; applied_decal = true; on_gpu = g; }
+    pass(4);
     present(2);
-    r.velocity_refused += !header_applied_for(applied, fi, true, scene_only);
+    r.velocity_refused += !header_applied_for(labels.applied_frame, fi, true, scene_only);
     present(3);
-    if (g == double_at + 1 && double_at >= 0) fi += 2;   // the late present and this frame's own
   }
+  r.last_tag = labels.tag;
+  r.last_label = labels.applied_frame;
   return r;
 }
 static void test_header_pass() {
@@ -806,9 +827,16 @@ static void test_header_pass() {
   CHECK(kScenePassTargets == 5u);
   CHECK(header_pass(3, false, 0, 7) == HeaderPass::NotGbuffer && header_pass(3, true, 0, 7) == HeaderPass::NotGbuffer);
   CHECK(header_pass(4, false, 6, 7) == HeaderPass::Apply && header_pass(4, true, 6, 7) == HeaderPass::Decal);
-  CHECK(header_pass(4, true, 7, 7) == HeaderPass::Decal);
+  CHECK(header_pass(4, true, 7, 7) == HeaderPass::Decal && header_pass(4, true, 7, 7, true) == HeaderPass::Decal);
   CHECK(header_pass(5, false, 6, 7) == HeaderPass::Apply && header_pass(5, true, 6, 7) == HeaderPass::Apply);
   CHECK(header_pass(5, false, 7, 7) == HeaderPass::Taken && header_pass(5, true, 7, 7) == HeaderPass::Taken);
+  // 6i: another recording's scene pass under a label already taken applies again with the key, never without it,
+  // and the decal pass of another recording never does.
+  CHECK(header_pass(5, true, 7, 7, true) == HeaderPass::Again && header_pass(5, false, 7, 7, true) == HeaderPass::Taken);
+  CHECK(header_pass(4, false, 7, 7, true) == HeaderPass::Taken);
+  // The tags: the frame's label, or the tag after the last one when that label's tag is already given. Never twice.
+  CHECK(gbuffer_tag(false, 41, 7, 9) == 41u && gbuffer_tag(true, 41, 7) == 7u && gbuffer_tag(true, 41, 7, 6) == 7u);
+  CHECK(gbuffer_tag(true, 41, 7, 7) == 8u && gbuffer_tag(true, 41, 8, 8) == 9u && gbuffer_tag(true, 41, 10, 9) == 10u);
   // Key off, as before: label now + 1 only, for both passes.
   CHECK(header_applied_for(8, 7, false, false) && header_applied_for(8, 7, true, false));
   CHECK(!header_applied_for(7, 7, false, false) && !header_applied_for(7, 7, true, false) && !header_applied_for(9, 7, true, false));
@@ -819,6 +847,7 @@ static void test_header_pass() {
     const HeaderPassRun r = header_pass_run(key, present_after, 60);
     CHECK(r.stale == 0 && r.st.scene == 60 && r.st.decal == 0 && r.st.taken_decal == 0 && r.st.taken_scene == 0);
     CHECK(r.st.decal_skipped == (key ? 60u : 0u));
+    CHECK(r.reused == 0 && r.tag_twice == 0 && r.pass_twice == 0 && r.st.again == 0 && r.last_tag == uint32_t(r.last_label));
   }
   CHECK(header_pass_run(false, 0, 60).velocity_refused == 0 && header_pass_run(true, 0, 60).velocity_refused == 0);
   {   // The present between the scene and the decal pass (hx1 180928's dolly): key off, the decal pass takes every label
@@ -827,13 +856,85 @@ static void test_header_pass() {
     CHECK(off.stale == 59 && off.st.scene == 1 && off.st.decal == 60 && off.st.taken_decal == 59 && off.st.taken_scene == 0);
     CHECK(off.velocity_refused == 0);
     CHECK(on.stale == 0 && on.st.scene == 60 && on.st.decal == 0 && on.st.decal_skipped == 60 && on.st.taken_decal == 0);
-    CHECK(on.velocity_refused == 0);
+    CHECK(on.velocity_refused == 0 && on.reused == 0 && on.tag_twice == 0 && on.st.again == 0);
   }
-  {   // Two G-buffer frames inside one present interval (a hitch): the second one's label is taken by the first scene
-      // pass with or without the key (counted; not fixed by the key).
-    const HeaderPassRun off = header_pass_run(false, 0, 60, 20), on = header_pass_run(true, 0, 60, 20);
-    CHECK(off.stale == 1 && off.st.taken_scene == 1 && off.st.taken_decal == 0);
-    CHECK(on.stale == 1 && on.st.taken_scene == 1 && on.st.taken_decal == 0);
+  for (int present_after : {0, 2, 3}) {
+    // Two G-buffer frames inside one present interval (a hitch; hx1 180928 tags 2754 and 2757). Key off, as before: the
+    // second one's label is taken, it runs on the first one's header and reuses the entries sealed with its tag.
+    // Key on (6i): it applies its own header with the next tag: no frame on another's header, no entry reused, no tag
+    // or pass serial twice, no velocity draw refused. The tags then run one ahead of the labels.
+    const HeaderPassRun off = header_pass_run(false, present_after, 60, 20), on = header_pass_run(true, present_after, 60, 20);
+    CHECK(off.stale == 1 && off.reused == 1 && off.st.taken_scene == 1 && off.st.taken_decal == 0 && off.st.again == 0);
+    CHECK(on.stale == 0 && on.reused == 0 && on.tag_twice == 0 && on.pass_twice == 0);
+    CHECK(on.st.again == 1 && on.st.taken_scene == 0 && on.st.taken_decal == 0 && on.st.scene == 59);
+    CHECK(on.velocity_refused == 0 && on.last_tag == uint32_t(on.last_label) + 1u);
+    // A label without a G-buffer frame afterwards: the tags are the labels again.
+    const HeaderPassRun back = header_pass_run(true, present_after, 60, 20, 40);
+    CHECK(back.stale == 0 && back.reused == 0 && back.tag_twice == 0 && back.st.again == 1);
+    CHECK(back.last_tag == uint32_t(back.last_label));
+  }
+  {   // Three G-buffer frames in a row with one late present each (two hitches back to back): still one tag per frame.
+    HeaderLabels l;
+    HeaderPassStats st;
+    std::set<uint32_t> tags;
+    uint32_t pass_of_first = 0;
+    for (uint64_t rec = 1; rec <= 3; ++rec) {
+      CHECK(l.begin(kScenePassTargets, true, 500, 1, rec, st));
+      CHECK(tags.insert(l.seal(true, 499)).second);
+      if (rec == 1) pass_of_first = l.pass;
+      CHECK(!l.begin(kScenePassTargets, true, 500, 1, rec, st));   // the same recording's pass begun again: not a frame
+      CHECK(!l.begin(4, true, 500, 1, rec, st));
+    }
+    CHECK(st.scene == 1 && st.again == 2 && st.taken_scene == 3 && l.tag == 502u);
+    // The first frame's pending header (its pass serial) no longer owns the label's GbFrame: its submit leaves it alone.
+    GbFrame gf; gf.frame = 500; gf.pass = l.pass;
+    CHECK(gf.pass != pass_of_first);
+    CHECK(l.begin(kScenePassTargets, true, 501, 1, 4, st) && l.seal(true, 500) == 503u);
+    CHECK(l.begin(kScenePassTargets, true, 505, 1, 5, st) && l.seal(true, 504) == 505u);
+  }
+}
+
+// 6i rt_hair_coverage_keep: evidence does not expire by age (hx1 190905: key 22a2 left the screen under the dolly in,
+// "coverage stale" 28 frames later; 2-3 heads per dolly came back as cards for 10 frames).
+static void test_coverage_keep() {
+  using namespace hair_primary;
+  using Why = CoverageGate::Why;
+  for (bool keep : {false, true}) {
+    CoverageGate g;
+    g.hold = g.confirm = true;
+    g.keep = keep;
+    CHECK(g.why(0x22a2, 100) == Why::None);            // the first swap always needs a measurement
+    g.observe(0x22a2, 100, 2869, 2900);
+    uint64_t f = 101;
+    for (; f < 148; ++f) { CHECK(g.allow(0x22a2, f)); g.swapped(0x22a2, f); g.observe(0x22a2, f, 2869, 2900, true); }
+    // The draw leaves the screen but is still submitted: measurements without card pixels replace nothing.
+    int stale_at = -1;
+    for (int i = 0; i < 120; ++i, ++f) {
+      const Why w = g.why(0x22a2, f);
+      if (w == Why::Ok) g.swapped(0x22a2, f);
+      else if (stale_at < 0) { stale_at = i; CHECK(w == Why::Stale); }
+      g.observe(0x22a2, f, 0, 0, w == Why::Ok);
+    }
+    CHECK(keep ? stale_at < 0 : stale_at == int(kHoldFrames));   // the 28 frames of hx1 190905
+    // It comes back into view: strands at once with the key, cards until a new measurement without it.
+    CHECK(g.why(0x22a2, f) == (keep ? Why::Ok : Why::Stale));
+    // A draw the game culled (not drawn, so not swapping) for 300 frames: the same.
+    g.observe(0x12e9, 100, 180, 176);
+    CHECK(g.allow(0x12e9, 101));
+    CHECK(g.why(0x12e9, 401) == (keep ? Why::Ok : Why::Stale));
+    // What the key never does: pass a key whose last measurement failed, was invalidated, or has no card pixels.
+    g.observe(0x77, 100, 3300, 1000);
+    CHECK(g.why(0x77, 101) == Why::Low && g.why(0x77, 401) == (keep ? Why::Low : Why::Stale));
+    g.invalidate(0x12e9, 400);
+    CHECK(g.why(0x12e9, 401) == Why::Invalidated);
+    g.observe(0x12e9, 402, 180, 176);
+    CHECK(g.allow(0x12e9, 403));
+    // A swapping key that then fails still goes to cards on its second bad measurement, at any age of the first proof.
+    f += 300;
+    for (int i = 0; i < 2; ++i, ++f) { if (g.allow(0x22a2, f)) g.swapped(0x22a2, f); g.observe(0x22a2, f, 2869, 900, true); }
+    CHECK(g.why(0x22a2, f) == Why::Low);
+    g.clear();                                         // a level load: every key starts again
+    CHECK(g.why(0x22a2, f) == Why::None);
   }
 }
 
@@ -1514,7 +1615,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish(); test_card_fill(); test_header_pass();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish(); test_card_fill(); test_header_pass(); test_coverage_keep();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
