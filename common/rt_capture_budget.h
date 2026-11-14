@@ -171,25 +171,41 @@ struct CaptureHeadroom {
  std::array<uint64_t,kRiseHistory> history{};
  unsigned history_count=0,history_next=0;
  uint64_t rise=0;
+ // rt_capture_peak_reserve=1 (claude/vram-rightsize, 2026-11-14, default 0): the learned rise is a cut between two
+ // demand levels (user log 22:14-22:26: the cascade demand alternates between 54-70 MiB and 490-580 MiB, rise 535
+ // MiB), but it was added on top of the HIGH level too: 3 slots x 1088-1120 MiB for 510-580 MiB. With the key the
+ // rise reserve is not taken past the highest demand of the last kPeakWindow to 2 x kPeakWindow samples + 25%
+ // (the level a repeat of the cut lands on), except for a rise still in progress (the last `steps` samples: a
+ // pan beyond that peak keeps its ramp reserve). At the low level the reserve stays (the cut up fits); when the
+ // high level has not been seen for the window the reserve decays to the 25% and the preset quarter, and the next
+ // cut overflows once, as the first one of a session does.
+ static constexpr uint64_t kPeakWindow=7200;
+ DemandPeak peak;uint64_t samples=0;
  uint64_t capacity(uint64_t demand,uint64_t storage_limit,uint64_t card_cap,unsigned interval,
                    uint64_t preset_capacity=0,uint64_t current=0,bool rise_reserve=false,
-                   uint64_t learn=UINT64_MAX){
+                   uint64_t learn=UINT64_MAX,bool peak_reserve=false){
   demand=(std::min)(demand,kMeshPoolHardCap);
   if(initialized && demand>previous)step=(std::max)(step,demand-previous);
   previous=demand;initialized=true;
   const uint64_t steps=(4+interval+interval-1)/interval;
   // Both estimators learn always, so a live toggle of the key uses the history already seen.
   const uint64_t observed=(std::min)(learn==UINT64_MAX?demand:learn,kMeshPoolHardCap);
+  uint64_t recent=0;
   for(unsigned k=1;k<=history_count && k<=steps && k<=kRiseHistory;++k){
    const uint64_t before=history[(history_next+kRiseHistory-k)%kRiseHistory];
-   if(observed>before)rise=(std::max)(rise,observed-before);
+   if(observed>before){rise=(std::max)(rise,observed-before);recent=(std::max)(recent,observed-before);}
   }
+  peak.observe(demand,samples++,kPeakWindow);
   history[history_next]=observed;history_next=(history_next+1)%kRiseHistory;
   if(history_count<kRiseHistory)++history_count;
   // Bootstrap from the preset's existing quarter-capacity reserve, rather
   // than learning the first pan only after a small static-scene shrink.
-  const uint64_t movement=rise_reserve?(std::min)(rise,kMeshPoolHardCap)
-                                      :(std::min)(step,kMeshPoolHardCap/steps)*steps;
+  uint64_t movement=rise_reserve?(std::min)(rise,kMeshPoolHardCap)
+                                :(std::min)(step,kMeshPoolHardCap/steps)*steps;
+  if(peak_reserve){
+   const uint64_t level=peak.peak()+peak.peak()/4;
+   movement=(std::min)(movement,(std::max)(recent,level>demand?level-demand:0));
+  }
   const uint64_t reserve=(std::max)((std::max)(demand/4,preset_capacity/4),movement);
   const uint64_t quantum=16*mib;
   uint64_t cap=(std::min)(kMeshPoolHardCap,card_cap);
