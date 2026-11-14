@@ -17,5 +17,4 @@
   until live (the wait that remains).
 - READY_FOR_LIVE, staged, not authorized: `handout_qual/jobs/hq-s8-modes.json` (0 / 1 / 2 / 2 + fix / 0, 8 traces and
   an rt_stats window per state, about 5.5 minutes after load, lint live and frozen 0 failing).
-- Disk: the 24 trace folders `test-main/captures/20261114-191625` to `-191832` (1.17 GB) are fully analysed and can
-  all be deleted; nothing deleted by this branch.
+- Disk: the 24 trace folders `test-main/captures/20261114-191625` to `-191832` (1.17 GB) are analysed: all deletable.
