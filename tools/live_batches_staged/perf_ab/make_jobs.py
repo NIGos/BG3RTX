@@ -102,17 +102,19 @@ def toggled(states, order, settings):
     return plan + [phase(label, 12, settings(state), frames=FRAMES) for label, state in order]
 
 
-def retime(names):
+def retime(names, here=HERE, measured=lambda p: FRAMES):
     """live_flow's readiness waits, then the windows' own length: SETTLE frames in the state, an acknowledged stats
-    reset, FRAMES measured frames (opt_profile's rule; the tightening alone keeps one period)."""
+    reset, FRAMES measured frames (opt_profile's rule; the tightening alone keeps one period). Other batches reuse it
+    with their folder (`here`) and their own frames per window (`measured(phase)`; None keeps the phase as it is)."""
+    HERE = here
     flow.tighten_files(HERE, job_names=names)
     lint_snapshot.load()   # the frozen FPS model per save and diagnostic state (the live corpus may be empty)
     for name in names:
         job, plan, plan_path = flow.load_job(HERE / "jobs" / f"{name}.json")
         for p, state in zip(plan, flow.phase_states(job, plan)):
-            if p.get("frames"):
-                p.update(frames=SETTLE + FRAMES, settle_frames=SETTLE, stats_reset=True)
-                p["seconds"] = round((SETTLE + FRAMES) / flow.fps_windows.expected(job, state)["fps"] + .1, 3)
+            if p.get("frames") and measured(p):
+                p.update(frames=SETTLE + measured(p), settle_frames=SETTLE, stats_reset=True)
+                p["seconds"] = round((SETTLE + measured(p)) / flow.fps_windows.expected(job, state)["fps"] + .1, 3)
                 p["motion_start"] = p["motion_end"] = p["seconds"]
             # A cold start may compile; a live toggle waits for a fresh quiet [watch] period (120 frames).
             if p.get("wait_log"):
@@ -133,14 +135,14 @@ def retime(names):
     return added + len(new)
 
 
-def focused_job(name, save, start, plan, gates, expect, purpose):
+def focused_job(name, save, start, plan, gates, expect, purpose, batch=BATCH, live_batch="perf-ab"):
     windows = [p["label"] for p in plan if p.get("frames")]
     return {
         "name": name, "save": save, "session": False, "traces": 0, "hold": 120, "timeout": 360, "max_minutes": 6,
-        "repeat": 1, "live_batch": "perf-ab", "fail_fast": True, "stop_on_dump": False,
+        "repeat": 1, "live_batch": live_batch, "fail_fast": True, "stop_on_dump": False,
         "set": start,
         # Focused (no window_mode): the game takes the focus, so no unfocused 30 fps cap and [pace] / FG are valid.
-        "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"{BATCH}/plans/{name}.json"],
+        "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"{batch}/plans/{name}.json"],
         "patterns": PATTERNS,
         "expect": ["\\[auto\\] scene ready", "\\[hot\\] core generation \\d+ loaded", "\\[cfg\\] settings read"] + expect,
         "expect_every": [every(n + " in every window", s, s, windows) for n, s in LINES] + gates,
@@ -148,7 +150,7 @@ def focused_job(name, save, start, plan, gates, expect, purpose):
         "expect_runner": [f"\\[motion-plan\\] complete phases={len(plan)}\\b", "^Run ended: done"],
         "live_flow": {"expected_fps": 60, "settings_latency_s": 1, "trace_stall_s": 0},
         "estimated_phase_seconds": sum(p["seconds"] for p in plan),
-        "post": (f"python {BATCH}/analyze.py --job {BATCH}/jobs/{name}.json "
+        "post": (f"python {batch}/analyze.py --job {batch}/jobs/{name}.json "
                  '--log "{log}" --runner "{runner}" --out "{log}.perf.md"'),
         "post_gate": True,
         "purpose": purpose + " STAGED, not authorized.",

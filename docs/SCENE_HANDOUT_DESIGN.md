@@ -1,6 +1,8 @@
 # Scene handout: remove the `[rt] scene wait` (design, 2026-11-09)
 
-Branch `claude/scene-handout-design`. Design only: nothing is built. It answers the four blockers of the
+Status (2026-11-14): increments 1-5 are built and merged, off by default, never qualified. Current state, compatibility
+and the qualification batch: section 8. Sections 1-7 are the design as written on 2026-11-09 (branch
+`claude/scene-handout-design`); the notes under the table of section 5 record what each increment changed. It answers the four blockers of the
 2026-11-08 review (docs/TRACK_D_SCENE_BUILD.md, "Scene wait growth", branch claude/opt-scene-handout).
 
 ## 1. The problem in numbers
@@ -235,3 +237,76 @@ Total 4-5.5 days after a go from increment 0. Gate to start 1: sh1 frame time(on
   lighting thread and the submit thread); keep it a small mutex around reservation state only;
   (6) replay packs record set 1 (`replay_note_alpha_layout`, layer/replay.cpp:1006): the UAB flags must be
   ignored or recorded there.
+
+## 8. State on main and qualification (2026-11-14, branch claude/handout-ready)
+
+### 8.1 What is built
+
+| Increment | Content | State |
+|---|---|---|
+| 1 | `rt_scene_handout_layout` (restart): UAB device features, set 1 UAB layout and pools, dummy TLAS | complete, GPU fixture |
+| 2 | TLAS addresses in the stamp (bytes 16 / 24), constant 1051 at the scene trace sites, `rt_scene_handout=1` | complete |
+| 3 | `rt_scene_handout=2`: reservation at the capture begin, handout without the wait, resolution at vkQueueSubmit, ABI 30 | complete |
+| 4 | OMM accelerated TLAS on reserved slots (tickets on every user recording) | complete |
+| 4b | Native hit materials: query built at the commit into a per-slot handout query set | complete |
+| 5 | Traversal flag (ABI 31), water on the handout | complete |
+
+Keys today: `rt_scene_handout_layout` 0 / 1 at startup; `rt_scene_handout` 0 (wait), 1 (trace by stamp address, same
+TLAS, still waits), 2 (handout; needs the layout on the device, `rt_scene_wait=1` and the BVH split, else it acts
+as 1). Native hit materials, OMM (static and dynamic) and water run on the handout. The old ini comment "not with
+rt_hit_material" described increment 3 and was stale since 4b; it is corrected.
+
+### 8.2 The quality trade
+
+In order (the normal frame) there is none: the lighting traces this frame's scene, as with the wait. The slot is
+reserved at the capture begin and filled before the same vkQueueSubmit; the shaders read the TLAS address at execution.
+It is not a one-frame-old scene. Only a fallback frame traces the previous frame's scene P (every binding of set P
+copied into set R at the submit): build not committed, build failed, build submitted after the lighting, recording
+dropped, hit-material query failed or bound another camera. That is what a wait timeout gives today; a moving
+character's shadow lags one frame in such a frame. Frames that still wait (no handout): no valid previous scene (level
+load, the first frames, after a skipped build), legacy single-BLAS builds, a first RT query before the capture began
+(the 0.5-0.7 ms residual in motion), two frames after a pipeline without constant 1051 ran (a toggle).
+Counters: `[rt] scene wait ... handed out N (0 ms)`; `[rt] scene handout: N frames, reserved, handed out, in order,
+fallbacks F (not committed, build failed, order, dropped), pairing mismatches, committed first, unused, users refused;
+OMM accelerated commits, downgraded; hit material queries at the commit, failed (fallbacks: query, camera)`;
+`[rt] scene handout fallback: frame ... (reason)`; `[core] scene handout: ... settled ..., water on the handout`.
+
+### 8.3 Live evidence so far (logs pruned; numbers from docs/archive/PROGRESS_CODEX_2026-11-11.md)
+
+- sh2, 2026-11-09 18:43, S8 real Ultra, RTX Hair strands on: wait mean ON 0.47-0.69 ms vs OFF 4.4-5.1; 0 fallbacks,
+  0 pairing mismatches; rendered median 24.2-24.6 vs 24.6-25.2 ms (GPU-bound); rt passes 6.2-6.6 vs 7.2-7.5 ms.
+- sh2 rerun the same evening (increment 5): every gate passed but the in-motion wait (0.6-0.7 ms, static 0.06),
+  0 fallbacks, water on the handout 59/60, no false OMM downgrades.
+- Never run: sh1 (the ceiling), the inn, High, anything after 2026-11-09. Today's OFF wait (main 6f6cef07): inn Ultra
+  7.9-9.6 ms, S8 3.2-5.6 ms.
+
+### 8.4 Compatibility with what landed after it (code read 2026-11-14)
+
+Since b5da66ae nothing changed in core/, layer/alphatest.cpp, layer/hit_material.cpp, common/scene_handout*.h or
+shaders/rt/rt_common.hlsli; layer/rtscene.cpp gained only the build-camera UBO accessors.
+
+| Feature | Verdict | Why |
+|---|---|---|
+| RTX Hair strands (`rt_hair_groom_primary_current`, header camera, `rt_hair_header_cam_gpu`) | works | The strand G-buffer traces its own header TLAS (hair_primary_gbuffer.hlsl:131, :152), published by the build (bvhsplit.cpp:4408) and re-decided at the submit after the handout resolution (layer.cpp:533 then :549). It never binds set 1. The build camera and its GPU copy are recorded into the build's command buffer (rtscene.cpp:1197-1213, hair_primary.cpp:780). sh2 ran with strands on. |
+| Groom TLAS in secondary rays | works | A stamp address already (alphatest.cpp:1288-1293, rt_common.hlsli:983); written at the commit of slot R; a fallback copies P's stamp binding with P's groom. |
+| Pixel LOD camera TLAS | works | Per scene slot like the groom TLAS (bvhsplit.cpp:1018, :4259); only the header names it; slot lifetime rules unchanged (rtscene.cpp:215-226, R and P pinned). |
+| `rt_capture_wide_split` | works | Capture and BLAS level only; on in sh2. |
+| VRAM guard latch | fallback exists | A refused or failed build ends as `build failed` -> P (rtscene.cpp:1337-1350 HandoutCommit); geometry left out does not fail the build. |
+| OMM static and dynamic | works | `bvh_omm_tickets` hands out both ticket kinds (bvhsplit.cpp:4676-4685); a user that cannot hold them downgrades byte 24 (counted). |
+| Water | works | core/water.cpp:1121-1137, core/gi.cpp:4115-4135 (increment 5). |
+| Native hit materials | works | Commit-time query (rtscene.cpp:1445, :1945-1961); fallbacks query / camera counted. |
+
+No incompatibility found, so no code fix. Not proven live: pixel LOD, header camera GPU copy, `rt_hair_mv_card`,
+row / slot stability and the guard latch together with the handout (they share no state with it).
+
+### 8.5 Qualification (staged, not run)
+
+`tools/live_batches_staged/handout_qual/` (predicted.json first, README.md): five launches in one session, 0 / 2 / 0
+inside each run, thresholds from the OFF repeat. Offline on 2026-11-14: scene_handout_test, scene_handout_gpu_fixture,
+frame_replay_test (self-test 4c) and the whole suite pass; this branch changes no shader (variants.txt delta 0).
+
+### 8.6 Launcher
+
+Performance page, "Low-latency scene" (`scene_handout`): Off / On. On writes `rt_scene_handout_layout=1` and
+`rt_scene_handout=2`, needs a game restart (Off is live), is marked Experimental (needs "Show Experimental") and is Off
+in every preset until the batch above has run.
