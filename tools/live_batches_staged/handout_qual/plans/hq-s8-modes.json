@@ -21,19 +21,6 @@
     "wait_log_timeout": 180
   },
   {
-    "label": "producer-sanity-warmup",
-    "kind": "static",
-    "seconds": 1.1,
-    "capture_at": 0,
-    "serial": 0,
-    "set": "rt_scene_handout=0,rt_hair=0,rr_hair_strand_aa=0,rt_stats=0,rt_primary_check=0,rt_stats_period_frames=120,qa_exposure_hold=1,rt_scene_handout_hit_wait=0",
-    "wait_log": [
-      "\\[core\\] GI far \\(\\d+ frames\\)",
-      "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
-    ],
-    "wait_log_timeout": 40
-  },
-  {
     "label": "warm-m1",
     "kind": "static",
     "speed": "static",
@@ -325,7 +312,8 @@
     "wait_stats": [
       "\\[core\\] GI far \\(\\d+ frames\\)",
       "\\[rt\\] scene wait: \\d+ frames",
-      "\\[rt\\] scene handout: \\d+ frames, reserved"
+      "\\[rt\\] scene handout: \\d+ frames, reserved",
+      "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
     ],
     "wait_log_timeout": 30
   },
@@ -379,7 +367,8 @@
     "wait_stats": [
       "\\[core\\] GI far \\(\\d+ frames\\)",
       "\\[rt\\] scene wait: \\d+ frames",
-      "\\[rt\\] scene handout: \\d+ frames, reserved"
+      "\\[rt\\] scene handout: \\d+ frames, reserved",
+      "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
     ],
     "wait_log_timeout": 30
   },

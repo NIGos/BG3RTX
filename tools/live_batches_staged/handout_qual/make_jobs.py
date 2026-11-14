@@ -188,11 +188,15 @@ def modes():
     # hits, timeouts, fallbacks, the fix taking the committed scene) are judged by analyze.py hit_checks.
     stats = dict(period_frames=60, sample_frames=60, min=1)
     far = "\\[core\\] GI far \\(\\d+ frames\\)"
+    # State lines stay out of the any-line "expect": live_flow puts a producer-sanity phase for every periodic expect
+    # line after the first warm-up, in the warm-up's state. GI far needs rt_stats=1 and the core handout line
+    # rt_scene_handout=2, so the OFF warm-up could never print them (hq-s8-modes.1.204217 stopped there, phase 1 of 19).
+    core = "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
     j["expect_every"] = [pab.every("GI far line in every hit window", far, far, hit, **stats),
                          pab.every("scene wait line in every hit window", WAIT, WAIT, hit, **stats),
-                         pab.every("handout line in the handout windows", HANDOUT, HANDOUT, ["hit-m2", "hit-fix"], **stats)]
+                         pab.every("handout line in the handout windows", HANDOUT, HANDOUT, ["hit-m2", "hit-fix"], **stats),
+                         pab.every("core handout line in the handout windows", core, core, ["hit-m2", "hit-fix"], **stats)]
     j["patterns"] = j["patterns"] + ["GI far \\(", "GI hit direct", "\\[hit material (?:submit|query)\\]"]
-    j["expect"] += [far, "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"]
     j["energy_expect"] = {"m2": "lower"}   # analyze.py: the predicted loss is reported, not judged
     return plan, j
 

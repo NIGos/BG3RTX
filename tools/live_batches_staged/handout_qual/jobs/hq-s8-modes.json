@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 2187,
+  "timeout": 2159,
   "max_minutes": 14,
   "repeat": 1,
   "live_batch": "handout-qual",
@@ -70,9 +70,7 @@
     "\\[rt\\] scene handout: \\d+ frames, reserved",
     "\\[ngx\\] RR create .*: Success",
     "\\[trace\\] frame \\d+ written",
-    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
-    "\\[core\\] GI far \\(\\d+ frames\\)",
-    "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
   ],
   "expect_every": [
     {
@@ -116,6 +114,18 @@
       "period_frames": 60,
       "sample_frames": 60,
       "min": 1
+    },
+    {
+      "name": "core handout line in the handout windows",
+      "select": "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+",
+      "match": "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+",
+      "windows": [
+        "hit-m2",
+        "hit-fix"
+      ],
+      "period_frames": 60,
+      "sample_frames": 60,
+      "min": 1
     }
   ],
   "forbid": [
@@ -131,7 +141,7 @@
     "\\[layer\\] optional scene handout update-after-bind request failed"
   ],
   "expect_runner": [
-    "\\[motion-plan\\] complete phases=19\\b",
+    "\\[motion-plan\\] complete phases=18\\b",
     "^Run ended: done"
   ],
   "live_flow": {
@@ -174,7 +184,7 @@
       "logs": 2
     }
   },
-  "estimated_phase_seconds": 340.52,
+  "estimated_phase_seconds": 339.42,
   "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-s8-modes.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
   "post_gate": true,
   "purpose": "Scene handout energy by mode at S8, Ultra, FG 3x, focused, static, exposure held: rt_scene_handout 0 / 1 / 2 / 2 with rt_scene_handout_hit_wait=1 / 0, 8 float traces per state and a short rt_stats window each. Mode 1 and the fix inside the OFF range; mode 2 reproduces the -0.20% (unpublished commit-time hit-material query). Reports the scene wait and the GI trace GPU ms of every state. STAGED, not authorized.",

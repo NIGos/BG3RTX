@@ -107,6 +107,7 @@ PASSES = [("G-buffer base colour (control: the same scene)", "aa4efa4d", 1), ("d
 # Log lines per state window (energy and hit-* windows): the native hit-material path at work.
 STATE_LINES = [("GI trace GPU median ms", r"gi: trace pass \(ray-traced.*GPU median ([\d.]+) ms"),
                ("scene wait mean ms", r"\[rt\] scene wait:.*wait mean ([\d.]+) ms"),
+               ("frame time median ms", r"\[pace\] rendered frame time over \d+ frames: median ([\d.]+) ms"),
                ("GI far: ambient kept at qualified hits", r"GI far \(\d+ frames\):.*ambient kept at qualified hits ([\d.]+)"),
                ("GI far: bounce per ray", r"GI far \(\d+ frames\):.*bounce ([\d.]+) \(old rule"),
                ("GI hit direct: light rays traced", r"GI hit direct lights \(\d+ frames\): light rays traced (\d+)"),
@@ -203,25 +204,32 @@ def hit_checks(medians, plan, expect=None):
     return found, notes
 
 
+# (line, rule) of the energy windows (rt_stats off: the cost windows of a modes job) against the OFF pair.
+STATE_COSTS = [("GI trace GPU median ms", "not higher"), ("scene wait mean ms", "lower"), ("frame time median ms", "lower")]
+
+
 def state_costs(medians, expect=None):
-    """{status: [text]}: the GI trace GPU ms of every energy state against the OFF pair (sane_gates "not higher":
-    the handout predicts no GPU change, so a drop beyond the floor is EXPLAIN unless the job predicts it)."""
+    """{status: [text]}: the costs of every energy state against the OFF pair. GI trace GPU ms is "not higher" (the
+    handout predicts no GPU change, so a drop beyond the floor is EXPLAIN unless the job predicts it); the scene wait
+    and the frame time are the deliverable ("lower": a rise beyond noise and floor FAILS; the delta is always shown)."""
     found = {sane.FAIL: [], sane.EXPLAIN: [], sane.INFO: []}
-    name = "GI trace GPU median ms"
-    v = {k[len("energy-"):]: x for k, x in medians.get(name, {}).items() if k.startswith("energy-")}
-    if "off-a" not in v or "off-b" not in v:
-        return found
-    for state, on in v.items():
-        if state.startswith("off"):
+    for name, rule in STATE_COSTS:
+        v = {k[len("energy-"):]: x for k, x in medians.get(name, {}).items() if k.startswith("energy-")}
+        if "off-a" not in v or "off-b" not in v:
             continue
-        floor = sane.cost_floor((v["off-a"] + v["off-b"]) / 2)
-        status, d, noise = sane.compare(v["off-a"], v["off-b"], on, floor, "not higher", (expect or {}).get(state) == "lower")
-        text = (f"energy-{state}: {name}: OFF {v['off-a']:.3f} / {v['off-b']:.3f}, {state} {on:.3f}, delta {d:+.3f}, "
-                f"noise {noise:.3f}, floor {floor:.3f}")
-        if status in found:
-            found[status].append(text)
-        elif (expect or {}).get(state) == "lower" and abs(d) > max(noise, floor):
-            found[sane.INFO].append(text + " (predicted)")
+        for state, on in v.items():
+            if state.startswith("off"):
+                continue
+            floor = sane.cost_floor((v["off-a"] + v["off-b"]) / 2)
+            status, d, noise = sane.compare(v["off-a"], v["off-b"], on, floor, rule, (expect or {}).get(state) == "lower")
+            text = (f"energy-{state}: {name}: OFF {v['off-a']:.3f} / {v['off-b']:.3f}, {state} {on:.3f}, delta {d:+.3f}, "
+                    f"noise {noise:.3f}, floor {floor:.3f}")
+            if status in found:
+                found[status].append(text)
+            elif rule == "lower":
+                found[sane.INFO].append(text)
+            elif (expect or {}).get(state) == "lower" and abs(d) > max(noise, floor):
+                found[sane.INFO].append(text + " (predicted)")
     return found
 
 
