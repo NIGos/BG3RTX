@@ -1112,7 +1112,7 @@ Root cause NOT established. Verified facts, then the one hypothesis left and the
     window A (07:41:21.8 to 07:41:29.8) had generated frames throughout; the 1.00 lines up to 07:41:17 are the load,
     the warm-up and the warm-fg0 phase.
 
-## 5t. Strands and cards alternating with a still camera (offline 2026-11-10, branch claude/hair-swap-transitions: key rt_hair_swap_latch, off)
+## 5t. Strands and cards alternating with a still camera (offline 2026-11-10, branch claude/hair-swap-transitions: key rt_hair_swap_latch, off; key removed 2026-11-14, 6k)
 - FG hypothesis disproved by the user's fg=0 observation 2026-11-10: in 0.9.6-hairtest1 the hair still toggles between
   strands and cards with a static camera and fg=0, worse for distant characters. Zoomed in, the flicker has a constant
   period: it flickers for a while, is stable for about 0.5 s, and repeats. The fps cap was 58: 28 frames are 0.48 s.
@@ -1528,7 +1528,7 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
 - User check: launcher Lighting, "RTX Hair detail at distance" (`hair_distant_detail`, 2026-11-10): Off / 1/4 (Standard,
   small_keep 0.25) / 1/8 (Sharper, 0.125), live after Save; Off in every preset and in data/release.ini until the final
   qualification live (no longer a release pin). Watch S8 zoomed out while switching. docs/progress/claude-hair-detail-knob.md.
-## 5w. Stable groom rows (offline 2026-11-10, branch claude/hair-row-stable: key rt_hair_row_stable, off)
+## 5w. Stable groom rows (offline 2026-11-10, branch claude/hair-row-stable: key rt_hair_row_stable, off; key removed 2026-11-14, 6k)
 
 Live hl1 164930 (natural arrival, camera wheel zoom): of the 5u candidates A (another build's TLAS traced: 75 submits
 checked, 0) and C (full BLAS builds: 0) are disproved, B is confirmed: in the first frame of the zoom 11 of 11 keyed
@@ -1698,7 +1698,7 @@ the wheel dolly runs at about 15 m/s), none in the static windows. Frame 2066 (s
 3. shaderInt64 and fragment stores (water's precedent: `sharc_device=1`); refuse the variant otherwise.
 4. Instanced hair (FS 0ca5ee93, other bindings) keeps its cards in increment 1.
 
-## 6a. Stale publish under a fast camera (offline 2026-11-10, branch claude/hair-stale-publish: key rt_hair_stale_publish, off)
+## 6a. Stale publish under a fast camera (offline 2026-11-10, branch claude/hair-stale-publish: key rt_hair_stale_publish, off; key and check removed 2026-11-14, 6k)
 
 Live hl1 210357 (VALID, 5z diagnostics): all 5 frame watchdog trips (G-buffer frames 2618-2620, 2622, 2624) applied
 the previous build frame's publish (k = 1), its header camera one build camera step (0.34-0.70 m) from the frame's,
@@ -1733,7 +1733,7 @@ VP eye 0.000 m at both; every dropout "rejected after the hit"; no trip in a sta
 - Next after the live: if Y is about 0 and trips are 0, the rebase with org != 0 is the remaining defect (strands for
   those frames instead of cards); if Y is about one step, +208 of the build UBO is not the G-buffer's camera.
 
-## 6b. 6a carded every frame in hf2 (offline 2026-11-10, branch claude/hair-stale-camera: rt_hair_stale_publish fixed, off)
+## 6b. 6a carded every frame in hf2 (offline 2026-11-10, branch claude/hair-stale-camera: rt_hair_stale_publish fixed, off; removed 2026-11-14, 6k)
 
 Live hf2 225504 (rt_hair_stale_publish=1 with rt_hair_mv_card=2, rt_hair_row_stable=1, rt_hair_pixel_lod=1): every
 period line "camera not known 60; drawn as cards 60", every G-buffer by label applied build frame N - 1, still camera
@@ -2206,6 +2206,186 @@ hx1 regenerated (predicted.json first, with the 190905 result): one launch, abou
   that comes back into view shows strands at once.
 - Open: the card fill decision (user; PNG pairs of this run); `rt_hair_coverage_keep` into the bundle if its windows
   hold; styles and LODs without a groom file keep their cards (S8: index counts 3399 and 7086).
+
+## 6j. Final live hx1 194658: the bundle holds; coverage keep and card fill read (2026-11-14, branch claude/hair-final-report: docs only)
+
+Live hx1 194658 (S8, VALID, 25 of 25 phases, 229 s; window occluded in 372 of 372 checks: no frame time judged).
+Per window from the period lines. hp = rt_hair_header_scene_pass, keep = rt_hair_coverage_keep; strand draws = main
+G-buffer hair draws drawn as strands / all; dense shares = accepted / no strand on the ray; decal = scene passes whose
+label the decal pass took; other = by another scene pass (hitch frames) / second passes with their own header.
+
+| window | hp | fill | keep | camera | frames | watchdog trips | strands->cards | cards->strands (card run) | frames all cards | strand draws | still | moving (samples) | decal | other | GPU ms |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| warmup (10 lines), warm-on | 1 | 0 | 0 | still | 60 | 0 | 0 | 0-5 (first swaps) | 0 | 420/420 to 720/720 | 84-89% / 3.0-5.4% | - | 0 | 0 / 0 | 0.13-0.16 |
+| warm-ab (2 lines) | 0 | 1 | 1 | still | 60 | 0 | 0 | 0 | 0 | 720/720 | 85-89% / 5.0-5.1% | - | 19, 41 of 60 | 0 / 0 | 0.14-0.15 |
+| pre-in | 1 | 0 | 0 | dolly in | 60 | 0 | 1 (coverage stale, 244b) | 3 (17) | 0 | 716/769 | 83% / 4.5% | 80% / 4.1% (827) | 0 | 0 / 0 | 0.19 |
+| pre-out (3 lines) | 1 | 0 | 0 | dolly out | 60 | 0 | 0 | 0-3 | 0 | 720/780 to 720/720 | 78-85% / 4.0-5.1% | 83% / 5.0% (1439) | 0 | 0 / 0 | 0.15-0.33 |
+| in-on | 1 | 0 | 0 | dolly in | 180 | 0 | 0 | 3 (10) | 0 of 181 | 2306/2336 | 80% / 4.5% | 79% / 5.6% (1204) | 0 | 0 / 0 | 0.27 |
+| out-on | 1 | 0 | 0 | dolly out | 180 | 0 | 0 | 2 (10) | 0 of 181 | 2183/2203 | 85% / 4.8% | 83% / 4.9% (1301) | 0 | 0 / 0 | 0.16 |
+| orbit-r | 1 | 0 | 0 | orbit | 180 | 0 | 0 | 2 (10-12) | 0 of 181 | 2165/2187 | 84% / 4.5% | 84% / 4.5% (4094) | 0 | 0 / 0 | 0.16 |
+| orbit-l | 1 | 0 | 0 | orbit | 180 | 0 | 0 | 2 (10) | 0 of 181 | 2166/2186 | 82% / 3.4% | 82% / 3.9% (4307) | 0 | 0 / 0 | 0.19 |
+| still-on (PNG) | 1 | 0 | 0 | still | 60 | 0 | 0 | 0 | 0 of 61 | 732/732 | 85% / 4.5% | - | 0 | 0 / 0 | 0.20 |
+| in-shot | 1 | 0 | 0 | dolly in | 120 | 0 | 0 | 3 (10) | 0 of 121 | 1525/1555 | 83% / 4.6% | 81% / 5.0% (1204) | 0 | 0 / 0 | 0.27 |
+| shot-on (PNG) | 1 | 0 | 0 | still, near | 60 | 0 | 1 (coverage stale, 244b) | 0 | 0 of 61 | 736/793 | 80% / 4.8% | - | 0 | 0 / 0 | 0.32 |
+| out-shot | 1 | 0 | 0 | dolly out | 120 | 0 | 0 | 3 (10) | 0 of 121 | 1445/1483 | 87% / 4.2% | 80% / 4.4% (1343) | 0 | 0 / 0 | 0.16 |
+| in-keep | 1 | 0 | 1 | dolly in | 180 | 0 | 0 | 3 (5) | 0 of 181 | 2319/2334 | 81% / 4.6% | 80% / 4.5% (1212) | 0 | 0 / 0 | 0.31 |
+| out-keep | 1 | 0 | 1 | dolly out | 180 | 0 | 0 | 2 (5) | 0 of 181 | 2198/2208 | 85% / 4.7% | 86% / 3.3% (1478) | 0 | 0 / 0 | 0.17 |
+| still-fill (PNG) | 1 | 1 | 0 | still | 60 | 0 | 0 | 0 | 0 of 61 | 732/732 | 90% / 3.6% | - | 0 | 0 / 0 | 0.15 |
+| in-fill | 1 | 1 | 0 | dolly in | 120 | 0 | 0 | 3 (10) | 0 of 121 | 1520/1550 | 83% / 4.8% | 83% / 4.2% (1188) | 0 | 0 / 0 | 0.22 |
+| shot-fill (PNG) | 1 | 1 | 0 | still, near | 60 | 0 | 1 (coverage stale, 244b) | 0 | 0 of 61 | 756/793 | 82% / 6.5% | - | 0 | 0 / 0 | 0.35 |
+| out-fill | 1 | 1 | 0 | dolly out | 120 | 0 | 0 | 3 (10) | 0 of 121 | 1445/1486 | 86% / 4.6% | 84% / 4.5% (1311) | 0 | 0 / 0 | 0.17 |
+| in-base | 0 | 0 | 0 | dolly in | 180 | 7 | 10 (frame watchdog 10) | 12 (29) | 29 of 181 | 1946/2334 | 82% / 4.7% | 59% / 27.4% (1166) | 179 of 216 | 0 / 0 | 0.27 |
+| out-base | 0 | 0 | 0 | dolly out | 180 | 1 | 17 (frame watchdog 12, coverage low 3, other 2) | 16 (23) | 23 of 181 | 1908/2208 | 87% / 4.3% | 70% / 14.4% (1170) | 129 of 184 | 0 / 0 | 0.17 |
+
+Gates (a fail needs more than the spread of the still key-on lines: accepted 78-90%, no strand 3.0-6.5%):
+- Header: all 32 key-on period lines read "at the decal pass 0", "label taken by the decal pass 0", "by
+  another scene pass 0". PASS. Control: 179 and 129 labels taken, all 8 watchdog lines of the run (G-buffer frames
+  4974-4980 and 5157, each "applied the publish of build frame N - 1"), 13 and 2 dropouts, 58 and 37 own-bound fails.
+- Bundle alone, the 6 moving windows (in-on, out-on, orbit-r, orbit-l, in-shot, out-shot): 0 strands->cards of any
+  cause, 0 frame watchdog trips, 0 frames with every draw on cards, own-bound fails 0, strand draws 97.4-99.1%. PASS.
+  The draws left on cards are heads that enter the view: 2-3 per window, 10 frames each (8 "coverage stale" + 2 "card
+  depth not dropped"; in-on: 30 = 2336 - 2306). No head in view lost its strands in a moving frame.
+- Dense samples, moving against still: 79-84% / 3.9-5.6% against 80-87% / 3.4-4.8%. Largest gap +1.1 points of "no
+  strand" (in-on), inside the still spread. PASS. Control: 59% / 27.4% and 70% / 14.4%.
+- rt_hair_coverage_keep (in-keep, out-keep): 0 strands->cards of any cause, 0 trips, own-bound fails 0. PASS. "coverage
+  stale" refusals 0 (16-35 in every other moving window); a head that enters the view draws cards for 5 frames, not 10.
+- Hitch frames: none in the run ("by another scene pass" 0 and "second scene passes with their own header and tag" 0
+  in all 36 lines). The per-recording header of 6i was not exercised in game; its proof stays the CTest.
+- Cost: strand G-buffer draws 0.13-0.20 ms zoomed out, 0.27-0.35 ms in the windows that hold the near view. Keep: 0.31
+  and 0.17 ms against 0.27 and 0.16 (in-on, out-on). Fill: 0.15 and 0.35 ms against 0.20 and 0.32 (6-13 timed frames
+  each). No difference outside the spread: neither key has a measurable GPU cost here.
+
+Not as predicted:
+- The 3 "coverage stale" switches (pre-in, shot-on, shot-fill) are key 244b at 0-1 card pixels: the head leaves the
+  screen in the dolly in and goes stale 28 frames later, which falls into the still window after a 120-frame dolly
+  (predicted 0 in still windows). Unseen. In in-on 244b stayed in view (605 pixels): no switch.
+- Keep: cards->strands 3 and 2 (predicted 0 or 1). The verdict is kept, but an entering head still waits 3 frames at the
+  "strike" gate and 2 at "card depth not dropped". The 0 switches of in-keep and out-keep do not separate the key from
+  the bundle (in-on and out-on also read 0; 244b stayed in view there); the stale refusals and the card runs do.
+- "dropouts" with the key on (pre-in 24, pre-out 4, orbit-r 1) are all "no card marker" at 0 / 0 pixels (244b, 9775):
+  draws without a card pixel, counted, not a loss.
+
+Card fill (rt_hair_card_fill), the pairs in `docs/hair_fill/` (final image i11704 at 2560, levels / 0.70 in both;
+G-buffer albedo; crops 3x nearest; |difference| x4). The cameras match (near view: identical; still: within 0-2 px).
+- What it changes: the card-marked pixels without an accepted strand draw the card instead of what is behind. Counted
+  frames: zoomed out 151 of 2915 card pixels without the fill and 161 of 2857 with it (5.2-5.6%, about 13 pixels a
+  head); near view 883 of 19597 and 1005 of 19935 (4.5-5.0%). In the G-buffer albedo they are single dark or skin
+  pixels scattered between the strands and along the outline, not a band at the tips or the parting.
+- G-buffer albedo, pixels darker than 0.6 of the hair median in a disc inside the hair: wizard crown 2.1% -> 1.7%,
+  front head 6.1% -> 5.8%, elf 5.4% -> 3.6%. Final image, mean RGB of the same discs: 119/115/111 -> 119/115/112,
+  106/102/102 -> 105/102/102, 76/75/78 -> 75/74/77: no change after lighting and RR.
+- No seam and no colour step between card and strand pixels in any crop, still or a second after the dolly. The
+  differences in the pairs are the idle animation (the halo, the black-haired woman turning, the angel's pose).
+- Recommendation: keep it an Advanced option, not in the bundle. No visible gain in this scene; the loss it was built
+  for is gone with the header fix (0 dropouts, 0 trips without it); it turns the frame watchdog into a report and holds
+  a failing key for 28 measurements instead of 2; it needs a restart. The user decides with the pairs.
+
+Recommendations:
+1. `rt_hair_coverage_keep` into the On bundle: 0 switches, 0 trips, own-bound fails 0, stale refusals 16-35 -> 0, entry
+   card runs 10 -> 5 frames, CPU only. Open: no kept verdict failed in the run (that path is proven only by the CTest).
+2. Card fill: Advanced option (above).
+3. Removable now (all off in this run, and the bundle held): `rt_hair_stale_publish` (its check read "camera moved
+   since the publish 0" in all 36 lines, also in the control: low risk); `rt_hair_row_stable`, `rt_hair_watchdog_draw`,
+   `rt_hair_watchdog_one_key`, `rt_hair_swap_latch`, `rt_hair_coverage_min_pixels` with their Advanced knobs (low risk:
+   answers to symptoms of the decal header; latched keys 0, per-draw trips 0). The key-off path of
+   `rt_hair_header_scene_pass` and its knob: medium risk, it is the only A/B of the fix; remove it after a release has
+   run with the bundle. Keep the frame watchdog and the header pass, coverage and dense sample lines (they detect a
+   regression or a hitch frame); `rt_hair_dense_sample` stays a diagnostic key, off.
+4. Left for "100%": styles without a groom file keep their cards (S8: 2 draws a frame, index counts 3399 and 7086; run
+   tools.hair_groom.batch for them); hitch frames unproven in game (0 seen in 190905 and 194658); the 5 card frames of
+   an entering head with keep (strike 3 + card depth 2).
+
+User check: S8 (Water Queens House), RTX Hair On alone. Zoom in and out fast with the wheel and orbit: every head in
+view keeps its strands; a head that enters the view shows cards for about 10 frames (5 with Advanced "Strand hair: keep
+the last coverage verdict" On). Card fill: `docs/hair_fill/shot_heads_final_a.png`, `_b.png`, `still_heads_final.png`.
+
+## 6k. Coverage keep adopted, the entering head, six keys removed, hitch frame line (offline 2026-11-14, branch claude/hair-cleanup; READY_FOR_LIVE)
+
+No live. Evidence is hx1 194658 (6j). No shader, no ABI, `shaders/variants.txt` delta 0 (135 requests), GPU cost 0.
+
+1. Bundle. RTX Hair On writes `rt_hair_coverage_keep=1` (26 keys; `common/settings.h`). A file with the older bundle gets
+   the key on load (`complete_marked_choices`), a key the file sets keeps its value. The Advanced knob "Strand hair: keep
+   the last coverage verdict" stays as its A/B. Evidence (in-keep, out-keep against in-on, out-on): "coverage stale"
+   refusals 16-35 -> 0, card run of a head entering the view 10 -> 5 frames, 0 switches of any cause, strand G-buffer
+   draws 0.31 / 0.17 ms against 0.27 / 0.16 (inside the spread). Open as in 6j: no kept verdict failed in a run; that
+   path (cards on the second bad measurement) is proven by the CTest only.
+
+2. The entering head: 5 card frames -> 3 (4 when the arriving frame's header does not hold the groom yet).
+   What the 5 frames were, in the order prepass, publish, G-buffer of a frame (the game records a frame's prepass
+   before the build that publishes it):
+   - 2 "strike" frames without the groom in any publish. The draw is seen, its groom is built a frame later. No
+     strands exist to trace. Not removable by a gate.
+   - 1 "strike" frame with the groom in one publish only. `SwapGate::groom_stable` needs two (the frame may still
+     read the publish before at submit). Kept: it is what makes a strand frame safe.
+   - 2 "card depth not dropped" frames: the handshake. The G-buffer passes every gate, marks the key ready, and the
+     prepass that drops the card depth reads the mark only after the next publish moved it (`ready_prev`). The next
+     prepass is recorded before that publish, so it waits a second frame.
+   Removed, with `rt_hair_coverage_keep` on (`SwapGate::early`, set from the same key: key off is the old path):
+   - a ready mark made since the last publish counts at once (`ready_now`): the second handshake frame goes;
+   - the G-buffer whose only refusals are the strike of a groom in its first publish (`SwapGate::arriving`) and the
+     card depth makes the mark too: the next prepass drops the depth, that frame's publish makes the groom stable, and
+     its G-buffer draws strands. The first handshake frame goes. The G-buffer still checks `groom_stable`, the header
+     and the coverage verdict itself; nothing is drawn as strands earlier than its gates allow.
+   Safe because a prepass that went first for a G-buffer that then refuses is the case the native-depth fallback
+   already answers (`DepthLatch::needs_card_depth`; only keys with a fallback pipeline may drop, `g_depth_safe_keys`).
+   A key without a kept verdict ("coverage none", the first swap, after a level load) is refused before the strike
+   and takes the old path.
+   CTest `hair_groom_asset_test` `test_entering_head`: card frames from the groom's first publish 3 -> 1 (2 when the
+   arriving frame's header lacked the key); a groom that leaves after its first publish gives no strand frame and its
+   early prepass meets the fallback; the mark lasts one publish; key off is unchanged.
+   Not exercised in game. Predicted for the next live: card runs of 3 or 4 frames (5 would mean the change had no effect).
+
+3. Removed keys and code (all off in 194658; answers to symptoms of the decal pass taking the header's label, 6h):
+   - `rt_hair_stale_publish` (6a, 6b): the submit-time camera check, its UBO binding lookup at main-view hair draws,
+     the pending header's camera fields, the "stale publish check" period line and the "stale publish" lines.
+   - `rt_hair_row_stable` (5w): `GroomRows`; a groom's row is its position among the live grooms, as with the key off.
+   - `rt_hair_watchdog_draw` (5i item 11): `DrawWatchdog`, its per-key card hold and its report fields.
+   - `rt_hair_watchdog_one_key` (5i): the one-key sparing of the frame watchdog.
+   - `rt_hair_swap_latch` (5t): the coverage latch, `Why::Latched`, `Refusal::CoverLatched`.
+   - `rt_hair_coverage_min_pixels` (5u audit): the gate's evidence floor.
+   Five Advanced knobs and six ini keys go (the stale publish key had no knob). 394 lines of layer and header code net
+   (48 added, 442 removed), 223 of tests. An old user file holding the keys loads: they are carried in the map and
+   read by nothing (`settings_test`: same merged state, no default, no knob, no choice writes them).
+   Log text changed (jobs that match it are regenerated or historical):
+   - switches line: the cause list is "frame watchdog, coverage low, coverage high, coverage stale/none/invalidated,
+     header not applied (camera gate, order), live toggle, other" (no "key watchdog", no "coverage latched"); no "key
+     watchdog trips", no "latched keys".
+   - header safety line: no "per-draw watchdog trips (deciding: ...)", no "frame watchdog spared to one key".
+   Kept: `rt_hair_header_scene_pass` and `rt_hair_header_cam_gpu` with their knobs (the A/B of the fix; remove the
+   key-off paths after a release has run with the bundle), `rt_hair_card_fill` as an Advanced option outside the bundle
+   (6j: no visible gain, 4.5-5.6% of card pixels, restart), `rt_hair_dense_sample` as a diagnostic (pinned 0 in release),
+   the frame watchdog and every other period line.
+   Behaviour with the bundle on: unchanged by the removal (every removed branch was behind a key that read 0); the
+   only decision change of 6k is item 2.
+
+4. Hitch frames (two scene G-buffer pass recordings in one present interval) were never seen live (0 in 190905 and
+   194658). The header pass counters need detailed logging. Now the first one of a session writes one `log()` line,
+   also with `detailed_logging=0`: "[hair primary] hitch frame: a second scene G-buffer pass was recorded under frame
+   label N (...), the first of this session: it applied its own strand header and tag (rt_hair_header_scene_pass 1)".
+   Cost: two sums per G-buffer pass. A user's log with that line and no card flash is the live proof of 6i.
+
+5. Jobs. hx1 regenerated (predicted.json first): 16 phases, about 98 s, the bundle exactly as the launcher writes it
+   (no card fill, no dense sampler: both are pipeline variants that do not ship).
+   - Bundle (in-on, out-on, orbit-r, orbit-l, in-on2, out-on2; 180 frames each): header at the scene pass only, label
+     taken by the decal pass 0, by another scene pass 0; 0 strands->cards of any cause; 0 frames with every draw on
+     cards; frame watchdog trips 0; rebase origin 0. Counts of real faults: 0, no tolerance.
+   - A/B inside the run (in-nokeep, out-nokeep): `rt_hair_coverage_keep=0`. Same gates, "coverage stale" open.
+   - Reported: card runs (3 or 4 predicted; 10 with keep off), first refusing gates, dropouts, GPU ms, a hitch frame.
+   - Dropped: the fill windows and PNG pairs (decided), the dense sampler and the control without the scene pass
+     header (shown in 190905 and 194658).
+   - The job expects the seven-cause switches line, so a run on a layer with the removed keys is INVALID.
+   hc1, hk1 (hair_cam), hl1 (hair_late) and hf2 (hair_final) are marked historical in their generators; pl1
+   (hair_pixel_lod) is marked not current (it sets `rt_hair_row_stable` and predates the bundle). They still lint: the
+   six keys stay known to `pipeline_readiness` in one marked group.
+   Lint live and frozen 0 failing; snapshot appended only (3 readiness queries, 1 pattern); merge_scope tooling 0.
+
+User check after a go: S8 (Water Queens House), RTX Hair On alone. Zoom in and out fast with the wheel and orbit: every
+head in view keeps its strands; a head that enters the view shows cards for about 3 frames (10 with Advanced "Strand
+hair: keep the last coverage verdict" Off).
+
+Left: styles without a groom file keep their cards (S8: index counts 3399 and 7086); the key-off path of
+`rt_hair_header_scene_pass`; the 3 card frames of an entering head (2 of them are the groom's build latency: a groom
+kept built for a few frames after its draw leaves the view would remove them, at a memory and refit cost not measured).
 
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings

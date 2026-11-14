@@ -289,7 +289,17 @@ struct SwapGate {
   }
   bool groom_stable(uint64_t key) const { return published.count(key) && published_prev.count(key) && !retired(key); }
   bool allow_gbuffer(uint64_t key) const { return groom_stable(key); }
+  // 6k (docs/RTX_HAIR_PRIMARY.md, set with rt_hair_coverage_keep): the handshake of a head that enters the view with a
+  // kept verdict. hx1 194658: 5 card frames, 3 "strike" (2 without its groom in the publish, 1 with it in one publish
+  // only) and 2 "card depth not dropped" (the G-buffer marks the key ready, the next prepass is recorded before the
+  // publish that moves the mark to ready_prev, so it waits one frame more). With `early` a mark made since the last
+  // publish counts at once, and the G-buffer of the frame the groom is in its first publish makes it too (arriving:
+  // the next publish makes the groom stable, and that frame's G-buffer still checks it). A prepass that went first for
+  // a G-buffer that then refuses is the case the native-depth fallback already answers (DepthLatch::needs_card_depth).
+  bool early = false;
+  bool arriving(uint64_t key) const { return published.count(key) && !published_prev.count(key) && !retired(key); }
   bool allow_prepass(uint64_t key) const {
+    if (early && ready_now.count(key) && published.count(key) && !retired(key)) return true;
     return groom_stable(key) && (gbuffer_prev.count(key) || ready_prev.count(key));
   }
   bool allow_velocity(uint64_t key) const { return groom_stable(key) && gbuffer_prev.count(key); }
@@ -432,14 +442,6 @@ struct CoverageGate {
   // widened by that measurement's own count noise (the bound's formula at the live footprint) and at most kHoldFrames
   // old; it returns to cards on an outside measurement, an invalidation, or when the measurement gets older.
   bool hold = false;
-  // rt_hair_coverage_min_pixels (off; 5u audit): a measurement with fewer than kMinEvidenceCard card pixels is no
-  // evidence (it replaces nothing), as a measurement without card pixels under the hold. hs1 095322 key 5364: 1..55 card
-  // pixels, union ratio 1.056..6.000, switches by "coverage stale" every ~30 frames. Below 64 pixels the count noise of
-  // one measurement exceeds any margin (cover_sigma(64, 64) = 0.25), the watchdogs and the dropout counter already ignore
-  // such draws (kDropoutMinCard). Such hair keeps whatever its last real evidence allowed until that ages out, then cards,
-  // steady until it is drawn at 64 pixels or more again.
-  bool min_pixels = false;
-  static constexpr uint64_t kMinEvidenceCard = 64;   // == kDropoutMinCard (static_assert there)
   // rt_hair_coverage_footprint (off): every measurement, also a new swap's, is judged by the same bound at its own
   // footprint: [kCoverRatioMin - sigma, kCoverRatioMax + sigma], sigma = cover_sigma(S, C) of that measurement. At the
   // offline footprint (9397 card samples) that is kCoverMin/kCoverMax; small draws (100-1800 pixels, 2026-11-07:
@@ -447,19 +449,9 @@ struct CoverageGate {
   // pixels, 0.31 of 50).
   bool footprint = false;
   std::unordered_map<uint64_t, uint64_t> swapping;
-  // rt_hair_swap_latch (off; docs/RTX_HAIR_PRIMARY.md 5t): a key whose own strands failed its bound (a measurement of a
-  // frame it was swapped in, outside the bounds a swapping key is judged by) stays on cards until its footprint
-  // changes materially, instead of being retried on the next passing probe measurement (strands, verdict, cards,
-  // probe, strands: a periodic flicker). The key is still measured every frame by the masked probe (never displayed).
-  // Reference footprint: the card pixels of its first card-frame measurement after the failure (same kind of
-  // measurement as the ones compared with it); 0 while that is pending. Material: the two counts differ by more than
-  // their summed count noise sqrt(C) + sqrt(C0) (per-count variance <= mean, the model of cover_sigma).
-  bool latch = false;
-  std::unordered_map<uint64_t, uint64_t> latched;
-  uint64_t latches = 0, releases = 0;
   // rt_hair_coverage_confirm (off; docs/RTX_HAIR_PRIMARY.md 5u): a held swapping key goes to cards only after
   // kCoverConfirm measurements in a row outside the swapping-key bounds (the hold's bound at each measurement's own
-  // footprint), not on one. Same rule and reason as kWatchdogDrawBad: a G-buffer frame applies one header, so a fault of
+  // footprint), not on one. A G-buffer frame applies one header, so a fault of
   // one publish (hs1 085153: be12's slot exchange, `[2 rows: 0+0]` on single frames) makes one bad measurement; by the time
   // it is read (5-6 frames later) that frame's hole is already shown and the card frame it causes is a second artefact.
   // Count noise at the bound fails two measurements in a row at p^2 instead of p. A real loss still fails on the second.
@@ -470,7 +462,7 @@ struct CoverageGate {
   // stale evidence. Both then showed their cards for the 8-10 frames a new probe measurement takes when they came back
   // into view (hx1 190905: a "coverage stale" strands->cards switch in 3 of 7 moving windows with the scene pass
   // header, key 22a2 at the screen edge; 2-3 cards->strands switches per dolly, card runs of 10 frames). With the key
-  // the last measurement stays the verdict until a newer one, an invalidation, a latch or a watchdog replaces it: a key
+  // the last measurement stays the verdict until a newer one, an invalidation or a watchdog replaces it: a key
   // that passed keeps its strands, a key that failed keeps its cards and its probe. The first swap of a key still
   // needs a measurement (None), and so does every key after a level load (clear()).
   bool keep = false;
@@ -483,10 +475,6 @@ struct CoverageGate {
     return double(strand) < (std::min)(kCoverMin, kCoverRatioMin - s) * c ||
            double(inside) > (std::max)(kCoverMax, kCoverRatioMax + s) * c;
   }
-  static bool footprint_changed(uint64_t card, uint64_t reference) {
-    const double d = card > reference ? double(card - reference) : double(reference - card);
-    return d > std::sqrt(double(card)) + std::sqrt(double(reference));
-  }
   void swapped(uint64_t key, uint64_t frame) { if (key && frame > swapping[key]) swapping[key] = frame; }
   bool is_swapping(uint64_t key, uint64_t now) const {
     const auto it = swapping.find(key);
@@ -495,13 +483,10 @@ struct CoverageGate {
   void invalidate(uint64_t key, uint64_t frame) {
     if (key && frame > incomplete[key]) incomplete[key] = frame;
   }
-  // was_swapped: the measured G-buffer frame drew this key as strands (its own markers, not the probe's). inside: the
-  // strand pixels inside the card markers when `strand` is the union count (5u); omitted: the same count.
-  void observe(uint64_t key, uint64_t frame, uint64_t card, uint64_t strand, bool was_swapped = false,
-               uint64_t inside = UINT64_MAX) {
+  // inside: the strand pixels inside the card markers when `strand` is the union count (5u); omitted: the same count.
+  void observe(uint64_t key, uint64_t frame, uint64_t card, uint64_t strand, uint64_t inside = UINT64_MAX) {
     if (!key) return;
     if (hold && !card) return;
-    if (min_pixels && card < kMinEvidenceCard) return;
     if (inside == UINT64_MAX) inside = strand;
     auto& e = latest[key];
     const bool newest = frame >= e.frame;
@@ -510,27 +495,12 @@ struct CoverageGate {
       uint32_t& b = bad_run[key];
       b = outside_swapping(card, strand, inside) ? b + 1 : 0;
     }
-    if (!latch || !card) return;
-    if (was_swapped) {
-      const double s = hold || footprint ? cover_sigma(strand, card) : 0.0;
-      const double r = double(strand) / double(card), r_in = double(inside) / double(card);
-      if (r < (std::min)(kCoverMin, kCoverRatioMin - s) || r_in > (std::max)(kCoverMax, kCoverRatioMax + s)) {
-        if (!latched.count(key)) ++latches;
-        latched[key] = 0;
-      }
-      return;
-    }
-    const auto l = latched.find(key);
-    if (l == latched.end()) return;
-    if (!l->second) l->second = card;
-    else if (footprint_changed(card, l->second)) { latched.erase(l); ++releases; }
   }
   // Why allow() refuses (the swap-refusal tally of the period line); Ok when it allows.
-  enum class Why : uint8_t { Ok, None, Invalidated, Stale, Low, High, Latched };
+  enum class Why : uint8_t { Ok, None, Invalidated, Stale, Low, High };
   Why why(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax, bool use_hold = true) const {
     const auto it = latest.find(key);
     if (it == latest.end()) return Why::None;
-    if (latch && latched.count(key)) return Why::Latched;
     const auto& e = it->second;
     const auto bad = incomplete.find(key);
     if (bad != incomplete.end() && e.frame <= bad->second) return Why::Invalidated;
@@ -552,31 +522,31 @@ struct CoverageGate {
   bool allow(uint64_t key, uint64_t now, double bound = kCoverMin, double upper = kCoverMax) const {
     return why(key, now, bound, upper) == Why::Ok;
   }
-  void clear() { latest.clear(); incomplete.clear(); swapping.clear(); latched.clear(); bad_run.clear(); }
+  void clear() { latest.clear(); incomplete.clear(); swapping.clear(); bad_run.clear(); }
 };
 
 // Main-view hair draws that kept their cards, by the first gate that refused them (layer/hair_primary.cpp
 // hair_primary_swap), per pass (0 G-buffer, 1 velocity, 2 prepass). Printed in the 300-frame period line.
 enum class Refusal : uint8_t {
   Publish, Quiet, CoverNone, CoverInvalidated, CoverStale, CoverLow, CoverHigh, Strike, Order, NoSlot, Passes,
-  Applied, PrepassDrop, NotDropped, NoStrand, Watchdog, CoverLatched, Count
+  Applied, PrepassDrop, NotDropped, NoStrand, Watchdog, Count
 };
 inline const char* refusal_name(Refusal r) {
   static const char* const names[] = {"publish", "load quiet", "coverage none", "coverage invalidated", "coverage stale",
                                       "coverage low", "coverage high", "strike", "order 0", "no slot", "passes mask",
                                       "not applied/live", "prepass drop", "card depth not dropped", "no strand variant",
-                                      "watchdog", "coverage latched"};
+                                      "watchdog"};
   static_assert(sizeof names / sizeof names[0] == size_t(Refusal::Count), "one name per refusal");
   return r < Refusal::Count ? names[size_t(r)] : "?";
 }
 inline Refusal coverage_refusal(CoverageGate::Why w) {
   return w == CoverageGate::Why::None ? Refusal::CoverNone : w == CoverageGate::Why::Invalidated ? Refusal::CoverInvalidated
        : w == CoverageGate::Why::Stale ? Refusal::CoverStale : w == CoverageGate::Why::Low ? Refusal::CoverLow
-       : w == CoverageGate::Why::Latched ? Refusal::CoverLatched : Refusal::CoverHigh;
+       : Refusal::CoverHigh;
 }
 // 6g rt_hair_card_fill (docs/RTX_HAIR_PRIMARY.md 6g): with the per-pixel card fill a frame that lost strands already
 // shows the game's card on every card pixel without one, so the two gates that answer a lost frame with a whole-head
-// switch are not needed for it. The frame and key watchdogs only report. A swapping key returns to cards on a
+// switch are not needed for it. The frame watchdog only reports. A swapping key returns to cards on a
 // sustained loss only: kFillConfirm low measurements in a row, the span the watchdog itself would have kept the cards
 // (kWatchdogFrames): a loss shorter than the card period it used to cause never switches the head. Every other gate
 // (publish, load quiet, no or stale evidence, coverage high, strikes, order) is unchanged.
@@ -612,24 +582,21 @@ struct RefusalTally {
 // (hair_primary_swap's Refusal). Run lengths (frames a key stayed on strands or on cards between two switches) show
 // the oscillation's phases: a frame watchdog cycle is card runs of about kWatchdogFrames and strand runs of the
 // verdict latency.
-enum class SwitchCause : uint8_t { FrameWatchdog, KeyWatchdog, CoverLow, CoverHigh, CoverStale, Latched, NotApplied, Live,
-                                   Other, Count };
+enum class SwitchCause : uint8_t { FrameWatchdog, CoverLow, CoverHigh, CoverStale, NotApplied, Live, Other, Count };
 constexpr uint64_t kSwitchGap = 2;
 inline const char* switch_cause_name(SwitchCause c) {
-  static const char* const names[] = {"frame watchdog", "key watchdog", "coverage low", "coverage high",
-                                      "coverage stale/none/invalidated", "coverage latched",
+  static const char* const names[] = {"frame watchdog", "coverage low", "coverage high",
+                                      "coverage stale/none/invalidated",
                                       "header not applied (camera gate, order)", "live toggle", "other"};
   static_assert(sizeof names / sizeof names[0] == size_t(SwitchCause::Count), "one name per cause");
   return c < SwitchCause::Count ? names[size_t(c)] : "?";
 }
-// key_watchdog: the watchdog refusal was this key's own (rt_hair_watchdog_draw or rt_hair_watchdog_one_key).
-inline SwitchCause switch_cause(Refusal r, bool key_watchdog) {
+inline SwitchCause switch_cause(Refusal r) {
   switch (r) {
-    case Refusal::Watchdog: return key_watchdog ? SwitchCause::KeyWatchdog : SwitchCause::FrameWatchdog;
+    case Refusal::Watchdog: return SwitchCause::FrameWatchdog;
     case Refusal::CoverLow: return SwitchCause::CoverLow;
     case Refusal::CoverHigh: return SwitchCause::CoverHigh;
     case Refusal::CoverNone: case Refusal::CoverInvalidated: case Refusal::CoverStale: return SwitchCause::CoverStale;
-    case Refusal::CoverLatched: return SwitchCause::Latched;
     case Refusal::Applied: return SwitchCause::NotApplied;
     default: return SwitchCause::Other;
   }
@@ -652,7 +619,7 @@ struct SwapTransitions {
   std::vector<uint32_t> runs[2];   // completed run lengths of the period: [0] card runs, [1] strand runs
   // Frame watchdog trips of the period: draws under / above their own bound in the tripped frames, frames whose strands
   // wrote under a tenth of the card pixels, and the last trip.
-  uint64_t wd_trips = 0, wd_key_trips = 0, wd_bad = 0, wd_good = 0, wd_lost = 0, wd_frame = 0, wd_s = 0, wd_c = 0;
+  uint64_t wd_trips = 0, wd_bad = 0, wd_good = 0, wd_lost = 0, wd_frame = 0, wd_s = 0, wd_c = 0;
   double wd_bound = 0.0;
   void close_frame() {
     if (f_strands + f_cards) { ++frames; all_cards += !f_strands; }
@@ -719,7 +686,7 @@ struct SwapTransitions {
     return n;
   }
   // The period line's text after "[hair primary] switches (last N frames):".
-  template <size_t N> void format(char (&out)[N], uint64_t latched_now = 0) const {
+  template <size_t N> void format(char (&out)[N]) const {
     size_t at = 0;
     out[0] = 0;
     auto put = [&](const char* fmt, auto... a) {
@@ -734,13 +701,13 @@ struct SwapTransitions {
     run_stats(runs[1], sr); run_stats(runs[0], cr);
     put("), %llu cards->strands; %llu frames with hair draws, %llu with every draw on cards; strand runs %zu: "
         "%u/%u/%u frames (min/median/max), card runs %zu: %u/%u/%u; frame watchdog trips %llu (their draws under own "
-        "bound %llu, above %llu; frames under a tenth of the card pixels %llu; last: frame %llu, %llu/%llu, bound %.4f), "
-        "key watchdog trips %llu; latched keys %llu; worst keys (prefix: switches, ratio as strands min..max (frames), "
+        "bound %llu, above %llu; frames under a tenth of the card pixels %llu; last: frame %llu, %llu/%llu, bound %.4f); "
+        "worst keys (prefix: switches, ratio as strands min..max (frames), "
         "as cards min..max (frames), card pixels min..max):",
         (unsigned long long)to_strands, (unsigned long long)frames, (unsigned long long)all_cards, runs[1].size(), sr[0],
         sr[1], sr[2], runs[0].size(), cr[0], cr[1], cr[2], (unsigned long long)wd_trips, (unsigned long long)wd_bad,
         (unsigned long long)wd_good, (unsigned long long)wd_lost, (unsigned long long)wd_frame, (unsigned long long)wd_s,
-        (unsigned long long)wd_c, wd_bound, (unsigned long long)wd_key_trips, (unsigned long long)latched_now);
+        (unsigned long long)wd_c, wd_bound);
     const auto count = [](const Entry* e) { return e->second.to_cards + e->second.to_strands; };
     const Entry* worst[3] = {};
     for (const Entry& kv : keys) {
@@ -764,7 +731,7 @@ struct SwapTransitions {
     for (uint64_t& c : to_cards) c = 0;
     to_strands = frames = all_cards = 0;
     runs[0].clear(); runs[1].clear();
-    wd_trips = wd_key_trips = wd_bad = wd_good = wd_lost = 0;
+    wd_trips = wd_bad = wd_good = wd_lost = 0;
     for (auto it = keys.begin(); it != keys.end();) {
       Key& k = it->second;
       if (k.last + 600 < frame) { it = keys.erase(it); continue; }
@@ -955,7 +922,6 @@ enum class CurrentPick : uint8_t { Current, NotRecorded, AfterGbuffer, Incompati
 // entries sealed with the counted tag, and those with a strand. The first check that can explain it.
 enum class Dropout : uint8_t { None, NoMarker, NoTrace, Missed, Rejected, Unattributed, Count };
 constexpr uint32_t kDropoutMinCard = 64;   // fewer card pixels: too little evidence (a few pixels at the screen edge)
-static_assert(CoverageGate::kMinEvidenceCard == kDropoutMinCard, "one evidence floor for the gate and the watchdogs");
 inline const char* dropout_name(Dropout d) {
   static const char* const names[] = {"none", "no card marker (header tag)", "no trace (camera rebase)",
                                       "rays missed (groom TLAS)", "rejected after the hit (owner, card band, tips)",
@@ -1170,42 +1136,6 @@ inline uint32_t shared_key_complete(uint64_t* row_keys, uint32_t rows, const uin
   }
   return cleared;
 }
-// rt_hair_row_stable (docs/RTX_HAIR_PRIMARY.md 5w, live hl1 164930): a groom's row (its groom TLAS instance index, header
-// row and InstInfo row) used to be its position in the build's dynamic draw list: sorted by key only while the camera
-// is still and holds are on, otherwise the game's capture draw order, which changes from frame to frame (11 of 11 keyed
-// rows held another key in the first frame of a camera move, the strands of every key rejected). With the key a groom
-// (its dynamic slot key) keeps its row while it is live; a row whose groom left is given to another groom only `lag`
-// build frames later, when no frame in flight can still read a header or TLAS that holds the old groom there (the scene
-// ring: one groom TLAS per scene slot). Rows between live ones stay empty (an inactive instance, key 0).
-struct GroomRows {
-  uint64_t key[kMaxGrooms] = {};    // the groom holding the row (0: never used)
-  uint64_t last[kMaxGrooms] = {};   // the last build frame it was live in the row
-  uint32_t early = 0;               // rows reused before the lag (every row taken: more than kMaxGrooms grooms in `lag` frames)
-  // live: this build's groom keys in any order (count <= kMaxGrooms); rows_out[i]: the row of live[i]. now: the build
-  // frame, increasing and never 0. Returns the row count (the highest live row + 1).
-  uint32_t assign(const uint64_t* live, uint32_t count, uint64_t now, uint64_t lag, uint32_t* rows_out) {
-    uint32_t rows = 0;
-    for (uint32_t i = 0; i < count; ++i) rows_out[i] = kMaxGrooms;
-    for (uint32_t i = 0; i < count; ++i)   // the grooms that keep their row first: a newcomer never takes it
-      for (uint32_t r = 0; r < kMaxGrooms; ++r)
-        if (key[r] == live[i] && last[r] && last[r] != now) { last[r] = now; rows_out[i] = r; break; }
-    for (uint32_t i = 0; i < count; ++i) {
-      if (rows_out[i] == kMaxGrooms) {
-        uint32_t pick = kMaxGrooms, oldest = kMaxGrooms;
-        for (uint32_t r = 0; r < kMaxGrooms && pick == kMaxGrooms; ++r) {
-          if (last[r] == now) continue;
-          if (!last[r] || last[r] + lag < now) pick = r;
-          else if (oldest == kMaxGrooms || last[r] < last[oldest]) oldest = r;
-        }
-        if (pick == kMaxGrooms) { pick = oldest; if (pick < kMaxGrooms) ++early; }
-        if (pick == kMaxGrooms) continue;   // more grooms than rows (the caller caps the count)
-        key[pick] = live[i]; last[pick] = now; rows_out[i] = pick;
-      }
-      rows = rows_out[i] + 1 > rows ? rows_out[i] + 1 : rows;
-    }
-    return rows;
-  }
-};
 // Round 3 M1: the row's previous points are valid only when they are the previous build frame's (the velocity variant
 // pairs them with the previous publish's camera): a slot that skipped updates (held, soup refused, crowd cards) returns
 // with points from an older frame. last_update: the build frame of the slot's last update before this one.
@@ -1315,27 +1245,20 @@ inline SubmitDecision submit_decision(const Staged* staged, const bool* submitte
 // draw without pixels next to measured ones may simply have left the view). Tripped: no swap for kWatchdogFrames
 // G-buffer frames (the readback ring plus freshness: decisions taken before this evidence arrived).
 constexpr uint64_t kWatchdogFrames = kHoldFrames;
-// rt_hair_watchdog_one_key (off; 5i 2026-11-09): a frame whose only draw under its own bound is one key, next to at
-// least one swapped draw above its own bound, does not trip the frame: that key alone keeps its cards for
-// kWatchdogFrames (key_active), every other draw keeps its strands. hc1 2026-11-09: one shared-key draw with 0 strand
-// pixels put every hair of the frame on cards twice a second.
 struct Watchdog {
   uint64_t until = 0, trips = 0, card = 0, accepted = 0, unmarked = 0;
   double max_sigma = 0.0;
-  bool one_key = false;   // rt_hair_watchdog_one_key
-  uint32_t good = 0, bad = 0;
-  uint64_t bad_key = 0, spared = 0;
-  std::unordered_map<uint64_t, uint64_t> key_until;
-  void begin() { card = accepted = unmarked = 0; max_sigma = 0.0; good = bad = 0; bad_key = 0; }
+  uint32_t good = 0, bad = 0;   // the judged frame's draws above / under their own bound (reported with a trip)
+  void begin() { card = accepted = unmarked = 0; max_sigma = 0.0; good = bad = 0; }
   // One swapped draw of the judged frame: its card and strand pixels (card 0 with last_card: no marker at all).
-  void draw(uint32_t c, uint32_t s, uint32_t last_card, uint64_t key = 0) {
+  void draw(uint32_t c, uint32_t s, uint32_t last_card) {
     if (c) max_sigma = (std::max)(max_sigma, cover_sigma(s, c));
     card += c;
     accepted += s;
     if (!c && last_card >= kDropoutMinCard) unmarked += last_card;
-    if (c >= kDropoutMinCard) {   // the draw against its own bound (the per-draw watchdog's term)
+    if (c >= kDropoutMinCard) {   // the draw against its own bound
       if (double(s) >= (std::min)(kCoverMin, kCoverRatioMin - cover_sigma(s, c)) * double(c)) ++good;
-      else { ++bad; bad_key = key; }   // one call per draw slot: each key once per judged frame
+      else ++bad;
     }
   }
   double bound() const { return (std::min)(kCoverMin, kCoverRatioMin - max_sigma); }
@@ -1343,73 +1266,11 @@ struct Watchdog {
   bool judge(uint64_t now) {
     if (!card) card = unmarked;
     if (card < kDropoutMinCard || double(accepted) >= bound() * double(card)) return false;
-    if (one_key && bad == 1 && good >= 1 && bad_key) {
-      for (auto it = key_until.begin(); it != key_until.end();) it = it->second <= now ? key_until.erase(it) : std::next(it);
-      key_until[bad_key] = now + kWatchdogFrames;
-      ++spared;
-      return false;
-    }
     until = now + kWatchdogFrames;
     ++trips;
     return true;
   }
   bool active(uint64_t now) const { return now < until; }
-  bool key_active(uint64_t key, uint64_t now) const {
-    const auto it = key_until.find(key);
-    return it != key_until.end() && now < it->second;
-  }
-};
-
-// rt_hair_watchdog_draw (off; docs/RTX_HAIR_PRIMARY.md 5i item 11): the item 19 watchdog judged per draw key instead of
-// per frame. A swapped draw is bad when its strand pixels fall under its own bound (the frame watchdog's per-draw term:
-// min(kCoverMin, kCoverRatioMin - cover_sigma) of its own measurement); a draw without any marker counts its last card
-// pixels with no strands, but only when no swapped draw of the frame left a marker (the frame watchdog's rule: one draw
-// without pixels next to measured ones may simply have left the view). Fewer than kDropoutMinCard card pixels: no
-// evidence, the key's run is unchanged. A key trips after kWatchdogDrawBad bad judged G-buffer frames in a row and keeps
-// its cards for kWatchdogFrames; every other draw keeps swapping.
-// kWatchdogDrawBad = 2: a G-buffer frame applies exactly one header (GbFrame: one tag, unique_frame), so a fault of one
-// publish (its header camera or rows) can make at most one judged frame bad; a second bad frame in a row needs a fault
-// that outlives a publish, which is what the hold is for.
-constexpr uint32_t kWatchdogDrawBad = 2;
-struct DrawWatchdog {
-  struct Key { uint32_t bad = 0; uint64_t last = 0, until = 0; };
-  struct Seen { uint64_t key = 0; uint32_t card = 0, accepted = 0, last_card = 0; };
-  std::unordered_map<uint64_t, Key> keys;
-  Seen seen[kDrawSlots] = {};
-  uint32_t n = 0;
-  bool marked = false;
-  uint64_t trips = 0;
-  void begin() { n = 0; marked = false; }
-  void draw(uint64_t key, uint32_t c, uint32_t s, uint32_t last_card) {
-    if (key && n < kDrawSlots) seen[n++] = {key, c, s, last_card};
-    marked |= c != 0;
-  }
-  // The judged G-buffer frame `frame` (each frame judged once per key): the number of keys that tripped now.
-  uint32_t judge(uint64_t frame) {
-    uint32_t tripped = 0;
-    for (uint32_t i = 0; i < n; ++i) {
-      const Seen& d = seen[i];
-      uint32_t card = d.card;
-      double sigma = 0.0;
-      if (card) sigma = cover_sigma(d.accepted, card);
-      else if (!marked && d.last_card >= kDropoutMinCard) card = d.last_card;
-      if (card < kDropoutMinCard) continue;
-      Key& k = keys[d.key];
-      if (k.last >= frame) continue;
-      k.last = frame;
-      if (double(d.accepted) >= (std::min)(kCoverMin, kCoverRatioMin - sigma) * double(card)) { k.bad = 0; continue; }
-      if (++k.bad < kWatchdogDrawBad) continue;
-      k.bad = 0;
-      k.until = frame + kWatchdogFrames;
-      ++trips;
-      ++tripped;
-    }
-    return tripped;
-  }
-  bool active(uint64_t key, uint64_t now) const {
-    const auto it = keys.find(key);
-    return it != keys.end() && now < it->second.until;
-  }
 };
 
 // 5u (docs/RTX_HAIR_PRIMARY.md): the coverage measurements of the period by footprint, always on, lean too, CPU only:
@@ -1750,59 +1611,5 @@ struct DenseStats {
     d.max_card_anchor = (std::max)(d.max_card_anchor, s.card_to_anchor());
   }
 };
-
-// 6a rt_hair_stale_publish (docs/RTX_HAIR_PRIMARY.md 6a, 6b). The submit-time check: the distance between the applied
-// publish's build camera and the G-buffer's own camera, measured from the G-buffer's camera UBO (+208, read at the
-// submit; -1 unknown). Over kStaleCameraTol the frame draws its cards (card mode of every recorded slot) instead of
-// tracing a publish of another camera. The tolerance is the card band's fixed term (hair_primary_max_radius, hp_on_card).
-// 6b (hf2 225504): the frame labels never decide. The G-buffer frame is frame_index + 1 at its recording, the build frame
-// frame_index at the build; in every submit of hf2 the build of the G-buffer's own label was not yet recorded (k = 1 by
-// label in 60 of 60 frames, still camera included), so a build camera looked up by the G-buffer's label is unknown in
-// the normal case and k says nothing about the cameras. An unknown camera traces as before (never cards).
-constexpr float kStaleCameraTol = 0.01f;
-enum class Stale : uint8_t { Own, SameCamera, Moved, Unknown, Count };
-inline const char* stale_name(Stale s) {
-  static const char* const names[] = {"same camera, same label", "same camera, older label",
-                                      "camera moved since the publish", "camera not known"};
-  return s < Stale::Count ? names[size_t(s)] : "?";
-}
-// pub_frame: the applied publish's build frame (0: none, its camera unknown); gb_frame: the G-buffer frame (labels,
-// reported only); offset_m: the measured camera distance (< 0: not measured).
-inline Stale stale_publish(uint64_t pub_frame, uint64_t gb_frame, float offset_m) {
-  if (!pub_frame || offset_m < 0.0f || !std::isfinite(offset_m)) return Stale::Unknown;
-  if (offset_m > kStaleCameraTol) return Stale::Moved;
-  return pub_frame == gb_frame ? Stale::Own : Stale::SameCamera;
-}
-// The card-mode slots the check adds: every recorded slot, only for a measured camera move with the key on.
-inline uint32_t stale_card_slots(bool enabled, Stale s, const DrawSlots& recorded) {
-  if (!enabled || s != Stale::Moved) return 0u;
-  uint32_t m = 0;
-  for (uint32_t i = 0; i < kDrawSlots; ++i) if (recorded.keys[i]) m |= 1u << i;
-  return m;
-}
-// 6b: the G-buffer camera UBO of a recording is looked up at its main-view hair draws (any, swapped or not: hf2 never
-// swapped once its first frames drew cards, so a swap-only lookup never ran). At most kStaleUboTries queries per header.
-constexpr uint32_t kStaleUboTries = 4;
-inline bool stale_ubo_wanted(bool has_ubo, uint32_t tries) { return !has_ubo && tries < kStaleUboTries; }
-// Why a G-buffer camera was not measured (period line): no main-view hair draw in the recording, the binding query
-// failed (no set 0 binding 2 uniform buffer), the UBO is not host-readable, its VP is not camera-relative (eye off).
-enum class StaleWhy : uint8_t { Measured, NoDraw, NoBinding, NotMapped, EyeOff, Count };
-inline const char* stale_why_name(StaleWhy w) {
-  static const char* const names[] = {"measured", "no main-view hair draw", "no camera UBO binding",
-                                      "UBO not host-readable", "UBO VP not camera-relative"};
-  return w < StaleWhy::Count ? names[size_t(w)] : "?";
-}
-inline StaleWhy stale_why(bool drawn, bool bound, bool read, float vp_eye_m) {
-  if (!drawn) return StaleWhy::NoDraw;
-  if (!bound) return StaleWhy::NoBinding;
-  if (!read) return StaleWhy::NotMapped;
-  if (!(vp_eye_m >= 0.0f && vp_eye_m <= kStaleCameraTol)) return StaleWhy::EyeOff;
-  return StaleWhy::Measured;
-}
-inline float camera_distance(const float* a, const float* b) {
-  double d2 = 0;
-  for (int i = 0; i < 3; ++i) d2 += (double(a[i]) - b[i]) * (double(a[i]) - b[i]);
-  return std::isfinite(d2) ? float(std::sqrt(d2)) : -1.0f;
-}
 
 }  // namespace hair_primary

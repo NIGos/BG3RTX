@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 801,
+  "timeout": 758,
   "max_minutes": 6,
   "repeat": 1,
   "live_batch": "hair-stable",
@@ -12,7 +12,7 @@
   "window_mode": "visible_unfocused_fg",
   "fail_fast": false,
   "stop_on_dump": false,
-  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=2560,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_header_cam_gpu=1,rt_hair_header_scene_pass=1,rt_hair_card_fill=1,rt_hair_dense_sample=1",
+  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=2560,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_header_cam_gpu=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=1",
   "args": [
     "-RealPresent",
     "-Move",
@@ -37,13 +37,9 @@
     "\\[hot\\] core generation \\d+ loaded",
     "\\[cfg\\] settings read",
     "\\[hair primary\\] G-buffer hair pipeline: .*nearest-strand trace compiled in \\(specialization 1047\\) 1",
-    "\\[hair primary\\] G-buffer hair pipeline: .*dense samples \\(specialization 1052\\) 1",
-    "\\[hair primary\\] G-buffer hair pipeline: .*card fill \\(specialization 1053\\) 1",
-    "\\[hair primary\\] card fill: header flag 1 .*pipelines 1 .*draws its card; frame watchdog reports only",
-    "\\[hair primary\\] card fill: header flag 0 .*is discarded; frame watchdog switches to cards",
     "\\[hair primary\\] header pass \\(last \\d+ frames, rt_hair_header_scene_pass 1\\)",
-    "\\[hair primary\\] header pass \\(last \\d+ frames, rt_hair_header_scene_pass 0\\)",
-    "\\[hair primary\\] header pass \\(last .*second scene passes of an interval with their own header and tag \\d+"
+    "\\[hair primary\\] header pass \\(last .*second scene passes of an interval with their own header and tag \\d+",
+    "\\[hair primary\\] switches \\(last \\d+ frames\\): \\d+ strands->cards \\(frame watchdog \\d+, coverage low \\d+, coverage high \\d+, coverage stale/none/invalidated \\d+, header not applied \\(camera gate, order\\) \\d+, live toggle \\d+, other \\d+\\), \\d+ cards->strands; "
   ],
   "expect_every": [
     {
@@ -71,44 +67,33 @@
       "period_frames": 180
     },
     {
-      "name": "every scene G-buffer pass has its own header: no label taken by the decal pass or by another scene pass (shot dollies)",
+      "name": "every scene G-buffer pass has its own header: no label taken by the decal pass or by another scene pass (dollies after the A/B)",
       "select": "\\[hair primary\\] header pass \\(last",
       "match": "rt_hair_header_scene_pass 1\\): applied at the scene G-buffer pass [1-9][0-9]*, at the decal pass 0 .*label taken by the decal pass 0 .*by another scene pass 0 ",
       "min": 1,
       "windows": [
-        "in-shot",
-        "out-shot"
-      ],
-      "sample_frames": 120,
-      "period_frames": 120
-    },
-    {
-      "name": "every scene G-buffer pass has its own header: no label taken by the decal pass or by another scene pass (still)",
-      "select": "\\[hair primary\\] header pass \\(last",
-      "match": "rt_hair_header_scene_pass 1\\): applied at the scene G-buffer pass [1-9][0-9]*, at the decal pass 0 .*label taken by the decal pass 0 .*by another scene pass 0 ",
-      "min": 1,
-      "windows": [
-        "still-on",
-        "shot-on"
-      ],
-      "period_frames": 60
-    },
-    {
-      "name": "every scene G-buffer pass has its own header: no label taken by the decal pass or by another scene pass (keep dollies)",
-      "select": "\\[hair primary\\] header pass \\(last",
-      "match": "rt_hair_header_scene_pass 1\\): applied at the scene G-buffer pass [1-9][0-9]*, at the decal pass 0 .*label taken by the decal pass 0 .*by another scene pass 0 ",
-      "min": 1,
-      "windows": [
-        "in-keep",
-        "out-keep"
+        "in-on2",
+        "out-on2"
       ],
       "sample_frames": 180,
       "period_frames": 180
     },
     {
-      "name": "strands in every frame with the bundle alone, no switch to cards by a gate (dollies)",
+      "name": "every scene G-buffer pass has its own header: no label taken by the decal pass or by another scene pass (keep off)",
+      "select": "\\[hair primary\\] header pass \\(last",
+      "match": "rt_hair_header_scene_pass 1\\): applied at the scene G-buffer pass [1-9][0-9]*, at the decal pass 0 .*label taken by the decal pass 0 .*by another scene pass 0 ",
+      "min": 1,
+      "windows": [
+        "in-nokeep",
+        "out-nokeep"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "strands in every frame with the bundle: 0 strands->cards of any cause (dollies)",
       "select": "\\[hair primary\\] switches \\(last",
-      "match": "strands->cards \\(frame watchdog 0, key watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated \\d+, coverage latched 0, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(.*key watchdog trips 0;",
+      "match": ": 0 strands->cards \\(frame watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated 0, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(",
       "min": 1,
       "windows": [
         "in-on",
@@ -118,9 +103,9 @@
       "period_frames": 180
     },
     {
-      "name": "strands in every frame with the bundle alone, no switch to cards by a gate (orbits)",
+      "name": "strands in every frame with the bundle: 0 strands->cards of any cause (orbits)",
       "select": "\\[hair primary\\] switches \\(last",
-      "match": "strands->cards \\(frame watchdog 0, key watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated \\d+, coverage latched 0, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(.*key watchdog trips 0;",
+      "match": ": 0 strands->cards \\(frame watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated 0, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(",
       "min": 1,
       "windows": [
         "orbit-r",
@@ -130,140 +115,28 @@
       "period_frames": 180
     },
     {
-      "name": "strands in every frame with the bundle alone, no switch to cards by a gate (shot dollies)",
+      "name": "strands in every frame with the bundle: 0 strands->cards of any cause (dollies after the A/B)",
       "select": "\\[hair primary\\] switches \\(last",
-      "match": "strands->cards \\(frame watchdog 0, key watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated \\d+, coverage latched 0, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(.*key watchdog trips 0;",
+      "match": ": 0 strands->cards \\(frame watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated 0, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(",
       "min": 1,
       "windows": [
-        "in-shot",
-        "out-shot"
-      ],
-      "sample_frames": 120,
-      "period_frames": 120
-    },
-    {
-      "name": "strands in every frame with the bundle alone, no switch to cards by a gate (still)",
-      "select": "\\[hair primary\\] switches \\(last",
-      "match": "strands->cards \\(frame watchdog 0, key watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated \\d+, coverage latched 0, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(.*key watchdog trips 0;",
-      "min": 1,
-      "windows": [
-        "still-on",
-        "shot-on"
-      ],
-      "period_frames": 60
-    },
-    {
-      "name": "no strands->cards switch of any cause with rt_hair_coverage_keep (dollies)",
-      "select": "\\[hair primary\\] switches \\(last",
-      "match": ": 0 strands->cards \\(frame watchdog 0, key watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated 0, coverage latched 0, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(.*key watchdog trips 0;",
-      "min": 1,
-      "windows": [
-        "in-keep",
-        "out-keep"
+        "in-on2",
+        "out-on2"
       ],
       "sample_frames": 180,
       "period_frames": 180
     },
     {
-      "name": "without rt_hair_header_scene_pass the decal pass takes the label of scene G-buffer passes (dollies)",
-      "select": "\\[hair primary\\] header pass \\(last",
-      "match": "rt_hair_header_scene_pass 0\\): .*label taken by the decal pass [1-9]",
+      "name": "keep off: no switch to cards by a watchdog, low or high coverage or a header not applied",
+      "select": "\\[hair primary\\] switches \\(last",
+      "match": "strands->cards \\(frame watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated \\d+, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(",
       "min": 1,
       "windows": [
-        "in-base",
-        "out-base"
+        "in-nokeep",
+        "out-nokeep"
       ],
       "sample_frames": 180,
       "period_frames": 180
-    },
-    {
-      "name": "switches line of the fill and control windows (report; control dollies)",
-      "select": "\\[hair primary\\] switches \\(last",
-      "match": "\\d+ strands->cards \\(frame watchdog \\d+, .* \\d+ cards->strands; ",
-      "min": 0,
-      "windows": [
-        "in-base",
-        "out-base"
-      ],
-      "sample_frames": 180,
-      "period_frames": 180
-    },
-    {
-      "name": "switches line of the fill and control windows (report; fill shot dollies)",
-      "select": "\\[hair primary\\] switches \\(last",
-      "match": "\\d+ strands->cards \\(frame watchdog \\d+, .* \\d+ cards->strands; ",
-      "min": 0,
-      "windows": [
-        "in-fill",
-        "out-fill"
-      ],
-      "sample_frames": 120,
-      "period_frames": 120
-    },
-    {
-      "name": "switches line of the fill and control windows (report; fill still)",
-      "select": "\\[hair primary\\] switches \\(last",
-      "match": "\\d+ strands->cards \\(frame watchdog \\d+, .* \\d+ cards->strands; ",
-      "min": 0,
-      "windows": [
-        "still-fill",
-        "shot-fill"
-      ],
-      "period_frames": 60
-    },
-    {
-      "name": "swapped draws under a tenth of their card pixels (report; dollies)",
-      "select": "\\[hair primary\\] dropouts \\(last",
-      "match": "\\): \\d+ swapped G-buffer draws wrote under a tenth of their card pixels",
-      "min": 0,
-      "windows": [
-        "in-on",
-        "out-on",
-        "in-keep",
-        "out-keep",
-        "in-base",
-        "out-base"
-      ],
-      "sample_frames": 180,
-      "period_frames": 180
-    },
-    {
-      "name": "swapped draws under a tenth of their card pixels (report; shot dollies)",
-      "select": "\\[hair primary\\] dropouts \\(last",
-      "match": "\\): \\d+ swapped G-buffer draws wrote under a tenth of their card pixels",
-      "min": 0,
-      "windows": [
-        "in-shot",
-        "out-shot",
-        "in-fill",
-        "out-fill"
-      ],
-      "sample_frames": 120,
-      "period_frames": 120
-    },
-    {
-      "name": "frame watchdog lines name the card period (control, report)",
-      "select": "\\[hair primary\\] watchdog: G-buffer frame",
-      "match": "cards for (0|28) frames; build camera step -?[0-9.]+ m",
-      "min": 0,
-      "windows": [
-        "in-base",
-        "out-base"
-      ],
-      "event": true
-    },
-    {
-      "name": "strands are drawn in every still window (swapped draws counted)",
-      "select": "\\[hair primary\\] coverage \\(last",
-      "match": "\\d+ draws probed, [1-9][0-9]* swapped",
-      "min": 1,
-      "windows": [
-        "still-on",
-        "shot-on",
-        "still-fill",
-        "shot-fill"
-      ],
-      "period_frames": 60
     },
     {
       "name": "the rebase origin is 0 in every sampled frame (header camera copied on the GPU; dollies)",
@@ -272,63 +145,15 @@
       "min": 1,
       "windows": [
         "in-on",
-        "out-on",
-        "in-keep",
-        "out-keep",
-        "in-base",
-        "out-base"
+        "out-on"
       ],
       "sample_frames": 180,
       "period_frames": 180
     },
     {
-      "name": "the rebase origin is 0 in every sampled frame (header camera copied on the GPU; shot dollies)",
+      "name": "the rebase origin is 0 in every sampled frame (header camera copied on the GPU; orbits)",
       "select": "\\[hair primary\\] rebase origin \\(last",
       "match": " 0 with a non-zero origin .*rt_hair_header_cam_gpu 1",
-      "min": 1,
-      "windows": [
-        "in-shot",
-        "out-shot",
-        "in-fill",
-        "out-fill"
-      ],
-      "sample_frames": 120,
-      "period_frames": 120
-    },
-    {
-      "name": "the dense sample period line, with sampled frames (dollies)",
-      "select": "\\[hair primary\\] dense samples \\(last",
-      "match": "rt_hair_dense_sample 1\\): [1-9][0-9]* sampled frames, .* still: \\d+ samples: .* \\| moving .*: \\d+ samples: ",
-      "min": 1,
-      "windows": [
-        "in-on",
-        "out-on",
-        "in-keep",
-        "out-keep",
-        "in-base",
-        "out-base"
-      ],
-      "sample_frames": 180,
-      "period_frames": 180
-    },
-    {
-      "name": "the dense sample period line, with sampled frames (shot dollies)",
-      "select": "\\[hair primary\\] dense samples \\(last",
-      "match": "rt_hair_dense_sample 1\\): [1-9][0-9]* sampled frames, .* still: \\d+ samples: .* \\| moving .*: \\d+ samples: ",
-      "min": 1,
-      "windows": [
-        "in-shot",
-        "out-shot",
-        "in-fill",
-        "out-fill"
-      ],
-      "sample_frames": 120,
-      "period_frames": 120
-    },
-    {
-      "name": "the dense sample period line, with sampled frames (orbits)",
-      "select": "\\[hair primary\\] dense samples \\(last",
-      "match": "rt_hair_dense_sample 1\\): [1-9][0-9]* sampled frames, .* still: \\d+ samples: .* \\| moving .*: \\d+ samples: ",
       "min": 1,
       "windows": [
         "orbit-r",
@@ -338,15 +163,203 @@
       "period_frames": 180
     },
     {
-      "name": "strand G-buffer GPU ms with and without the fill (cost, report only)",
-      "select": "\\[hair primary\\] strand G-buffer draws GPU",
-      "match": "GPU [0-9.]+ ms/frame",
+      "name": "the rebase origin is 0 in every sampled frame (header camera copied on the GPU; dollies after the A/B)",
+      "select": "\\[hair primary\\] rebase origin \\(last",
+      "match": " 0 with a non-zero origin .*rt_hair_header_cam_gpu 1",
       "min": 1,
       "windows": [
-        "still-on",
-        "still-fill"
+        "in-on2",
+        "out-on2"
       ],
-      "period_frames": 60
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "the rebase origin is 0 in every sampled frame (header camera copied on the GPU; keep off)",
+      "select": "\\[hair primary\\] rebase origin \\(last",
+      "match": " 0 with a non-zero origin .*rt_hair_header_cam_gpu 1",
+      "min": 1,
+      "windows": [
+        "in-nokeep",
+        "out-nokeep"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "card runs of entering heads, min/median/max (report; dollies)",
+      "select": "\\[hair primary\\] switches \\(last",
+      "match": "\\d+ cards->strands; .*card runs \\d+: \\d+/\\d+/\\d+; ",
+      "min": 0,
+      "windows": [
+        "in-on",
+        "out-on"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "card runs of entering heads, min/median/max (report; orbits)",
+      "select": "\\[hair primary\\] switches \\(last",
+      "match": "\\d+ cards->strands; .*card runs \\d+: \\d+/\\d+/\\d+; ",
+      "min": 0,
+      "windows": [
+        "orbit-r",
+        "orbit-l"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "card runs of entering heads, min/median/max (report; dollies after the A/B)",
+      "select": "\\[hair primary\\] switches \\(last",
+      "match": "\\d+ cards->strands; .*card runs \\d+: \\d+/\\d+/\\d+; ",
+      "min": 0,
+      "windows": [
+        "in-on2",
+        "out-on2"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "card runs of entering heads, min/median/max (report; keep off)",
+      "select": "\\[hair primary\\] switches \\(last",
+      "match": "\\d+ cards->strands; .*card runs \\d+: \\d+/\\d+/\\d+; ",
+      "min": 0,
+      "windows": [
+        "in-nokeep",
+        "out-nokeep"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swap refusals by first refusing gate (report; dollies)",
+      "select": "\\[hair primary\\] frame \\d+: \\d+ grooms published",
+      "match": "hair draws strand/total: main G-buffer \\d+/\\d+, .*swap refusals \\(main-view hair draws kept as cards, first refusing gate\\):",
+      "min": 0,
+      "windows": [
+        "in-on",
+        "out-on"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swap refusals by first refusing gate (report; orbits)",
+      "select": "\\[hair primary\\] frame \\d+: \\d+ grooms published",
+      "match": "hair draws strand/total: main G-buffer \\d+/\\d+, .*swap refusals \\(main-view hair draws kept as cards, first refusing gate\\):",
+      "min": 0,
+      "windows": [
+        "orbit-r",
+        "orbit-l"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swap refusals by first refusing gate (report; dollies after the A/B)",
+      "select": "\\[hair primary\\] frame \\d+: \\d+ grooms published",
+      "match": "hair draws strand/total: main G-buffer \\d+/\\d+, .*swap refusals \\(main-view hair draws kept as cards, first refusing gate\\):",
+      "min": 0,
+      "windows": [
+        "in-on2",
+        "out-on2"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swap refusals by first refusing gate (report; keep off)",
+      "select": "\\[hair primary\\] frame \\d+: \\d+ grooms published",
+      "match": "hair draws strand/total: main G-buffer \\d+/\\d+, .*swap refusals \\(main-view hair draws kept as cards, first refusing gate\\):",
+      "min": 0,
+      "windows": [
+        "in-nokeep",
+        "out-nokeep"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swapped draws under a tenth of their card pixels (report; dollies)",
+      "select": "\\[hair primary\\] dropouts \\(last",
+      "match": "\\): \\d+ swapped G-buffer draws wrote under a tenth of their card pixels",
+      "min": 0,
+      "windows": [
+        "in-on",
+        "out-on"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swapped draws under a tenth of their card pixels (report; orbits)",
+      "select": "\\[hair primary\\] dropouts \\(last",
+      "match": "\\): \\d+ swapped G-buffer draws wrote under a tenth of their card pixels",
+      "min": 0,
+      "windows": [
+        "orbit-r",
+        "orbit-l"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swapped draws under a tenth of their card pixels (report; dollies after the A/B)",
+      "select": "\\[hair primary\\] dropouts \\(last",
+      "match": "\\): \\d+ swapped G-buffer draws wrote under a tenth of their card pixels",
+      "min": 0,
+      "windows": [
+        "in-on2",
+        "out-on2"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swapped draws under a tenth of their card pixels (report; keep off)",
+      "select": "\\[hair primary\\] dropouts \\(last",
+      "match": "\\): \\d+ swapped G-buffer draws wrote under a tenth of their card pixels",
+      "min": 0,
+      "windows": [
+        "in-nokeep",
+        "out-nokeep"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "hitch frames: a second scene G-buffer pass in one present interval (report, once per session)",
+      "select": "\\[hair primary\\] hitch frame",
+      "match": "a second scene G-buffer pass was recorded under frame label \\d+",
+      "min": 0,
+      "windows": [
+        "in-on",
+        "out-on",
+        "orbit-r",
+        "orbit-l",
+        "in-nokeep",
+        "out-nokeep",
+        "in-on2",
+        "out-on2"
+      ],
+      "event": true
+    },
+    {
+      "name": "strand G-buffer GPU ms with and without rt_hair_coverage_keep (cost, report only)",
+      "select": "\\[hair primary\\] strand G-buffer draws GPU",
+      "match": "GPU [0-9.]+ ms/frame",
+      "min": 0,
+      "windows": [
+        "in-on",
+        "out-on",
+        "in-nokeep",
+        "out-nokeep"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
     }
   ],
   "forbid": [
@@ -365,16 +378,12 @@
     "\\[wheel-input\\] phase=6 notches=10\\b",
     "\\[wheel-input\\] phase=7 notches=-10\\b",
     "\\[wheel-input\\] phase=11 notches=10\\b",
-    "\\[wheel-input\\] phase=13 notches=-10\\b",
-    "\\[wheel-input\\] phase=15 notches=10\\b",
-    "\\[wheel-input\\] phase=16 notches=-10\\b",
-    "\\[wheel-input\\] phase=19 notches=10\\b",
-    "\\[wheel-input\\] phase=21 notches=-10\\b",
-    "\\[wheel-input\\] phase=23 notches=10\\b",
-    "\\[wheel-input\\] phase=24 notches=-10\\b",
+    "\\[wheel-input\\] phase=12 notches=-10\\b",
+    "\\[wheel-input\\] phase=14 notches=10\\b",
+    "\\[wheel-input\\] phase=15 notches=-10\\b",
     "\\[rotation-input\\] phase=8 ",
     "\\[rotation-input\\] phase=9 ",
-    "\\[motion-plan\\] complete phases=25\\b",
+    "\\[motion-plan\\] complete phases=16\\b",
     "^Run ended: done"
   ],
   "live_flow": {
@@ -432,16 +441,8 @@
       "quantile": 0.95,
       "samples": 361,
       "maximum": 0.5
-    },
-    "trace_capture_stall": {
-      "seconds": 2.6511199999999997,
-      "source": "hmm1-mask-s8-fg2.1.083713.log",
-      "quantile": 0.95,
-      "samples": 361,
-      "maximum": 3.36211,
-      "logs": 60
     }
   },
-  "estimated_phase_seconds": 140.8,
-  "purpose": "6i: one launch, the RTX Hair On bundle with rt_hair_header_scene_pass inside it. With the bundle alone (card fill flag off) every wheel dolly and orbit window must show: the header applied at the scene G-buffer pass only, no label taken by the decal pass or by another scene pass, frame watchdog trips 0, no frame on cards, no switch to cards by any gate. Then inside the same run: rt_hair_coverage_keep (no switch to cards at all, also not for a draw that left the screen), the card fill for the visual record (full-width PNGs, still and right after a dolly, next to the same two without it), and last the control without rt_hair_header_scene_pass (the decal pass takes labels). STAGED, not authorized."
+  "estimated_phase_seconds": 97.7,
+  "purpose": "6k: one launch, the RTX Hair On bundle as the launcher writes it (rt_hair_header_scene_pass and rt_hair_coverage_keep inside it), no card fill, no dense sampler. In every wheel dolly and orbit window with the bundle: the header applied at the scene G-buffer pass only, no label taken by the decal pass or by another scene pass, 0 switches to cards of any cause, no frame on cards, frame watchdog trips 0. Reported: the card runs of the heads that enter the view (3 or 4 frames predicted, 5 in hx1 194658) next to those of the same dolly with rt_hair_coverage_keep off (10), toggled inside the run. STAGED, not authorized."
 }

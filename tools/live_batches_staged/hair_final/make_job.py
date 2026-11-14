@@ -1,5 +1,9 @@
 """hair_final: the final RTX Hair qualification in the user's real preset. STAGED, not queued, not authorized.
 
+HISTORICAL since 2026-11-14 (docs/RTX_HAIR_PRIMARY.md 6k): hf2 sets rt_hair_stale_publish and rt_hair_row_stable
+and gates on the 'stale publish check' line; the keys and the line are removed. Superseded by hx1 (hair_stable).
+Not to be queued. The job still lints (the keys stay known to pipeline_readiness).
+
     py -3 -m tools.live_batches_staged.hair_final.make_job
 
 One Water Queens House (S8) launch, preset=ultra with fg=3 (the hl1/pl1/hm1 set), the RTX Hair On bundle and every new
