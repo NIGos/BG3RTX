@@ -18,6 +18,11 @@ periods). Each job's post command writes `<log>.perf.md` with `analyze.py`.
 | hq-inn-ultra | The Blushing Mermaid - 96h 39m | the same without the primary-check windows | 513 s at 11.7 fps (about half at 25 fps) |
 | hq-s8-high, hq-inn-high | both | static 360; pan Q + E 240 each | 154 s, 296 s |
 | hq-smoke-s8 | Water Queens House | handout on from launch: static, pan Q, pan E, static | 77 s |
+| hq-s8-energy | Water Queens House | 8 float traces per state, exposure held (decides the open S8 -0.72%) | 150 s |
+| hq-s8-check | Water Queens House | primary-ray check pan Q + E (split out of hq-s8-ultra, 15 minute cap) | 576 s |
+
+After the first run (2026-11-14): pans and statics are 3 periods per window (at least 2 complete periods wherever the
+period grid falls); the per-pass GPU costs are judged "not higher beyond noise" (they fall when the wait goes).
 
 Run order: hq-smoke-s8 (does the device start with the layout and hand out at all), hq-s8-ultra, hq-inn-ultra,
 hq-s8-high, hq-inn-high. Add 100-120 s of loading per launch: about 35 minutes for the session.

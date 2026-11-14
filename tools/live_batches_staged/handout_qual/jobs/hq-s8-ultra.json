@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 3743,
+  "timeout": 3066,
   "max_minutes": 14,
   "repeat": 1,
   "live_batch": "handout-qual",
@@ -279,9 +279,7 @@
         "pan-on-q",
         "pan-on-e",
         "hair-pan-on-q",
-        "hair-pan-on-e",
-        "check-pan-on-q",
-        "check-pan-on-e"
+        "hair-pan-on-e"
       ],
       "period_frames": 120,
       "sample_frames": 120,
@@ -296,9 +294,7 @@
         "pan-on-q",
         "pan-on-e",
         "hair-pan-on-q",
-        "hair-pan-on-e",
-        "check-pan-on-q",
-        "check-pan-on-e"
+        "hair-pan-on-e"
       ],
       "period_frames": 120,
       "sample_frames": 120,
@@ -313,9 +309,7 @@
         "pan-on-q",
         "pan-on-e",
         "hair-pan-on-q",
-        "hair-pan-on-e",
-        "check-pan-on-q",
-        "check-pan-on-e"
+        "hair-pan-on-e"
       ],
       "period_frames": 120,
       "sample_frames": 120,
@@ -372,22 +366,6 @@
       "min": 1
     },
     {
-      "name": "primary-ray check in every check window (ON against the OFF pair: analyze.py)",
-      "select": "rt stats \\(\\d+ frames, alpha test on\\): primary-ray check match",
-      "match": "primary-ray check match [0-9.]+%",
-      "windows": [
-        "check-pan-off-a-q",
-        "check-pan-off-a-e",
-        "check-pan-on-q",
-        "check-pan-on-e",
-        "check-pan-off-b-q",
-        "check-pan-off-b-e"
-      ],
-      "period_frames": 60,
-      "sample_frames": 60,
-      "min": 1
-    },
-    {
       "name": "hair period line in every hair window",
       "select": "\\[hair primary\\] frame \\d+: ",
       "match": "\\[hair primary\\] frame \\d+: ",
@@ -417,7 +395,7 @@
     "\\[layer\\] optional scene handout update-after-bind request failed"
   ],
   "expect_runner": [
-    "\\[motion-plan\\] complete phases=33\\b",
+    "\\[motion-plan\\] complete phases=26\\b",
     "^Run ended: done"
   ],
   "live_flow": {
@@ -430,8 +408,8 @@
     ],
     "fps_windows": []
   },
-  "estimated_phase_seconds": 615.646,
+  "estimated_phase_seconds": 344.37,
   "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-s8-ultra.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
   "post_gate": true,
-  "purpose": "Scene handout at Water Queens House, Ultra, FG 3x, uncapped, focused: rt_scene_handout 0 / 2 / 0 in static and pan windows with stock cards, pan windows with RTX Hair On, three float traces per state for the energy check, and primary-ray check windows in motion. Per window: scene wait, handout fallbacks, rendered frame time median and p99, every GPU cost line. STAGED, not authorized."
+  "purpose": "Scene handout at Water Queens House, Ultra, FG 3x, uncapped, focused: rt_scene_handout 0 / 2 / 0 in static and pan windows with stock cards, pan windows with RTX Hair On, three float traces per state for the energy check. Per window: scene wait, handout fallbacks, rendered frame time median and p99, every GPU cost line. STAGED, not authorized."
 }

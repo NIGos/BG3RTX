@@ -51,10 +51,10 @@ Select a row to see what it does, its GPU cost, when it takes effect, what it ne
 | Performance | Frame rate | Frame Generation | Off / 2x / 3x / 4x | On or off: restart; 2x/3x/4x: at once |
 | Performance | Frame rate | NVIDIA Reflex | Off / On / On + Boost | At once; Frame Generation needs On or On + Boost |
 | Performance | Frame rate | Rendered frame limit | Off / 30-240 fps, step 1 | At once (when you release the slider); counts rendered frames |
+| Performance | Frame rate | Low-latency scene | Off / On | On: restart; Off: at once; On in High and Ultra |
 | Performance | Tracing speed | Faster bounce light tracing | Off / On | At once; same image, on in every preset |
 | Performance | Tracing speed | Bounce trace reordering | Off / By hit kind / By hit kind and object | At once, may briefly pause |
 | DLSS 5 | DLSS 5 | DLSS 5 Neural Rendering (Experimental) | Off / On, runtime file | Restart to activate; its key toggles live after activation |
-| Experimental | Performance | Low-latency scene | Off / On | On: restart; Off: at once |
 | Experimental | Frame Generation | Frame generation pacing test | Standard / Deferred | At once |
 | Experimental | Frame Generation | Multi-frame presentation test | Standard / Driver metering | Restart |
 | Experimental | Water | Water surface reflections | Off / On | On: restart; Off: at once; needs Water lighting |

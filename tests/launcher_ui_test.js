@@ -392,10 +392,10 @@ render(fixture);go('Experimental');
  assert(all(ids.get('card-water_surface_fresnel')).some(e=>e.textContent==='Adjusts reflections at the water surface.'));
  assert(all(ids.get('card-water_surface_fresnel')).some(e=>e.className==='badge exp'));
  assert.strictEqual(ids.get('control-water_surface_fresnel-0').type,'checkbox','unqualified marker hidden; Off/On is a switch');
- // Low-latency scene (a Performance knob whose only upgrade is unqualified) sits here, not on Performance.
- assert(onPage('card-scene_handout'),'Low-latency scene on Experimental');
- assert.deepStrictEqual(page().filter(e=>e.className==='group-title').map(e=>e.textContent),['Performance','Water']);
- go('Performance');assert(!onPage('card-scene_handout'));assert(/Low-latency scene/.test(text(ids.get('experimental-pointer'))));
+ // Low-latency scene is a qualified Performance control since 2026-11-14: not here, no pointer for it.
+ assert(!onPage('card-scene_handout'),'Low-latency scene is not on Experimental');
+ assert.deepStrictEqual(page().filter(e=>e.className==='group-title').map(e=>e.textContent),['Water']);
+ go('Performance');assert(!ids.get('experimental-pointer')||!/Low-latency scene/.test(text(ids.get('experimental-pointer'))));
  go('Surfaces');assert(/1 experimental option: Water interface Fresnel/.test(text(ids.get('experimental-pointer'))));
  ids.get('experimental-open').onclick();assert(/selected/.test(ids.get('card-water_surface_fresnel').className),'the pointer opens the option it names');
  ids.get('experimental-switch').checked=false;ids.get('experimental-switch').onchange();assert.deepStrictEqual(msg(),{type:'experimental',value:false});
@@ -404,7 +404,7 @@ render(fixture);go('Experimental');
 if(optIn){
  // The real opt-in state: every unqualified option of the release is on the Experimental page, in its group.
  render(optIn);go('Experimental');
- for(const s of optIn.settings.filter(s=>s.category==='Experimental'||s.id==='scene_handout'))assert(onPage('card-'+s.id),s.id+' not on Experimental');
+ for(const s of optIn.settings.filter(s=>s.category==='Experimental'))assert(onPage('card-'+s.id),s.id+' not on Experimental');
  assert(!page().some(e=>e.className==='group-title'&&e.textContent==='More'),'every experimental option has its group');
  render(fixture);
 }

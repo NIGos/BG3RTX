@@ -18,10 +18,12 @@ from tools.live_batches_staged.perf_ab import make_jobs as pab
 
 BATCH = "tools/live_batches_staged/handout_qual"
 PERIOD = pab.PERIOD
-# Measured frames after the 60-frame settle: 2-3 complete 120-frame periods in a static window, 1-2 per pan side (a
-# state pans Q, then E back: 2-4 per state; perf-ab-inn 135354 got 1 complete period in some 360-frame windows).
-# Check windows log every 60 frames. Sized for the inn at the lint model's fps inside the 15 minute cap.
-FRAMES = {"static": 3 * PERIOD, "pan": 2 * PERIOD, "check": PERIOD}
+# Measured frames after the 60-frame settle: 3 periods in a static and in a pan window, so a window holds at least 2
+# complete 120-frame periods wherever the period grid falls (the first run, 2026-11-14, sized pans at 2 periods: the
+# first pan side after a toggle had none in 4 of 5 launches). A pan state pans Q, then E back. Check windows log every
+# 60 frames: 4 periods. Sized for the inn at the lint model's fps inside the 15 minute cap.
+FRAMES = {"static": 3 * PERIOD, "pan": 3 * PERIOD, "check": 2 * PERIOD}
+ENERGY_TRACES = 8   # per state in hq-s8-energy (the first run had 3: S8 -0.72% against an OFF spread of 647.8-656.6)
 S8, INN = pab.S8, pab.INN
 # Startup: the update-after-bind layout (restart key) with the handout off; dumps only for the energy traces (PNG 1280).
 START = (pab.USER.replace("dump_images=0", "dump_images=1,dump_png_width=1280") +
@@ -57,10 +59,10 @@ def group(name, kind, hair=0):
             for state in ("off-a", "on", "off-b") for side in sides]
 
 
-def energy(state):
-    """Static, exposure held, three float traces (gi_1ray_qual's shot phase): the energy check of AGENTS.md."""
-    p = pab.phase(f"energy-{state}", 14.2, keys(2 if state == "on" else 0, hold=1), frames=60)
-    p.update(trace_at=[1, 6, 11], motion_start=17, motion_end=17)
+def energy(state, n=3):
+    """Static, exposure held, n float traces (gi_1ray_qual's shot phase): the energy check of AGENTS.md."""
+    p = pab.phase(f"energy-{state}", 14.2 + 5 * (n - 3), keys(2 if state == "on" else 0, hold=1), frames=60)
+    p.update(trace_at=[1 + 5 * i for i in range(n)], motion_start=17 + 5 * (n - 3), motion_end=17 + 5 * (n - 3))
     return p
 
 
@@ -72,7 +74,7 @@ def gates(plan, hair_windows=()):
     measured = [p["label"] for p in plan if p.get("frames") and not p.get("trace_at")]
     on = [w for w in measured if "-on" in w]
     timed = [w for w in measured if not w.startswith("check")]
-    out = [every(n + " in every window", s, s, timed) for n, s in pab.LINES]
+    out = [every(n + " in every window", s, s, timed) for n, s in pab.LINES] if timed else []
     out += [
         every("handout: every first RT query handed out in the ON windows", WAIT, "handed out [1-9]\\d*", on),
         every("handout: 0 fallbacks and 0 pairing mismatches in every ON window", HANDOUT,
@@ -80,10 +82,13 @@ def gates(plan, hair_windows=()):
         every("handout: no hit-material fallback and no OMM downgrade in every ON window", HANDOUT,
                   "downgraded 0; .*\\(fallbacks: query 0, camera 0\\)", on),
         every("scene wait: 0 timeouts in every window", WAIT, "got this frame's scene, 0 timeouts", measured),
-        every("capacity: no opaque draw dropped in every window", "\\[geo\\] RT capture, last \\d+ frames:",
-                  "opaque draws dropped \\(buffer full\\) 0\\.00,", timed),
     ]
+    if timed:
+        out.append(every("capacity: no opaque draw dropped in every window", "\\[geo\\] RT capture, last \\d+ frames:",
+                      "opaque draws dropped \\(buffer full\\) 0\\.00,", timed))
     check = [w for w in measured if w.startswith("check")]
+    if not measured:
+        return []   # the energy job has no timed window
     if check:
         out.append(every("primary-ray check in every check window (ON against the OFF pair: analyze.py)",
                              "rt stats \\(\\d+ frames, alpha test on\\): primary-ray check match",
@@ -107,9 +112,21 @@ def job(name, save, start, plan, purpose, hair_windows=()):
     return plan, j
 
 
+def check_only():
+    """The primary-ray windows (about 80 ms/frame) in their own launch at S8: with them hq-s8-ultra passed the 15 minute
+    cap at 3 periods per window; the match does not depend on the scene's cost."""
+    warm = pab.phase
+    plan = [warm("warmup", 20, keys(0)), warm("warm-on", 8, keys(2)), warm("warm-check", 4, keys(2, 0, 1)), warm("warm-off", 4, keys(0))]
+    plan += group("check-pan", "check") + [warm("restore", 2, keys(0))]
+    plan, j = job("hq-s8-check", S8, f"{START},{pab.HAIR_START},rt_hair=0,{keys(0)}", plan,
+               "Scene handout stale-scene detector at S8, Ultra, FG 3x, focused: rt_scene_handout 0 / 2 / 0 in primary-ray "
+               "check windows in motion (pan Q and E). ON match not lower than the OFF pair's by more than their difference.")
+    j["timeout"] = 1500   # plan 576 s at the lint model's 3 fps plus the readiness allowance (800 s)
+    return plan, j
+
+
 def ultra(slug, save, check=True):
-    """check: the primary-ray windows (about 80 ms/frame). S8 only: with them the inn passes the 15 minute cap at the
-    lint model's fps, and the match does not depend on the scene's cost."""
+    """check: the primary-ray windows (about 80 ms/frame), now in hq-s8-check (off in every ultra job)."""
     warm = pab.phase
     plan = [warm("warmup", 20, keys(0)), warm("warm-on", 8, keys(2)), warm("warm-hair-on", 8, keys(2, 1)),
             warm("warm-hair-off", 4, keys(0, 1))] + ([warm("warm-check", 4, keys(2, 0, 1))] if check else []) + [warm("warm-off", 4, keys(0))]
@@ -124,6 +141,18 @@ def ultra(slug, save, check=True):
                "windows with stock cards, pan windows with RTX Hair On, three float traces per state for the energy check" +
                (", and primary-ray check windows in motion" if check else "") + ". Per window: scene wait, handout fallbacks, rendered frame time "
                "median and p99, every GPU cost line.", hair)
+
+
+def energy_repeat():
+    """S8 only, no timed window: ENERGY_TRACES float traces per state (off-a / on / off-b), exposure held, the handout
+    toggled live. Decides the open energy point of docs/SCENE_HANDOUT_DESIGN.md section 8 (S8 -0.72% with 3 traces)."""
+    warm = pab.phase
+    plan = [warm("warmup", 20, keys(0, hold=1)), warm("warm-on", 8, keys(2, hold=1)), warm("warm-off", 4, keys(0, hold=1))]
+    plan += [energy(s, ENERGY_TRACES) for s in ("off-a", "on", "off-b")] + [warm("restore", 2, keys(0))]
+    return job("hq-s8-energy", S8, f"{START},{pab.HAIR_START},rt_hair=0,{keys(0)}", plan,
+               f"Scene handout energy repeat at S8, Ultra, FG 3x, focused: {ENERGY_TRACES} float traces per state (rt_scene_handout "
+               "0 / 2 / 0, static camera, exposure held). The ON mean of the normalized scene colour must lie inside the OFF "
+               "samples' range; the spread of the OFF samples is the noise.")
 
 
 def high(slug, save):
@@ -164,7 +193,7 @@ def measured(p):
 
 def main():
     assert (HERE / "predicted.json").exists(), "predicted.json precedes the jobs"
-    made = [ultra("s8", S8), ultra("inn", INN, check=False), high("s8", S8), high("inn", INN), smoke()]
+    made = [ultra("s8", S8, check=False), ultra("inn", INN, check=False), high("s8", S8), high("inn", INN), smoke(), energy_repeat(), check_only()]
     for plan, j in made:
         for folder, value in (("plans", plan), ("jobs", j)):
             (HERE / folder).mkdir(exist_ok=True)
