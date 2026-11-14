@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 726,
+  "timeout": 768,
   "max_minutes": 5,
   "repeat": 1,
   "live_batch": "hair-stable",
@@ -12,7 +12,7 @@
   "window_mode": "visible_unfocused_fg",
   "fail_fast": false,
   "stop_on_dump": false,
-  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_header_cam_gpu=1,rt_hair_mv_card=2,rt_hair_card_fill=1,rt_hair_dense_sample=1,rt_hair_stale_publish=0,rt_hair_pixel_lod=0",
+  "set": "preset=ultra,fg=3,headless=0,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,dump_images=1,dump_png_width=2560,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,sharc=0,qa_exposure_hold=0,rt_alpha_floor_yield=0,rt_capture_rise_reserve=1,rt_capture_wide_split=1,rt_mesh_budget_own=0,detailed_logging=1,rt_stats_period_frames=60,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_header_cam_gpu=1,rt_hair_mv_card=2,rt_hair_card_fill=1,rt_hair_dense_sample=1,rt_hair_stale_publish=0,rt_hair_pixel_lod=0",
   "args": [
     "-RealPresent",
     "-Move",
@@ -40,25 +40,94 @@
     "\\[hair primary\\] G-buffer hair pipeline: .*dense samples \\(specialization 1052\\) 1",
     "\\[hair primary\\] G-buffer hair pipeline: .*card fill \\(specialization 1053\\) 1",
     "\\[hair primary\\] card fill: header flag 1 .*pipelines 1 .*draws its card; frame watchdog reports only",
-    "\\[hair primary\\] card fill: header flag 0 .*is discarded; frame watchdog switches to cards"
+    "\\[hair primary\\] card fill: header flag 0 .*is discarded; frame watchdog switches to cards",
+    "\\[hair primary\\] header pass \\(last \\d+ frames, rt_hair_header_scene_pass 1\\)",
+    "\\[hair primary\\] header pass \\(last \\d+ frames, rt_hair_header_scene_pass 0\\)"
   ],
   "expect_every": [
+    {
+      "name": "the header is applied at the scene G-buffer pass only, no label taken by the decal pass (dollies)",
+      "select": "\\[hair primary\\] header pass \\(last",
+      "match": "rt_hair_header_scene_pass 1\\): applied at the scene G-buffer pass [1-9][0-9]*, at the decal pass 0 .*label taken by the decal pass 0 ",
+      "min": 1,
+      "windows": [
+        "in-fix",
+        "out-fix",
+        "in-fill",
+        "out-fill"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "the header is applied at the scene G-buffer pass only, no label taken by the decal pass (still, orbit)",
+      "select": "\\[hair primary\\] header pass \\(last",
+      "match": "rt_hair_header_scene_pass 1\\): applied at the scene G-buffer pass [1-9][0-9]*, at the decal pass 0 .*label taken by the decal pass 0 ",
+      "min": 1,
+      "windows": [
+        "watch-fill",
+        "orbit-r",
+        "orbit-l",
+        "watch-off"
+      ],
+      "period_frames": 60
+    },
+    {
+      "name": "without the key the decal pass takes the label of scene G-buffer passes during the dolly",
+      "select": "\\[hair primary\\] header pass \\(last",
+      "match": "rt_hair_header_scene_pass 0\\): .*label taken by the decal pass [1-9]",
+      "min": 1,
+      "windows": [
+        "in-base",
+        "out-base"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "strands in every frame of the dolly with the fix (no frame under its bound, none on cards)",
+      "select": "\\[hair primary\\] switches \\(last",
+      "match": "strands->cards \\(frame watchdog 0, key watchdog 0, coverage low 0,.* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(",
+      "min": 1,
+      "windows": [
+        "in-fix",
+        "out-fix",
+        "in-fill",
+        "out-fill"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
+    {
+      "name": "swapped draws under a tenth of their card pixels in the dollies (report)",
+      "select": "\\[hair primary\\] dropouts \\(last",
+      "match": "\\): \\d+ swapped G-buffer draws wrote under a tenth of their card pixels",
+      "min": 0,
+      "windows": [
+        "in-fix",
+        "out-fix",
+        "in-fill",
+        "out-fill",
+        "in-base",
+        "out-base"
+      ],
+      "sample_frames": 180,
+      "period_frames": 180
+    },
     {
       "name": "no frame watchdog, key watchdog or coverage low switch while the card fill runs",
       "select": "\\[hair primary\\] switches \\(last",
       "match": "strands->cards \\(frame watchdog 0, key watchdog 0, coverage low 0,",
       "min": 1,
       "windows": [
-        "in-fill",
         "watch-fill",
-        "out-fill",
         "orbit-r",
         "orbit-l"
       ],
       "period_frames": 60
     },
     {
-      "name": "strands are drawn in every window (swapped draws counted)",
+      "name": "strands are drawn in every still window (swapped draws counted)",
       "select": "\\[hair primary\\] coverage \\(last",
       "match": "\\d+ draws probed, [1-9][0-9]* swapped",
       "min": 1,
@@ -69,14 +138,17 @@
       "period_frames": 60
     },
     {
-      "name": "frame watchdog lines of the dollies name the card period (0 with the fill, 28 without)",
+      "name": "frame watchdog lines name the card period (0 with the fill, 28 without)",
       "select": "\\[hair primary\\] watchdog: G-buffer frame",
       "match": "cards for (0|28) frames; build camera step -?[0-9.]+ m",
       "min": 0,
       "windows": [
+        "in-fix",
+        "out-fix",
         "in-fill",
         "out-fill",
-        "in-off"
+        "in-base",
+        "out-base"
       ],
       "event": true
     },
@@ -86,13 +158,15 @@
       "match": " 0 with a non-zero origin .*rt_hair_header_cam_gpu 1",
       "min": 1,
       "windows": [
+        "in-fix",
+        "out-fix",
         "in-fill",
         "out-fill",
-        "in-off",
-        "watch-fill",
-        "watch-off"
+        "in-base",
+        "out-base"
       ],
-      "period_frames": 60
+      "sample_frames": 180,
+      "period_frames": 180
     },
     {
       "name": "the dense sample period line in the dollies, with sampled frames",
@@ -100,20 +174,24 @@
       "match": "rt_hair_dense_sample 1\\): [1-9][0-9]* sampled frames, .* still: \\d+ samples: .* \\| moving .*: \\d+ samples: ",
       "min": 1,
       "windows": [
+        "in-fix",
+        "out-fix",
         "in-fill",
         "out-fill",
-        "in-off"
+        "in-base",
+        "out-base"
       ],
-      "period_frames": 60
+      "sample_frames": 180,
+      "period_frames": 180
     },
     {
       "name": "dense sample lines of the dolly's moving frames",
       "select": "\\[hair primary\\] dense sample: G-buffer frame",
-      "match": "origin -?[0-9.]+ m, ray against view x projection [0-9.]+ mrad, card [0-9.]+ m, hit -?[0-9.]+ m, .*anchor moved -?[0-9.]+ m in the world .* camera step [0-9.]+ m",
+      "match": "origin -?[0-9.]+ m, ray against view x projection [0-9.]+ mrad, card [0-9.]+ m, hit -?[0-9.]+ m, .*anchor moved -?[0-9.]+ m in the world .* camera step -?[0-9.]+ m",
       "min": 1,
       "windows": [
-        "in-fill",
-        "in-off"
+        "in-fix",
+        "in-base"
       ],
       "event": true
     },
@@ -141,9 +219,14 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "\\[wheel-input\\] phase=3 notches=10\\b",
-    "\\[wheel-input\\] phase=5 notches=-10\\b",
-    "\\[wheel-input\\] phase=7 notches=10\\b",
-    "\\[motion-plan\\] complete phases=12\\b",
+    "\\[wheel-input\\] phase=4 notches=-10\\b",
+    "\\[wheel-input\\] phase=6 notches=10\\b",
+    "\\[wheel-input\\] phase=7 notches=-10\\b",
+    "\\[wheel-input\\] phase=9 notches=10\\b",
+    "\\[wheel-input\\] phase=11 notches=-10\\b",
+    "\\[wheel-input\\] phase=17 notches=10\\b",
+    "\\[wheel-input\\] phase=18 notches=-10\\b",
+    "\\[motion-plan\\] complete phases=19\\b",
     "^Run ended: done"
   ],
   "live_flow": {
@@ -152,6 +235,6 @@
     "trace_stall_s": 3,
     "fps_windows": []
   },
-  "estimated_phase_seconds": 65.2,
-  "purpose": "6g: one launch for the RTX Hair state of 2026-11-14. Card fill on (rt_hair_card_fill, specialization 1053): under hl1's wheel dolly in and out and hc1's slow orbit no head switches to cards (switches line: frame watchdog 0, key watchdog 0, coverage low 0 in every period) and the PNG of the dolly shows no hole; the same dolly with the fill off in the same run is the comparison (hl1 003637: 5-7 trips). The dense samples of both dollies name the cause of the strand loss that remains with the header camera copied on the GPU (predicted.json part2: P1-P6). STAGED, not authorized."
+  "estimated_phase_seconds": 107.2,
+  "purpose": "6h: one launch. rt_hair_header_scene_pass (the strand header applied only at the scene G-buffer pass, never at the decal pass) toggled inside the run under hl1's wheel dolly in and out. With the key and without the card fill: no label taken by the decal pass and strands in every frame (frame watchdog trips 0, no frame on cards, no draw under a tenth of its card pixels). With the key and the fill: the same, then the still image (PNG) and hc1's slow orbit. Last without the key: the header pass line shows the labels the decal pass took (the cause of hx1 180928's loss). STAGED, not authorized."
 }
