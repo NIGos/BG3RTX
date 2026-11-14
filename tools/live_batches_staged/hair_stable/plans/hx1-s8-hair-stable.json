@@ -12,7 +12,7 @@
     "motion_end": 20.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",
@@ -33,7 +33,7 @@
     "motion_end": 3.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=1,rt_hair_header_scene_pass=0,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation "
@@ -53,7 +53,7 @@
     "motion_end": 3.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation "
@@ -73,7 +73,7 @@
     "motion_end": 4.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
     "wheel": 10,
     "frames": 120,
     "settle_frames": 0,
@@ -94,7 +94,7 @@
     "motion_end": 4.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
     "wheel": -10,
     "frames": 120,
     "settle_frames": 0,
@@ -115,7 +115,7 @@
     "motion_end": 3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
     "frames": 32,
     "settle_frames": 0,
     "stats_reset": true,
@@ -135,7 +135,7 @@
     "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
     "wheel": 10,
     "frames": 180,
     "settle_frames": 0,
@@ -143,8 +143,7 @@
     "wait_stats": [
       "\\[hair primary\\] header pass \\(last",
       "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },
@@ -161,7 +160,7 @@
     "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
     "wheel": -10,
     "frames": 180,
     "settle_frames": 0,
@@ -169,8 +168,7 @@
     "wait_stats": [
       "\\[hair primary\\] header pass \\(last",
       "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },
@@ -187,14 +185,14 @@
     "motion_end": 7,
     "pixels_per_second": 60,
     "direction": 1,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
     "frames": 180,
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
       "\\[hair primary\\] header pass \\(last",
       "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] dense samples \\(last"
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },
@@ -211,126 +209,19 @@
     "motion_end": 7,
     "pixels_per_second": 60,
     "direction": -1,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
     "frames": 180,
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
       "\\[hair primary\\] header pass \\(last",
       "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] dense samples \\(last"
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },
   {
-    "label": "still-on",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 5.4,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 6,
-    "motion_end": 6,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
-    "frames": 60,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[hair primary\\] header pass \\(last",
-      "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] coverage \\(last",
-      "\\[hair primary\\] strand G-buffer draws GPU"
-    ],
-    "wait_log_timeout": 30,
-    "trace_at": [
-      0.5
-    ]
-  },
-  {
-    "label": "in-shot",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 4.8,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 5,
-    "motion_end": 5,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=120",
-    "wheel": 10,
-    "frames": 120,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[hair primary\\] header pass \\(last",
-      "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
-    ],
-    "wait_log_timeout": 30
-  },
-  {
-    "label": "shot-on",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 5.4,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 6,
-    "motion_end": 6,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
-    "frames": 60,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[hair primary\\] header pass \\(last",
-      "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] coverage \\(last"
-    ],
-    "wait_log_timeout": 30,
-    "trace_at": [
-      0.1
-    ]
-  },
-  {
-    "label": "out-shot",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 4.8,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 5,
-    "motion_end": 5,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=120",
-    "wheel": -10,
-    "frames": 120,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[hair primary\\] header pass \\(last",
-      "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
-    ],
-    "wait_log_timeout": 30
-  },
-  {
-    "label": "settle-keep",
+    "label": "settle-nokeep",
     "kind": "static",
     "speed": "static",
     "seconds": 2.3,
@@ -342,7 +233,7 @@
     "motion_end": 3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
     "frames": 32,
     "settle_frames": 0,
     "stats_reset": true,
@@ -350,7 +241,7 @@
     "wait_log_timeout": 30
   },
   {
-    "label": "in-keep",
+    "label": "in-nokeep",
     "kind": "static",
     "speed": "static",
     "seconds": 7.1,
@@ -362,7 +253,7 @@
     "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
     "wheel": 10,
     "frames": 180,
     "settle_frames": 0,
@@ -370,13 +261,12 @@
     "wait_stats": [
       "\\[hair primary\\] header pass \\(last",
       "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },
   {
-    "label": "out-keep",
+    "label": "out-nokeep",
     "kind": "static",
     "speed": "static",
     "seconds": 7.1,
@@ -388,7 +278,7 @@
     "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
     "wheel": -10,
     "frames": 180,
     "settle_frames": 0,
@@ -396,13 +286,12 @@
     "wait_stats": [
       "\\[hair primary\\] header pass \\(last",
       "\\[hair primary\\] switches \\(last",
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },
   {
-    "label": "settle-fill",
+    "label": "settle-on2",
     "kind": "static",
     "speed": "static",
     "seconds": 2.3,
@@ -414,7 +303,7 @@
     "motion_end": 3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
     "frames": 32,
     "settle_frames": 0,
     "stats_reset": true,
@@ -422,126 +311,7 @@
     "wait_log_timeout": 30
   },
   {
-    "label": "still-fill",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 5.4,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 6,
-    "motion_end": 6,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
-    "frames": 60,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[hair primary\\] coverage \\(last",
-      "\\[hair primary\\] strand G-buffer draws GPU"
-    ],
-    "wait_log_timeout": 30,
-    "trace_at": [
-      0.5
-    ]
-  },
-  {
-    "label": "in-fill",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 4.8,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 5,
-    "motion_end": 5,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=120",
-    "wheel": 10,
-    "frames": 120,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
-    ],
-    "wait_log_timeout": 30
-  },
-  {
-    "label": "shot-fill",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 5.4,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 6,
-    "motion_end": 6,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
-    "frames": 60,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[hair primary\\] coverage \\(last"
-    ],
-    "wait_log_timeout": 30,
-    "trace_at": [
-      0.1
-    ]
-  },
-  {
-    "label": "out-fill",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 4.8,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 5,
-    "motion_end": 5,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=120",
-    "wheel": -10,
-    "frames": 120,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
-    ],
-    "wait_log_timeout": 30
-  },
-  {
-    "label": "settle-base",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 2.3,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 3,
-    "motion_end": 3,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=0,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=60",
-    "frames": 32,
-    "settle_frames": 0,
-    "stats_reset": true,
-    "wait_stats": [],
-    "wait_log_timeout": 30
-  },
-  {
-    "label": "in-base",
+    "label": "in-on2",
     "kind": "static",
     "speed": "static",
     "seconds": 7.1,
@@ -553,20 +323,20 @@
     "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=0,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
     "wheel": 10,
     "frames": 180,
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
       "\\[hair primary\\] header pass \\(last",
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
+      "\\[hair primary\\] switches \\(last",
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   },
   {
-    "label": "out-base",
+    "label": "out-on2",
     "kind": "static",
     "speed": "static",
     "seconds": 7.1,
@@ -578,15 +348,15 @@
     "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hair_groom_primary=1,rt_hair_card_fill=0,rt_hair_header_scene_pass=0,rt_hair_coverage_keep=0,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
+    "set": "rt_hair_groom_primary=1,rt_hair_coverage_keep=1,pan_inputs=0,pan_capture=0,rt_stats_period_frames=180",
     "wheel": -10,
     "frames": 180,
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
       "\\[hair primary\\] header pass \\(last",
-      "\\[hair primary\\] rebase origin \\(last",
-      "\\[hair primary\\] dense samples \\(last"
+      "\\[hair primary\\] switches \\(last",
+      "\\[hair primary\\] rebase origin \\(last"
     ],
     "wait_log_timeout": 30
   }
