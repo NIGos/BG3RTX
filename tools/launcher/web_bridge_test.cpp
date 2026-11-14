@@ -608,6 +608,31 @@ int main(int argc,char** argv){
     check(nb.state_json().find("\"preparation\"")==std::string::npos);
     check(nb.handle("{\"type\":\"prep\",\"action\":\"pause\"}").find("Preparation is unavailable")!=std::string::npos);
   }
+  // A message belongs to the action that produced it: the next action clears it (it used to stay in the status strip
+  // until the next successful write). The preset already in the file writes nothing and leaves nothing to undo. A
+  // slider with Off names the value its On button starts from (the frame limit: Ultra's 58 fps, not the minimum).
+  {
+    launcher::State ps; ps.caps=~0u; ps.base=st::code_defaults();
+    ps.base["dev"]="0"; ps.preset=st::kUltra; ps.values=st::preset_values(st::kUltra);
+    int saves=0;
+    launcher::web::Hooks sh;
+    sh.save=[&](launcher::State& written,const st::KVList& keys,std::string&){++saves;for(auto& kv:keys)written.user[kv.first]=kv.second;return true;};
+    sh.recheck=[]{return launcher::GraphicsInspection{};};
+    launcher::web::Bridge sb(ps,sh);
+    auto json=sb.handle("{\"type\":\"shortcut\",\"id\":\"no_such_key\",\"value\":\"Ctrl+Shift+F5\"}");
+    check(json.find("\"status\":\"Unknown keyboard shortcut.\"")!=std::string::npos);
+    check(sb.handle("{\"type\":\"state\"}").find("Unknown keyboard shortcut.")!=std::string::npos);   // a refresh keeps it
+    check(sb.handle("{\"type\":\"recheck\"}").find("\"status\":\"\"")!=std::string::npos);            // the next action clears it
+    sb.handle("{\"type\":\"preset\",\"value\":3}");   // may complete the startup keys of a bare file once
+    const int written=saves;const std::vector<int> ultra=ps.values;
+    sb.handle("{\"type\":\"preset\",\"value\":3}");
+    check(saves==written&&ps.values==ultra);
+    json=sb.handle("{\"type\":\"preset\",\"value\":2}");
+    check(saves==written+1&&ps.preset==st::kHigh&&json.find("Preset High applied")!=std::string::npos);
+    const auto cap=json.find("\"id\":\"fps_cap\"");
+    check(cap!=std::string::npos&&json.find("\"hasOff\":true,\"onValue\":58",cap)!=std::string::npos&&
+          json.find("\"hasOff\":true,\"onValue\":58",cap)<json.find("\"id\":",cap+5));
+  }
   std::printf("%d checks, %d failed\n",checks,failed);return failed?1:0;
 }
 

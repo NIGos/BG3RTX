@@ -373,7 +373,15 @@ std::wstring quote(const std::wstring& s) { return L"\"" + s + L"\""; }
 // One child process in its own kill-on-close job object.
 struct Child {
   HANDLE job = nullptr, process = nullptr;
-  DWORD exit_code = 0;
+  DWORD exit_code = 0, priority_class = BELOW_NORMAL_PRIORITY_CLASS;
+  // The priority class of every process in the job (the job limit moves running processes too).
+  void priority(DWORD cls) {
+    if (!job || cls == priority_class) return;
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION li{};
+    li.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_PRIORITY_CLASS;
+    li.BasicLimitInformation.PriorityClass = cls;
+    if (SetInformationJobObject(job, JobObjectExtendedLimitInformation, &li, sizeof li)) priority_class = cls;
+  }
   bool start(const std::wstring& cmd, const std::wstring& cwd, const std::wstring& log) {
     stop();
     job = CreateJobObjectW(nullptr, nullptr);
@@ -399,6 +407,7 @@ struct Child {
                                    cwd.c_str(), &si, &pi);
     if (out != INVALID_HANDLE_VALUE) CloseHandle(out);
     if (!ok) { CloseHandle(job); job = nullptr; return false; }
+    priority_class = BELOW_NORMAL_PRIORITY_CLASS;
     AssignProcessToJobObject(job, pi.hProcess);
     ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);
@@ -530,6 +539,9 @@ void Manager::tick(bool game_running) {
     if (m.hair.start(cmd, m.root, m.report_dir + L"\\batch.log")) { m.hair_jobs = threads; m.hair_all = all; }
     else { m.hair_failed = true; m.hair_error = "the converter could not be started"; }
   }
+  // Beside the running game ("Also while playing") the converter drops to idle priority: it only gets CPU time the
+  // game and the driver leave. BelowNormal otherwise, like every offline tool.
+  m.hair.priority(game_running ? IDLE_PRIORITY_CLASS : BELOW_NORMAL_PRIORITY_CLASS);
   // Shaders: once per launcher session, before Play (never beside a running game: it compiles its own).
   if (m.shaders.active()) m.shaders.running();
   const bool layer = file_exists(exe_dir() + L"\\VkLayer_bg3rtx.dll") && file_exists(m.root + L"\\shaders\\precompile.txt");

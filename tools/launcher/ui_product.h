@@ -68,7 +68,8 @@ static void footer() {
   std::wstring t=count?std::to_wstring(count)+(count==1?L" unsaved change. ":L" unsaved changes. "):L"";
   bool running=game_running();
   int pending=(g.pending&&(running||!g_screenshot.empty()))?launcher::ui_state::restart_count(g.baseline,saved_settings()):0;
-  t+=pending?widen(launcher::ui_state::restart_banner(pending))+L" ":count?L"":L"Saved. ";
+  // The basic window keeps Save (the WebView window applies each change at once): say so where the status is read.
+  t+=pending?widen(launcher::ui_state::restart_banner(pending))+L" ":count?L"Press Save to apply. ":L"Saved. Basic window: changes apply when you press Save. ";
   if(running)t+=L"Game is running. ";
   if(!g.message.empty()&&g.message!=L"Saved.")t+=L"\r\n"+(g.message.size()>220?g.message.substr(0,220)+L"... (View error details)":g.message);
   ShowWindow(control(g.wnd,ERROR_DETAILS),g.message.empty()?SW_HIDE:SW_SHOW);
@@ -444,7 +445,7 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   WNDCLASSEXW wc{sizeof wc};wc.lpfnWndProc=wndproc;wc.hInstance=inst;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hbrBackground=g.bg;wc.lpszClassName=L"BG3RTXLauncher";
   wc.hIcon=(HICON)LoadImageW(inst,MAKEINTRESOURCEW(1),IMAGE_ICON,S(32),S(32),0);wc.hIconSm=wc.hIcon;RegisterClassExW(&wc);
   wc.lpfnWndProc=bodyproc;wc.lpszClassName=L"BG3RTXBody";RegisterClassExW(&wc);
-  g.wnd=CreateWindowExW(WS_EX_CONTROLPARENT,L"BG3RTXLauncher",L"BG3RTX settings",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,S(g_review_width?g_review_width+16:960),S(900),nullptr,nullptr,inst,nullptr);
+  g.wnd=CreateWindowExW(WS_EX_CONTROLPARENT,L"BG3RTXLauncher",L"BG3RTX settings (basic window)",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,S(g_review_width?g_review_width+16:960),S(900),nullptr,nullptr,inst,nullptr);
   auto emblem=add(g.wnd,L"STATIC",L"",SS_ICON,0);SendMessageW(emblem,STM_SETICON,WPARAM(wc.hIcon),0);SetWindowSubclass(emblem,emblemproc,1,0);place(emblem,16,8,32,32);
   place(add(g.wnd,L"STATIC",L"",SS_LEFT,HEADER,true),64,8,880,40);label(g.wnd,L"Preset",16,60,72,24);
   for(int p=0;p<st::kPresetCount;++p)add(g.wnd,L"BUTTON",widen(st::kPresetLabel[p]),WS_TABSTOP|BS_AUTORADIOBUTTON|BS_PUSHLIKE|(p==0?WS_GROUP:0),PRESET_LOW+p);

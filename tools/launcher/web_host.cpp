@@ -55,6 +55,8 @@ struct Host {
   std::string session;
   st::Map baseline;
   bool no_game{}, report{}, failed{}, ready{}, busy{}, closed{}, shot_bottom{};
+  bool hidden{};            // minimised: the WebView is hidden and suspended, and no state is sent to it
+  std::string last_state;   // the last message sent to the page: the 2 s refresh sends only what changed
   float shot_scale{};
   int result{};
   std::thread worker;
@@ -102,7 +104,9 @@ std::wstring browse_granny(HWND owner,const std::wstring& current) {
   if(SUCCEEDED(dialog->Show(owner))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){out=path;CoTaskMemFree(path);}}}
   return out;
 }
-void send(Host& h,const std::string& json) {if(h.view)h.view->PostWebMessageAsJson(widen(json).c_str());}
+void send(Host& h,const std::string& json) {if(h.view){h.last_state=json;h.view->PostWebMessageAsJson(widen(json).c_str());}}
+// Every 2 s (timer 1). The page rebuilds itself from each state it receives, so an unchanged state is not sent again:
+// while the game runs the launcher then costs two process snapshots and a few file checks per tick, and no WebView work.
 void refresh(Host& h) {
   if(h.busy||!h.bridge)return;
   auto session=session_token();
@@ -111,7 +115,9 @@ void refresh(Host& h) {
   const bool playing=game_running();
   h.bridge->set_can_play(!h.no_game&&valid_game_dir(h.game)&&!playing);
   if(h.prep)h.prep->tick(playing);
-  send(h,h.bridge->state_json());
+  if(h.hidden)return;
+  auto json=h.bridge->state_json();
+  if(json!=h.last_state)send(h,json);
 }
 void fail(Host& h, const char* stage="WebView2 initialization", HRESULT error=E_FAIL) {
   if(!h.shot.empty())write_file_atomic(h.shot+L".error.txt",std::string(stage)+": HRESULT "+std::to_string(static_cast<unsigned long>(error)),nullptr);
@@ -249,7 +255,19 @@ LRESULT CALLBACK window_proc(HWND window,UINT message,WPARAM w,LPARAM l) {
         invalidate_caption(*h);return 0;
       }
     case WM_SETFOCUS:if(h->controller)h->controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);return 0;
-    case WM_SIZE:if(h->controller&&w!=SIZE_MINIMIZED)h->controller->put_Bounds(webview_bounds(*h));invalidate_caption(*h);return 0;
+    case WM_SIZE:
+      if(h->controller){
+        // Minimised (the usual state while the game runs): hide the WebView and let it suspend, which stops its timers
+        // and rendering and lets the browser processes trim memory. Showing it again resumes it; the state is sent anew.
+        const bool hidden=w==SIZE_MINIMIZED;
+        if(hidden!=h->hidden){
+          h->hidden=hidden;h->controller->put_IsVisible(hidden?FALSE:TRUE);
+          if(hidden){ComPtr<ICoreWebView2_3> view3;if(h->view&&SUCCEEDED(h->view.As(&view3)))view3->TrySuspend(Callback<ICoreWebView2TrySuspendCompletedHandler>([](HRESULT,BOOL)->HRESULT{return S_OK;}).Get());}
+          else if(h->ready&&h->shot.empty()){h->last_state.clear();refresh(*h);}
+        }
+        if(!hidden)h->controller->put_Bounds(webview_bounds(*h));
+      }
+      invalidate_caption(*h);return 0;
     case WM_GETMINMAXINFO:reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={px(*h,736),px(*h,620)};return 0;
     case WM_TIMER:if(w==2)capture(*h);else if(w==3){h->result=2;DestroyWindow(window);}else refresh(*h);return 0;
     case work_done:if(h->worker.joinable())h->worker.join();h->busy=false;

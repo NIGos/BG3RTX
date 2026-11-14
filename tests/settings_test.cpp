@@ -1846,6 +1846,74 @@ static void test_strand_bundle() {
   CHECK(writers > 0);
 }
 
+// Whole user files of earlier versions, loaded the way the release app loads them (bg3rtx.ini, data/release.ini, then
+// the file). Every control the player sees reads back as one of its choices (never "Custom value kept"), saving
+// writes a file that loads to the same choices, and saving that again changes nothing.
+//   user_ini_20261101.ini (developer file, test_user_ini_migration above), launcher/user_hairtest8.ini (0.9.6-hairtest8:
+//   RTX Hair On written before the three stability keys existed, experimental opt-in) and user_preset_only.ini.
+static void test_old_user_files() {
+  const Map release = parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini") + read_file(BG3RTX_SOURCE_DIR "/data/release.ini"));
+  auto load = [&](const std::string& text) {
+    Map m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini(text));
+    return m;
+  };
+  auto round_trip = [&](const std::string& name, const std::string& text, int preset, bool opt_in) {
+    CHECK(!text.empty());
+    const Map m = load(text);
+    CHECK_EQ(get(m, "dev"), "0");
+    CHECK(preset_from_id(get(parse_ini(text), "preset")) == preset);
+    const std::vector<int> v = presentation_values(m, false, opt_in);
+    for (int i = 0; i < kKnobCount; ++i)
+      if (knob_visible(kKnobs[i], false, opt_in) && v[i] < 0) CHECK_EQ(name + ": " + kKnobs[i].id + " reads back as custom", "");
+    const std::string saved = render_user_ini(text, preset, v);
+    CHECK(presentation_values(load(saved), false, opt_in) == v);
+    CHECK_EQ(render_user_ini(saved, preset, v), saved);   // a second save is a no-op
+    return saved;
+  };
+
+  // The hairtest8 file, with two of the strand keys removed on 2026-11-14 added as a file of that time could hold them.
+  const std::string hair8 = read_file(BG3RTX_SOURCE_DIR "/tests/fixtures/launcher/user_hairtest8.ini") +
+                            "rt_hair_row_stable=1\nrt_hair_swap_latch=1\n";
+  const Knob& hair = *find_knob("exp_hair_groom_primary");
+  {
+    const Map m = load(hair8);
+    CHECK(knob_value(hair, m) == 1);
+    // The bundle is whole on load, the keys added after the file was written included.
+    for (const KV& kv : hair.choices[1].kv) if (kv.key) CHECK_EQ(std::string(kv.key) + "=" + get(m, kv.key), std::string(kv.key) + "=" + kv.value);
+    for (const char* key : {"rt_hair_header_cam_gpu", "rt_hair_header_scene_pass", "rt_hair_coverage_keep"})
+      CHECK(parse_ini(hair8).count(key) == 0);   // the fixture really predates them
+    CHECK(knob_value(*find_knob("hair_motion_stability"), m) == 0);   // the player's explicit Off beats Ultra's On
+    CHECK(knob_value(*find_knob("exp_hair_strand_aa"), m) == 2);      // opted in
+    CHECK(knob_value(*find_knob("dlss5_nr"), m) == 1);
+    CHECK(knob_value(*find_knob("fps_cap"), m) == 0);
+    const std::string saved = round_trip("hairtest8", hair8, kUltra, true);
+    const Map w = parse_ini(saved);
+    for (const KV& kv : hair.choices[1].kv) if (kv.key) CHECK_EQ(std::string(kv.key) + "=" + get(w, kv.key), std::string(kv.key) + "=" + kv.value);
+    // Removed keys are carried as written and select nothing; hotkeys and the runtime path survive.
+    CHECK_EQ(get(w, "rt_hair_row_stable"), "1"); CHECK_EQ(get(w, "hotkey_dlss5"), "Ctrl+Shift+F6");
+    CHECK(!get(w, "dlss5_nr_runtime").empty()); CHECK_EQ(get(w, "experimental_options"), "1");
+    // Without the opt-in the same file keeps RTX Hair (a release control) and loses only the experimental option.
+    Map plain = parse_ini(hair8); plain["experimental_options"] = "0";
+    Map m0 = code_defaults(); apply_layer(m0, release); apply_layer(m0, plain);
+    CHECK(knob_value(hair, m0) == 1); CHECK_EQ(get(m0, "rr_hair_strand_aa"), "0");
+  }
+  // A file that only names its preset: exactly the preset, for every preset, and saving adds no key.
+  const std::string only = read_file(BG3RTX_SOURCE_DIR "/tests/fixtures/settings/user_preset_only.ini");
+  CHECK(parse_ini(only).size() == 1);
+  for (int p = 0; p < kPresetCount; ++p) {
+    std::string text = only;
+    const std::string from = "preset=high", to = std::string("preset=") + kPresetId[p];
+    text.replace(text.find(from), from.size(), to);
+    const Map m = load(text);
+    const std::vector<int> v = knob_values(m), want = preset_values(p);
+    for (int i = 0; i < kKnobCount; ++i)
+      if (knob_visible(kKnobs[i], false) && v[i] != want[i])
+        CHECK_EQ(std::string(kPresetId[p]) + ": " + kKnobs[i].id + "=" + std::to_string(v[i]), std::to_string(want[i]));
+    const std::string saved = round_trip(std::string("preset-only ") + kPresetId[p], text, p, false);
+    CHECK(parse_ini(saved).size() == 1);
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1875,6 +1943,7 @@ int main(int argc, char** argv) {
     CHECK(key_change_needs_restart("fg_present_metering","1","0"));
   }
   test_strand_bundle();
+  test_old_user_files();
   test_release_rtx_hair();
   test_hair_distant_detail();
   test_hair_motion_stability();

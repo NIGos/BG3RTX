@@ -23,7 +23,7 @@ function dom() {
 }
 const {ids,document}=dom();
 let receive;const sent=[];
-const context=vm.createContext({document,navigator:{},location:{search:'',protocol:'file:'},URLSearchParams,window:{chrome:{webview:{postMessage:m=>sent.push(m),addEventListener:(_,fn)=>receive=fn}}}});
+const context=vm.createContext({document,setTimeout:fn=>fn(),navigator:{},location:{search:'',protocol:'file:'},URLSearchParams,window:{chrome:{webview:{postMessage:m=>sent.push(m),addEventListener:(_,fn)=>receive=fn}}}});
 vm.runInContext(fs.readFileSync('tools/launcher/ui/app.js','utf8'),context);
 const render=s=>receive({data:{...s,type:'state'}});
 const all=e=>[e,...e.children.flatMap(c=>typeof c==='object'?all(c):[])];
@@ -360,6 +360,18 @@ render({...fixture,settings:[{...slider,value:58}]});const range=ids.get('card-t
 assert(!range.disabled);assert.strictEqual(range.attributes['aria-valuetext'],'58 fps');
 count=sent.length;range.value=60;range.oninput();assert.strictEqual(range.attributes['aria-valuetext'],'60 fps');assert.strictEqual(sent.length,count,'dragging does not write');
 range.onchange();assert.deepStrictEqual(msg(),{type:'set',id:'test-cap',value:60});
+// A state that arrives while the thumb is held (the host refreshes on a timer) does not rebuild the slider under the
+// pointer; it is rendered on release. Releasing with a change sends the value and waits for the bridge's answer.
+range.onpointerdown();render({...fixture,settings:[{...slider,value:90}]});
+assert.strictEqual(ids.get('card-test-cap').querySelectorAll('input')[0],range,'slider rebuilt while dragging');
+range.onpointerup();assert.notStrictEqual(ids.get('card-test-cap').querySelectorAll('input')[0],range,'deferred state not rendered on release');
+assert.strictEqual(ids.get('card-test-cap').querySelectorAll('input')[0].attributes['aria-valuetext'],'90 fps');
+const held=ids.get('card-test-cap').querySelectorAll('input')[0];held.onpointerdown();render({...fixture,settings:[{...slider,value:91}]});held.value=70;held.onchange();
+assert.deepStrictEqual(msg(),{type:'set',id:'test-cap',value:70});held.onpointerup();assert.strictEqual(ids.get('card-test-cap').querySelectorAll('input')[0],held,'stale state rendered after a change was sent');
+// On starts from the value the bridge names (the preset's), or from the last value of this session; never from the minimum.
+render({...fixture,settings:[{...slider,onValue:58}]});go('Performance');ids.get('card-test-cap').querySelectorAll('button')[1].onclick();assert.strictEqual(sent.at(-1).value,90,'On: the last value the bridge confirmed in this session');
+render({...fixture,settings:[{...slider,id:'test-cap2',onValue:58}]});go('Performance');ids.get('card-test-cap2').querySelectorAll('button')[1].onclick();assert.strictEqual(sent.at(-1).value,58,'On: the preset value');
+render(fixture);
 // Diagnostic preview nodes remain intact on unchanged snapshots, including dialog focus.
 const report={visible:true,files:[{name:'graphics.txt',size:12,text:'Sanitized text'}],bytes:12};
 const reportState={...fixture,report:{...report,loggingHint:'Turn on Detailed logging, reproduce the problem, then create the report.'},status:'Package preview ready'};render(reportState);
