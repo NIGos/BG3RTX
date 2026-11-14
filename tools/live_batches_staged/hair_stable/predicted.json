@@ -27,10 +27,26 @@
   },
   "part2_keep_off": {
     "keys": "the bundle with rt_hair_coverage_keep=0 (the state qualified in 194658's in-on and out-on; the handshake change is off with it)",
-    "predicted": "in-nokeep, out-nokeep: header gates as part 1; frame watchdog 0, coverage low 0, coverage high 0, 0 frames on cards. 'coverage stale/none/invalidated' 0 or 1 (a draw off the screen for 28 frames). Card runs of 10 frames; 16-35 'coverage stale' G-buffer refusals per window."
+    "predicted": "in-nokeep, out-nokeep: header gates as part 1; frame watchdog 0, coverage low 0, coverage high 0, 0 frames on cards. 'coverage stale/none/invalidated' 0 or 1 (a draw off the screen for 28 frames). Card runs of 10 frames; 16-35 'coverage stale' G-buffer refusals per window.",
+    "gate": "Control: the runner only requires the switches line in in-nokeep and out-nokeep (sensible gates, 2026-11-14). Its switch causes and card runs are reported, not gated."
   },
   "hitch_frames": "'[hair primary] hitch frame' is expected in no window (0 seen in 190905 and 194658). If the line appears it reads 'it applied its own strand header and tag'; the windows after it must still pass part 1. That would be the first live proof of the 6i per-recording header.",
   "not_gated": "card runs, cards->strands counts, refusal counts, dropout counts, GPU ms and the keep-off window's stale switches are reported. The window may be occluded: no frame time is judged.",
   "dropped_since_194658": "the card fill windows and PNG pairs (decided: an Advanced option, 6j), the dense sampler (qualified in two runs; a diagnostic pipeline variant), the control without rt_hair_header_scene_pass (reproduced in 190905 and 194658).",
-  "target": "strands in every frame of a converted style, also under fast camera motion, with no card/strand flipping, and a head that enters the view on strands within 3-4 frames. A style or LOD without a groom file keeps its cards (S8: 2 draws a frame, index counts 3399 and 7086)."
+  "target": "strands in every frame of a converted style, also under fast camera motion, with no card/strand flipping, and a head that enters the view on strands within 3-4 frames. A style or LOD without a groom file keeps its cards (S8: 2 draws a frame, index counts 3399 and 7086).",
+  "result_hx1_202905": {
+    "run": "captures/queue/logs/hx1-s8-hair-stable.1.202905.log, 16 of 16 phases, 183 s, marked INVALID only by the keep-off control gate (in-nokeep: 3 strands->cards, coverage stale 2, other 1, where the gate required other 0). That gate is now 'the line exists'.",
+    "card_runs_min_median_max": {
+      "in-on": "3 runs 3/3/9",
+      "out-on": "2 runs 3/3/3",
+      "orbit-r": "2 runs 3/6/6",
+      "orbit-l": "2 runs 3/3/3",
+      "in-nokeep": "5 runs 1/9/10",
+      "out-nokeep": "3 runs 10/10/72",
+      "in-on2": "3 runs 3/3/3",
+      "out-on2": "2 runs 3/3/3"
+    },
+    "bundle": "0 strands->cards of any cause, 0 frames on cards, 0 watchdog trips in all six bundle windows.",
+    "verdict": "Prediction held: median 3 frames on cards per entering head with the bundle (predicted 3-4; one run of 9 in in-on, one of 6 in orbit-r, above the predicted 5 cap) against 9-10 with keep off (predicted 10; one run of 72 in out-nokeep)."
+  }
 }

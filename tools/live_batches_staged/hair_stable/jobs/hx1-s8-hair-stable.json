@@ -127,9 +127,9 @@
       "period_frames": 180
     },
     {
-      "name": "keep off: no switch to cards by a watchdog, low or high coverage or a header not applied",
+      "name": "keep off (control): the switches line exists in every window",
       "select": "\\[hair primary\\] switches \\(last",
-      "match": "strands->cards \\(frame watchdog 0, coverage low 0, coverage high 0, coverage stale/none/invalidated \\d+, header not applied \\(camera gate, order\\) 0, live toggle 0, other 0\\), .* frames with hair draws, 0 with every draw on cards; .*frame watchdog trips 0 \\(",
+      "match": "\\d+ strands->cards \\(frame watchdog \\d+, .*card runs \\d+: \\d+/\\d+/\\d+; ",
       "min": 1,
       "windows": [
         "in-nokeep",

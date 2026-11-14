@@ -53,9 +53,12 @@
       },
       "cost": {
         "GI trace GPU median": "m1 and fix equal to OFF (about 4.7-4.8 ms); m2 about 1.3 ms lower (the dropped hit work, not a gain)",
-        "scene wait mean": "OFF and m1 3.6 ms; m2 under 0.1 ms; fix between 0 and the OFF mean (unknown: the wait moves from the first RT query to the first hit-material pass; this is the number the run is for)"
+        "scene wait mean": "OFF and m1 3.6 ms; m2 under 0.1 ms; fix between 0 and the OFF mean (unknown: the wait moves from the first RT query to the first hit-material pass; this is the number the run is for)",
+        "rendered frame time median": "OFF and m1 about 21.5 ms; m2 about 1 ms lower (wait and dropped hit work); fix between m2 and OFF. Judged in the energy windows (rt_stats off) against the OFF pair: 'lower' rule, a rise beyond noise and max(0.1 ms, 1%) fails, the delta is always printed."
       },
-      "decision": "fix inside the OFF range with qualified hits: rt_scene_handout_hit_wait=1 becomes the default with the handout. If its wait mean is close to the OFF mean, the handout has no gain with native hit materials and the published frame-time gains (section 8.5) were the dropped hit work: then either Off again on presets with rt_hit_material, or the query moves to a layer command buffer inserted at the submit before the lighting (design 8.6)."
+      "decision": "fix inside the OFF range with qualified hits: rt_scene_handout_hit_wait=1 becomes the default with the handout. If its wait mean is close to the OFF mean, the handout has no gain with native hit materials and the published frame-time gains (section 8.5) were the dropped hit work: then either Off again on presets with rt_hit_material, or the query moves to a layer command buffer inserted at the submit before the lighting (design 8.6).",
+      "first_run_204217": "Stopped in the warm-up (phase 1 of 19, 144 s): 'producer silent' on the GI far and core handout lines. Job fault, not code: both were in the any-line expect, so live_flow asked for them right after the OFF warm-up, where rt_stats=0 (no GI far line) and rt_scene_handout=0 (core/gi.cpp handout_log returns before the line). No handout or fix state was reached. OFF warm-up numbers (23 periods of 120 frames, static S8): scene wait mean 3.60 ms, 0 timeouts; GI trace GPU median 4.65 ms; rt passes 6.6 ms; rendered median 21.5 ms.",
+      "runner_gates": "Lines exist, per state: GI far and scene wait in every hit window; the '[rt] scene handout' and '[core] scene handout' lines in hit-m2 and hit-fix. No value is gated by the runner; analyze.py judges (sane_gates)."
     }
   },
   "decision": "Qualified (knob may lose its Experimental mark) when every correctness gate passes in all five launches. On by default only if the rendered median gains more than the noise in at least one of the four cost launches and loses in none.",

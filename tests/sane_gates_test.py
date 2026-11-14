@@ -85,6 +85,10 @@ class SaneGates(unittest.TestCase):
         found = hq.state_costs({"GI trace GPU median ms": {"energy-off-a": 4.83, "energy-m2": 3.49, "energy-off-b": 4.69}},
                                {"m2": "lower"})
         self.assertEqual((len(found[sane.EXPLAIN]), len(found[sane.INFO])), (0, 1))
+        # the deliverable rows: a wait that falls is shown (INFO), a frame time that rises beyond noise and floor fails
+        found = hq.state_costs({"scene wait mean ms": {"energy-off-a": 3.6, "energy-fix": 1.0, "energy-off-b": 3.5},
+                                "frame time median ms": {"energy-off-a": 21.4, "energy-fix": 22.4, "energy-off-b": 21.5}})
+        self.assertEqual((len(found[sane.FAIL]), len(found[sane.EXPLAIN]), len(found[sane.INFO])), (1, 0, 1))
 
     def test_hit_checks(self):
         plan = [{"label": f"{kind}-{state}", "set": f"rt_scene_handout_hit_wait={int(state == 'fix')}"}

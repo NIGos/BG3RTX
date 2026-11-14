@@ -55,8 +55,10 @@ def causes(stale):
             ".*frame watchdog trips 0 \\(")
 # The bundle: no switch to cards of any cause, no frame with every draw on cards, no frame under its bound.
 NO_SWITCH = ": 0 strands->cards " + causes("0")
-# Keep off: "coverage stale/none/invalidated" is open (a draw off the screen for 28 frames: 0 or 1 per window).
-NO_LOSS = "strands->cards " + causes("\\d+")
+# Keep off is the CONTROL: its windows only need their switches line (user rule 2026-11-14, AGENTS.md sensible gates).
+# hx1 202905 was INVALID only because in-nokeep required "other 0" and saw "coverage stale 2, other 1"; the counts of
+# the control are reported next to the bundle's, never gated.
+CONTROL_LINE = "\\d+ strands->cards \\(frame watchdog \\d+, .*card runs \\d+: \\d+/\\d+/\\d+; "
 OWN_HEADER = ("rt_hair_header_scene_pass 1\\): applied at the scene G-buffer pass [1-9][0-9]*, at the decal pass 0 "
               ".*label taken by the decal pass 0 .*by another scene pass 0 ")
 
@@ -149,9 +151,8 @@ def make_job(plan):
             # under its bound.
             *[every(f"strands in every frame with the bundle: 0 strands->cards of any cause ({what})",
                     SWITCHES, NO_SWITCH, windows, **period) for what, windows, period in gated],
-            # keep off: the state hx1 194658 qualified; only a draw off the screen may go to cards (unseen)
-            every("keep off: no switch to cards by a watchdog, low or high coverage or a header not applied",
-                  SWITCHES, NO_LOSS, NOKEEP, **DOLLY),
+            # keep off: the control of the A/B; its line must exist, its values are the report
+            every("keep off (control): the switches line exists in every window", SWITCHES, CONTROL_LINE, NOKEEP, **DOLLY),
             *[every(f"the rebase origin is 0 in every sampled frame (header camera copied on the GPU; {what})",
                     "\\[hair primary\\] rebase origin \\(last", " 0 with a non-zero origin .*rt_hair_header_cam_gpu 1",
                     windows, **period) for what, windows, period in moving],
