@@ -142,7 +142,7 @@ common/water_compose.h `pick_scene`), owned by rtscene.cpp:
   gi/ls_ref/ls_ref_body.hlsli:25, rt/hair_receiver.hlsli:19, rt/water_reflect.hlsl:128.
 - Request delta 0 (spec constant, no define). Recompile once: every request whose preprocessed text includes
   rt_common.hlsli (29 files; all 134 GI requests of shaders/variants.txt plus water, D-LS and hair requests).
-- Key off: specialized to 0, frozen and folded (tools/spec_constant_proto.py canonical) = the previous program.
+- Key off: specialized to 0, frozen and folded (tools/spirv_equivalence.py canonical) = the previous program.
 - GPU cost: one uniform 8-byte stamp load per query, expected < 0.01 ms; measure from the `gpu` lines anyway.
 
 ### 3.5 Host ABI
