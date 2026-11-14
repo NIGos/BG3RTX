@@ -48,6 +48,7 @@
 #include "ls_lights.h"
 #include "sharc.h"
 #include "sun_trust.h"
+#include "rr_mode_latch.h"
 
 // D-EM (Bg3HostApi::rt_emissive, Bg3EmissiveInfo): the SHaRC injection adds the game's effects-target
 // emission. It follows BG3RTX_HOST_HAS_RT_EMISSIVE, which the D-EM host_api.h is to define (an ABI
@@ -511,11 +512,11 @@ uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_shift = 1;
 // RR mode (docs/QUALITY.md fix 3): with Ray Reconstruction denoising the frame,
 // the GI uses the preset's ray count and keeps no history of its own, the
 // input RR is designed for. Ultra uses two rays. gi_rr: -1 follows rr, 0 off, 1 on.
-uint32_t gi_res_shift() {
-  int m = host->cfg_int("gi_rr", -1);
-  bool rr = m < 0 ? host->rr_active() : m != 0;
-  return rr ? 0u : 1u;
-}
+// core/rr_mode_latch.h: a gap of rr_active shorter than the hold (the first frame after a loading screen) keeps
+// the mode, so the images are not reallocated twice per level load.
+bg3::RrModeLatch g_rr_latch;
+bool gi_rr_mode() { return g_rr_latch.update(host->cfg_int("gi_rr", -1), host->rr_active(), host->frame_index()); }
+uint32_t gi_res_shift() { return gi_rr_mode() ? 0u : 1u; }
 bg3::RecordingHistory g_history;
 bool g_logged = false;
 uint64_t g_last_pre_frame = 0;
@@ -747,8 +748,7 @@ void trace_timing_collect() {
     auto& v = g_tr_ms[k];
     if (v.size() < stats_period(300)) continue;
     std::sort(v.begin(), v.end());
-    const int rr_setting=host->cfg_int("gi_rr",-1);
-    bool rr_mode=rr_setting<0?host->rr_active():rr_setting!=0;
+    const bool rr_mode=g_rr_latch.mode;
     log_stats("gi: trace pass (%s, %u rays/sample, %s) GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames)",
               k ? "ray-traced, gi_rt=1" : "screen-space",
               uint32_t(rr_mode ? host->cfg_int("gi_rr_rays", 1) : host->cfg_int("gi_rays", 4)),
@@ -2288,8 +2288,7 @@ Push make_push() {
   pc.debug = uint32_t(host->cfg_int("gi_debug", 0));
   pc.history = host->cfg_float("gi_history", 0.1f);
   pc.ao = host->cfg_float("gi_ao", 1.0f);
-  int rr_mode = host->cfg_int("gi_rr", -1);
-  if (rr_mode < 0 ? host->rr_active() : rr_mode != 0) {   // RR mode: 1 spp, no accumulation of our own
+  if (gi_rr_mode()) {   // RR mode: 1 spp, no accumulation of our own
     pc.rays = uint32_t(host->cfg_int("gi_rr_rays", 1));
     pc.history = 1.0f;
   }
