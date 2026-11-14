@@ -1,5 +1,11 @@
 # Launcher UI rework: proposal (2026-11-14)
 
+> Decided 2026-11-14 and implemented on this branch: Direction A with **instant apply**. Section 2 rule 5
+> (changes bar, Review, Save) is replaced: a click is written at once, named in a status strip with Undo; no
+> Save, no review, no unsaved state. Rule 3 is implemented as written (at the click, inline, Undo). Options
+> 1, 2 and 4 of section 1 accepted, 3 declined (the name "Low-latency scene" stays). Dark theme only.
+> Section 6 was carried out as four phases; see `docs/progress/claude-ui-rework.md`.
+
 Companion to `AUDIT.md`. Mockups: `mockups/index.html` (Direction A recommended, Direction B alternative).
 No feature is added or removed; options that change behaviour are marked **Option**.
 

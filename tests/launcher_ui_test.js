@@ -66,13 +66,13 @@ render(fixture);
  const source=fs.readFileSync('tools/launcher/ui/app.js','utf8');
  for(const gone of ["send('save'","send('discard'","send('confirm'","send('cancel'","unsavedCount","state.preview"])assert(!source.includes(gone),gone+' left in app.js');
  // Nothing to say: the status strip is hidden. A message from the bridge shows it, without Undo.
- render({...fixture,status:''});assert(ids.get('changes').hidden,'status strip hidden when there is nothing to say');
- render({...fixture,status:'Report saved on your PC.'});assert(!ids.get('changes').hidden&&ids.get('status').textContent==='Report saved on your PC.'&&ids.get('undo').hidden&&ids.get('dismiss').hidden);
+ render({...fixture,status:''});assert.strictEqual(ids.get('changes').className,'idle','status strip out of sight when there is nothing to say');
+ render({...fixture,status:'Report saved on your PC.'});assert(ids.get('changes').className===''&&ids.get('status').textContent==='Report saved on your PC.'&&ids.get('undo').hidden&&ids.get('dismiss').hidden);
  // A change: what changed, what changed with it, Undo and Dismiss; the same list sits in the row that was clicked.
  const notice={text:'RTX Hair: On → Off',also:['Strand hair edge resolve: Analytic coverage → Off'],anchor:'exp_hair_groom_primary',undo:true};
  render({...fixture,status:'',notice});
  assert.strictEqual(ids.get('status').textContent,'RTX Hair: On → Off. Also changed: Strand hair edge resolve: Analytic coverage → Off.');
- assert(!ids.get('changes').hidden&&!ids.get('undo').hidden&&!ids.get('dismiss').hidden);
+ assert(ids.get('changes').className===''&&!ids.get('undo').hidden&&!ids.get('dismiss').hidden);
  ids.get('undo').onclick();assert.deepStrictEqual(msg(),{type:'undo'});
  ids.get('dismiss').onclick();assert.deepStrictEqual(msg(),{type:'dismiss'});
  go('Lighting');
@@ -228,6 +228,30 @@ for(const id of ['box_lights','exp_hidden_surface','hair_distant_detail','hair_m
  assert(ids.get('hotkey_rtx_hair'),'RTX Hair hotkey on the Hotkeys page');
  render(fixture);go('Lighting');
 }
+// Keyboard: a group of choices is one Tab stop (the current choice); arrows move focus between choices without
+// writing; Home and End jump; a disabled choice is skipped. The navigation works the same with Up and Down.
+{
+ const gi=fixture.settings.find(s=>s.id==='gi'),buttons=ids.get('card-gi').querySelectorAll('button').filter(b=>/^control-gi-/.test(b.id));
+ assert.deepStrictEqual(buttons.map(b=>b.tabIndex),buttons.map((_,i)=>i===gi.value?0:-1),'one Tab stop per group');
+ const key=k=>({key:k,preventDefault(){}});let before=sent.length;
+ buttons[gi.value].focus();buttons[gi.value].onkeydown(key('ArrowRight'));
+ assert.strictEqual(document.activeElement,buttons[(gi.value+1)%buttons.length]);
+ document.activeElement.onkeydown(key('ArrowLeft'));assert.strictEqual(document.activeElement,buttons[gi.value]);
+ buttons[0].onkeydown(key('ArrowLeft'));assert.strictEqual(document.activeElement,buttons[buttons.length-1],'wraps');
+ buttons[1].onkeydown(key('Home'));assert.strictEqual(document.activeElement,buttons[0]);buttons[0].onkeydown(key('End'));assert.strictEqual(document.activeElement,buttons[buttons.length-1]);
+ assert.strictEqual(sent.length,before,'moving between choices writes nothing');
+ render({...fixture,settings:fixture.settings.map(s=>s.id==='gi'?{...s,value:0,choices:s.choices.map((c,i)=>({...c,enabled:i!==1}))}:s)});
+ const limited=ids.get('card-gi').querySelectorAll('button').filter(b=>/^control-gi-/.test(b.id));
+ limited[0].onkeydown(key('ArrowRight'));assert.strictEqual(document.activeElement,limited[2],'a disabled choice is skipped');
+ render(fixture);
+ const presets=ids.get('presets').children;assert.deepStrictEqual(presets.map(b=>b.tabIndex),presets.map((_,i)=>i===fixture.preset?0:-1));
+ const nav=ids.get('navigation').children.filter(e=>e.tagName==='button');
+ assert.deepStrictEqual(nav.map(b=>b.tabIndex),nav.map(b=>b.id==='nav-Lighting'?0:-1));
+ ids.get('nav-Lighting').onkeydown(key('ArrowDown'));assert.strictEqual(document.activeElement,ids.get('nav-Surfaces'));
+ ids.get('nav-Surfaces').onkeydown(key('ArrowRight'));assert.strictEqual(document.activeElement,ids.get('nav-Surfaces'),'the sidebar uses Up and Down only');
+ assert(/Ctrl\+Z/.test(ids.get('undo').title));
+ document.activeElement=null;
+}
 // The detail panel shows the selected row; selecting another row does not rebuild the page.
 {
  const first=ids.get('card-rt_geometry');assert(/selected/.test(first.className),'the first row is selected');
@@ -258,9 +282,9 @@ for(const id of ['box_lights','exp_hidden_surface','hair_distant_detail','hair_m
 go('Performance');
 {
  assert.deepStrictEqual(page().filter(e=>e.className==='group-title').map(e=>e.textContent),['Frame rate','Tracing speed']);
- const d=ids.get('group-Tracing speed');assert(d&&d.tagName==='details'&&!d.open,'Tracing speed starts collapsed');
+ const d=ids.get('group-Tracing-speed');assert(d&&d.tagName==='details'&&!d.open,'Tracing speed starts collapsed');
  assert(all(d).includes(ids.get('card-exp_gi_rt_pipeline'))&&/\bchild\b/.test(ids.get('card-exp_gi_rt_pipeline_reorder').className));
- d.open=true;render(fixture);assert(ids.get('group-Tracing speed').open,'disclosure collapsed on bridge update');
+ d.open=true;render(fixture);assert(ids.get('group-Tracing-speed').open,'disclosure collapsed on bridge update');
  assert(onPage('experimental-pointer')&&/hidden/.test(text(ids.get('experimental-pointer'))),'the page says where its experimental options are');
  ids.get('experimental-open').onclick();assert.strictEqual(ids.get('nav-Experimental').attributes['aria-current'],'page');
 }

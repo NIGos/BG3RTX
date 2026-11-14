@@ -89,12 +89,21 @@ const hotkeyFor={dlss5_nr:'hotkey_dlss5',exp_hair_groom_primary:'hotkey_rtx_hair
 const hotkeyName=id=>(hotkeyInfo[id]||[id])[0];
 function openSection(id,focus,select) {section=id;if(select)selected[id]=select;render(state);$('main').scrollTop=0;if(focus)$(focus)?.focus?.();}
 function el(tag, className, text) { const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e; }
-function send(type, extra={}) { if(sample) { $('changes').hidden=false;$('status').textContent='Sample preview: actions do not change settings or launch the game';return; } window.chrome?.webview?.postMessage({type,...extra}); }
+function send(type, extra={}) { if(sample) { $('changes').className='';$('status').textContent='Sample preview: actions do not change settings or launch the game';return; } window.chrome?.webview?.postMessage({type,...extra}); }
 function measured(text) {return !!text && !/unknown|not measured|not detected|unavailable/i.test(text);}
 function pill(text,kind) {return el('span','pill '+(kind||''),text);}
 function badge(text,kind,title) {const b=el('span','badge'+(kind?' '+kind:''),text);if(title)b.title=title;return b;}
 function linkButton(id,text,fn) {const b=el('button','btn link-btn',text);b.id=id;b.onclick=fn;return b;}
 function showDialog(d) {if(!d.open)d.showModal();}
+// Keyboard: one Tab stop per group of choices (the current choice); the arrow keys move between the choices and
+// Enter or Space chooses. Moving never writes a setting.
+function rove(group,vertical) {
+ const buttons=[...group.querySelectorAll('button')];
+ const current=buttons.find(b=>/(^| )(on|base)( |$)/.test(b.className||'')&&!b.disabled)||buttons.find(b=>!b.disabled);
+ buttons.forEach(b=>{b.tabIndex=b===current?0:-1;
+  b.onkeydown=e=>{const step=(vertical?{ArrowDown:1,ArrowUp:-1}:{ArrowRight:1,ArrowDown:1,ArrowLeft:-1,ArrowUp:-1})[e.key]||(e.key==='Home'?'first':e.key==='End'?'last':0);if(!step)return;e.preventDefault();
+   const live=buttons.filter(x=>!x.disabled),next=step==='first'?live[0]:step==='last'?live[live.length-1]:live[(live.indexOf(b)+step+live.length)%live.length];if(next)next.focus();};});
+}
 const releaseOptIn=()=>!!state&&!state.developer&&!!state.experimental;
 const awaiting=ch=>/experimental|awaiting/.test(ch.maturity||'');
 // A release setting whose every choice above the first is unqualified belongs on the Experimental page (Low-latency
@@ -148,7 +157,7 @@ function choiceControl(s,control,describedBy) {
  s.choices.forEach(ch=>{const text=plainLabel(s,ch.label),on=ch.value===s.value,b=el('button',on?'on':'',text);b.disabled=ch.enabled===false;b.title=[ch.apply,ch.reason].filter(Boolean).join('. ');b.setAttribute('aria-label',text+'; '+ch.apply);b.setAttribute('aria-pressed',on?'true':'false');b.onclick=()=>send('set',{id:s.id,value:ch.value});seg.append(b);});
  control.className+=' choices';
  if(s.value<0)control.append(el('span','help-copy','Custom value kept'));
- control.append(seg);
+ control.append(seg);rove(seg);
 }
 // The control of one setting and its unmet-requirements line. Ids are control-<id>-<n>.
 function settingControl(s) {
@@ -160,7 +169,7 @@ function settingControl(s) {
   choiceControl(s,control,needs.id);
  } else if(s.min!==undefined&&s.max>s.min) {
   const isOff=s.hasOff&&s.value===0;
-  if(s.hasOff){const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',name);const off=el('button',isOff?'on':'','Off');off.setAttribute('aria-pressed',String(isOff));off.onclick=()=>send('set',{id:s.id,value:0});const on=el('button',!isOff?'on':'','On');on.setAttribute('aria-pressed',String(!isOff));on.onclick=()=>send('set',{id:s.id,value:isOff?s.min:s.value});seg.append(off,on);control.append(seg);}
+  if(s.hasOff){const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',name);const off=el('button',isOff?'on':'','Off');off.setAttribute('aria-pressed',String(isOff));off.onclick=()=>send('set',{id:s.id,value:0});const on=el('button',!isOff?'on':'','On');on.setAttribute('aria-pressed',String(!isOff));on.onclick=()=>send('set',{id:s.id,value:isOff?s.min:s.value});seg.append(off,on);control.append(seg);rove(seg);}
   const valueText=value=>String(value)+(s.unit?(s.unit==='%'?'':' ')+s.unit:'');
   // The value follows the thumb; the setting is sent once, when the thumb is released (change), not while dragging.
   const i=el('input');i.type='range';i.min=s.min;i.max=s.max;i.step=s.step||1;i.value=isOff?s.min:s.value;i.disabled=isOff;i.setAttribute('aria-label',name);i.setAttribute('aria-valuetext',isOff?'Off':valueText(s.value));const out=el('output','range-value',isOff?'Off':valueText(s.value));i.oninput=()=>{out.textContent=valueText(i.value);i.setAttribute('aria-valuetext',valueText(i.value));};i.onchange=()=>send('set',{id:s.id,value:Number(i.value)});control.className+=' range';control.append(i,out);
@@ -242,7 +251,7 @@ function runtimeFile(s) {
 // A group: small caps heading and one panel. `collapsed` groups are a disclosure that remembers its state.
 function group(title,lead,children,opts={}) {
  const box=el('div','rows');box.append(...children);
- if(opts.collapsed){const d=el('details','group'),sum=el('summary');d.id='group-'+(opts.id||title);sum.id='group-summary-'+(opts.id||title);sum.append(el('h2','group-title',title));if(lead)sum.append(el('span','group-lead',lead));restoreDisclosure(d,opts.open);d.append(sum,box);return d;}
+ if(opts.collapsed){const d=el('details','group'),sum=el('summary');const slug=String(opts.id||title).replace(/[^A-Za-z0-9]+/g,'-');d.id='group-'+slug;sum.id='group-summary-'+slug;sum.append(el('h2','group-title',title));if(lead)sum.append(el('span','group-lead',lead));restoreDisclosure(d,opts.open);d.append(sum,box);return d;}
  const g=el('section','group'),head=el('div','group-head');head.append(el('h2','group-title',title));if(lead)head.append(el('p','group-lead',lead));
  if(opts.id)g.id=opts.id;g.append(head,box);return g;
 }
@@ -359,7 +368,7 @@ function hairJob(prep) {
  const why=el('p','needs');why.id='prep-source-reason';why.append(icon('Needs'),el('span','',reason));why.hidden=!reason||all;
  [['Styles seen in game',0],['All styles',1]].forEach(([label,value])=>{const on=all===!!value,b=el('button',on?'on':'',label);b.id='prep-source-'+value;b.setAttribute('aria-pressed',String(on));b.setAttribute('aria-describedby',why.id);
   if(value&&reason&&!all){b.disabled=true;b.title=reason;}b.onclick=()=>send('prep',{action:'convertAll',value});seg.append(b);});
- const srcRow=el('div','option-row');srcRow.append(seg);src.append(srcLabel,srcRow,why);
+ rove(seg);const srcRow=el('div','option-row');srcRow.append(seg);src.append(srcLabel,srcRow,why);
  // granny2.dll: the player's own copy; never shipped.
  const g=prep.granny||{},dll=el('div','granny');dll.id='prep-granny';
  const path=el('p','path',g.path?g.path:'granny2.dll: not chosen');path.id='prep-granny-path';
@@ -373,7 +382,7 @@ function hairJob(prep) {
  const when=el('div','option-group'),whenLabel=el('span','option-label','When to convert');whenLabel.id='prep-when-label';
  const ws=el('div','seg prep-when');ws.setAttribute('role','group');ws.setAttribute('aria-labelledby',whenLabel.id);
  [['Game closed',0],['Also while playing',1]].forEach(([label,value])=>{const on=!!prep.whilePlaying===!!value,b=el('button',on?'on':'',label);b.id='prep-when-'+value;b.setAttribute('aria-pressed',on?'true':'false');b.onclick=()=>send('prep',{action:'whilePlaying',value});ws.append(b);});
- const whenRow=el('div','option-row');whenRow.append(ws);when.append(whenLabel,whenRow,el('p','cost','While playing, it uses one core at low priority.'));opts.append(when);
+ rove(ws);const whenRow=el('div','option-row');whenRow.append(ws);when.append(whenLabel,whenRow,el('p','cost','While playing, it uses one core at low priority.'));opts.append(when);
  box.append(opts);
  return box;
 }
@@ -390,6 +399,7 @@ function shaderJob(prep) {
 function presetButtons(root) {
  root.replaceChildren();
  ['Low','Medium','High','Ultra'].forEach((name,index)=>{const on=state.preset===index,b=el('button',on?(state.custom?'base':'on'):'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',on&&!state.custom?'true':'false');b.title=[state.presetDescriptions?.[index],index===state.recommendedPreset?'Suggested for this GPU; performance varies.':''].filter(Boolean).join('\n');b.onclick=()=>send('preset',{value:index});root.append(b);});
+ rove(root);
  const note=$('preset-note');note.replaceChildren();
  const name=['Low','Medium','High','Ultra'][state.preset]||'';
  if(state.custom){const c=el('span','custom-preset','Custom');c.setAttribute('aria-label','Custom settings');note.append(c,el('span','',', based on '+name+' · '),linkButton('preset-reset','Reset to '+name,()=>send('preset',{value:state.preset})));}
@@ -513,6 +523,7 @@ function renderNavigation() {
   if(id==='Home'&&state.gamePath===''){const n=el('span','nav-count','1');n.title='1 problem';b.append(n);}
   else if(id==='Home'&&busy){const d=el('span','nav-dot');d.title='Preparation is running';b.append(d);}
   b.onclick=()=>openSection(id);nav.append(b);});
+ rove(nav,true);
  if(sample)nav.append(el('div','sample-label','Sample data · no game launch'));
 }
 function render(next) {
@@ -543,7 +554,7 @@ function render(next) {
 function renderFooter() {
  const n=state.notice||{},also=(n.also||[]).length?' Also changed: '+n.also.join('; ')+'.':'';
  const text=n.text?n.text+'.'+also:state.status||'';
- $('changes').hidden=!text;$('status').textContent=text;
+ $('changes').className=text?'':'idle';$('status').textContent=text;
  $('undo').hidden=!n.undo;$('dismiss').hidden=!n.text;
 }
 function renderReport() {
@@ -551,12 +562,15 @@ function renderReport() {
  const root=$('report-preview'),notice=state.status&&/report|package/i.test(state.status)?state.status:'';
  const signature=JSON.stringify([r,notice]);if(signature===reportSignature){showDialog(d);return;}reportSignature=signature;rememberDisclosures(root);root.replaceChildren();if(r.message)root.append(el('p','help-copy',r.message));if(state.status&&/report|package/i.test(state.status))root.append(el('p','notice',state.status));const files=r.files||[];if(files.length){root.append(el('h3','','Preview · '+files.length+' files · '+(r.bytes||0).toLocaleString()+' bytes'));const ul=el('ul','report-list');files.forEach(f=>{const li=el('li');li.append(el('b','',f.name+' · '+f.size.toLocaleString()+' bytes'));if(f.note)li.append(el('p','',f.note));if(f.binary){ul.append(li);return;}const details=el('details'),summary=el('summary','','View file contents');details.id='report-file-'+encodeURIComponent(f.name);summary.id='report-summary-'+encodeURIComponent(f.name);restoreDisclosure(details);details.append(summary,el('pre','',f.text||''));li.append(details);ul.append(li);});root.append(ul);}$('export-report').hidden=!files.length;$('prepare-report').textContent=files.length?'Refresh preview':'Preview files';showDialog(d);
 }
-$('undo').onclick=()=>send('undo');$('dismiss').onclick=()=>send('dismiss');$('play').onclick=()=>send('play');
+$('undo').onclick=()=>send('undo');$('undo').title='Undo the last change (Ctrl+Z)';
+// Ctrl+Z undoes the last change while the bridge offers it (not inside a text field).
+if(document.addEventListener)document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&!e.altKey&&String(e.key).toLowerCase()==='z'&&state?.notice?.undo&&!/^(text|textarea)$/i.test(e.target?.type||'')&&!$('report-dialog').open){e.preventDefault();send('undo');}});
+$('dismiss').onclick=()=>send('dismiss');$('play').onclick=()=>send('play');
 $('close-report').onclick=()=>{$('report-dialog').close();send('closeReport');};$('report-dialog').addEventListener('cancel',()=>send('closeReport'));$('prepare-report').onclick=()=>{if(!sample){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report…';$('cancel-report').hidden=false;$('prepare-report').disabled=true;}send('prepareReport',{issue:$('issue').value,logs:$('include-logs').checked,settings:$('include-settings').checked,system:$('include-system').checked,save:!!$('include-save').checked});};$('cancel-report').onclick=()=>send('cancelReport');$('export-report').onclick=()=>send('exportReport');
 window.chrome?.webview?.addEventListener('message',e=>{const data=typeof e.data==='string'?JSON.parse(e.data):e.data;if(data.type==='state'){render(data);if(sample)reviewView(true);}else if(data.type==='progress'){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report: '+data.done+' / '+data.total;$('cancel-report').hidden=false;}});
 // Review views (--screenshot-view) adjust the sample, or the host's review state, before rendering again.
 function reviewView(host) {
- {if(sampleView==='error')state.writeError={text:'Settings not saved. Nothing was changed.\nThe file is in use by another application (Windows error 32). Close it and try again.',retry:true};if(sampleView==='notice'){state.settings.find(s=>s.id==='exp_hair_groom_primary').value=0;}if(sampleView==='notice')state.notice={text:'RTX Hair: On \u2192 Off',also:['Strand hair edge resolve: Analytic coverage \u2192 Off'],anchor:'exp_hair_groom_primary',undo:true};if(sampleView==='missing'&&!host){state.gamePath='';state.compatibility.warnings=['Choose the game folder containing bin\\bg3.exe. Settings browsing remains available.'];}if(sampleView==='probe'&&!host){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
+ {if(sampleView==='error')state.writeError={text:'Settings not saved. Nothing was changed.\nThe file is in use by another application (Windows error 32). Close it and try again.',retry:true};if(sampleView==='notice'){state.settings.find(s=>s.id==='exp_hair_groom_primary').value=0;}if(sampleView==='notice')state.notice={text:'RTX Hair: On \u2192 Off',also:['Strand hair edge resolve: Analytic coverage \u2192 Off'],anchor:'exp_hair_groom_primary',undo:true};if(sampleView==='missing'&&!host){state.gamePath='';state.canPlay=false;}if(sampleView==='probe'&&!host){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
  if(sampleView==='restart'){state.restartNeeded=true;state.restartCount=2;state.restartNames=['Hair shadows','Water lighting'];state.restartBanner='Restart the game to apply: Hair shadows, Water lighting.';state.notice={text:'Water lighting: Off \u2192 Reflections (after a game restart)',also:[],anchor:'exp_water',undo:true};render(state);}
  if((query.has('report')||sampleView==='report')&&!state.report?.files?.length){state.report={visible:true,privacy:'Creates a ZIP on your PC with BG3RTX logs, graphics settings, version and system graphics details. Logs may contain file paths. We remove common personal path details, but you should review the files before sharing. Nothing is uploaded. Screenshots and crash dumps are excluded; your latest save is added only if you tick it.',files:[{name:'CONTENTS.txt',size:248,text:'Sample preview only. No files have been collected.'},{name:'graphics.txt',size:112,text:'Sample adapter: NVIDIA GeForce RTX 5090\nDriver: 621.01\nAdapter used by the game: unconfirmed'}],bytes:360};renderReport();}
  if(sampleView==='experimental'||query.has('bottom'))$('main').scrollTop=$('main').scrollHeight;
