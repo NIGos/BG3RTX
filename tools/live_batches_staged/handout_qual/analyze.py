@@ -93,14 +93,19 @@ def energy(log, runner, plan_path, plan):
         lines = stamped_lines(Path(log).read_text(encoding="utf-8-sig", errors="replace"))
         run.phases = [(w["label"], w["applied"], w["end"])
                       for w in windows(Path(runner).read_text(encoding="utf-8-sig", errors="replace"), plan, lines)]
-        v = {s: [x[0] / x[2] for x in float_samples(run, f"energy-{s}")] for s in ("off-a", "on", "off-b")}
+        # As many samples as the phase's plan asks for (hq-s8-energy: 8; float_samples' default 3 made that run INVALID).
+        asked = {p["label"]: len(p["trace_at"]) for p in plan if p.get("trace_at")}
+        v = {s: [x[0] / x[2] for x in float_samples(run, f"energy-{s}", asked[f"energy-{s}"])]
+             for s in ("off-a", "on", "off-b")}
     except (Exception, SystemExit) as e:   # missing traces or dumps: the run is incomplete for energy, not judged
         return f"not evaluated: {e}", None
     off = v["off-a"] + v["off-b"]
     on = statistics.mean(v["on"])
     ok = min(off) <= on <= max(off)
+    per = "; ".join(f"{s} n={len(x)} mean {statistics.mean(x):.5f} sd {statistics.stdev(x):.5f} "
+                    f"({min(x):.5f} to {max(x):.5f})" for s, x in v.items())
     return (f"normalized scene colour mean: OFF samples {min(off):.5f} to {max(off):.5f} (mean {statistics.mean(off):.5f}), "
-            f"ON mean {on:.5f} ({(on / statistics.mean(off) - 1) * 100:+.2f}%)"), ok
+            f"ON mean {on:.5f} ({(on / statistics.mean(off) - 1) * 100:+.2f}%). Per state: {per}"), ok
 
 
 def main():
@@ -129,7 +134,7 @@ def main():
                      [f"- FAIL: {f}" for f in failures] +
                      ["", "## ON against the OFF pair (noise = |off-b - off-a| of the same group)", "",
                       "| Group | Line | Rule | Values | |", "| --- | --- | --- | --- | --- |"] + rows +
-                     ["", "## Energy (static, exposure held, 3 float traces per state)", "", etext, "", table])
+                     ["", "## Energy (static, exposure held, float traces per state as planned)", "", etext, "", table])
     if a.out:
         Path(a.out).write_text(text, encoding="utf-8")
     else:

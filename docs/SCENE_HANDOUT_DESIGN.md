@@ -318,6 +318,24 @@ spread of 647.8-656.6: borderline and OPEN. Staged to decide it: `hq-s8-energy` 
 no complete period (pans are now 3 periods) and the analyzer judged the per-pass costs "equal" although they fell (now
 "not higher beyond noise").
 
+Energy decided (`hq-s8-energy.1.191419`, 8 float traces per state, exposure held at EV 11.4508, static camera; normalized
+5c3fdabc scene colour mean): OFF-a 648.51 (sd 0.49, 647.47-649.11), ON 647.24 (sd 0.73, 646.64-648.94), OFF-b 648.57
+(sd 0.31, 647.96-648.97). OFF-a against OFF-b 0.009%; ON -0.20% (-1.29, standard error 0.28), 7 of 8 ON samples below
+every OFF sample. A real, small difference: the gate (ON mean inside the OFF range) FAILS. The inn's +0.11% and the first
+S8 -0.72% (3 traces) were inside their noise; this one is not. The eighth ON sample (trace 20261114-191725) sits at the
+OFF level in the per-frame buffers (diffuse d1669194 +0.02%, scene colour +0.04%) while the final frame after RR stays
+at the ON level: most likely a traced frame that did not take the handout (that period logs 116 of 120 handouts,
+`committed first 2`). Without it ON is -0.24% in the scene colour, -0.35% in the diffuse light (d1669194, z -14.6) and
+-0.13% in the tonemapped frame (d25b8086). The G-buffer base colour and normals are equal, so the scene is the same.
+Section 8.2 predicts no difference in order, so this is a defect to chase, not a shading-model consequence: a handed
+out frame gets about 0.35% less diffuse light in that same frame. First suspect: the visibility rays (sun shadow / AO)
+on the handout's traversal TLAS (stamp byte 24, the OMM accelerated commit of slot R) or its alpha records, against
+what the wait path traces. Next step (one launch, same job shape, not staged): three states `rt_scene_handout` 0 / 1 /
+2. If 1 equals 2 the stamp TLAS path is the cause, if 1 equals 0 the no-wait commit (alpha records, hit material query
+at the commit). OPEN until then; -0.2% is far below visibility, so the default stays as decided.
+The first analysis of that run said INVALID "missing float sample": `gi_1ray_qual` `float_samples` required exactly 3
+traces per phase and the job had 8. It now takes the count the plan asks for (`trace_at`).
+
 User decision 2026-11-14 ("Si, accendilo"): On by default in High and Ultra, Off in Low and Medium. The control is a
 normal Performance control (Frame rate group, not experimental): the release policy and `data/release.ini` do not touch
 it, `bg3rtx.ini` carries the High values (`rt_scene_handout_layout=1`, `rt_scene_handout=2`).
