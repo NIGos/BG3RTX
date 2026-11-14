@@ -72,6 +72,9 @@ std::unordered_map<VkPipeline, Pass> g_pass_of;               // game pipeline -
 // Index ranges of the grooms in the last two published TLASes: a draw is swapped only when its groom is in both, so
 // the prepass (recorded before this frame's build) and the G-buffer (after it) agree on a draw that just appeared.
 hair_primary::SwapGate g_gate;   // which draws are swapped (common/hair_primary.h SwapGate)
+// hair_primary_swap's lock-free leave (common/hair_primary.h DrawFilter), added to under g_mu: every pipeline that
+// entered g_hair_pipes, g_variant or g_cascade_clone, and every draw key that entered g_gate.published or g_depth.keys.
+hair_primary::DrawFilter g_pipe_filter, g_key_filter;
 hair_primary::CoverageGate g_coverage;
 constexpr uint32_t kProbeAfter = 1u << 31;
 struct DrawVariants { VkPipeline strand[hair_primary::kDrawSlots] = {}, probe[hair_primary::kDrawSlots] = {}; };
@@ -1122,6 +1125,7 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
           instanced |= g_inst_mods.count(ci.pStages[k].module) != 0;
         }
       // M5 participation: every hair pipeline, whether or not it gets a variant below.
+      if (out[i] && (fs >= 0 || instanced) && hash != hair_primary::kShadowStaticFs) g_pipe_filter.add(uint64_t(out[i]));
       if (out[i] && (fs >= 0 || instanced) && hash != hair_primary::kShadowStaticFs)
         g_hair_pipes[out[i]] = instanced ? 4u + hair_primary::Participation::kGbuffer
                              : hash == hair_primary::kDeferredStaticFs ? uint32_t(hair_primary::Participation::kGbuffer)
@@ -1368,6 +1372,7 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     map[game] = v;
   };
   for (const Made& m : made) {
+    if (m.cascade || m.has_variant) g_pipe_filter.add(uint64_t(m.game));
     if (m.cascade) replace(g_cascade_clone, m.game, m.cascade);
     if (m.fallback) replace(g_fallback, m.game, m.fallback);
     if (!m.has_variant) continue;
@@ -1882,6 +1887,7 @@ static bool hair_primary_swap_locked(VkCommandBuffer cmd, CmdState* s, const Dra
   if (hp == g_hair_pipes.end() && it == g_variant.end() && !g_gate.published.count(key) &&
       !g_gate.published_prev.count(key) && !g_depth.keys.count(key))
     return false;
+  g_key_filter.add(key);   // before g_depth.prepass below may add it (the publish adds g_gate's keys)
   if (it == g_variant.end()) {
     if (s->pass.color_count >= 4) {
       g_depth.observe_pipeline(key, now, false, g_fallback.count(s->pipe[0]) != 0);
@@ -2038,6 +2044,13 @@ static bool hair_primary_swap_locked(VkCommandBuffer cmd, CmdState* s, const Dra
 }
 
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  // Strands on, and neither the pipeline nor the index range ever mattered (no hair FS, no variant, no cascade clone;
+  // not a published groom key, no dropped card depth): the locked path below returns false for such a draw in every
+  // pass with no other effect (hp_coverage and hp_query are already UINT32_MAX outside a swap). About 7000 game draws
+  // per frame at the inn took g_mu (and the tracker lock in D16 passes) for this answer.
+  if (args.kind == 1 && s->pipe[0] && strands_on() && !g_pipe_filter.maybe(uint64_t(s->pipe[0])) &&
+      !g_key_filter.maybe(hair_primary_draw_key(s, args)))
+    return false;
   uint64_t want_cam = 0;   // 6b: the G-buffer frame whose pending header wants this draw's camera UBO
   const bool swapped = hair_primary_swap_locked(cmd, s, args, want_cam);
   if (want_cam) {   // 6a: the hair draw's gCam (set 0 binding 2), as geocapture finds the build's camera UBO
@@ -2234,6 +2247,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_order = false;
     apply_header(cmd, st);
   }
+  for (uint32_t k = 0; k < count && k < hair_primary::kMaxGrooms; ++k) if (keys[k]) g_key_filter.add(keys[k]);
   g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms), now);
   // Round 3 L3: the per-key maps grew all session; drop keys not published for kKeyForgetFrames.
   for (uint32_t k = 0; k < count; ++k) if (keys[k]) g_key_seen[keys[k]] = now;

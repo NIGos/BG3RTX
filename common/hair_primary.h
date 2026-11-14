@@ -4,6 +4,7 @@
 // shaders/rt/hair_primary.hlsli (kHp* constants). Header-only, no Vulkan: unit-tested in hair_primary_test.
 #pragma once
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -233,6 +234,24 @@ inline bool soup_update_ok(bool captured, bool held, uint64_t soup_off, uint32_t
 // publish), and the draws sharing one index-range key (two characters with the same hairstyle) are judged together.
 constexpr uint32_t kStrikes = 2;
 constexpr uint64_t kRetryFrames = 600, kRetryMaxFrames = 9600;
+// The per-draw hook's lock-free leave (layer/hair_primary.cpp hair_primary_swap): "was this value ever added?" without
+// the mutex. Bits are only ever set, under the writer's lock and before the value enters the guarded container, so a
+// clear bit proves the value is in none of them (the draw then leaves exactly as the locked path would have, had it run
+// before that writer); a set bit (a member, a former member or a hash collision) only sends the draw to the locked
+// path, which decides as before. 65536 bits: a session's hair pipelines and index-range keys are a few hundred.
+struct DrawFilter {
+  static constexpr uint32_t kBits = 1u << 16;
+  std::atomic<uint64_t> words[kBits / 64] = {};
+  static uint32_t slot(uint64_t v) {
+    v ^= v >> 33; v *= 0xff51afd7ed558ccdull; v ^= v >> 33;
+    return uint32_t(v) & (kBits - 1);
+  }
+  void add(uint64_t v) { const uint32_t b = slot(v); words[b >> 6].fetch_or(1ull << (b & 63), std::memory_order_release); }
+  bool maybe(uint64_t v) const {
+    const uint32_t b = slot(v);
+    return ((words[b >> 6].load(std::memory_order_acquire) >> (b & 63)) & 1u) != 0;
+  }
+};
 struct SwapGate {
   struct Retired { uint64_t until = 0, wait = 0; };
   // gbuffer_*: the key's G-buffer strand variant drew. ready_*: the G-buffer passed every swap gate except the
