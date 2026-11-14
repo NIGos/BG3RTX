@@ -2,6 +2,7 @@
 // rt_hair_groom (docs/RTX_HAIR_INTEGRATION.md): the strand groom of matched native hair draws, traced as
 // linear swept spheres (VK_NV_ray_tracing_linear_swept_spheres) by the secondary ray queries.
 #include "../common/hair_groom_asset.h"
+#include "../common/hair_groom_decode.h"
 #include <vulkan/vulkan.h>
 #include <cstdint>
 #include <memory>
@@ -28,6 +29,10 @@ struct Loaded {
 // One LOD of a groom (round 3 M6): its bytes only, validated (parse_lod); `lod` views into `bytes`. False when the
 // file changed since indexing (size, header) or the LOD is malformed.
 bool read_lod(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod& lod);
+// rt_hair_groom_async: the same read on a worker thread (below normal priority). The first call for a (groom, LOD)
+// queues it and returns Pending, as do the calls while it runs or while 4 decodes are outstanding; a later call
+// returns Ready with the bytes (handed over once) or Failed. `now` is the frame, for dropping results nobody takes.
+LodDecode read_lod_async(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod& lod, uint64_t now);
 const Loaded* find(uint64_t index_id, uint32_t index_count);
 // Index counts of the loaded grooms: a draw with another count never matches (no hashing).
 bool count_known(uint32_t index_count);
