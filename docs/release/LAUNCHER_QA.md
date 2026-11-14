@@ -1,5 +1,15 @@
 # Release launcher QA - 2026-11-04
 
+> 2026-11-14, branch `claude/ui-rework` (not merged): the WebView launcher applies each change at once. There is no
+> Save, Discard, review dialog or unsaved-changes prompt in the WebView any more; the lines below that name them
+> describe 0.9.6 and the basic fallback window, which keeps Save. New WebView contract: a click is written at
+> once and named in the status strip with Undo (Ctrl+Z); dependencies change at the click and are listed in the
+> row; a failed write changes nothing and offers Retry; "Restart the game to apply: <names>" stays under the
+> header while the game runs with older startup settings. Pages: Home, Lighting, Surfaces, Performance, DLSS 5,
+> Experimental (with its switch), Hotkeys, Help & support. Offline evidence: `launcher_web_bridge_test`,
+> `tests/launcher_ui_test.js`, screenshots in `docs/ui_rework/shots_impl/`. Not yet checked in the real WebView2
+> window or with the game running.
+
 - PASS (offline): 15 release controls, shared metadata, exact choices/ranges and release visibility match CONTROL_CONTRACT.md. Preset values, keys, dependencies and apply transitions are unchanged.
 - PASS (offline): both renderers use the Lighting order below; depth of field and bloom smoothing is on Surfaces. One compact header shows version, preset, GPU and mod-file presence. No total-cost tile or unknown-cost/memory badges.
 - PASS (offline): measured costs appear after descriptions; estimates and separate hair-pass timings are in details. No aggregate rendering-cost or frame-rate claim.

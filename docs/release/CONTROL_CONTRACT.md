@@ -78,10 +78,12 @@ Dependency dialogs name actions: Enable requirements / Adjust options / Keep edi
 Selecting a choice turns on the options it needs at once, recursively, all or nothing (`settings::raise_needs`;
 status "Also turned on: ..."); a need that is hidden, custom, experimental without opt-in or unsupported raises
 nothing and the card keeps showing it. Turning a prerequisite off still lowers its dependents at Save.
-Apply labels: “Applies after saving”; “Applies after saving; may briefly pause”; “Restart the game to apply”.
-WebView badges, three kinds: "Applies now" (launcher-only preparation actions, no Save), "Applies after saving" (Live and
-Hitch; the pause note stays in the badge title and Details) and "Restart to apply" ("May need a restart" when only some
-choices restart). The old "May briefly pause" badge is gone.
+Apply labels of the table (basic fallback window, which keeps Save): “Applies after saving”; “Applies after saving;
+may briefly pause”; “Restart the game to apply”.
+WebView (instant apply since 2026-11-14, docs/ui_rework/PROPOSAL.md): a click is written at once; the bridge sends
+"Applies at once", "Applies at once; may briefly pause" or "Restart the game to apply" per choice. One badge only, amber:
+"Restart", "Restart to turn on/off" or "Restart for <choices>", and "Restart pending" on rows the running game has not
+taken yet. No Save, review dialog or unsaved state; the status strip names the change with Undo.
 The native report preview uses the default inclusion set and has no issue field or inclusion checkboxes; WebView provides both.
 
 Automatic release policies (also after stale user INI layering):

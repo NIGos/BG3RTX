@@ -106,7 +106,7 @@ void send(Host& h,const std::string& json) {if(h.view)h.view->PostWebMessageAsJs
 void refresh(Host& h) {
   if(h.busy||!h.bridge)return;
   auto session=session_token();
-  if(session!=h.session){h.session=session;h.baseline=effective(h.state);h.bridge->set_restart_count(0);}
+  if(session!=h.session){h.session=session;h.baseline=effective(h.state);h.bridge->set_restart({});}
   h.bridge->set_mod_status(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?"Mod files present":"Mod files missing");
   const bool playing=game_running();
   h.bridge->set_can_play(!h.no_game&&valid_game_dir(h.game)&&!playing);
@@ -258,15 +258,8 @@ LRESULT CALLBACK window_proc(HWND window,UINT message,WPARAM w,LPARAM l) {
     case work_progress:send(*h,"{\"type\":\"progress\",\"done\":"+std::to_string(w)+",\"total\":"+std::to_string(l)+"}");return 0;
     case WM_CLOSE:
       if(h->busy){h->cancel=true;return 0;}
-      if(h->bridge&&h->bridge->dirty()){
-        int answer=action_dialog(window,L"Unsaved changes",L"Save changes before closing?",{{IDYES,L"Save"},{IDNO,L"Discard changes"},{IDCANCEL,L"Keep editing"}});
-        if(answer==IDCANCEL)return 0;
-        if(answer==IDYES){
-          // The page's own Save request. Saved with nothing to review: close. Otherwise the review or the error stays open.
-          const auto reply=h->bridge->handle("{\"type\":\"save\",\"policy\":\"enable\"}");
-          if(h->bridge->dirty()){send(*h,reply);return 0;}
-        }
-      }DestroyWindow(window);return 0;
+      // Every change is already in the file (instant apply): nothing to ask.
+      DestroyWindow(window);return 0;
     case WM_DESTROY:h->closed=true;KillTimer(window,1);KillTimer(window,2);KillTimer(window,3);PostQuitMessage(0);return 0;
   }return DefWindowProcW(window,message,w,l);
 }
@@ -288,7 +281,7 @@ void review_bridge(Host& h,const std::wstring& view){
   if(view==L"experimental")h.bridge->handle("{\"type\":\"experimental\",\"value\":true}");
   if(view==L"preset")h.bridge->handle("{\"type\":\"preset\",\"value\":2}");
   if(view==L"report")h.bridge->handle("{\"type\":\"report\"}");
-  h.bridge->set_status(view==L"missing"?"Choose the game folder containing bin\\bg3.exe. Settings remain available.":"Settings loaded.");
+  h.bridge->set_status("");   // the page shows a missing game folder itself
 }
 int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const std::wstring& screenshot,int width,const std::wstring& shot_view,float shot_scale,bool shot_bottom) {
   LPWSTR version{};
@@ -322,15 +315,15 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         auto after=candidate.base;st::apply_layer(after,st::parse_ini(text));
         bool pending=game_running()&&ui_state::restart(h.baseline,after);std::wstring err;
         if(!write_file_atomic(root_dir()+L"\\bg3rtx_ui.ini",ui_state::serialize(4,pending,h.session,h.baseline),&err)){error="Settings not saved. Restart information could not be saved.\n"+narrow(err);return false;}
-        if(!write_file_atomic(user_ini_path(),text,&err)){error="Settings not saved. Your edits are kept.\n"+narrow(err);return false;}
+        if(!write_file_atomic(user_ini_path(),text,&err)){error="Settings not saved. Nothing was changed.\n"+narrow(err);return false;}
         candidate.user_text=text;candidate.user=st::parse_ini(text);candidate.loaded=candidate.values;candidate.loaded_dlss5_runtime_path=candidate.dlss5_runtime_path;
-        h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,after):0);return true;
+        {int others=0;auto names=pending?ui_state::restart_names(h.baseline,after,&others):std::vector<std::string>{};h.bridge->set_restart(std::move(names),pending?others:0);}return true;
       };
       hooks.play=[&h](std::string& error){
         if(h.no_game||game_running()||!valid_game_dir(h.game)){error="Choose the game folder or close the running game to enable Play.";return false;}
         DWORD pid{};std::wstring err,note;if(!launcher::dlss5::stage(h.state,h.game,note,err)){error=narrow(err);return false;}
         auto guard_note=guard_game_upscaler(h.state);if(!guard_note.empty())note+=L"\n"+guard_note;
-        bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?(std::string("Game started. ")+narrow(note)):std::string("Settings saved, but the game could not start. See Help & support.\n")+narrow(err)+"\n"+narrow(note);return ok;
+        bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?(std::string("Game started. ")+narrow(note)):std::string("The game could not start. See Help & support.\n")+narrow(err)+"\n"+narrow(note);return ok;
       };
       hooks.reportHint=[] {return session_logging::hint(root_dir());};
       hooks.prepareReport=[&h](const std::string& issue,bool logs,bool settings,bool system,bool save){
@@ -370,8 +363,8 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         if(!h.prep->act(action,value))return false;h.prep->tick(game_running());return true;};
       h.bridge=std::make_unique<Bridge>(h.state,std::move(hooks));h.bridge->set_version(product_version());
       h.bridge->set_game_path(narrow(h.game));
-      h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,effective(h.state)):0);
-      h.bridge->set_status(valid_game_dir(h.game)?"Settings loaded.":"Choose the game folder containing bin\\bg3.exe. Settings remain available.");
+      h.bridge->set_compatibility(inspect_graphics());{int others=0;auto names=pending?ui_state::restart_names(h.baseline,effective(h.state),&others):std::vector<std::string>{};h.bridge->set_restart(std::move(names),pending?others:0);}
+      h.bridge->set_status("");   // the page shows a missing game folder itself
     } else review_bridge(h,shot_view);
     WNDCLASSEXW cls{sizeof cls};cls.lpfnWndProc=window_proc;cls.hInstance=inst;cls.lpszClassName=L"BG3RTX.WebView";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
     cls.hIcon=LoadIconW(inst,MAKEINTRESOURCEW(1));cls.hIconSm=HICON(LoadImageW(inst,MAKEINTRESOURCEW(1),IMAGE_ICON,GetSystemMetrics(SM_CXSMICON),GetSystemMetrics(SM_CYSMICON),0));
