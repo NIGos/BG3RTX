@@ -1700,7 +1700,21 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
   g_cfg_scene_pass = scene_key;
   // 6i: with the key a second scene pass recording under the same label (two G-buffer frames in one present interval)
   // applies again, with its own tag, pending header and GbFrame; the first one's submit then leaves the GbFrame alone.
-  if (!g_labels.begin(p.color_count, g_cfg_scene_pass, frame, uint64_t(cmd), cmd_recording(cmd), g_header_pass)) return;
+  const uint64_t hitches = g_header_pass.taken_scene + g_header_pass.again;
+  const bool applies = g_labels.begin(p.color_count, g_cfg_scene_pass, frame, uint64_t(cmd), cmd_recording(cmd), g_header_pass);
+  // 6k: a hitch frame (two scene G-buffer pass recordings in one present interval) was never seen in a live run
+  // (0 in hx1 190905 and 194658; its handling is proven by the CTest only). The first one of a session is logged with
+  // log(), so a user's log has it without detailed logging; the period line's counters need detailed logging.
+  static bool hitch_logged = false;
+  if (!hitch_logged && g_header_pass.taken_scene + g_header_pass.again != hitches) {
+    hitch_logged = true;
+    log("[hair primary] hitch frame: a second scene G-buffer pass was recorded under frame label %llu (two G-buffer "
+        "frames in one present interval), the first of this session: %s (rt_hair_header_scene_pass %d). Logged once; "
+        "the header pass period line counts them with detailed logging.", (unsigned long long)frame,
+        applies ? "it applied its own strand header and tag" : "it ran on the first pass's strand header and tag",
+        int(g_cfg_scene_pass));
+  }
+  if (!applies) return;
   hair_primary::Staged picks[kStaged];
   const bool frame_tags = cfg_int("rt_hair_primary_frame_tag", 0) != 0;
   for (int i = 0; i < kStaged; ++i) {
