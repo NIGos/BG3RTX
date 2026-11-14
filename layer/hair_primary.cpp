@@ -239,6 +239,11 @@ uint64_t g_watchdog_spared_mark = 0;   // rt_hair_watchdog_one_key: g_watchdog.s
 hair_primary::FootprintStats g_footprint;
 hair_primary::LateArrival g_late;
 int g_nearest_compiled = -1, g_nearest_flag_logged = -1, g_nearest_compiled_logged = -2;
+// 6g rt_hair_card_fill: g_fill_compiled: constant 1053 in the strand G-buffer pipelines (-1: none created yet);
+// g_card_fill: the per-pixel card fill runs (compiled in and header flag kFlagCardFill at the last publish), so the
+// frame watchdog does not put the hair on cards and a held key needs kFillConfirm low measurements (hair_primary.h).
+int g_fill_compiled = -1, g_fill_logged = -2;
+bool g_card_fill = false;
 hair_primary::TlasCheck g_tlas_check;   // 5u observable (detailed logging)
 hair_primary::CameraSteps g_cam_steps;   // 5x: build camera step per frame (frame watchdog line)
 float eye_of(uint64_t frame) { const auto* x = g_cam_steps.find(frame); return x ? x->eye : -1.0f; }
@@ -596,7 +601,8 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
               "header camera is not the groom points' origin), card distance %.3f m, hit distance %.3f m (-1: miss); groom "
               "points and BLASes on the GPU at that G-buffer: of %s (build stamp %lld, applied publish %llu; frame + 1)",
               (unsigned long long)gf->frame, (unsigned long long)g_watchdog.accepted,
-              (unsigned long long)g_watchdog.card, g_watchdog.bound(), (unsigned long long)hair_primary::kWatchdogFrames,
+              (unsigned long long)g_watchdog.card, g_watchdog.bound(),
+              (unsigned long long)(g_card_fill ? 0 : hair_primary::kWatchdogFrames),   // 6g: the card fill shows the cards
               g_cam_steps.step(gf->frame), g_cam_steps.step(gf->frame - 1), (unsigned long long)gf->pub_frame,
               (long long)gf->frame - (long long)gf->pub_frame, g_cam_steps.between(gf->pub_frame, gf->frame),
               (unsigned long long)gf->frame, eye_of(gf->pub_frame), eye_of(gf->frame), (unsigned long long)gf->frame,
@@ -1229,6 +1235,9 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     // 6f rt_hair_dense_sample: constant 1052 of the per-slot G-buffer variants, added only when the key is on at
     // pipeline creation (key off: the specialization as before).
     const uint32_t dense = pass == Pass::Gbuffer && cfg_int("rt_hair_dense_sample", 0) != 0 ? 1u : 0u;
+    // 6g rt_hair_card_fill: constant 1053 of the per-slot strand pipelines (not the masked probes), added only when the
+    // key is on at pipeline creation (header flag kFlagCardFill then switches it live; key off: the specialization as before).
+    const uint32_t fill = pass == Pass::Gbuffer && cfg_int("rt_hair_card_fill", 0) != 0 ? 1u : 0u;
     // 5y rt_hair_mv_card: the card-motion path of the velocity variant, compiled in when the key is on at pipeline
     // creation (header flags kFlagMvCardFallback / kFlagMvCardAll then switch it live); off: the specialization as before.
     const uint32_t mv_card = pass == Pass::Velocity && cfg_int("rt_hair_mv_card", 0) != 0 ? 1u : 0u;
@@ -1263,10 +1272,11 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       char t[320];
       std::snprintf(t, sizeof t, "[hair primary] %s hair pipeline: native depth test %u write %u compare %d -> strands test 1 "
                     "write %u compare GREATER_OR_EQUAL; nearest-strand trace compiled in (specialization 1047) %u; dense "
-                    "samples (specialization 1052) %u",
+                    "samples (specialization 1052) %u; card fill (specialization 1053) %u",
                     pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable, ds->depthWriteEnable,
-                    int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer), pass == Pass::Gbuffer ? nearest : 0u, dense);
+                    int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer), pass == Pass::Gbuffer ? nearest : 0u, dense, fill);
       if (pass == Pass::Gbuffer) g_nearest_compiled = int(nearest);
+      if (pass == Pass::Gbuffer) g_fill_compiled = int(fill);
       notes.push_back(std::string("pipe:") + t);
       dsv.depthTestEnable = VK_TRUE;
       dsv.depthWriteEnable = pass == Pass::Gbuffer ? VK_TRUE : VK_FALSE;
@@ -1320,18 +1330,22 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       dsv.front = ds->front; dsv.back = ds->back;
       // Pipeline specialization supplies exact draw-key attribution before tracing,
       // without changing the game's descriptor or push-constant layouts.
-      const uint32_t words[7] = {spec_words[0], spec_words[1], k, coverage, shading_space, nearest, dense};
-      VkSpecializationMapEntry map[7] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
+      const uint32_t words[8] = {spec_words[0], spec_words[1], k, coverage, shading_space, nearest, dense, fill};
+      VkSpecializationMapEntry map[8] = {spec_map[0], spec_map[1], {hair_primary::kSpecDrawSlot, 8, 4},
                                          {shader_variant::kSpecIdHairGroomCoverage, 12, 4},
                                          {shader_variant::kSpecIdHairShadingSpace, 16, 4},
                                          {shader_variant::kSpecIdHairGroomNearest, 20, 4}};
       uint32_t map_n = nearest ? 6u : 5u;
       if (dense) map[map_n++] = {shader_variant::kSpecIdHairDenseSample, 24, 4};
-      const VkSpecializationInfo draw_spec{map_n, map, dense ? sizeof words : sizeof words - 4, words};
-      stages[size_t(fs)].pSpecializationInfo = &draw_spec;
+      const VkSpecializationInfo draw_spec{map_n, map, dense ? sizeof words - 4 : sizeof words - 8, words};
+      // 6g: the strand pipeline alone gets the card fill (the probe writes neither colour nor depth: it only counts).
+      if (fill) map[map_n] = {shader_variant::kSpecIdHairCardFill, 28, 4};
+      const VkSpecializationInfo fill_spec{map_n + 1u, map, sizeof words, words};
+      stages[size_t(fs)].pSpecializationInfo = fill ? &fill_spec : &draw_spec;
       dsv.depthWriteEnable = VK_TRUE;
       vci.pColorBlendState = ci.pColorBlendState;
       vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &m.draw.strand[k]);
+      stages[size_t(fs)].pSpecializationInfo = &draw_spec;
       dsv.depthWriteEnable = VK_FALSE;
       dsv.front.writeMask = dsv.back.writeMask = 0;
       vci.pColorBlendState = ci.pColorBlendState ? &blend : nullptr;
@@ -1922,8 +1936,9 @@ static bool hair_primary_swap_locked(VkCommandBuffer cmd, CmdState* s, const Dra
   const auto cover = g_coverage.why(key, now + 1);
   if (g_published + 2 < now + 1) refuse(Refusal::Publish);
   else if (g_load.quiet(now)) refuse(Refusal::Quiet);
-  else if (g_cfg_watchdog_draw ? g_draw_watchdog.active(key, now + 1)
-                               : g_watchdog.active(now + 1) || g_watchdog.key_active(key, now + 1))
+  else if (!hair_primary::fill_spares(Refusal::Watchdog, g_card_fill) &&
+           (g_cfg_watchdog_draw ? g_draw_watchdog.active(key, now + 1)
+                                : g_watchdog.active(now + 1) || g_watchdog.key_active(key, now + 1)))
     refuse(Refusal::Watchdog);   // item 19: a counted frame lost its strands (rt_hair_watchdog_draw: this draw did)
   else if (cover != hair_primary::CoverageGate::Why::Ok) refuse(hair_primary::coverage_refusal(cover));
   else if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
@@ -2189,6 +2204,17 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
           "G-buffer pipelines %d (-1: none created yet): the %s trace runs", now_flag, (unsigned long long)frame_index(),
           g_nearest_compiled, now_flag && g_nearest_compiled == 1 ? "nearest-strand" : "restart-loop");
     }
+  }
+  if (cfg_int("rt_hair_card_fill", 0) != 0) h.flags |= hair_primary::kFlagCardFill;   // 6g, live once compiled in
+  g_card_fill = (h.flags & hair_primary::kFlagCardFill) != 0 && g_fill_compiled == 1;
+  g_coverage.confirm_runs = g_card_fill ? hair_primary::kFillConfirm : hair_primary::CoverageGate::kCoverConfirm;
+  if (int(g_card_fill) + 2 * g_fill_compiled != g_fill_logged) {
+    g_fill_logged = int(g_card_fill) + 2 * g_fill_compiled;
+    log("[hair primary] card fill: header flag %d at publish frame %llu; specialization 1053 in the strand G-buffer "
+        "pipelines %d (-1: none created yet): a card-marked pixel without a strand %s; frame watchdog %s, a swapping key "
+        "returns to cards after %u low measurements in a row", (h.flags & hair_primary::kFlagCardFill) != 0 ? 1 : 0,
+        (unsigned long long)frame_index(), g_fill_compiled, g_card_fill ? "draws its card" : "is discarded",
+        g_card_fill ? "reports only" : "switches to cards", unsigned(g_coverage.confirm_runs));
   }
   if (cfg_int("rt_hair_macro_normal", 0) != 0) h.flags |= hair_primary::kFlagMacroNormal;   // 5g, live once compiled in
   if (cfg_int("rt_hair_tangent_world", 0) != 0) h.flags |= hair_primary::kFlagTangentWorld;

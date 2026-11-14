@@ -76,6 +76,9 @@ enum SpecId : unsigned {
   // 6f rt_hair_dense_sample: per-fragment decision samples of the strand G-buffer variant (rt/hair_primary_gbuffer);
   // a diagnostic, added to the specialization only when on.
   kSpecIdHairDenseSample = 1052,
+  // 6g rt_hair_card_fill: a card-marked strand G-buffer fragment without a strand draws its card (rt/hair_primary_gbuffer);
+  // added to the per-slot strand pipelines' specialization only when on.
+  kSpecIdHairCardFill = 1053,
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;

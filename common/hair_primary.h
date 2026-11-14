@@ -60,6 +60,9 @@ constexpr uint32_t kFlagNearest = 1u << 6;
 // 5y rt_hair_mv_card: the strand motion vector from the card's own skinned motion, read only by a velocity variant built
 // with specialization kSpecIdHairMvCard = 1. Fallback: only where the row has no valid previous points; All: every pixel.
 constexpr uint32_t kFlagMvCardFallback = 1u << 7, kFlagMvCardAll = 1u << 8;
+// 6g rt_hair_card_fill (specialization 1053 of the strand G-buffer pipelines): a card-marked fragment whose trace gave
+// no strand it may write draws its card instead of discarding.
+constexpr uint32_t kFlagCardFill = 1u << 9;
 constexpr uint32_t kHeaderWords = 16;
 constexpr uint32_t kDrawSlots = 16;
 constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
@@ -462,6 +465,8 @@ struct CoverageGate {
   bool confirm = false;
   std::unordered_map<uint64_t, uint32_t> bad_run;
   static constexpr uint32_t kCoverConfirm = 2;
+  // 6g rt_hair_card_fill: the run a held key needs (kCoverConfirm, or kFillConfirm while the per-pixel card fill runs).
+  uint32_t confirm_runs = kCoverConfirm;
   static bool outside_swapping(uint64_t card, uint64_t strand, uint64_t inside) {
     const double s = cover_sigma(strand, card), c = double(card);
     return double(strand) < (std::min)(kCoverMin, kCoverRatioMin - s) * c ||
@@ -528,7 +533,7 @@ struct CoverageGate {
     const Why w = e.ratio() < bound ? Why::Low : e.inside_ratio() > upper ? Why::High : Why::Ok;
     if (confirm && held && w != Why::Ok) {   // one bad measurement of a swapping key: not yet confirmed
       const auto b = bad_run.find(key);
-      if (b == bad_run.end() || b->second < kCoverConfirm) return Why::Ok;
+      if (b == bad_run.end() || b->second < confirm_runs) return Why::Ok;
     }
     return w;
   }
@@ -557,6 +562,14 @@ inline Refusal coverage_refusal(CoverageGate::Why w) {
        : w == CoverageGate::Why::Stale ? Refusal::CoverStale : w == CoverageGate::Why::Low ? Refusal::CoverLow
        : w == CoverageGate::Why::Latched ? Refusal::CoverLatched : Refusal::CoverHigh;
 }
+// 6g rt_hair_card_fill (docs/RTX_HAIR_PRIMARY.md 6g): with the per-pixel card fill a frame that lost strands already
+// shows the game's card on every card pixel without one, so the two gates that answer a lost frame with a whole-head
+// switch are not needed for it. The frame and key watchdogs only report. A swapping key returns to cards on a
+// sustained loss only: kFillConfirm low measurements in a row, the span the watchdog itself would have kept the cards
+// (kWatchdogFrames): a loss shorter than the card period it used to cause never switches the head. Every other gate
+// (publish, load quiet, no or stale evidence, coverage high, strikes, order) is unchanged.
+constexpr uint32_t kFillConfirm = uint32_t(kHoldFrames);
+inline bool fill_spares(Refusal r, bool card_fill) { return card_fill && r == Refusal::Watchdog; }
 struct RefusalTally {
   uint64_t n[3][size_t(Refusal::Count)] = {};
   void add(int pass, Refusal r) { if (pass >= 0 && pass < 3 && r < Refusal::Count) ++n[pass][size_t(r)]; }

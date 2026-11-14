@@ -427,6 +427,9 @@ inline constexpr Knob kKnobs[] = {
     // knobs stay for A/B. rt_hair_coverage_min_pixels stays out (its prediction failed in 103633).
     // 5u (live hs1 133243): the nearest-strand trace (rt_hair_groom_nearest) too. It is compiled into the strand
     // pipelines at their creation, so a game started with RTX Hair off needs a restart for it (the old trace until then).
+    // 6g (2026-11-14, the user's play log of 0.9.6-hairtest13): the strand header's camera copied on the GPU
+    // (rt_hair_header_cam_gpu). Without it every frame watchdog trip of that session had its ray origin one camera step
+    // off (72 trips in 2927 hair frames, a third of them on cards); lives hc1 234025 and hl1 000345 / 003637 ran with it.
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores,
      {{"rt_hair_groom_primary", "1"}, {"rt_hair_groom_primary_order", "1"}, {"rt_hair_groom_primary_current", "1"},
       {"rt_hair_primary_frame_tag", "1"}, {"rt_hair_groom_lod_keep", "1"}, {"rt_hair_primary_hold", "1"},
@@ -435,7 +438,7 @@ inline constexpr Knob kKnobs[] = {
       {"rt_hair_fibre_gi", "1"}, {"rt_hair_fibre_spec", "1"}, {"rt_hair_fibre_mapped", "1"},
       {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"},
       {"rt_hair_coverage_union", "1"}, {"rt_hair_coverage_confirm", "1"}, {"rt_hair_slot_stable", "1"},
-      {"rt_hair_live_warmup", "1"}, {"rt_hair_groom_nearest", "1"}},
+      {"rt_hair_live_warmup", "1"}, {"rt_hair_groom_nearest", "1"}, {"rt_hair_header_cam_gpu", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Beta: supported, off in every preset. A style gets strands after the game has shown it once and the launcher has converted it; until then it keeps the game's look. Turns on and off while playing. Requires linear swept spheres, shaderInt64 and fragment stores. Hair styles get strands after the game has shown them once and the launcher has converted them. Turns on all of RTX Hair: strands on screen and in ray-traced lighting (frame record decided at submit, per-frame trace tags, LOD keep, coverage hold, world-space tangent), strand shadow and AO transmittance, no card shadows, physical fibre shading (also indirect, specular and shadow-mapped lights), RR hair guides and physical hair ray origins. Cost remains unqualified. It turns on and off while playing, also with its keyboard shortcut (Ctrl+Shift+F7 by default); if the game started with RTX Hair off, the physical hair ray origins need a game restart."},
   // Distant RTX Hair detail (docs/RTX_HAIR_PRIMARY.md 5v, user request 2026-11-10): the release control of the pixel LOD.
@@ -638,6 +641,13 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rt_hair_live_warmup", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_live_warmup", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "5u audit 2026-11-10: turn RTX Hair off and on (Ctrl+Shift+F7): with On the hair returns as strands once, without a burst of card flashes a second later."},
+
+  {"exp_hair_card_fill", "Strand hair: card under missing strands",
+   "Experimental: where a hair pixel finds no strand, it shows the game's own hair card instead of a hole, and a frame that loses strands no longer switches the whole head to cards. Unqualified.",
+   Kind::Choice, Apply::Restart, "Restart to enable; turning it off applies while you play.", true,
+   {{"off", "Off", 0, {{"rt_hair_card_fill", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_card_fill", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "6g 2026-11-14: S8, zoom in fast with the mouse wheel and pan: with On the hair shows no holes and no pop of a whole head to cards; a hair pixel without a strand shows the card."},
 
   {"exp_rr_hair_guides", "RR hair guides",
    "Experimental: Ray Reconstruction treats hair (cards and strands) as a dielectric fibre instead of reading its backlit value as metalness. Appearance is unqualified.",
@@ -984,6 +994,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_coverage_confirm", "0"},
     {"rt_hair_coverage_min_pixels", "0"},
     {"rt_hair_live_warmup", "0"},
+    {"rt_hair_card_fill", "0"},
     {"rt_hair_debug_late_arrival", "0"},
     {"rt_hair_dense_sample", "0"},
     {"rt_hair_groom_lod_keep", "0"},

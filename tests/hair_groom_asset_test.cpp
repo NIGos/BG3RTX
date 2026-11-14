@@ -765,6 +765,62 @@ static void test_coverage_footprint() {
 // frame_index to F + 1 before hair_primary_publish (inside the same build) asks rt_this_build_camera(F + 1): false, the
 // header goes out without kFlagCamera, every strand fragment discards in hp_rebase, but the swap gates (coverage, depth
 // latch, applied keys) never read the flag: the draw is swapped, its card depth already dropped -> no hair that frame.
+// 6g rt_hair_card_fill (common/hair_primary.h fill_spares, CoverageGate::confirm_runs): the dolly of hl1 003637 (five
+// frames in a row at 0.59-0.71 of ~3300 card pixels, then back at 0.96+) and the user's play of 2026-11-14 (frame
+// watchdog trips on single frames). Without the fill: the second low measurement puts the key on cards. With it: the
+// key stays strands through a loss shorter than kFillConfirm measurements (the fill shows the missing pixels as cards)
+// and goes to cards only on a sustained one; a key on cards, missing or stale evidence and coverage high are unchanged.
+static void test_card_fill() {
+  using namespace hair_primary;
+  CHECK(kFlagCardFill == 512u);   // shaders/rt/hair_primary_gbuffer.hlsl hair_primary_flag_card_fill
+  CHECK((kFlagCardFill & (kFlagTips | kFlagCamera | kFlagPrevCamera | kFlagCoverage | kFlagMacroNormal | kFlagTangentWorld |
+                          kFlagNearest | kFlagMvCardFallback | kFlagMvCardAll)) == 0u);
+  CHECK(kFillConfirm == kWatchdogFrames && kFillConfirm > CoverageGate::kCoverConfirm);
+  for (int r = 0; r < int(Refusal::Count); ++r) {
+    CHECK(!fill_spares(Refusal(r), false));
+    CHECK(fill_spares(Refusal(r), true) == (Refusal(r) == Refusal::Watchdog));
+  }
+  for (bool fill : {false, true}) {
+    CoverageGate g;
+    g.hold = g.confirm = true;
+    g.confirm_runs = fill ? kFillConfirm : CoverageGate::kCoverConfirm;
+    g.observe(0x58da, 100, 3300, 3200);
+    CHECK(g.allow(0x58da, 101));
+    uint64_t f = 101;
+    for (; f < 104; ++f) { g.swapped(0x58da, f); g.observe(0x58da, f, 3300, 3200, true); }
+    const uint64_t loss[5] = {1932, 2193, 2491, 2731, 364};   // hl1 003637, G-buffer frames 2448-2452
+    for (uint64_t s : loss) {
+      if (g.allow(0x58da, f)) g.swapped(0x58da, f);
+      g.observe(0x58da, f, 3300, s, g.is_swapping(0x58da, f));
+      ++f;
+    }
+    CHECK(g.why(0x58da, f) == (fill ? CoverageGate::Why::Ok : CoverageGate::Why::Low));
+    if (!fill) continue;
+    g.swapped(0x58da, f);
+    g.observe(0x58da, f, 3300, 3200, true);   // the dolly ends: the run is over
+    CHECK(g.bad_run[0x58da] == 0 && g.allow(0x58da, f + 1));
+    ++f;
+    for (uint32_t i = 0; i < kFillConfirm; ++i, ++f) {   // a sustained loss (a groom that does not fit its cards)
+      CHECK(g.allow(0x58da, f));
+      g.swapped(0x58da, f);
+      g.observe(0x58da, f, 3300, 1000, true);
+    }
+    CHECK(g.why(0x58da, f) == CoverageGate::Why::Low);
+    CoverageGate cards;                        // a key on cards: the strict start decision, as without the fill
+    cards.hold = cards.confirm = true;
+    cards.confirm_runs = kFillConfirm;
+    CHECK(cards.why(0x77, 101) == CoverageGate::Why::None);
+    cards.observe(0x77, 100, 3300, 1000);
+    CHECK(cards.why(0x77, 101) == CoverageGate::Why::Low);
+    cards.observe(0x77, 101, 3300, 3200);
+    CHECK(cards.allow(0x77, 102));
+    cards.swapped(0x77, 102);
+    cards.observe(0x77, 102, 3300, 3200 + 3300, true, 3300 * 2);   // strands far outside the cards (coverage high)
+    CHECK(cards.why(0x77, 103) == CoverageGate::Why::Ok);           // one measurement of a held key: not yet confirmed
+    CHECK(cards.why(0x77, 102 + kHoldFrames + 1) == CoverageGate::Why::Stale);
+  }
+}
+
 static void test_dropout() {
   using namespace hair_primary;
   CHECK(dropout_reason(5000, 4800, 5000, 9000, 8000) == Dropout::None);
@@ -1391,7 +1447,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish(); test_card_fill();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
