@@ -279,5 +279,20 @@ int main(){
  bg3::vram_guard::Guard guard;guard.sample(31000*mib,31419*mib);
  check(guard.low && !guard.allow(size));
  guard.sample(10000*mib,31419*mib);check(!guard.low && guard.allow(size));
+ // Growth step: the user's 2026-11-14 22:15:10-23 targets, each applied when it exceeds the capacity.
+ {const uint64_t targets[]={1456,1504,1584,1568,1616,1680,1760,1744,1776,1808,1792,1808,1824,1840};
+  unsigned plain=0,stepped=0;uint64_t a=1408*mib,b=1408*mib;
+  for(uint64_t t:targets){
+   if(t*mib>a){a=t*mib;++plain;}
+   if(t*mib>b){b=elastic_growth(b,t*mib,cap);++stepped;check(b>=t*mib && b%(16*mib)==0);}
+  }
+  check(plain==10 && stepped==3 && a==1840*mib && b==2016*mib);
+  check(a+a/4>b && b<=a+a/8);             // no shrink back (peak + 25% does not fit), surplus within 1/8
+ }
+ check(elastic_growth(1024*mib,1040*mib,cap)==1152*mib);   // +16 MiB asked, +128 MiB taken
+ check(elastic_growth(1024*mib,1600*mib,cap)==1600*mib);   // a large rise is not stretched
+ check(elastic_growth(1024*mib,1040*mib,1100*mib)==1100*mib && elastic_growth(1024*mib,1040*mib,1030*mib)==1040*mib);
+ check(elastic_growth(1024*mib,512*mib,cap)==512*mib && elastic_growth(1024*mib,1024*mib,cap)==1024*mib);
+ check(elastic_growth(0,16*mib,cap)==16*mib && elastic_growth(UINT64_MAX-mib,UINT64_MAX,UINT64_MAX)==UINT64_MAX);
  std::printf("RT elastic capture: %u CPU checks; no GPU claim\n",checks);
 }

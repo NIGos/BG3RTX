@@ -1222,7 +1222,16 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   const hair_groom::Loaded* src = hair_groom::find(id, a.indices);
   std::vector<uint8_t> bytes;
   hair_groom::Lod l;   // round 3 M6: only this LOD's bytes are read and validated
-  if (!src || !hair_groom::read_lod(*src, uint32_t(lod), bytes, l)) {
+  // rt_hair_groom_async (default 0, live): the file read and LZMS decode run on a worker thread instead of inside
+  // this build (median 47 ms, max 203 ms per LOD in the user's log of 2026-11-14); the draw keeps its cards (or its
+  // built LOD, rt_hair_groom_lod_keep) until a later build finds the bytes ready.
+  bool read = false;
+  if (src && cfg_int("rt_hair_groom_async", 0) != 0) {
+    const hair_groom::LodDecode state = hair_groom::read_lod_async(*src, uint32_t(lod), bytes, l, now);
+    if (state == hair_groom::LodDecode::Pending) return nullptr;
+    read = state == hair_groom::LodDecode::Ready;
+  } else read = src && hair_groom::read_lod(*src, uint32_t(lod), bytes, l);
+  if (!read) {
     log("[hair groom] %016llx: file unreadable or changed since startup, groom off for it", (unsigned long long)id);
     a.failed = true;
     return nullptr;

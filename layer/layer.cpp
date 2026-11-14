@@ -716,6 +716,13 @@ bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap) {
   return false;
 }
 
+bool vram_fits(int consumer, uint64_t bytes) {
+  if (!vram_guard_on() || consumer < 0 || consumer >= vram_guard::kConsumerCount) return true;
+  std::lock_guard<std::mutex> lock(g_vg_mu);
+  auto probe = g_vg;   // allow() records a grant: test a copy
+  return consumer == vram_guard::kRtCapture ? probe.allow_capture(bytes, g_vg_real_budget) : probe.allow(bytes);
+}
+
 uint64_t vram_take_ask(int yield) {
   if (yield < 0 || yield >= vram_guard::kYieldCount) return 0;
   return g_vg_ask[yield].exchange(0, std::memory_order_relaxed);

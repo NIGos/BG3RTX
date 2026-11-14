@@ -554,6 +554,11 @@ void shader_poll() {
   if (now - g_last_check < 250) return;
   g_last_check = now;
   log_stats();
+  // The source scan (160 files in 2 trees, on the present thread) serves hot reload: every 250 ms with dev=1,
+  // every 5 s in a player package (dev=0, data/release.ini), where nobody edits shaders while playing.
+  static ULONGLONG last_scan = 0;
+  if (g_stamp && now - last_scan < (cfg_int("dev", 1) ? 250u : 5000u)) return;
+  last_scan = now;
   uint64_t stamp = (std::max)(dir_stamp(shaders_dir()), dir_stamp(root_dir() + "\\common"));
   if (stamp == g_stamp) return;
   bool first = g_stamp == 0;
