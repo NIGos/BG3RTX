@@ -121,7 +121,16 @@ def retime(names):
         flow.write(plan_path, plan)
         flow.write(HERE / "jobs" / f"{name}.json", job)
     # Append-only: readiness queries the frozen lint snapshot has not seen (unproven until a VALID run supplies them).
-    return lint_snapshot.extend_readiness(sorted((HERE / "jobs").glob("*.json")))
+    added = lint_snapshot.extend_readiness(sorted((HERE / "jobs").glob("*.json")))
+    # Likewise the expect and forbid patterns no frozen log was matched against (count 0, as 2460945e did by hand):
+    # scripts/merge_scope.py's tooling check needs an entry for each.
+    data = flow.read(lint_snapshot.PATH)
+    new = sorted({rx for path in (HERE / "jobs").glob("*.json") for key in ("forbid", "expect")
+                  for rx in flow.read(path).get(key, [])} - data["matches"].keys())
+    if new:
+        data["matches"].update({rx: [0, None] for rx in new})
+        flow.write(lint_snapshot.PATH, data)
+    return added + len(new)
 
 
 def focused_job(name, save, start, plan, gates, expect, purpose):
@@ -232,7 +241,7 @@ def main():
     # The focused jobs take live_flow's timing (readiness waits, frame-window seconds); the wide-split jobs keep
     # opt_profile's own timing, which their source already carries.
     added = retime([job["name"] for _, job in made if "wide-split" not in job["name"]])
-    print("Generated", ", ".join(job["name"] for _, job in made), f"- no queue staging; {added} new readiness queries "
+    print("Generated", ", ".join(job["name"] for _, job in made), f"- no queue staging; {added} new entries "
           "appended to lint_corpus_snapshot.json")
 
 

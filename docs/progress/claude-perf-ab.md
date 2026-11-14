@@ -15,9 +15,8 @@
 | Dialogue1 | Ultra | 1.76 -> 1.69 | 14.12 -> 10.94 | 1.25 -> 1.22 | 1.18 -> 1.05 | 2.54 -> 2.44 |
 | Dialogue1 | High | 1.68 -> 1.70 | 2.80 -> 2.63 | 0.83 -> 0.77 | 0.36 -> 0.34 | 2.43 -> 2.51 |
 
-- Camp could not run: its save "Campsite - 27h" no longer exists. Single static windows from separate runs:
-  under about 0.3 ms per pass is noise. Both runs were unfocused at the 30 fps cap with stock hair and FG 2x,
-  so they say nothing about frame time or about the user's hair configuration.
+- Camp could not run (its save "Campsite - 27h" no longer exists). Separate runs: under about 0.3 ms per pass is
+  noise. Both were unfocused at the 30 fps cap, stock hair, FG 2x: no word on frame time or the hair configuration.
 - Today's logs show the hold path copying a lot per 120 builds in the static windows: S8 Ultra hold pack 0 jobs
   and copy 29640 jobs (10.9 GB), S8 High pack 1200 and copy 38764 (14.7 GB), inn Ultra pack 120 and copy 63985
   (17.1 GB). No 2026-11-05 log is left to compare; job C measures it against the split off.
@@ -27,15 +26,15 @@
   (`rt_hair_groom_primary=0`) / stock cards again (noise floor). All toggles are live because the game starts
   with the bundle, `rt_hair_mv_card=2` and the nearest trace; the origin reservation and the 1049 velocity
   pipelines stay in the off windows.
-- Skipped: the bundle with `rt_hair_groom=0`. The groom key gates the strand swaps (`layer/util.cpp`), so that
-  window would show cards. The lighting-only window is its valid complement.
+- Skipped: the bundle with `rt_hair_groom=0` (the groom key gates the strand swaps, `layer/util.cpp`: it would
+  show cards). The lighting-only window is its valid complement.
 - Job C (`perf-ab-wide-split-0`, `-1`): the opt-profile-s8 state without pans, `rt_capture_wide_split` 0 and 1
   (startup key, two launches): scene build, `[bvh]` hold pack and copy jobs, mesh pool MB.
 - Job D (`perf-ab-dlss5-s8`, optional): `dlss5_nr=1` at start, `dlss5_nr_bypass` 1 / 0 / 1; valid only if the
   launcher has already staged `sl/nvngx_dlssnr.dll` for the test tree, else it fails fast on `NR created`.
 - Analyzer: `<log>.perf.md`, one table per job (median and range of every GPU cost line, scene wait, `[pace]`
   median and p99, CPU submit, VRAM, guard lines, off-b minus off-a as noise). Checked on today's logs.
-- Gates: live_flow preflight (`--tree .` and `--frozen`) 5 jobs, 0 failing; 23 readiness queries appended to
-  the lint snapshot (append only); batch_jobs_lint, live_flow, opt_profile and test_registration tests pass.
-- Expected time after load: s8 135 s, inn 252 s by the lint model (about 125 s at 25 fps), wide split 47 s
-  each, dlss5 74 s. No code change, no live run. After the user's go: read each `<log>.perf.md` against `predicted.json`.
+- Gates: live_flow preflight (`--tree .`, `--frozen`) 5 jobs, 0 failing; lint snapshot extended (append only);
+  batch_jobs_lint, live_flow, opt_profile, test_registration and the merge_scope tooling step pass.
+- Expected time after load: s8 135 s, inn 252 s by the lint model (about 125 s at 25 fps), wide split 47 s each,
+  dlss5 74 s. No code change, no live run. After the go: read each `<log>.perf.md` against `predicted.json`.
