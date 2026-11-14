@@ -153,7 +153,10 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     # BLAS chunk cap by occupancy (common/as_chunk_alloc.h chunk_within_cap, layer/bvhsplit.cpp as_create): host only.
     "rt_as_cap_occupied "
     # Startup-only capture layout (common/capture_stride.h): set at launch, never toggled in a run; no core pipeline.
-    "rt_capture_wide_split".split())
+    "rt_capture_wide_split "
+    # Scene handout: the hit-material passes take the committed pair (core/gi.cpp handout_hit_settle) and the layer
+    # skips the commit-time query (layer/rtscene.cpp). The same pipelines (constant 1051 follows rt_scene_handout).
+    "rt_scene_handout_hit_wait".split())
 for key in NO_PIPELINE:
     TABLE[key] = []
 

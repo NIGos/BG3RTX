@@ -225,7 +225,7 @@ struct HandoutFrame {
 };
 HandoutFrame g_hof;
 uint64_t g_handout_unready = 0;   // last frame a handout pass met a pipeline without constant 1051
-struct HandoutStats { uint64_t calls = 0, frames = 0, settled = 0, settle_spec = 0, settle_refused = 0, settle_water = 0, settle_failed = 0, water_handout = 0; };
+struct HandoutStats { uint64_t calls = 0, frames = 0, settled = 0, settle_spec = 0, settle_refused = 0, settle_water = 0, settle_failed = 0, water_handout = 0, settle_hit = 0; };
 HandoutStats g_hos;
 VkAccelerationStructureKHR rt_tlas_ordinary(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity, bool* scene_current);
 // The committed pair for a pass of a handout frame that cannot use the handout (once per frame: rt_scene_set waits).
@@ -241,15 +241,28 @@ bool handout_settle(VkCommandBuffer cmd, VkAccelerationStructureKHR& tlas, VkDes
   tlas = g_hof.tlas; alpha = g_hof.alpha; identity = g_hof.identity;
   return true;
 }
+// rt_scene_handout_hit_wait=1 (docs/SCENE_HANDOUT_DESIGN.md 8.6): a native hit-material pass of a handout frame takes
+// the committed pair (the frame's one wait, at its first such pass), so its query is recorded in the lighting command
+// buffer, after the G-buffer's deferred packet, as without the handout. The commit-time query (increment 4b) is
+// recorded in the capture's command buffer, before that packet's: never published ("[hit material submit] ordered 0"
+// on every handout frame, hq-s8-ultra 2026-11-14), so every hit was unqualified and the frame 0.2% darker.
+bool handout_hit_settle(VkCommandBuffer cmd, VkAccelerationStructureKHR& tlas, VkDescriptorSet& alpha, uint64_t& identity) {
+  if (!tlas || tlas != g_hof.dummy || g_hof.frame != host->frame_index() ||
+      !host->cfg_int("rt_scene_handout_hit_wait", 0)) return true;
+  ++g_hos.settle_hit;
+  return handout_settle(cmd, tlas, alpha, identity);
+}
 // One line per 600 RT frames while the key is 2 (the layer's "[rt] scene handout" line has the resolutions).
 void handout_log() {
   if (host->cfg_int("rt_scene_handout", 0) < 2 && !g_hos.frames) return;
   if (++g_hos.calls < stats_period(600)) return;
   host->log("scene handout: %llu RT frames, %llu took a handout; %llu settled to the committed scene (pipeline without "
-            "constant 1051 %llu, pass not registered %llu, water %llu), %llu found none; water on the handout %llu",
+            "constant 1051 %llu, pass not registered %llu, water %llu), %llu found none; water on the handout %llu; "
+            "hit material passes on the committed scene %llu (rt_scene_handout_hit_wait)",
             (unsigned long long)g_hos.calls, (unsigned long long)g_hos.frames, (unsigned long long)g_hos.settled,
             (unsigned long long)g_hos.settle_spec, (unsigned long long)g_hos.settle_refused,
-            (unsigned long long)g_hos.settle_water, (unsigned long long)g_hos.settle_failed, (unsigned long long)g_hos.water_handout);
+            (unsigned long long)g_hos.settle_water, (unsigned long long)g_hos.settle_failed, (unsigned long long)g_hos.water_handout,
+            (unsigned long long)g_hos.settle_hit);
   g_hos = HandoutStats{};
 }
 bool g_hair_origin_cap=false,g_hair_origin_init=false,g_hair_origin_frame=false;
@@ -2396,6 +2409,7 @@ bool dispatch(VkCommandBuffer cmd, Pipe& p, Bound& b, const Push& pc, uint32_t w
                VkPipelineLayout private_layout=VK_NULL_HANDLE) {
   const VkDeviceFuncs& vk = *host->vk;
   if(!p.pipeline)return false;
+  if(&p==&g_hit_material && !handout_hit_settle(cmd,b.tlas,b.alpha,b.omm_identity))return false;
   auto traversal=prepare_omm_traversal(cmd,b,p.pipeline,rt);
   if(!traversal.valid())return false;
   VkDescriptorSet selected_alpha=b.alpha;
@@ -2472,6 +2486,7 @@ VkDescriptorSet write_sun_set(const Snapshot& s) {
 bool ls_dispatch(VkCommandBuffer cmd, Bound& b, const Push& pc, VkDescriptorSet sun, VkPipeline pipe, uint32_t gx,
                  uint32_t gy, const Snapshot* box = nullptr, bool material_use = false) {
   if(!pipe)return false;
+  if(material_use && !handout_hit_settle(cmd,b.tlas,b.alpha,b.omm_identity))return false;
   auto traversal=prepare_omm_traversal(cmd,b,pipe);
   if(!traversal.valid())return false;
   const VkDeviceFuncs& vk = *host->vk;
@@ -2736,6 +2751,7 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
     g_rg_logged = 0;
     host->log("rf hit gi: off");
   }
+  if (!handout_hit_settle(cmd, b.tlas, b.alpha, b.omm_identity)) return false;
   auto traversal = prepare_omm_traversal(cmd, b, p.pipeline);
   if (!traversal.valid()) return false;
   VkDescriptorSet material_alpha = b.alpha;
@@ -3053,6 +3069,7 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
              reorder && path==rtp::Path::kRaygen && !host->rt_pipeline.reorder_hint?"; the driver reports no reordering: no hint, no prepass":"");
   }
  }
+ if(!handout_hit_settle(cmd,b.tlas,b.alpha,b.omm_identity))return false;
  auto traversal=prepare_omm_traversal(cmd,b,rp?rp->pipeline:p.pipeline);if(!traversal.valid())return false;
  VkDescriptorSet material_alpha=b.alpha;
  if(!host->rt_hit_material_use(cmd,b.tlas,b.alpha,b.omm_identity,&material_alpha))return false;

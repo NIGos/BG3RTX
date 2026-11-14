@@ -327,14 +327,14 @@ OFF level in the per-frame buffers (diffuse d1669194 +0.02%, scene colour +0.04%
 at the ON level: most likely a traced frame that did not take the handout (that period logs 116 of 120 handouts,
 `committed first 2`). Without it ON is -0.24% in the scene colour, -0.35% in the diffuse light (d1669194, z -14.6) and
 -0.13% in the tonemapped frame (d25b8086). The G-buffer base colour and normals are equal, so the scene is the same.
-Section 8.2 predicts no difference in order, so this is a defect to chase, not a shading-model consequence: a handed
-out frame gets about 0.35% less diffuse light in that same frame. First suspect: the visibility rays (sun shadow / AO)
-on the handout's traversal TLAS (stamp byte 24, the OMM accelerated commit of slot R) or its alpha records, against
-what the wait path traces. Next step (one launch, same job shape, not staged): three states `rt_scene_handout` 0 / 1 /
-2. If 1 equals 2 the stamp TLAS path is the cause, if 1 equals 0 the no-wait commit (alpha records, hit material query
-at the commit). OPEN until then; -0.2% is far below visibility, so the default stays as decided.
+Section 8.2 predicts no difference in order, so this is a defect, not a shading-model consequence. Cause found from
+the code and the logs on disk: section 8.6 (the commit-time hit-material query is never published). The first suspect
+(OMM traversal TLAS, alpha records) is ruled out: `omm check` has 0 violations in OFF and ON windows alike.
 The first analysis of that run said INVALID "missing float sample": `gi_1ray_qual` `float_samples` required exactly 3
 traces per phase and the job had 8. It now takes the count the plan asks for (`trace_at`).
+
+Open after 8.6: the frame-time gains of the table above include the dropped hit work (GI trace GPU 4.8 -> 3.5 ms at
+S8), so they overstate the handout on Ultra. High has no native hit materials and is not affected.
 
 User decision 2026-11-14 ("Si, accendilo"): On by default in High and Ultra, Off in Low and Medium. The control is a
 normal Performance control (Frame rate group, not experimental): the release policy and `data/release.ini` do not touch
@@ -353,3 +353,47 @@ lines near 0 ms; Performance > Low-latency scene Off (live) shows the OFF frame 
 Performance page, Frame rate group, "Low-latency scene" (`scene_handout`): Off / On. On writes
 `rt_scene_handout_layout=1` and `rt_scene_handout=2`, needs a game restart (Off is live). Cost chip: saves about 1 to
 3.5 ms (about 1 ms at Water Queens House, 2.5 to 3.5 ms at the inn on Ultra, RTX 5090).
+
+### 8.6 Native hit materials on the handout: the commit-time query is never published (2026-11-14)
+
+Found while closing the S8 energy point (branch claude/handout-energy). On every handout frame the native
+hit-material path is silently off: hit GI has no qualified hit and no light rays at hits, and the hit shading of
+reflections takes the same query.
+
+Evidence (logs and traces on disk, no new live):
+- `hq-s8-ultra.1.160909.log`: `[hit material submit] ... ordered 0` on all 10 logged handout frames (query recording =
+  source recording), `ordered 1` on all 9 waiting frames (query in the lighting command buffer).
+- The same log, check windows: OFF has `GI hit direct lights: light rays traced 3841305` per 60 frames and
+  `GI far ... roof rule 14186820 ... bounce 0.0103030 ... ambient kept at qualified hits 0.00774`; ON has no
+  `GI hit direct lights` line, `roof rule 0`, bounce 0.0099191, ambient kept at qualified hits 0.00000.
+- `hq-s8-energy.1.191419.log`: GI trace GPU median 4.83 / 3.49 / 4.69 ms (OFF-a / ON / OFF-b), rt passes 7.0 / 5.9 /
+  7.0 ms. The first run's prediction "GPU work equal" was right; relaxing the gate to "not higher" hid this.
+- The 24 traces: G-buffer equal (+0.014%); the loss is in the diffuse light (-0.31%), on the ivy column (-1.6%) and
+  along contact creases (where GI rays hit near geometry), 0 on open floor. PNG block differences, 8 x 8 px.
+
+Cause: increment 4b records the query at the scene commit, in the capture's command buffer (the prepass one). The
+deferred packet it reads (`native_hit::deferred_finish`: the gather dispatches of the G-buffer material pass) is
+recorded in another command buffer that is not before it in the submit. `native_hit::before_submit` then finds no
+order proof (`ordered_before_query`, common/native_hit_order.h) and publishes word 0: the GPU rejects every row. That
+check is right: the query's dispatches would read rows the packet has not written yet. Nothing counted it: the
+handout line's `failed 0 (fallbacks: query 0, camera 0)` only covers the CPU side of the commit.
+
+Fix, off by default (`rt_scene_handout_hit_wait=1`, live key, bg3rtx.ini): a hit-material pass of a handout frame
+takes the committed pair instead (core/gi.cpp `handout_hit_settle` before the four `rt_hit_material_use` sites:
+`rt_hit_material`, the hit reference, reflections hit shading, hit GI). That is the frame's one wait, moved from the
+first RT query to the first hit-material pass; the query is then the lighting's own, as without the handout. The layer
+does not build the commit-time query while the key is on (layer/rtscene.cpp). The passes before it (sun shadows, AO,
+local shadows) keep the handout. No shader, ABI or variant change (`shaders/variants.txt` delta 0). New counter in
+`[core] scene handout: ... hit material passes on the committed scene N`. Unit test: native_hit_order_test (the
+commit-time order is refused, the lighting order accepted). `.\scripts\build.ps1 -Test`: 226 of 226.
+
+Not verified live (READY_FOR_LIVE): the settle path itself logged `0 settled` in every live so far, and the wait
+that remains with the key on is unknown. Staged: `tools/live_batches_staged/handout_qual/jobs/hq-s8-modes.json`
+(predicted.json `hq-s8-modes`): S8 static, exposure held, `rt_scene_handout` 0 / 1 / 2 / 2 + hit wait / 0, 8 float
+traces and a short `rt_stats` window per state; the analyzer prints the per-pass float means, the scene wait, the GI
+trace GPU ms and the hit lines per state. Predicted: mode 1 and the fix inside the OFF range with qualified hits, mode
+2 at -0.20%. Lint live and frozen: 0 failing.
+
+If the fix's wait is close to the OFF wait, the handout gains nothing with native hit materials. The alternative that
+keeps the whole gain: record the query in a layer-owned command buffer inserted into the submit before the first
+handout user (after the capture and the G-buffer material buffers). Larger host change; decide after the live.

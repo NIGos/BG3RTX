@@ -55,5 +55,11 @@ int main(){
  CHECK(badThenGood.prepare(true)==1);badThenGood.finish(true);CHECK(badThenGood.sealed && badThenGood.published);
  PendingPublication twice;CHECK(twice.prepare(true)==1);CHECK(twice.prepare(true)==0 && !twice.published && twice.pending);
  twice.finish(true);CHECK(twice.sealed && !twice.published);
+ // Scene handout (docs/SCENE_HANDOUT_DESIGN.md 8.6): the capture command buffer 20 is submitted before the G-buffer
+ // material one 21 (the deferred packet) and the lighting 30. A query recorded at the scene commit, in 20, has the
+ // packet after it: never published (hq-s8-ultra 2026-11-14, "ordered 0"). The lighting query in 30 is.
+ const std::array<uint64_t,3> handoutFrame{20,21,30};
+ CHECK(!ordered_before_query(Evidence{20,false,0,true},Evidence{21,false,0},20,graphics,graphics,handoutFrame));
+ CHECK(ordered_before_query(Evidence{20,false,0},Evidence{21,false,0},30,graphics,graphics,handoutFrame));
  std::printf("%u native hit submit-order/publication checks passed\n",checks);
 }

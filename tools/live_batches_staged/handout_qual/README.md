@@ -20,6 +20,7 @@ periods). Each job's post command writes `<log>.perf.md` with `analyze.py`.
 | hq-smoke-s8 | Water Queens House | handout on from launch: static, pan Q, pan E, static | 77 s |
 | hq-s8-energy | Water Queens House | 8 float traces per state, exposure held (decides the open S8 -0.72%) | 150 s |
 | hq-s8-check | Water Queens House | primary-ray check pan Q + E (split out of hq-s8-ultra, 15 minute cap) | 576 s |
+| hq-s8-modes | Water Queens House | rt_scene_handout 0 / 1 / 2 / 2 + rt_scene_handout_hit_wait / 0: 8 float traces and a short rt_stats window per state (design 8.6) | 317 s |
 
 After the first run (2026-11-14): pans and statics are 3 periods per window (at least 2 complete periods wherever the
 period grid falls); the per-pass GPU costs are judged "not higher beyond noise" (they fall when the wait goes).

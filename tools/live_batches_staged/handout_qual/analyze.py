@@ -5,7 +5,8 @@
 Reads a finished run; no game or queue access. Window medians are perf_ab's (complete 120-frame periods after each
 window's acknowledged stats reset). Every threshold is the OFF repeat of the same group (predicted.json "noise_rule"):
 noise = |off-b - off-a|; a gain is ON below the OFF mean by more than it. Energy: gi_1ray_qual's float samples
-(dumps.json scene colour mean / pre-exposure), ON mean inside the range of the OFF samples.
+(dumps.json scene colour mean / pre-exposure), each state's mean inside the range of the OFF samples
+(states are the energy-<state> phases; OFF repeats start with "off"), with the per-pass means and the hit-material lines.
 """
 import argparse
 from pathlib import Path
@@ -82,10 +83,79 @@ def judge(measured, plan):
     return rows, failures
 
 
-def energy(log, runner, plan_path, plan):
-    """ON mean inside the OFF samples' range; ('text', ok or None when not evaluated)."""
+# Per-pass float means of the energy traces (dumps.json, exposure held): where a difference first appears.
+PASSES = [("G-buffer base colour (control: the same scene)", "aa4efa4d", 1), ("diffuse light after the composite", "d1669194", 0),
+          ("scene colour before post (the energy quantity)", "5c3fdabc", 0), ("final frame before the UI", "d25b8086", 0)]
+# Log lines per state window (energy and hit-* windows): the native hit-material path at work.
+STATE_LINES = [("GI trace GPU median ms", r"gi: trace pass \(ray-traced.*GPU median ([\d.]+) ms"),
+               ("scene wait mean ms", r"\[rt\] scene wait:.*wait mean ([\d.]+) ms"),
+               ("GI far: ambient kept at qualified hits", r"GI far \(\d+ frames\):.*ambient kept at qualified hits ([\d.]+)"),
+               ("GI far: bounce per ray", r"GI far \(\d+ frames\):.*bounce ([\d.]+) \(old rule"),
+               ("GI hit direct: light rays traced", r"GI hit direct lights \(\d+ frames\): light rays traced (\d+)"),
+               ("hit material query published (ordered)", r"\[hit material submit\].* ordered (\d+)"),
+               ("hit material passes on the committed scene", r"\[core\] scene handout:.*committed scene (\d+) \(rt_scene_handout_hit_wait")]
+
+
+def energy_states(plan):
+    return [p["label"][len("energy-"):] for p in plan if p.get("trace_at") and p["label"].startswith("energy-")]
+
+
+def pass_means(run, plan):
+    """{pass name: {state: [mean of the rgb means per trace]}} from each energy trace's dumps.json."""
+    import json
+    from tools import m4_promotion_gate as m4
+    out = {name: {} for name, _, _ in PASSES}
+    for state in energy_states(plan):
+        _, start, end = run.phase_of("energy-" + state)
+        for t, txt in run.lines:
+            m = m4.TRACE.search(txt) if start <= t < end else None
+            if not m:
+                continue
+            dumps = json.loads((Path(m.group(2).strip()) / "dumps.json").read_text(encoding="utf-8"))
+            for name, fs, slot in PASSES:
+                cand = [(int(k[1:]), d) for k, d in dumps.items()
+                        if str(d.get("pass_fs", "")).startswith(fs) and d.get("slot") == slot and d.get("mean")]
+                if cand:
+                    rgb = max(cand, key=lambda c: c[0])[1]["mean"][:3]
+                    out[name].setdefault(state, []).append(sum(rgb) / len(rgb))
+    return out
+
+
+def against_off(values):
+    """[(state, mean, delta % of the OFF mean, delta / standard error)] for the states that are not OFF repeats."""
+    off = [x for s, v in values.items() if s.startswith("off") for x in v]
+    if len(off) < 2:
+        return []
+    rows = []
+    for s, v in values.items():
+        if s.startswith("off") or not v:
+            continue
+        d = statistics.mean(v) - statistics.mean(off)
+        se = (statistics.variance(off) / len(off) + (statistics.variance(v) / len(v) if len(v) > 1 else 0)) ** .5
+        rows.append((s, statistics.mean(v), d / statistics.mean(off) * 100, d / se if se else float("inf")))
+    return rows
+
+
+def state_lines(log, runner, plan):
+    """Markdown rows: per energy / hit-* window the median [n] of each STATE_LINES value logged inside it."""
+    lines = stamped_lines(Path(log).read_text(encoding="utf-8-sig", errors="replace"))
+    wins = [w for w in windows(Path(runner).read_text(encoding="utf-8-sig", errors="replace"), plan, lines)
+            if w["label"].startswith(("energy-", "hit-"))]
+    rows = ["| Line | " + " | ".join(w["label"] for w in wins) + " |", "| --- |" + " --- |" * len(wins)]
+    for name, rx in STATE_LINES:
+        cells = []
+        for w in wins:
+            v = [float(m[1]) for t, s in lines if w["applied"] <= t < w["end"] and (m := re.search(rx, s))]
+            cells.append(f"{statistics.median(v):g} [n{len(v)}]" if v else "-")
+        rows.append(f"| {name} | " + " | ".join(cells) + " |")
+    return rows if wins else []
+
+
+def energy(log, runner, plan_path, plan, expect=None):
+    """Each state's mean inside the OFF samples' range; ('text', ok or None when not evaluated, per-pass rows).
+    expect: {state: "equal" (default) | "lower" (a predicted loss: reported, not judged)}."""
     if not any(p.get("trace_at") for p in plan):
-        return "no energy phases in this job", None
+        return "no energy phases in this job", None, []
     try:
         from tools import m4_promotion_gate as m4
         from tools.live_batches.gi_1ray_qual.analyze import float_samples
@@ -95,17 +165,32 @@ def energy(log, runner, plan_path, plan):
                       for w in windows(Path(runner).read_text(encoding="utf-8-sig", errors="replace"), plan, lines)]
         # As many samples as the phase's plan asks for (hq-s8-energy: 8; float_samples' default 3 made that run INVALID).
         asked = {p["label"]: len(p["trace_at"]) for p in plan if p.get("trace_at")}
-        v = {s: [x[0] / x[2] for x in float_samples(run, f"energy-{s}", asked[f"energy-{s}"])]
-             for s in ("off-a", "on", "off-b")}
+        v = {s: [x[0] / x[2] for x in float_samples(run, f"energy-{s}", asked[f"energy-{s}"])] for s in energy_states(plan)}
+        passes = pass_means(run, plan)
     except (Exception, SystemExit) as e:   # missing traces or dumps: the run is incomplete for energy, not judged
-        return f"not evaluated: {e}", None
-    off = v["off-a"] + v["off-b"]
-    on = statistics.mean(v["on"])
-    ok = min(off) <= on <= max(off)
+        return f"not evaluated: {e}", None, []
+    off = [x for s, xs in v.items() if s.startswith("off") for x in xs]
+    others = [s for s in v if not s.startswith("off")]
+    if len(off) < 2 or not others:
+        return "not evaluated: no OFF pair or no other state", None, []
+    ok, parts = True, []
+    for s, mean, pct, z in against_off(v):
+        inside = min(off) <= mean <= max(off)
+        rule = (expect or {}).get(s, "equal")
+        ok = ok and (inside or rule != "equal")
+        parts.append(f"{s} mean {mean:.5f} ({pct:+.2f}%, {z:+.1f} standard errors): " +
+                     ("inside the OFF range" if inside else "OUTSIDE the OFF range") +
+                     ("" if rule == "equal" else f" (predicted {rule}, not judged)"))
     per = "; ".join(f"{s} n={len(x)} mean {statistics.mean(x):.5f} sd {statistics.stdev(x):.5f} "
                     f"({min(x):.5f} to {max(x):.5f})" for s, x in v.items())
-    return (f"normalized scene colour mean: OFF samples {min(off):.5f} to {max(off):.5f} (mean {statistics.mean(off):.5f}), "
-            f"ON mean {on:.5f} ({(on / statistics.mean(off) - 1) * 100:+.2f}%). Per state: {per}"), ok
+    rows = ["| Pass (float mean of rgb) | OFF mean | " + " | ".join(others) + " |", "| --- | --- |" + " --- |" * len(others)]
+    for name, values in passes.items():
+        off_p = [x for s, xs in values.items() if s.startswith("off") for x in xs]
+        cells = {s: f"{pct:+.3f}% ({z:+.1f} se)" for s, _, pct, z in against_off(values)}
+        if off_p:
+            rows.append(f"| {name} | {statistics.mean(off_p):.5f} | " + " | ".join(cells.get(s, "-") for s in others) + " |")
+    return (f"normalized scene colour mean: OFF samples {min(off):.5f} to {max(off):.5f} (mean {statistics.mean(off):.5f}). "
+            + ". ".join(parts) + f". Per state: {per}"), ok, rows
 
 
 def main():
@@ -117,14 +202,16 @@ def main():
     a = ap.parse_args()
     job, plan, plan_path = flow.load_job(a.job)
     measured, guard, guard_all, wide = pab.measure(a.log, a.runner, plan)
-    timed = [p for p in plan if p.get("frames") and not p.get("trace_at")]
+    # hit-* windows (rt_stats on) carry the native hit lines only: their own table below, no cost rows.
+    timed = [p for p in plan if p.get("frames") and not p.get("trace_at") and not p["label"].startswith("hit-")]
     table, _ = pab.report(job, timed, measured, guard, guard_all, wide)
     # One complete period at least per window (a pan side has 1-2); check windows carry the rt stats line only.
     missing = [f"{p['label']}: no complete period of {name}" for p in timed
                for name in (("primary-ray check match",) if p["label"].startswith("check") else pab.REQUIRED)
                if not measured.get(p["label"], {}).get(name)]
     rows, failures = judge(measured, plan)
-    etext, eok = energy(a.log, a.runner, plan_path, plan)
+    etext, eok, epasses = energy(a.log, a.runner, plan_path, plan, job.get("energy_expect"))
+    states = state_lines(a.log, a.runner, plan)
     if eok is False:
         failures.append("energy: " + etext)
     if eok is None and any(p.get("trace_at") for p in plan):
@@ -134,7 +221,9 @@ def main():
                      [f"- FAIL: {f}" for f in failures] +
                      ["", "## ON against the OFF pair (noise = |off-b - off-a| of the same group)", "",
                       "| Group | Line | Rule | Values | |", "| --- | --- | --- | --- | --- |"] + rows +
-                     ["", "## Energy (static, exposure held, float traces per state as planned)", "", etext, "", table])
+                     ["", "## Energy (static, exposure held, float traces per state as planned)", "", etext, ""] + epasses +
+                     (["", "## Native hit-material path per state window (median [n] of the lines inside)", ""] + states
+                      if states else []) + ["", table])
     if a.out:
         Path(a.out).write_text(text, encoding="utf-8")
     else:
