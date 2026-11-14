@@ -1353,7 +1353,7 @@ static void test_hair_distant_detail() {
   if (!k) return;
   CHECK_EQ(k->category, "Lighting");
   CHECK(choice_count(*k) == 3);
-  const char* labels[3] = {"Off", "1/4 (Standard)", "1/8 (Sharper)"};
+  const char* labels[3] = {"Full", "1/4 (Standard)", "1/8 (Sharper)"};
   const char* want[3] = {"rt_hair_pixel_lod=0 ", "rt_hair_pixel_lod=1 rt_hair_pixel_lod_small_keep=0.25 ",
                          "rt_hair_pixel_lod=1 rt_hair_pixel_lod_small_keep=0.125 "};
   for (int c = 0; c < 3; ++c) {

@@ -43,7 +43,7 @@ assert sun["choices"][2]["label"] == "Include hidden roofs"
 box = next(s for s in state["settings"] if s["id"] == "box_lights")
 assert box["maturity"] == "qualified" and not box["experimental"]
 assert box["value"] == 0
-assert "0.13 ms" in box["description"]
+assert "ms" not in box["description"]   # the cost has its own line
 assert [c["label"] for c in box["choices"]] == ["Off", "On"]
 assert all(c["enabled"] and c["maturity"] == "qualified" for c in box["choices"])
 assert "0.13 ms" in box["cost"]
@@ -61,7 +61,7 @@ expected = {
  "Surfaces": ["Reflections", "Water lighting", "Depth of field and bloom smoothing"],
  "Performance": ["Frame Generation", "Rendered frame limit", "NVIDIA Reflex", "Faster bounce light tracing", "Bounce trace reordering", "Low-latency scene"],   # gi_rt_pipeline, qualified 2026-11-08
  "Support": ["Detailed logging"],
- "DLSS 5": ["DLSS 5 Neural Rendering (experimental)"],
+ "DLSS 5": ["DLSS 5 Neural Rendering"],   # the page shows an Experimental badge instead
 }
 assert len(state["settings"]) == 23   # + scene_handout (Low-latency scene, 2026-11-14); 22 = 17 + exp_gi_rt_pipeline + reorder (2026-11-08) + RTX Hair (0.9.5) + its distance detail and motion stability
 for page, labels in expected.items():
@@ -78,7 +78,7 @@ choices = {
  "box_lights": ["Off", "On"], "rr_post_temporal": ["Off", "On"],
  "exp_native_coverage": ["Off", "On"],
  "exp_hair_groom_primary": ["Off", "On"],   # RTX Hair (0.9.5)
- "hair_distant_detail": ["Off", "1/4 (Standard)", "1/8 (Sharper)"],
+ "hair_distant_detail": ["Full", "1/4 (Standard)", "1/8 (Sharper)"],
  "hair_motion_stability": ["Off", "On"],
  "reflections": ["Off", "Glossy", "Standard", "Rough"],
  "exp_water": ["Off", "Reflections", "Reflections and shadows", "Include refraction"],
@@ -111,3 +111,16 @@ for ident, title, category, levels, description in rows:
     assert title[1:-1] == real["title"] and category == real["category"] and description[1:-1] == real["description"], ident
     assert re.findall(r"""'([^']*)'|"([^"]*)\"""", levels) == [(c["label"], "") if "'" not in c["label"] else ("", c["label"]) for c in real["choices"]], ident
 print("Sample data of the page matches the settings table.")
+
+# Copy contract (docs/ui_rework/PROPOSAL.md 3): the row shows one benefit line without numbers; cost has its own
+# field; the detail panel gets what each preset sets.
+for setting in state_opt_in["settings"]:
+    text = setting["description"]
+    assert len(text) <= 190 and not re.search(r"\d ms\b|RTX 5090", text), (setting["id"], text)
+    assert setting["presets"], setting["id"]
+by = {s["id"]: s for s in state["settings"]}
+assert by["local_shadows"]["presets"] == "Off \u00b7 Fast \u00b7 Full \u00b7 Full"
+assert by["reflex"]["presets"] == "On in every preset"
+assert by["fps_cap"]["presets"] == "Off \u00b7 Off \u00b7 Off \u00b7 58 fps"
+assert by["exp_gi_rt_pipeline"]["cost"] == "Measured: Saves about 2 ms"
+print("One-line benefit, separate cost and preset values verified.")

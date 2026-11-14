@@ -123,6 +123,14 @@ std::string label(int i,int value){
   if(k.slider.has_off&&value==0)return "Off";const std::string unit=k.slider.unit?k.slider.unit:"";
   return std::to_string(value)+(unit.empty()||unit=="%"?unit:" "+unit);
 }
+// What each preset sets, for the detail panel: the four values joined by a middle dot, or one value "in every preset".
+std::string preset_text(int i){
+  const auto& k=st::kKnobs[i];bool same=true;
+  for(int p=1;p<st::kPresetCount;++p)same=same&&k.preset[p]==k.preset[0];
+  if(same)return label(i,k.preset[0])+" in every preset";
+  std::string out;for(int p=0;p<st::kPresetCount;++p){if(p)out+=" \xC2\xB7 ";out+=label(i,k.preset[p]);}
+  return out;
+}
 // One change: "Name: from → to", marked when it waits for the next game start.
 std::string change_line(int i,int from,int to){
   return std::string(st::kKnobs[i].label)+": "+label(i,from)+" \xE2\x86\x92 "+label(i,to)+
@@ -324,7 +332,7 @@ std::string Bridge::state_json() const {
     int value=state_.values[i];std::string maturity=k.experimental?"experimental":st::choice_maturity(k,value);
     // Opted-in release options use release copy and live on their own Experimental page.
     const bool opted=!dev&&st::opt_in_knob(k),developer=k.dev_only&&!opted;
-    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(opted?"Experimental":k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(developer)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(std::string(k.cost.provenance)=="No qualified measurement available."?"":k.cost.provenance)+",\"apply\":"+q(apply_text(st::transition_apply(k,value,value),!developer))+",\"applyNote\":"+q(developer?k.apply_note:"")+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
+    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(opted?"Experimental":k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(developer)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(std::string(k.cost.provenance)=="No qualified measurement available."?"":k.cost.provenance)+",\"apply\":"+q(apply_text(st::transition_apply(k,value,value),!developer))+",\"applyNote\":"+q(developer?k.apply_note:"")+",\"presets\":"+q(preset_text(i))+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
     bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev,opt_in()))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps,opt_in());
       std::string reason,requirements;
       if(developer){

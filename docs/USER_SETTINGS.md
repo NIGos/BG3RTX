@@ -1,7 +1,10 @@
 # BG3RTX settings: user guide
 
-Use `bin\BG3RTX.exe` to select the game folder, choose Low, Medium, High or Ultra,
-and save your settings. Custom means you changed something from a preset. In the game's Graphics options,
+Use `bin\BG3RTX.exe` to select the game folder and choose Low, Medium, High or Ultra.
+**A setting applies the moment you click it**: there is no Save button. Each change is written to
+`bg3rtx_user.ini` at once and the running game picks it up. The strip at the bottom of the window names the
+change, anything that changed with it, and offers **Undo**. Custom means you changed something from a preset;
+"Reset to" next to the preset brings the preset back. In the game's Graphics options,
 select DLSS as the upscaler for Ray Reconstruction. Before Play, when Ray Reconstruction is On,
 the launcher restores DLSS in `graphicSettings.lsx` and backs up that file as `.lsx.bg3rtx-bak`.
 It keeps your existing DLSS quality mode, or selects Quality if none is stored.
@@ -10,39 +13,66 @@ Hardware and dependency checks can restrict the available choices. A suggested p
 or VRAM qualification. BG3RTX is tested only on an RTX 5090. See the release README for compatibility
 and memory limits.
 
+## How changes apply
+
+- **At once.** Most settings change the running game as you click. No badge is shown for these.
+- **After a game restart.** A setting with an amber "Restart" badge (or "Restart to turn on") is written at once
+  but takes effect at the next game start. While the game runs, a line under the header lists what is
+  waiting ("Restart the game to apply: Water lighting, Hair shadows") and those rows show "Restart pending".
+- **Dependencies.** Turning something on also turns on what it needs. Turning something off also lowers what
+  needs it. Both happen at the click and are listed next to the control with Undo. A setting lowered this way
+  comes back when you turn its prerequisite on again in the same launcher session. A sub-setting whose parent
+  is off (RTX Hair detail and motion stability) is dimmed and keeps its value.
+- **If the file cannot be written** (for example, it is open in another program) nothing changes and a red
+  line offers Retry.
+- **Play** starts the game with the settings as they are.
+
 ## Release controls
 
-Lighting, Surfaces, Performance and DLSS 5 contain the player controls below.
-Advanced contains the all-ray-tracing keyboard shortcut.
-Help & support contains the game folder, compatibility, memory information, overlay advice and local
-reports. Each card shows how a change applies: "Applies after saving", "May briefly pause" or
-"Restart to apply". After saving, the footer counts the changes that wait for the next game start.
+Select a row to see what it does, its GPU cost, when it takes effect, what it needs and what each preset sets.
 
-| Page | Setting | Choices | Apply |
-|---|---|---|---|
-| Lighting | Ray-tracing detail | Off / Solid surfaces / Include foliage | Restart |
-| Lighting | DLSS Ray Reconstruction | Off / On | Live, may briefly pause; needs an RTX GPU and DLSS in game |
-| Lighting | Sun shadows | Visible surfaces / Ray-traced / Include hidden roofs | Live |
-| Lighting | Indirect lighting | Off / Visible surfaces / Ray-traced / Ray-traced high | Live |
-| Lighting | Off-screen bounce light | Off / Near / Far (6 m) | On or off: restart; Near/Far: may briefly pause |
-| Lighting | Local light shadows | Off / Fast / Full | Live; Fast needs Ray Reconstruction |
-| Lighting | Interior light shadows | Off / On | Live; needs Local light shadows |
-| Lighting | Hair shadows | Off / On | On: restart; Off: live |
-| Lighting | Mod lighting strength | 50-100%, step 5% | Live; blends indirect light, local shadows and reflections |
-| Surfaces | Reflections | Off / Glossy / Standard / Rough | Live |
-| Surfaces | Water lighting | Off / Reflections / Reflections and shadows / Include refraction | On or higher level: restart; lower or Off: live |
-| Surfaces | Depth of field and bloom smoothing | Off / On | Live; needs Ray Reconstruction |
-| DLSS 5 | DLSS 5 Neural Rendering (experimental) | Off / On, runtime picker and status | Restart to activate; shortcut toggles live after activation |
-| Performance | Frame Generation | Off / 2x / 3x / 4x | On or off: restart; 2x/3x/4x: live |
-| Performance | NVIDIA Reflex | Off / On / On + Boost | Live; Frame Generation needs On or On + Boost |
-| Performance | Rendered frame limit | Off / 30-240 fps, step 1 | Live; counts rendered frames, before Frame Generation |
-| Experimental | Water surface reflections | Off / On | On: restart; Off: live; needs Water lighting |
+| Page | Group | Setting | Choices | Takes effect |
+|---|---|---|---|---|
+| Lighting | Ray tracing | Ray-tracing detail | Off / Solid surfaces / Include foliage | Restart |
+| Lighting | Ray tracing | DLSS Ray Reconstruction | Off / On | At once, may briefly pause; needs an RTX GPU and DLSS in game |
+| Lighting | Ray tracing | Mod lighting strength | 50-100%, step 5% | At once; blends indirect light, local shadows and reflections |
+| Lighting | Shadows | Sun shadows | Visible surfaces / Ray-traced / Include hidden roofs | At once |
+| Lighting | Shadows | Local light shadows | Off / Fast / Full | At once; Fast needs Ray Reconstruction |
+| Lighting | Shadows | Interior light shadows | Off / On | At once; needs Local light shadows |
+| Lighting | Bounced light | Indirect lighting | Off / Visible surfaces / Ray-traced / Ray-traced high | At once |
+| Lighting | Bounced light | Off-screen bounce light | Off / Near / Far (6 m) | On or off: restart; Near/Far: may briefly pause |
+| Lighting | Hair | Hair shadows | Off / On | On: restart; Off: at once |
+| Lighting | Hair | RTX Hair (Beta) | Off / On | At once, also with its key |
+| Lighting | Hair | RTX Hair detail at distance | Full / 1/4 (Standard) / 1/8 (Sharper) | At once |
+| Lighting | Hair | RTX Hair motion stability | Off / On | On: restart; Off: at once |
+| Surfaces | Reflections | Reflections | Off / Glossy / Standard / Rough | At once |
+| Surfaces | Water | Water lighting | Off / Reflections / Reflections and shadows / Include refraction | On or higher level: restart; lower or Off: at once |
+| Surfaces | Post effects | Depth of field and bloom smoothing | Off / On | At once; needs Ray Reconstruction |
+| Performance | Frame rate | Frame Generation | Off / 2x / 3x / 4x | On or off: restart; 2x/3x/4x: at once |
+| Performance | Frame rate | NVIDIA Reflex | Off / On / On + Boost | At once; Frame Generation needs On or On + Boost |
+| Performance | Frame rate | Rendered frame limit | Off / 30-240 fps, step 1 | At once (when you release the slider); counts rendered frames |
+| Performance | Tracing speed | Faster bounce light tracing | Off / On | At once; same image, on in every preset |
+| Performance | Tracing speed | Bounce trace reordering | Off / By hit kind / By hit kind and object | At once, may briefly pause |
+| DLSS 5 | DLSS 5 | DLSS 5 Neural Rendering (Experimental) | Off / On, runtime file | Restart to activate; its key toggles live after activation |
+| Experimental | Performance | Low-latency scene | Off / On | On: restart; Off: at once |
+| Experimental | Frame Generation | Frame generation pacing test | Standard / Deferred | At once |
+| Experimental | Frame Generation | Multi-frame presentation test | Standard / Driver metering | Restart |
+| Experimental | Water | Water surface reflections | Off / On | On: restart; Off: at once; needs Water lighting |
+| Experimental | RTX Hair | Strand hair edge resolve | Off / Strands unresolved / Analytic coverage | At once; needs RTX Hair |
+| Help & support | Problem reports | Detailed logging | Off / On | Restart |
+
+Tracing speed is collapsed by default: both options are on in every preset and do not change the image.
+The Experimental page has the switch **Show experimental options**; its options are off in every preset and
+hidden until you turn the switch on. Turning it off sets them all back to Off (Undo restores them).
+**Home** shows what needs attention, the preparation of shaders and RTX Hair styles, the preset and the
+in-game keys. **Hotkeys** changes the in-game keys. **Help & support** has the game folder, the graphics check,
+reports, tips and the version.
 
 Visible hair is the game's stock hair. With Hair shadows On, the game's hair and scalp cast
 ray-traced shadows. The first start after turning it on compiles shaders and can pause or stutter.
-No replacement hair files are included. **Lighting > RTX Hair** (beta, Off in every preset; restart the game to turn
-it on or off) shows hair as ray-traced strands: a style gets strands after the game has shown it once and the launcher
-has converted it (Help & support > Preparation). The Experimental page shows only Water surface reflections.
+No replacement hair files are included. **Lighting > RTX Hair** (beta, Off in every preset; turns on and off
+while playing) shows hair as ray-traced strands: a style gets strands after the game has shown it once and the launcher
+has converted it (Home > Preparation).
 
 Off-screen bounce light also carries light from glowing surfaces. Far extends sunlight bounce to 6 m.
 Interior light shadows respect the game's shadow flags, including lights whose shadows were
@@ -72,7 +102,7 @@ old hidden settings do not enable unsupported release features.
 ## Compare in game
 
 The **DLSS 5** page has its own On/Off control, runtime file picker and runtime status.
-DLSS 5 is experimental, Off in every preset, and requires Ray Reconstruction. Enable it
+DLSS 5 is experimental (the row carries the badge), Off in every preset, and requires Ray Reconstruction. Enable it
 and select your x64 `nvngx_dlssnr.dll` version 310.8 or 310.9 before starting the game.
 Automatic discovery checks the game folder's `bin`; NVIDIA-signed candidates take precedence.
 The launcher stages the selected file in its own `bin/sl` before Play, checks its signature and
@@ -82,34 +112,32 @@ Changing activation or the runtime needs a restart.
 **Ctrl+Shift+F8** toggles DLSS 5 Neural Rendering off/on live when it was enabled at game start.
 This switches the runtime bypass, without restarting or changing Ray Reconstruction.
 
-Under **Keyboard shortcuts**, change the RT shortcut on **Advanced** and the NR shortcut on
-**DLSS 5**. Select the capture field and press Ctrl, Shift and/or Alt with F1-F12, A-Z or 0-9.
-A single key is also accepted. **None** disables a shortcut; **Reset to default** restores it.
-Duplicate shortcuts and the reserved Ctrl+Shift+F10 are rejected. Save to apply.
+On **Hotkeys**, select a field and press Ctrl, Shift and/or Alt with F1-F12, A-Z or 0-9.
+A single key is also accepted. **Clear** disables a key; **Reset to** restores its default.
+Duplicate keys and the reserved Ctrl+Shift+F10 are rejected. A key change applies at once.
 
 By default, press **Ctrl+Shift+F9** in game to switch all ray-traced lighting off and on together.
 DLSS and Frame Generation stay unchanged, so you compare lighting in the same view. Each switch is
 logged in `bg3rtx.log`. This shortcut does not open a settings menu.
 
-Turn on **Show experimental options** in the launcher to see the Experimental page. These options
-are off in every preset. **Ctrl+Shift+F10** switches the last Experimental option you changed in the
-launcher off and on, but only for options that apply without a restart. The only Experimental option
-in this release, Water surface reflections, needs a restart, so Ctrl+Shift+F10 has no effect yet.
+**Ctrl+Shift+F10** switches the last Experimental option you changed in the launcher off and on, but only
+for options that apply without a restart.
 
 ## Files and support
 
 `bg3rtx.ini` contains defaults; `bg3rtx_user.ini` stores the selected preset and overrides.
 `bg3rtx_launcher.ini` stores the game folder. The log records the effective configuration.
 After a change that needs a restart, close the game and start it again through BG3RTX.
+`bg3rtx_user.ini` is rewritten on every change in the launcher; edit it by hand only while the launcher is closed.
 
 Start from the launcher or set the Steam launch option to
-`"<BG3RTX folder>\bin\BG3RTX.exe" %command%`. **Choose game folder…** in Help & support selects
+`"<BG3RTX folder>\bin\BG3RTX.exe" %command%`. **Choose folder…** in Help & support (or on Home when the game was not found) selects
 the folder that contains `bin\bg3.exe`. If the game does not start or Frame Generation does nothing,
 turn off other overlays (Steam, Discord, GOG Galaxy) for one launch.
 
 **Detailed logging** in Help & support is off by default in every preset; turn it on, restart the game and reproduce the problem before creating a bug report.
 
-Use **Create a diagnostic report…** on Home (or **Report a problem…** in Help & support), or run
+Use **Create a report…** on Home or in Help & support, or run
 `Diagnostics.cmd`, for a local report ZIP. Nothing is uploaded and no save is included by default.
 Tick **Include my latest save** in the report dialog (Diagnostics.cmd asks; answer Y) to add your
 newest save and its thumbnail under `saves/<save folder>/`: it helps reproduce the problem but contains
