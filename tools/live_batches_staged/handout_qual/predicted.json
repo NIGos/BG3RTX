@@ -3,8 +3,17 @@
   "question": "Does the scene handout (rt_scene_handout_layout=1 at start, rt_scene_handout=2 live; launcher: Performance, Low-latency scene) remove the '[rt] scene wait' without changing the image, and how much rendered frame time does that give at the inn and at Water Queens House (S8), on Ultra and High, with and without RTX Hair?",
   "what_it_is": "Not a one-frame-old scene: in order, the lighting traces this frame's scene exactly as with the wait (the build fills the reserved slot before the same vkQueueSubmit). Only a fallback frame (build not in the submit, failed, never came) traces the previous frame's scene, as a wait timeout does today. So the artefact detector is the fallback counter and the primary-ray match, not an image guess.",
   "reference": {
-    "today_off_20261114": {"inn_ultra_wait_mean_ms": "7.9-9.6 (opt-profile-inn 131746, perf-ab-inn 135354), 0 timeouts", "s8_wait_mean_ms": "3.2-5.6"},
-    "sh2_on_20261109": {"s8_ultra_wait_mean_ms": "ON 0.47-0.69 (static 0.06) vs OFF 4.4-5.1", "frame_median_ms": "ON 24.2-24.6 vs OFF 24.6-25.2 (GPU-bound)", "fallbacks": 0, "pairing_mismatches": 0, "water_on_the_handout": "59/60"},
+    "today_off_20261114": {
+      "inn_ultra_wait_mean_ms": "7.9-9.6 (opt-profile-inn 131746, perf-ab-inn 135354), 0 timeouts",
+      "s8_wait_mean_ms": "3.2-5.6"
+    },
+    "sh2_on_20261109": {
+      "s8_ultra_wait_mean_ms": "ON 0.47-0.69 (static 0.06) vs OFF 4.4-5.1",
+      "frame_median_ms": "ON 24.2-24.6 vs OFF 24.6-25.2 (GPU-bound)",
+      "fallbacks": 0,
+      "pairing_mismatches": 0,
+      "water_on_the_handout": "59/60"
+    },
     "note": "sh2 ran before the RTX Hair pixel LOD, header camera GPU copy, row/slot stability and rt_hair_mv_card work, and before the VRAM guard latch. Its logs are gone (pruned); the numbers are from docs/archive/PROGRESS_CODEX_2026-11-11.md."
   },
   "noise_rule": "Every threshold is the OFF repeat of the same run: noise(metric) = |off-b - off-a| of the same window group; a delta below it is not a finding. No tuned number.",
@@ -26,9 +35,31 @@
     "hq-smoke-s8": {
       "design": "The release policy (dev=0), preset=ultra as the launcher writes it, the knob's keys from launch (rt_scene_handout_layout=1, rt_scene_handout=2), RTX Hair On with distant detail 1/4 and motion stability, FG 3x, the preset's 58 fps cap: static, pan Q, pan E, static.",
       "expect": "handed out in every period, fallbacks 0, 0 wait timeouts, 0 opaque draws dropped, water reflections traced, FG ratio 3.00, VRAM guard normal, no '[rt] scene handout layout off', no device loss. Proves the knob's two keys survive the release policy."
+    },
+    "hq-s8-modes": {
+      "_rule": "Written 2026-11-14 before any run of this job, branch claude/handout-energy. STAGED, not queued, not authorized.",
+      "question": "Is the S8 energy loss of rt_scene_handout=2 (-0.20%, hq-s8-energy 191419) the unpublished commit-time hit-material query, and does rt_scene_handout_hit_wait=1 remove it? What is left of the frame-time gain then?",
+      "cause_from_code_and_logs": "The 4b query is recorded at the scene commit in the capture's command buffer; the G-buffer's deferred packet (its gather dispatches) is in another command buffer, not before it in the submit, so native_hit::before_submit never publishes it ('[hit material submit] ... ordered 0' on all 10 logged handout frames of hq-s8-ultra 160909, 'ordered 1' on all 9 waiting frames). Every hit is then unqualified: no 'GI hit direct lights' line, 'ambient kept at qualified hits 0.00000', bounce per ray 0.0099 against 0.0103, GI trace GPU 3.49 against 4.83 / 4.69 ms.",
+      "states": "off-a (0), m1 (rt_scene_handout=1: stamp address, still waits), m2 (2), fix (2 with rt_scene_handout_hit_wait=1), off-b (0). Per state: 8 float traces (static, exposure held), then a short rt_stats window (hit-<state>).",
+      "energy": {
+        "m1": "inside the OFF range (the query is the lighting's own, as with 0)",
+        "m2": "-0.20% (+-0.04%), outside the OFF range: the defect reproduced; diffuse light -0.3%",
+        "fix": "inside the OFF range; diffuse light within 2 standard errors of OFF"
+      },
+      "hit_windows": {
+        "off-a, m1, fix, off-b": "'GI hit direct lights' present with light rays traced > 0; 'ambient kept at qualified hits' > 0 (0.007-0.008 at this view); '[hit material submit] ordered 1'",
+        "m2": "no 'GI hit direct lights' line, ambient kept at qualified hits 0.00000, 'ordered 0'",
+        "fix only": "'[core] scene handout: ... hit material passes on the committed scene N' with N > 0; '[rt] scene handout: ... hit material queries at the commit 0'"
+      },
+      "cost": {
+        "GI trace GPU median": "m1 and fix equal to OFF (about 4.7-4.8 ms); m2 about 1.3 ms lower (the dropped hit work, not a gain)",
+        "scene wait mean": "OFF and m1 3.6 ms; m2 under 0.1 ms; fix between 0 and the OFF mean (unknown: the wait moves from the first RT query to the first hit-material pass; this is the number the run is for)"
+      },
+      "decision": "fix inside the OFF range with qualified hits: rt_scene_handout_hit_wait=1 becomes the default with the handout. If its wait mean is close to the OFF mean, the handout has no gain with native hit materials and the published frame-time gains (section 8.5) were the dropped hit work: then either Off again on presets with rt_hit_material, or the query moves to a layer command buffer inserted at the submit before the lighting (design 8.6)."
     }
   },
   "decision": "Qualified (knob may lose its Experimental mark) when every correctness gate passes in all five launches. On by default only if the rendered median gains more than the noise in at least one of the four cost launches and loses in none.",
   "known_limits": "Frames keep waiting: legacy single-BLAS builds, a first RT query before the capture began, two frames after a pipeline without constant 1051 ran (toggle). A toggle rebuilds every gi/ and water pipeline with constant 1051 (the warm phases absorb it).",
-  "disk": "logs plus 9 traces per Ultra launch (PNG width 1280, no raw dumps): under 0.3 GB for the batch."
+  "disk": "logs plus 9 traces per Ultra launch (PNG width 1280, no raw dumps): under 0.3 GB for the batch.",
+  "first_run_wrong_gate_20261114": "The prediction 'gpu: rt passes, GI ... equal within noise' was right and the first run broke it (GI trace -1.3 ms); the analyzer was then relaxed to 'not higher', which hid the dropped native hit-material work. A GPU cost that falls without a reason is a finding."
 }

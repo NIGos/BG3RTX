@@ -89,6 +89,11 @@ These rules come from mistakes already made in this repo. They apply on every br
 - GPU statistics counters live in device-local memory, reduced per workgroup, copied to the host after
   the timed region: host-visible atomics cost 15 ms (water reflections) and 7 ms (water compose) in 2026-11.
   CTest `host_atomics_lint_test` fails on a new shader atomic into a host-visible buffer (classify it there).
+- Sensible gates (user rule, 2026-11-14; `tools/live_batches/sane_gates.py`): a gate FAILS only beyond the run's own
+  noise (OFF repeats) AND a stated materiality floor (cost: max of 0.1 ms and 1%; energy: 0.5%; event counters stay at 0).
+  Under the floor print INFO. An unpredicted drop of a cost, or an energy difference beyond noise under the floor, is
+  EXPLAIN at the top of the report (it may be skipped work), never a silent pass. A window with too few periods is
+  "not judged"; INVALID only when no decisive window is. Runner `expect` patterns check that the lines exist, no more.
 - A gate must hold in every ON window, not in one: use the job's `expect_every` (select, match,
   plan `windows`; scripts/queue_gates.py) for per-window stats lines; plain `expect` is any-line.
 - Compare A/B within ONE run (toggle the key during the same moving session), never images

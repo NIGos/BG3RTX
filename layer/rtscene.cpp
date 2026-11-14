@@ -1442,8 +1442,11 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     ab.groom_first = res.groom_first;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     if(set)alpha_omm_commit(cmd,uint32_t(scene_slot));
-    if (set && handout_commit.slot >= 0 && native_hit::enabled() && cfg_int("rt_hit_material", 0)) {
+    if (set && handout_commit.slot >= 0 && native_hit::enabled() && cfg_int("rt_hit_material", 0) &&
+        !cfg_int("rt_scene_handout_hit_wait", 0)) {
       // Increment 4b: the hit-material query of the reserved slot, built now into the G-buffer command buffer.
+      // rt_scene_handout_hit_wait=1: not built; the hit-material passes wait for the commit and record their own
+      // query in the lighting command buffer (core/gi.cpp handout_hit_settle), after the deferred packet.
       const bool query = native_hit::commit_query(cmd, uint32_t(scene_slot));
       std::lock_guard<std::mutex> h(g_handout_mu);
       g_ho.commit_query(scene_slot, query);

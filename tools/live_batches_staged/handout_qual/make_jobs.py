@@ -1,6 +1,6 @@
 """handout_qual: qualify the scene handout (rt_scene_handout) in one live session. STAGED, not queued, not authorized.
 
-    py -3 -m tools.live_batches_staged.handout_qual.make_jobs
+    py -3 -m tools.live_batches_staged.handout_qual.make_jobs [job name ...]
 
 Five launches (README.md): hq-s8-ultra and hq-inn-ultra toggle rt_scene_handout 0 / 2 / 0 in static, pan, RTX Hair,
 energy and primary-check windows of one focused, uncapped FG 3x run each; hq-s8-high and hq-inn-high the static and
@@ -23,6 +23,7 @@ PERIOD = pab.PERIOD
 # first pan side after a toggle had none in 4 of 5 launches). A pan state pans Q, then E back. Check windows log every
 # 60 frames: 4 periods. Sized for the inn at the lint model's fps inside the 15 minute cap.
 FRAMES = {"static": 3 * PERIOD, "pan": 3 * PERIOD, "check": 2 * PERIOD}
+HIT_FRAMES = PERIOD   # hq-s8-modes hit-<state> windows: 2 periods of the 60-frame rt_stats lines
 ENERGY_TRACES = 8   # per state in hq-s8-energy (the first run had 3: S8 -0.72% against an OFF spread of 647.8-656.6)
 S8, INN = pab.S8, pab.INN
 # Startup: the update-after-bind layout (restart key) with the handout off; dumps only for the energy traces (PNG 1280).
@@ -155,6 +156,47 @@ def energy_repeat():
                "samples' range; the spread of the OFF samples is the noise.")
 
 
+# hq-s8-modes: the states that separate the stamp-TLAS path (1) from the no-wait commit (2) and confirm the fix.
+MODES = (("off-a", 0, 0), ("m1", 1, 0), ("m2", 2, 0), ("fix", 2, 1), ("off-b", 0, 0))
+
+
+def mode_keys(handout, hit_wait, stats=0):
+    k = keys(handout, hold=1) + f",rt_scene_handout_hit_wait={hit_wait}"
+    if stats:   # rt_stats without the primary-ray check (60-frame lines)
+        k = k.replace("rt_stats=0", "rt_stats=1").replace(f"rt_stats_period_frames={PERIOD}", "rt_stats_period_frames=60")
+    return k
+
+
+def modes():
+    """S8 static, exposure held: per state ENERGY_TRACES float traces, then a short rt_stats window (hit-<state>: the
+    native hit-material lines). Decides docs/SCENE_HANDOUT_DESIGN.md 8.6 (the -0.20% of rt_scene_handout=2)."""
+    warm = pab.phase
+    plan = [warm("warmup", 20, mode_keys(0, 0)), warm("warm-m1", 8, mode_keys(1, 0)), warm("warm-m2", 8, mode_keys(2, 0)),
+            warm("warm-fix", 8, mode_keys(2, 1)), warm("warm-stats", 4, mode_keys(2, 1, 1)), warm("warm-off", 4, mode_keys(0, 0))]
+    for state, handout, hit_wait in MODES:
+        e = energy(state, ENERGY_TRACES)
+        e["set"] = mode_keys(handout, hit_wait)
+        plan += [e, pab.phase(f"hit-{state}", 12, mode_keys(handout, hit_wait, 1), frames=HIT_FRAMES)]
+    plan += [warm("restore", 2, keys(0) + ",rt_scene_handout_hit_wait=0")]
+    hit = [f"hit-{s}" for s, _, _ in MODES]
+    plan, j = job("hq-s8-modes", S8, f"{START},{pab.HAIR_START},rt_hair=0,{mode_keys(0, 0)}", plan,
+                  f"Scene handout energy by mode at S8, Ultra, FG 3x, focused, static, exposure held: rt_scene_handout 0 / 1 / 2 / "
+                  f"2 with rt_scene_handout_hit_wait=1 / 0, {ENERGY_TRACES} float traces per state and a short rt_stats window "
+                  "each. Mode 1 and the fix inside the OFF range; mode 2 reproduces the -0.20% (unpublished commit-time "
+                  "hit-material query). Reports the scene wait and the GI trace GPU ms of every state.")
+    # Runner gates: only "the measured lines exist" in every hit window (user rule 2026-11-14). The values (qualified
+    # hits, timeouts, fallbacks, the fix taking the committed scene) are judged by analyze.py hit_checks.
+    stats = dict(period_frames=60, sample_frames=60, min=1)
+    far = "\\[core\\] GI far \\(\\d+ frames\\)"
+    j["expect_every"] = [pab.every("GI far line in every hit window", far, far, hit, **stats),
+                         pab.every("scene wait line in every hit window", WAIT, WAIT, hit, **stats),
+                         pab.every("handout line in the handout windows", HANDOUT, HANDOUT, ["hit-m2", "hit-fix"], **stats)]
+    j["patterns"] = j["patterns"] + ["GI far \\(", "GI hit direct", "\\[hit material (?:submit|query)\\]"]
+    j["expect"] += [far, "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"]
+    j["energy_expect"] = {"m2": "lower"}   # analyze.py: the predicted loss is reported, not judged
+    return plan, j
+
+
 def high(slug, save):
     warm = pab.phase
     plan = [warm("warmup", 20, keys(0)), warm("warm-on", 8, keys(2)), warm("warm-off", 4, keys(0))]
@@ -188,12 +230,16 @@ def measured(p):
     """Frames after the settle (perf_ab.retime); the energy phases keep their own clock (trace_at seconds)."""
     if p.get("trace_at"):
         return None
+    if p["label"].startswith("hit-"):
+        return HIT_FRAMES
     return FRAMES["check" if p["label"].startswith("check") else "pan" if p.get("kind") == "pan" else "static"]
 
 
 def main():
     assert (HERE / "predicted.json").exists(), "predicted.json precedes the jobs"
-    made = [ultra("s8", S8, check=False), ultra("inn", INN, check=False), high("s8", S8), high("inn", INN), smoke(), energy_repeat(), check_only()]
+    made = [ultra("s8", S8, check=False), ultra("inn", INN, check=False), high("s8", S8), high("inn", INN), smoke(), energy_repeat(), check_only(), modes()]
+    if sys.argv[1:]:   # job names: regenerate only these (the others keep the files of their own runs)
+        made = [m for m in made if m[1]["name"] in sys.argv[1:]]
     for plan, j in made:
         for folder, value in (("plans", plan), ("jobs", j)):
             (HERE / folder).mkdir(exist_ok=True)

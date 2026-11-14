@@ -20,6 +20,7 @@ periods). Each job's post command writes `<log>.perf.md` with `analyze.py`.
 | hq-smoke-s8 | Water Queens House | handout on from launch: static, pan Q, pan E, static | 77 s |
 | hq-s8-energy | Water Queens House | 8 float traces per state, exposure held (decides the open S8 -0.72%) | 150 s |
 | hq-s8-check | Water Queens House | primary-ray check pan Q + E (split out of hq-s8-ultra, 15 minute cap) | 576 s |
+| hq-s8-modes | Water Queens House | rt_scene_handout 0 / 1 / 2 / 2 + rt_scene_handout_hit_wait / 0: 8 float traces and a short rt_stats window per state (design 8.6) | 317 s |
 
 After the first run (2026-11-14): pans and statics are 3 periods per window (at least 2 complete periods wherever the
 period grid falls); the per-pass GPU costs are judged "not higher beyond noise" (they fall when the wait goes).
@@ -28,6 +29,11 @@ Run order: hq-smoke-s8 (does the device start with the layout and hand out at al
 hq-s8-high, hq-inn-high. Add 100-120 s of loading per launch: about 35 minutes for the session.
 
 ## What is judged (analyze.py, thresholds from the run itself)
+
+Verdicts follow `tools/live_batches/sane_gates.py` (user rule 2026-11-14): FAIL only beyond the OFF noise and a
+materiality floor in the bad direction (cost max(0.1 ms, 1%), energy 0.5%, match 1 point; event counters at 0);
+under the floor INFO; an unpredicted cost drop or an energy difference under the floor is EXPLAIN, listed first;
+a window with no complete period is not judged, and the run is INVALID only without a decisive window.
 
 For each window group the ON median is compared with the OFF pair; noise = |off-b - off-a| of that group.
 

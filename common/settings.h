@@ -1090,6 +1090,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_scene_wait", "1"},
     {"rt_scene_handout_layout", "1"},
     {"rt_scene_handout", "2"},
+    {"rt_scene_handout_hit_wait", "0"},
     {"cpu_timing", "0"},
     {"perf_submit_batch", "0"},
     {"rt_alpha_stream", "1"},

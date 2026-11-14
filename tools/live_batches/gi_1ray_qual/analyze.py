@@ -16,8 +16,8 @@ from tools.live_batches.sharc_far.rays_flicker import frames, traces
 from tools.live_batches.gi_1ray_qual.make_job import HERE, STATES
 
 
-def float_samples(run, phase):
-    """Select each trace independently, but resolve exposure from the full log."""
+def float_samples(run, phase, count=3):
+    """Select each trace independently, but resolve exposure from the full log. count: traces the phase asked for."""
     p = run.phase_of(phase)
     reader = copy(run)
     reader.pre_exposure = run.pre_exposure
@@ -31,8 +31,8 @@ def float_samples(run, phase):
         if not v or isinstance(v[0], str) or v[1] or not v[2] or v[0] <= 0 or not np.isfinite([v[0], v[2]]).all():
             raise ValueError(phase+': missing/nonfinite float colour or exposure')
         values.append(v)
-    if len(values) != 3:
-        raise ValueError(phase+': missing float sample')
+    if count is not None and len(values) != count:   # None: the caller judges what the phase has
+        raise ValueError(f'{phase}: {len(values)} float samples, {count} expected')
     return values
 
 
