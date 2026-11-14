@@ -19,12 +19,21 @@ inline constexpr uint64_t mib = uint64_t(1) << 20;
 // ---- headroom ----
 // Driver slack: the budget the driver reports is not fixed (other processes, its own reserve). In the
 // evidence it fell 789 MB (31419 -> 30630) between two [mem] samples as the process crossed it: 2.5% of
-// the budget. The slack is that fraction, or the largest drop this session saw, whichever is larger.
+// the budget. The slack is that fraction (the floor), or the largest RECENT drop (Guard::recent_drop: this
+// and the last stats window, void once the budget is back), whichever is larger, never above slack_cap.
+//
+// Why recent and capped (user's bg3rtx.log 2026-11-13 13:41): the budget fell 31419 -> 15477 MB in one
+// sample (Windows cuts the budget of a process whose window is not in the foreground) and to 13522 MB
+// after. With the session's largest drop kept for ever the margin was 15942 + step = 16454 MB: leaving Low
+// needed used + 2 x 16454 <= budget, impossible even at 31419 MB, and allow() refused everything above
+// 31419 - 15942 = 15477 MB. One budget dip cost the rest of the session. A drop that large is a change of
+// budget, already in the new budget; it is not slack the driver may take again.
 inline constexpr uint64_t kSlackPermille = 25;   // 789 / 31419 = 25.1 per mille
 // The smallest grow step any consumer makes: one BLAS chunk (rt_mesh_chunk_mb 64).
 inline constexpr uint64_t kMinStep = 64 * mib;
+uint64_t slack_cap(uint64_t budget);
 inline uint64_t slack(uint64_t budget, uint64_t observed_drop) {
-  return (std::max)(budget / 1000 * kSlackPermille, observed_drop);
+  return (std::max)(budget / 1000 * kSlackPermille, (std::min)(observed_drop, slack_cap(budget)));
 }
 // Margin = the largest single grow step (allocated while the buffer it replaces is still alive) + slack:
 // with `used + margin <= budget` the next such step still fits with the driver's slack to spare.
@@ -72,6 +81,14 @@ inline uint64_t cap(Consumer c, uint64_t budget) {
   return (std::clamp)(scaled, r.floor, r.ref);
 }
 
+// Slack cap: what the yielders can give back at most at this budget (the caps of BLAS chunks, mesh pool and
+// the recycled pool: 4224 + 2047 + 512 = 6783 MB = 21.6% of the reference budget). Slack is held so that a
+// budget drop can be met by yielding; a reserve beyond everything the guard could free protects nothing
+// and only refuses growth.
+inline uint64_t slack_cap(uint64_t budget) {
+  return cap(kAsChunks, budget) + cap(kMeshPool, budget) + cap(kHitRecycle, budget);
+}
+
 // ---- state: hysteresis ----
 // Low when the next largest step would not fit (used + margin > budget); back to normal only when two
 // margins fit (far below), so one freed chunk does not flip it every sample. In Low every growth is
@@ -79,23 +96,39 @@ inline uint64_t cap(Consumer c, uint64_t budget) {
 // checked per request against the headroom left (used + the bytes granted since the sample + slack).
 struct Guard {
   bool low = false;
-  uint64_t used = 0, budget = 0, prev_budget = 0, max_drop = 0;
+  // The OS budget is below what the process uses (used > budget); cleared when Low is left. For the one
+  // log line per transition (layer.cpp): cache trimming cannot fix this, the user has to know.
+  bool starved = false;
+  uint64_t used = 0, budget = 0, prev_budget = 0, budget_peak = 0;
+  // Largest single-sample budget drop of this stats window and the last one (the memory of largest_step),
+  // and the budget before the oldest of them: a budget back at that level has undone the drop.
+  uint64_t drop_cur = 0, drop_prev = 0, drop_from = 0;
+  // The trim need the yielders were last asked for in this Low episode (trim_ask).
+  uint64_t trim_asked = 0;
   uint64_t granted = 0;                   // bytes allowed since the last sample (not yet in `used`)
   uint64_t step_cur = 0, step_prev = 0;   // largest request this window and the last one
   uint64_t largest_step() const { return (std::max)((std::max)(step_cur, step_prev), kMinStep); }
-  uint64_t margin_now() const { return margin(budget, largest_step(), max_drop); }
+  uint64_t recent_drop() const { return (std::max)(drop_cur, drop_prev); }
+  uint64_t margin_now() const { return margin(budget, largest_step(), recent_drop()); }
   // Returns true when the state changed.
   bool sample(uint64_t used_bytes, uint64_t budget_bytes) {
-    if (prev_budget && budget_bytes < prev_budget) max_drop = (std::max)(max_drop, prev_budget - budget_bytes);
+    if (prev_budget && budget_bytes < prev_budget) {
+      drop_cur = (std::max)(drop_cur, prev_budget - budget_bytes);
+      drop_from = (std::max)(drop_from, prev_budget);
+    }
+    if (budget_bytes >= drop_from) drop_cur = drop_prev = drop_from = 0;   // the driver gave it back
     prev_budget = budget_bytes;
+    budget_peak = (std::max)(budget_peak, budget_bytes);
     used = used_bytes;
     budget = budget_bytes;
     granted = 0;
     const bool was = low;
-    if (!budget) { low = false; return was != low; }
+    if (!budget) { low = starved = false; trim_asked = 0; return was != low; }
     const uint64_t m = margin_now();
     if (!low && used + m > budget) low = true;
     else if (low && used + 2 * m <= budget) low = false;
+    if (!low) { starved = false; trim_asked = 0; }
+    else if (used > budget) starved = true;
     return was != low;
   }
   // A grow request of `bytes` (everything allocated at once, the replaced buffer counted as still alive).
@@ -103,7 +136,7 @@ struct Guard {
     step_cur = (std::max)(step_cur, bytes);
     if (!budget) return true;   // no budget known (extension missing, no sample yet): unchanged behaviour
     if (low) return false;
-    const uint64_t reserve = slack(budget, max_drop);
+    const uint64_t reserve = slack(budget, recent_drop());
     if (reserve > budget || used > budget - reserve || granted > budget - reserve - used ||
         bytes > budget - reserve - used - granted) return false;
     granted += bytes;
@@ -120,12 +153,27 @@ struct Guard {
     granted += bytes;
     return true;
   }
-  void new_window() { step_prev = step_cur; step_cur = 0; }
+  void new_window() {
+    step_prev = step_cur; step_cur = 0;
+    drop_prev = drop_cur; drop_cur = 0;
+    if (!drop_prev) drop_from = 0;
+  }
   // Bytes to give back now: down to the exit threshold (used + 2 margins = budget), 0 when not low.
   uint64_t trim_need() const {
     if (!low || !budget) return 0;
     const uint64_t target = used + 2 * margin_now();
     return target > budget ? target - budget : 0;
+  }
+  // Bytes to ask the yielders for at this sample: the whole need once per Low episode, and again only when
+  // the need is worse than the one already acted on by a chunk (kMinStep, the smallest amount a yielder can
+  // return to the device). A need the yielders cannot meet (the game's own share is over a low budget) is
+  // not asked for again at every sample: that cleared the recycled pool and evicted LRU meshes every 16
+  // frames for the rest of the session. The cache keeps its demand-driven share eviction (bvhsplit).
+  uint64_t trim_ask() {
+    const uint64_t need = trim_need();
+    if (!need || (trim_asked && need < trim_asked + kMinStep)) return 0;
+    trim_asked = need;
+    return need;
   }
 };
 

@@ -70,6 +70,10 @@ int main() {
   CHECK(slack(31419 * mib, 0) == 31419 * mib / 1000 * 25);
   CHECK(slack(31419 * mib, 0) >= 785 * mib && slack(31419 * mib, 0) <= 789 * mib);
   CHECK(slack(31419 * mib, 1200 * mib) == 1200 * mib);
+  // Capped at what the yielders can give back: 4224 + 2047 + 512 MB on the reference card.
+  CHECK(slack_cap(31419 * mib) == 6783 * mib);
+  CHECK(slack(31419 * mib, 15942 * mib) == 6783 * mib);
+  CHECK(slack_cap(15477 * mib) == (2080 + 1008 + 252) * mib);
   // Margin: never below one BLAS chunk + slack; a 2047 MB pool step dominates.
   CHECK(margin(31419 * mib, 0, 0) == kMinStep + slack(31419 * mib, 0));
   CHECK(margin(31419 * mib, 2047 * mib, 0) == 2047 * mib + slack(31419 * mib, 0));
@@ -83,7 +87,7 @@ int main() {
     CHECK(g.granted == 544 * mib * 3 + 64 * mib);
     // Over budget: low, the budget drop (789 MB) becomes the slack, every grow is refused.
     CHECK(g.sample(31668 * mib, 30630 * mib) && g.low);
-    CHECK(g.max_drop == 789 * mib);
+    CHECK(g.recent_drop() == 789 * mib);
     CHECK(!g.allow(64 * mib));
     // Free down to used + 2 margins = budget.
     const uint64_t m = g.margin_now();
@@ -132,6 +136,107 @@ int main() {
     CHECK(g.largest_step() == 2047 * mib);                // the previous window still counts
     g.new_window();
     CHECK(g.largest_step() == kMinStep);
+  }
+
+  // ---- a budget drop is slack for two stats windows, not for the session ----
+  {
+    Guard g;
+    g.sample(20000 * mib, 31419 * mib);
+    g.sample(20000 * mib, 30630 * mib);
+    CHECK(g.recent_drop() == 789 * mib);
+    g.new_window();
+    CHECK(g.recent_drop() == 789 * mib);                  // the previous window still counts
+    g.new_window();
+    CHECK(g.recent_drop() == 0 && g.drop_from == 0);
+    CHECK(g.margin_now() == kMinStep + slack(30630 * mib, 0));
+    // Two drops in a row, then the budget back at the level before the first: void at once.
+    g.sample(20000 * mib, 30000 * mib);
+    g.sample(20000 * mib, 29000 * mib);
+    CHECK(g.recent_drop() == 1000 * mib && g.drop_from == 30630 * mib);
+    g.sample(20000 * mib, 30000 * mib);
+    CHECK(g.recent_drop() == 1000 * mib);                 // only part of it came back
+    g.sample(20000 * mib, 30630 * mib);
+    CHECK(g.recent_drop() == 0);
+  }
+
+  // ---- the user's run of 2026-11-13 13:41, replayed: 31419 -> 15477 -> 13522 MB and back ----
+  // (bg3rtx.log: used 13153 of 31419, 13256 of 15477 "margin 16454 MB", 14747 of 13599, 13704 of 13522 MB.)
+  {
+    Guard g;
+    auto trims = [&g] { return g.trim_ask() != 0; };
+    CHECK(!g.sample(13153 * mib, 31419 * mib) && !g.low);
+    CHECK(g.allow(512 * mib) && !trims());                // the largest step in the log's first margin
+    g.sample(13256 * mib, 15477 * mib);                   // the halving: slack is capped, not 15942 MB
+    CHECK(g.recent_drop() == 15942 * mib);
+    CHECK(g.margin_now() == (512 + 3340) * mib);          // was 16454 MB
+    CHECK(g.low && !g.starved && trims());                // 13256 + 3852 > 15477: yield once
+    g.sample(14747 * mib, 13599 * mib);
+    CHECK(g.low && g.starved);                            // really over the OS budget: refuse, say so
+    CHECK(!g.allow(64 * mib));
+    CHECK(trims());                                       // worse than what was acted on: one more ask
+    g.sample(13704 * mib, 13522 * mib);
+    CHECK(g.low && g.starved && !g.allow(64 * mib) && !trims());
+    // The budget returns: growth allowed at that very sample.
+    CHECK(g.sample(13704 * mib, 31419 * mib));
+    CHECK(!g.low && !g.starved && g.recent_drop() == 0 && g.trim_need() == 0 && !trims());
+    CHECK(g.allow(64 * mib) && g.allow(1728 * mib));      // a chunk and the 3 x 576 MB cascade grow
+    // At the full budget growth is not refused while used + margin fits, whatever happened before:
+    // the old guard refused everything above 31419 - 15942 = 15477 MB.
+    for (uint64_t used = 14000; used <= 28000; used += 1000) {
+      CHECK(!g.sample(used * mib, 31419 * mib) && !g.low);
+      CHECK(g.allow(64 * mib));
+    }
+    // Real pressure at the full budget is still refused: used + margin above the budget.
+    const uint64_t s = slack(31419 * mib, 0), m = g.margin_now();
+    CHECK(m == 1728 * mib + s);
+    CHECK(g.sample(31419 * mib - m + mib, 31419 * mib) && g.low && !g.starved && !g.allow(64 * mib));
+    CHECK(g.sample(31419 * mib - 2 * m, 31419 * mib) && !g.low);
+    CHECK(!g.allow(2 * m - s + mib));                     // would cross budget - slack
+    CHECK(g.allow(2 * m - s));
+  }
+  // The budget stays down (another program holds the VRAM): the drop leaves the margin after two stats
+  // windows, and Low is left as soon as the use fits the budget that is really there.
+  {
+    Guard g;
+    g.sample(9000 * mib, 31419 * mib);
+    g.sample(9000 * mib, 13522 * mib);
+    CHECK(g.margin_now() == (64 + 2917) * mib);           // capped slack: 1817 + 880 + 220 MB
+    CHECK(!g.low);                                        // 9000 + 2981 <= 13522
+    g.sample(11000 * mib, 13522 * mib);
+    CHECK(g.low);                                         // 11000 + 2981 > 13522
+    g.new_window();
+    g.sample(11000 * mib, 13522 * mib);
+    CHECK(g.low);
+    g.new_window();                                       // two windows: floor slack 338 MB, margin 402 MB
+    CHECK(g.sample(11000 * mib, 13522 * mib) && !g.low && g.allow(64 * mib));
+    CHECK(g.sample(13200 * mib, 13522 * mib) && g.low && !g.starved);   // 13200 + 402 > 13522: still protected
+  }
+
+  // ---- no thrash at a steady low budget: one ask per episode, again only when it got worse by a chunk ----
+  {
+    Guard g;
+    g.sample(13000 * mib, 13522 * mib);
+    CHECK(!g.low && !g.starved);
+    unsigned asks = 0, starved_edges = 0;
+    bool was = g.starved;
+    for (int i = 0; i < 4000; ++i) {                      // ~18 minutes of samples at 60 fps
+      g.sample((14700 + (i * 37) % 60) * mib, 13522 * mib);   // 14.7 GB wanted, up to 59 MB of game streaming
+      if (i % 19 == 18) g.new_window();
+      CHECK(g.low && !g.allow(64 * mib));
+      asks += g.trim_ask() != 0;
+      starved_edges += g.starved != was;
+      was = g.starved;
+    }
+    CHECK(asks == 1 && starved_edges == 1 && g.starved);
+    g.sample(14900 * mib, 13522 * mib);                   // a real step up: one more ask, for the whole need
+    CHECK(g.trim_ask() == g.trim_need() && g.trim_ask() == 0);
+    g.sample(14000 * mib, 13522 * mib);                   // what was freed does not re-arm the ask
+    CHECK(g.trim_ask() == 0);
+    g.sample(14900 * mib, 13522 * mib);
+    CHECK(g.trim_ask() == 0 && g.starved);
+    // Leaving Low ends the episode: the next episode asks again.
+    CHECK(g.sample(9000 * mib, 13522 * mib) && !g.low && !g.starved && g.trim_asked == 0);
+    CHECK(g.sample(13400 * mib, 13522 * mib) && g.low && !g.starved && g.trim_ask() != 0);
   }
 
   // ---- no budget known: unchanged behaviour ----

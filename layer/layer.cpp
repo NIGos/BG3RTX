@@ -768,26 +768,42 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
   BvhVram b;
   bvh_vram(&b);
   const uint64_t recycled = native_hit::recycled_bytes();
-  bool changed = false, low = false;
-  uint64_t need = 0, margin = 0;
+  bool changed = false, low = false, starved = false, starved_changed = false;
+  uint64_t need = 0, margin = 0, peak = 0;
   if (on) {
     std::lock_guard<std::mutex> lock(g_vg_mu);
     g_vg_real_budget = real_budget;
+    const bool was_starved = g_vg.starved;
     changed = g_vg.sample(used, avail);
     low = g_vg.low;
-    need = g_vg.trim_need();
+    starved = g_vg.starved;
+    starved_changed = starved != was_starved;
+    peak = g_vg.budget_peak;
+    // One ask per Low episode (Guard::trim_ask), kept until its consumer takes it; none outside Low.
+    need = g_vg.trim_ask();
     margin = g_vg.margin_now();
     g_vg_budget = avail;
     const uint64_t have[vram_guard::kYieldCount] = {b.as_empty, recycled, b.lru};
     uint64_t ask[vram_guard::kYieldCount] = {};
     vram_guard::plan_trim(need, have, ask);
-    for (int i = 0; i < vram_guard::kYieldCount; ++i) g_vg_ask[i] = ask[i];
+    for (int i = 0; i < vram_guard::kYieldCount; ++i)
+      if (ask[i] || !low) g_vg_ask[i] = ask[i];
     if (changed)
       log("[vram] guard: headroom %s: used %.0f MB, budget %.0f MB, margin %.0f MB; asking %.0f MB (%s %.0f, %s %.0f, "
           "%s %.0f)",
           low ? "LOW, cache growth refused" : "back, growth allowed", used / 1048576.0, avail / 1048576.0,
           double(margin) / 1048576.0, double(need) / 1048576.0, vram_guard::kYieldName[0], ask[0] / 1048576.0,
           vram_guard::kYieldName[1], ask[1] / 1048576.0, vram_guard::kYieldName[2], ask[2] / 1048576.0);
+    // Always on, one line per transition: trimming our caches cannot fix a budget below the process's use.
+    if (starved_changed && starved)
+      log("[vram] OS VRAM BUDGET TOO LOW: Windows/the driver grants this process %.0f MB, it uses %.0f MB (budget "
+          "peak this session %.0f MB, device-local heaps %.0f MB). Another program holds VRAM or the game window is "
+          "not in the foreground. RT caches were shrunk once and their growth is refused until the budget returns: "
+          "expect lower fps and RT geometry left out meanwhile",
+          avail / 1048576.0, used / 1048576.0, double(peak) / 1048576.0, size / 1048576.0);
+    else if (starved_changed)
+      log("[vram] OS VRAM budget covers this process again: budget %.0f MB, used %.0f MB; cache growth allowed",
+          avail / 1048576.0, used / 1048576.0);
   }
   const bool refused = g_vg_refused_new.exchange(false);
   if (changed || refused || (window_end && logging::stats_enabled(cfg_int))) {
