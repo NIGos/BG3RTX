@@ -327,6 +327,10 @@ PRODUCER_SETTINGS = {
     "[hit material paks COLOR]": {"rt_stats": "1"},
     "[hit material pool]": {"rt_stats": "1"},
     "[hit material pool basis]": {"rt_stats": "1"},
+    # core/gi.cpp: the GI far line is an rt_stats counter line; handout_log returns unless rt_scene_handout is 2.
+    # hq-s8-modes 204217 expected both after an OFF warm-up and stopped there ("producer silent").
+    "[core] GI far": {"rt_stats": "1"},
+    "[core] scene handout": {"rt_scene_handout": "2"},
 }
 
 

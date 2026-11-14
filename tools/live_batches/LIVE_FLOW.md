@@ -43,7 +43,8 @@ comparison's required sample frames. Non-comparison scene settling, reload and
 failure-survival observations retain their independently justified bounds.
 
 Required pool-log lines also need `rt_stats=1` in each gated window; startup
-candidate-loading lines do not. Producer prerequisites live in `PRODUCER_SETTINGS`.
+candidate-loading lines do not. The `[core] GI far` line needs `rt_stats=1` and the
+`[core] scene handout` line `rt_scene_handout=2`. Producer prerequisites live in `PRODUCER_SETTINGS`.
 The runner sends the full job context through a JSON file. Lint checks the remaining
 job-derived environment values against the Windows 32767 UTF-16-unit limit
 (including the terminator), including tags and generated INI/log paths.

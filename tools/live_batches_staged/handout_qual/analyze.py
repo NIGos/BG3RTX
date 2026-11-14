@@ -38,7 +38,8 @@ pab.ROWS += [
 # and the materiality floor in the bad direction. "lower" = the deliverable (a rise is bad, the drop is the design);
 # "not higher" = a per-pass cost (a rise is bad; a drop beyond the floor is EXPLAIN: the handout removes a CPU wait, no
 # GPU work, and the unexplained GI trace drop of 2026-11-14 was dropped hit-material work); "equal" = a count;
-# "not lower" = a match percentage; "zero" = an event counter (one event is a fault).
+# "not lower" = a match percentage; "zero" = an event counter (one event is a fault; events the OFF windows of the
+# group have too are the baseline: only an ON count above the worst OFF period fails, sane.events).
 JUDGED = [("scene wait mean", "lower"), ("frame time median", "lower"), ("frame time p99", "not higher"),
           ("RT", "not higher"), ("GI", "not higher"), ("GI trace", "not higher"), ("scene build", "not higher"), ("strand G-buffer draws", "equal"),
           ("scene wait timeouts", "zero"), ("handout fallbacks", "zero"), ("handout pairing mismatches", "zero"),
@@ -84,7 +85,11 @@ def judge(measured, plan):
             if rule == "zero":
                 if on is None:
                     continue
-                status, text = (sane.OK if on == 0 else sane.FAIL), f"ON {on:g}"
+                off_max = max([v for st in ("off-a", "off-b") for label in states[st]
+                               for v in measured.get(label, {}).get(name, [])], default=0)
+                on = max(v for label in states["on"] for v in measured.get(label, {}).get(name, []))   # the worst period
+                status = sane.events(on, off_max)
+                text = f"ON {on:g}" + (f", OFF {off_max:g} (worst period)" if on else "")
             elif on is None or a is None or b is None:
                 if name in DECISIVE and any(x is not None for x in (a, on, b)):
                     notes.append(f"{group}: {name} not judged (a state has no complete period)")
@@ -92,9 +97,10 @@ def judge(measured, plan):
             else:
                 floor = floor_of(name, (a + b) / 2)
                 off_values = [v for st in ("off-a", "off-b") for label in states[st] for v in measured.get(label, {}).get(name, [])]
-                status, d, noise = sane.compare(a, b, on, floor, rule, name in PREDICTED_LOWER, off_values)
+                status, d, noise = sane.compare(a, b, on, floor, rule, name in PREDICTED_LOWER, off_values,
+                                                tail=name == "frame time p99")
                 decisive = decisive or name in DECISIVE
-                gain = " (gain beyond noise and floor)" if rule == "lower" and d < -max(noise, floor) else ""
+                gain = " (gain beyond noise plus floor)" if rule == "lower" and d < -(noise + floor) else ""
                 text = f"OFF {a:.3f} / {b:.3f}, ON {on:.3f}, ON - OFF {d:+.3f}, noise {noise:.3f}, floor {floor:.3f}{gain}"
             rows.append(f"| {group} | {name} | {rule} | {text} | {status} |")
             if status in found:
@@ -178,12 +184,24 @@ def state_lines(log, runner, plan):
 
 
 def hit_checks(medians, plan, expect=None):
-    """({status: [text]}, ["... not judged"]) of the state windows' counters, where one event is a fault: a wait
-    timeout or a handout fallback; the native hit path off (no qualified hit) in a state that does not predict it; the
-    hit-wait fix not taking the committed scene in its own windows."""
+    """({status: [text]}, ["... not judged"]) of the state windows' counters: a wait timeout or a handout fallback in
+    a non-OFF window beyond the worst OFF window of the same kind (energy-, hit-) fails, and events in an OFF window
+    are the baseline (INFO: hq-inn-fix 211816 had 1 and 3 timeouts in the OFF hit windows, 0 in the ON one); the native
+    hit path off (no qualified hit) in a state that does not predict it; the hit-wait fix not taking the committed
+    scene in its own windows."""
     found, notes = {sane.FAIL: [], sane.EXPLAIN: [], sane.INFO: []}, []
     for name in ("scene wait timeouts (max)", "handout fallbacks (max)"):
-        found[sane.FAIL] += [f"{label}: {name} {v:g}" for label, v in medians.get(name, {}).items() if v > 0]
+        per = medians.get(name, {})
+        for label, v in per.items():
+            kind, state = label.split("-", 1)
+            if state.startswith("off"):
+                if v > 0:
+                    found[sane.INFO].append(f"{label}: {name} {v:g} (an OFF window: the baseline)")
+                continue
+            off_max = max([x for k, x in per.items() if k.startswith(kind + "-off")], default=0)
+            status = sane.events(v, off_max)
+            if status in found:
+                found[status].append(f"{label}: {name} {v:g} (worst OFF window {off_max:g})")
     name = "GI far: ambient kept at qualified hits"
     for p in plan:
         label = p["label"]
@@ -209,9 +227,10 @@ def hit_checks(medians, plan, expect=None):
                 found[sane.FAIL].append(f"hit-{state}: no '{name}' line: no light ray at a hit (OFF {off:g})")
                 continue
             status, d, noise = sane.compare(rays["off-a"], rays["off-b"], rays[state], sane.count_floor(off), "equal")
-            if status in (sane.EXPLAIN, sane.FAIL):   # a count beyond noise and 1%: the hit work differs
-                found[sane.FAIL].append(f"hit-{state}: {name} {rays[state]:g} against OFF {rays['off-a']:g} / "
-                                        f"{rays['off-b']:g} (delta {d:+g}, noise {noise:g})")
+            if status != sane.OK:   # FAIL: a count beyond the OFF spread plus 1%: the hit work differs
+                found[sane.INFO if status == sane.INFO else sane.FAIL].append(
+                    f"hit-{state}: {name} {rays[state]:g} against OFF {rays['off-a']:g} / {rays['off-b']:g} "
+                    f"(delta {d:+g}, noise {noise:g}, floor {sane.count_floor(off):g})")
     name = "hit material passes on the committed scene"
     for state in sorted({p["label"].split("-", 1)[1] for p in plan
                          if p["label"].startswith(("energy-", "hit-")) and "rt_scene_handout_hit_wait=1" in p.get("set", "")
@@ -231,7 +250,7 @@ STATE_COSTS = [("GI trace GPU median ms", "not higher"), ("scene wait mean ms", 
 def state_costs(medians, expect=None, periods=None):
     """{status: [text]}: the costs of every energy state against the OFF pair. GI trace GPU ms is "not higher" (the
     handout predicts no GPU change, so a drop beyond the floor is EXPLAIN unless the job predicts it); the scene wait
-    and the frame time are the deliverable ("lower": a rise beyond noise and floor FAILS; the delta is always shown).
+    and the frame time are the deliverable ("lower": a rise beyond noise plus floor FAILS; the delta is always shown).
     periods: {line: {window: [period values]}}: the noise then includes the spread of the single OFF periods, as in the
     window groups (judge); the OFF pair's two medians alone under-estimate it (hq-s8-modes 205520: mode 1 frame time
     +0.230 ms "failed" against a pair difference of 0.200 and a floor of 0.214)."""
@@ -252,7 +271,7 @@ def state_costs(medians, expect=None, periods=None):
                 found[status].append(text)
             elif rule == "lower":
                 found[sane.INFO].append(text)
-            elif (expect or {}).get(state) == "lower" and abs(d) > max(noise, floor):
+            elif (expect or {}).get(state) == "lower" and abs(d) > noise + floor:
                 found[sane.INFO].append(text + " (predicted)")
     return found
 
@@ -350,7 +369,7 @@ def main():
     text = "\n".join([f"# {job['name']}: {verdict}", ""] +
                      [f"- {status}: {t}" for status in (sane.FAIL, sane.EXPLAIN) for t in found[status]] +
                      [f"- not judged: {n}" for n in notes + group_notes] +
-                     [f"- INFO (under the floor, or predicted): {t}" for t in found[sane.INFO]] +
+                     [f"- INFO (within noise plus floor, baseline, or predicted): {t}" for t in found[sane.INFO]] +
                      ["", sane.floors_text(),
                       "", "## ON against the OFF pair (noise = the larger of |off-b - off-a| and half the range of the OFF periods)", "",
                       "| Group | Line | Rule | Values | |", "| --- | --- | --- | --- | --- |"] + rows +

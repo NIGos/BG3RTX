@@ -90,8 +90,9 @@ These rules come from mistakes already made in this repo. They apply on every br
   the timed region: host-visible atomics cost 15 ms (water reflections) and 7 ms (water compose) in 2026-11.
   CTest `host_atomics_lint_test` fails on a new shader atomic into a host-visible buffer (classify it there).
 - Sensible gates (user rule, 2026-11-14; `tools/live_batches/sane_gates.py`): a gate FAILS only beyond the run's own
-  noise (OFF repeats) AND a stated materiality floor (cost: max of 0.1 ms and 1%; energy: 0.5%; event counters stay at 0).
-  Under the floor print INFO. An unpredicted drop of a cost, or an energy difference beyond noise under the floor, is
+  noise (OFF repeats) PLUS a stated materiality floor (cost: max of 0.1 ms and 1%; energy: 0.5%; equal counts: 1%). A p99
+  takes the full OFF range as noise. Events in OFF windows are the baseline: only ON counts above them fail (counters the
+  feature owns stay at 0). Within noise plus floor print INFO. An unpredicted drop of a cost, or an energy difference beyond noise under the floor, is
   EXPLAIN at the top of the report (it may be skipped work), never a silent pass. A window with too few periods is
   "not judged"; INVALID only when no decisive window is. Runner `expect` patterns check that the lines exist, no more.
 - A gate must hold in every ON window, not in one: use the job's `expect_every` (select, match,
