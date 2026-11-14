@@ -1941,6 +1941,85 @@ pipeline creation):
 - Next live shows which signature the moving samples carry; the fix follows from it (displaced points: where the stale
   data comes from; trace: the groom BLAS/TLAS update; reuse: the seal).
 
+## 6g. What the user saw in play, the card fill, and what is still open (offline 2026-11-14, branch claude/hair-stable: rt_hair_header_cam_gpu into the On bundle; key rt_hair_card_fill, off; READY_FOR_LIVE)
+
+User report (0.9.6-hairtest13, Ultra, RTX Hair On): hair jumps between cards and strands, now and then holes. The
+play log (`bg3rtx.log` 16:54:43-16:56:44, lean logging, about two minutes of hair) says why:
+- 2927 frames with hair draws, 960 of them (33%) with every hair draw on cards. 139 switches strands -> cards: frame
+  watchdog 72, coverage low 35, other 26, the user's own toggle 6; coverage stale, none, high and latched 0.
+  Card runs last 14-29 frames (median per period, up to 100), strand runs 2-16 frames while the camera moves.
+  The two still periods have 0 switches.
+- The losses are real, not gate noise: of the draws in tripped frames 252 were under their own bound and 8 above;
+  42 of 78 tripped frames kept under a tenth of their card pixels. Holes: 161 swapped draws wrote under a tenth of
+  their card pixels (126 with nothing traced, 35 traced then rejected) before a gate switched them.
+- Cause: `rt_hair_header_cam_gpu` was 0 (the key was not in the On bundle). Every trip line has "header camera X m
+  from build frame F's" with X the camera step of that frame (0.08-0.57 m), and the two with a GPU sample have the
+  rebase origin equal to the step (0.308 and 0.570 m; frame 4940: 7 of 2405 card pixels). This is 6c's cause 1 at
+  walking and camera-follow speed, not only in a wheel zoom.
+- Never strands in that session: index counts 3399, 7086, 4077 and 1623 (no groom file: a style or LOD not converted
+  yet) and 9384 (other UVs). 22 of 24 pending joins matched. S8 always has 2 such draws per frame (hq-s8-ultra).
+  No change here: a head can mix card and strand draws until the launcher has converted the captured style.
+
+Changes:
+1. RTX Hair On writes `rt_hair_header_cam_gpu=1` (common/settings.h; a file with the old bundle gets it on load, as
+   the keys added on 2026-11-10). Evidence: the play log above; lives hc1 234025 (origin 0 in 18 of 18 samples,
+   strand share 0.93-0.98) and hl1 000345 / 003637 (zoom coverage 2-7% -> 50-70%). Cost: one 16-thread dispatch, two
+   12-byte copies and three barriers per publish (not separable in the strand G-buffer line, 0.206 ms in 003637).
+2. `rt_hair_card_fill` (off; Advanced knob "Strand hair: card under missing strands"; specialization constant 1053
+   of the per-slot strand G-buffer pipelines, added only when the key is on at pipeline creation; header flag 512
+   turns it off and on live). A card-marked fragment whose trace gives no strand it may write draws its card instead
+   of `discard`: the native material at the card UV, the card normal and tangent (the existing card mode's output).
+   - No strand on the ray (or an entry that fails a bound): the card at its own depth; the accepted word gets the
+     card flag, so the velocity variant writes the card's motion and the count does not take it for a strand.
+   - A strand that this fragment may not write (another draw's, or outside this card layer's band): the card no nearer
+     than just behind that strand (two D24 steps or 2^-20 relative, whichever is further). The strand's own fragment
+     wins the depth test wherever it is written; the card shows only where nobody writes the strand. So a healthy
+     frame keeps its strands in front, and a failing frame degrades to cards pixel by pixel.
+   - Tips rejection is not filled (it is a wanted transparency). The masked probe pipelines do not get the constant.
+   - Not evaluated further: drawing the hair twice or a second "card where no strand" pass (the native material and
+     every card input are already in the swapped fragment; a second pass would cost the whole card raster again).
+   - Gates with the fill running (`hair_primary::fill_spares`, `CoverageGate::confirm_runs`): the frame and key
+     watchdogs only report ("cards for 0 frames"); a swapping key returns to cards after `kFillConfirm` = 28 low
+     measurements in a row (the card period the watchdog used to impose) instead of 2. A key on cards, missing or
+     stale evidence, coverage high, load quiet and the warm-up are unchanged.
+   - Look: the 3-7% of card pixels that have no strand when still (1 - S/C) show the card instead of scalp or
+     background, so the outline is the card's again. This is a visible change, not a pure fix: off by default.
+   - Proof offline: with constant 1053 = 0 the shader is equal to origin/main after specialization (canonical
+     SPIR-V, all 16 combinations of 1042/1045/1047/1052; with 1 it differs). Raw identity: 225 of 227 requests
+     byte-identical, the two others are rt/hair_primary_gbuffer.hlsl (spirv-val passed). shaders/variants.txt delta 0.
+     CTest hair_groom_asset_test test_card_fill (hl1 003637's five low frames keep the strands with the fill and go
+     to cards without; a 28-measurement loss still goes to cards). The fragment path itself runs only in game.
+3. LSS refit under translation, disproved as the cause of the remaining loss (6e left it open by argument only):
+   `hair_primary_gpu_check ... refit <dx dy dz> <frames>` builds the layer's BLAS (fast trace, update, compaction),
+   compacts it and refits it in place for 8 frames while points and camera move 0.5-1.3 m per frame.
+   RTX 5090: the refitted BLAS (compacted and not) keeps every hit of the unmoved build (61347 of 61347 at 10 m,
+   62891 at 3 m) and differs from a fresh build of the same points in at most 1 pixel of 65536.
+   tests/hair_primary_gpu_test.py refit_check (in CTest hair_primary_gpu_test).
+
+Still open: the 30-50% loss under a fast dolly with the GPU camera (6d-6f). Not solved here, and not provable from
+the code or the logs on disk (the hl1 logs were pruned). Read again from first principles:
+- By design nothing lags: the soup is this frame's prepass, converted with the block its vertex shader read, the
+  points, BLASes, TLAS and header are of that build (build stamp), the G-buffer draws the same vertices, the ray
+  origin is 0. A loss that is all or nothing per draw, on heads of equal size near and far, is then a fault of that
+  draw's points in that frame, not of the rays or the acceleration structure.
+- Candidates left (predicted.json of hair_stable, P1-P6), with the dense sample that names each: points kept from
+  the frame before (anchor moves by the camera step); card triangles collapsed in the prepass capture while the
+  G-buffer draws them (anchor at the camera; `hair_groom_update` takes a collapsed triangle's vertices as valid and
+  `xfb_to_world` collapses non-finite or z-mismatched ones); a rotation (drift grows with distance); the game's LOD
+  change; the TLAS instance data; the key map.
+- Found while reading, not changed (no evidence yet): the camera capture takes its conversion block from the first
+  captured draw and does not check the other draws' blocks (the cascade capture does, geocapture.cpp
+  cascade path `c_ubo`); `[hair groom] no point update` is logged 8 times per session only.
+
+Staged live (one launch, `tools/live_batches_staged/hair_stable/`, job hx1-s8-hair-stable, predicted.json first, lint
+0 failing, merge_scope tooling 0): S8, the bundle, card fill and dense sampler compiled in. hl1's wheel dolly in and
+out and hc1's orbit with the fill on (gate: every switches line "frame watchdog 0, key watchdog 0, coverage low 0";
+PNG of the dolly), the same dolly with the fill off in the same run (5-7 trips expected), dense samples of both.
+- User check after a go: S8, RTX Hair On, Advanced "Strand hair: card under missing strands" On, restart; zoom in
+  fast with the wheel and pan: no hole, no head popping to cards.
+- If the gate holds, add `rt_hair_card_fill` to the On bundle. Strands in every moving frame need the cause the
+  dense samples name and its fix, then one more dolly window.
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU
