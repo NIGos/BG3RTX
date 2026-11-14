@@ -312,6 +312,11 @@ Focused, FG 3x, in-run OFF / ON / OFF, RTX 5090 (logs `captures/queue/logs/hq-*.
 | S8, High pan | about 12.1 -> 11.6 ms | |
 | Inn, High | capped at 16.65 ms, no visible change | 4.4 -> 0 ms |
 
+Correction (2026-11-14, sections 8.6 and 8.7): the Ultra rows of this table include native hit-material work that mode
+2 skipped. At the inn the GI trace fell 8.2 to 4.6 ms in the same pans (-3.56 ms of the -3.51 ms frame time), so that
+gain was dropped work, not the handout. With the fix the S8 Ultra frame time is unchanged. The High rows stand (no
+native hit materials). The inn on Ultra is staged again as `hq-inn-fix`.
+
 Fallbacks 0 and pairing mismatches 0 in every window. Energy (3 traces per state): inn +0.11%, S8 -0.72% against an OFF
 spread of 647.8-656.6: borderline and OPEN. Staged to decide it: `hq-s8-energy` (8 traces per state) and `hq-s8-check`
 (primary-ray match in motion, split out of hq-s8-ultra). Four of five jobs were formally INVALID: some pan windows had
@@ -338,7 +343,8 @@ S8), so they overstate the handout on Ultra. High has no native hit materials an
 
 User decision 2026-11-14 ("Si, accendilo"): On by default in High and Ultra, Off in Low and Medium. The control is a
 normal Performance control (Frame rate group, not experimental): the release policy and `data/release.ini` do not touch
-it, `bg3rtx.ini` carries the High values (`rt_scene_handout_layout=1`, `rt_scene_handout=2`).
+it, `bg3rtx.ini` carries the High values (`rt_scene_handout_layout=1`, `rt_scene_handout=2`,
+`rt_scene_handout_hit_wait=1` since section 8.7).
 
 What a player gets: the preset row is Off / Off / On / On. A user file with only `preset=high` or `preset=ultra`
 (the launcher's file) expands to On at the next game start, with no edit (the layout key is read at device creation,
@@ -351,8 +357,9 @@ lines near 0 ms; Performance > Low-latency scene Off (live) shows the OFF frame 
 ### 8.6 Launcher
 
 Performance page, Frame rate group, "Low-latency scene" (`scene_handout`): Off / On. On writes
-`rt_scene_handout_layout=1` and `rt_scene_handout=2`, needs a game restart (Off is live). Cost chip: saves about 1 to
-3.5 ms (about 1 ms at Water Queens House, 2.5 to 3.5 ms at the inn on Ultra, RTX 5090).
+`rt_scene_handout_layout=1`, `rt_scene_handout=2` and `rt_scene_handout_hit_wait=1`, needs a game restart (Off is
+live). Cost chip: saves 0 to 0.5 ms (Water Queens House on Ultra: scene wait 3.5 to 0.3 ms, frame time unchanged; High
+about 0.5 ms; RTX 5090). The earlier "1 to 3.5 ms" is withdrawn (section 8.7).
 
 ### 8.6 Native hit materials on the handout: the commit-time query is never published (2026-11-14)
 
@@ -387,8 +394,8 @@ local shadows) keep the handout. No shader, ABI or variant change (`shaders/vari
 `[core] scene handout: ... hit material passes on the committed scene N`. Unit test: native_hit_order_test (the
 commit-time order is refused, the lighting order accepted). `.\scripts\build.ps1 -Test`: 226 of 226.
 
-Not verified live (READY_FOR_LIVE): the settle path itself logged `0 settled` in every live so far, and the wait
-that remains with the key on is unknown. Staged: `tools/live_batches_staged/handout_qual/jobs/hq-s8-modes.json`
+Verified live and on by default: section 8.7. Before that run: the settle path itself logged `0 settled` in every live, and the wait
+that remains with the key on was unknown. Staged then: `tools/live_batches_staged/handout_qual/jobs/hq-s8-modes.json`
 (predicted.json `hq-s8-modes`): S8 static, exposure held, `rt_scene_handout` 0 / 1 / 2 / 2 + hit wait / 0, 8 float
 traces and a short `rt_stats` window per state; the analyzer prints the per-pass float means, the scene wait, the GI
 trace GPU ms and the hit lines per state. Predicted: mode 1 and the fix inside the OFF range with qualified hits, mode
@@ -403,3 +410,33 @@ Gates since 2026-11-14 (user rule, `tools/live_batches/sane_gates.py`): the -0.2
 GI -3.4 ms in the pans, the same dropped work). Re-read of today's logs: smoke, S8 High and inn High PASS; S8 energy
 and inn Ultra EXPLAIN; S8 Ultra FAIL on the hair-pan frame time p99 (+4.4 ms, ON periods 25.5 / 32.0 / 30.4 against
 OFF 25.0-27.1), to be looked at with the fix run.
+
+### 8.7 The fix verified and made the default (hq-s8-modes.1.205520, 2026-11-14)
+
+S8, Ultra, static, FG 3x, focused, exposure held; 8 float traces per state, then a short `rt_stats` window:
+
+| | OFF a | mode 1 | mode 2 | mode 2 + hit wait | OFF b |
+|---|---|---|---|---|---|
+| Scene wait mean, ms | 3.55 | 3.60 | 0.07 | 0.28 | 3.47 |
+| Rendered frame time median, ms | 21.29 | 21.62 | 21.06 | 21.58 | 21.49 |
+| GI trace GPU median, ms | 4.57 | 4.72 | 3.60 | 4.66 | 4.71 |
+| Light rays at hits, per 60 frames | 3.84 M | 3.83 M | 0.14 M | 3.83 M | 3.84 M |
+| Ambient kept at qualified hits | 0.00775 | 0.00777 | 0.00026 | 0.00777 | 0.00776 |
+| Hit-material query published (ordered) | 1 | 1 | 0 | 1 | 1 |
+| Diffuse light against OFF | | +0.004% | -0.232% (-6.2 se) | +0.064% (+1.9 se) | |
+| Hit-material passes on the committed scene | | | 0 | 115 per period | |
+
+0 wait timeouts and 0 handout fallbacks in every state. Mode 2 alone reproduces the defect of 8.6. With
+`rt_scene_handout_hit_wait=1` the hit work is back, the wait is 0.28 ms and the frame time equals OFF: no gain at S8 on
+Ultra (GPU-bound), no cost. Verdict PASS under the sensible gates. The first report said FAIL for mode 1 frame time
+(+0.230 ms against a pair difference of 0.200 and a floor of 0.214): the per-state costs took only the two OFF medians
+as noise. They now use the spread of the single OFF periods too, as the window groups always did (noise 0.315): INFO.
+
+Default (correctness first): the Low-latency scene On choice writes `rt_scene_handout_hit_wait=1`; the code default
+and `bg3rtx.ini` are 1; the release policy keeps it at 1, so a player file written before the fix (two keys, or only
+a preset) loads with it. settings_test `test_scene_handout` pins it. Off does not write the key (no-op with mode 0).
+
+Open, staged (not queued): `handout_qual/jobs/hq-inn-fix.json` (predicted.json `hq-inn-fix`): the inn, Ultra, OFF / mode
+2 with the fix / OFF; static, pan Q and E, the pans with RTX Hair On, 4 float traces and a hit window per state.
+Predicted: wait 8.5 to 0.3-3 ms, frame time gain 0 to 1 ms, GI trace and light rays at hits equal to OFF. It decides
+whether the handout stays On in Ultra (stays unless ON is slower beyond noise and floor, or the hit rays differ).

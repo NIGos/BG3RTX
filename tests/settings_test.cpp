@@ -1441,7 +1441,7 @@ static void test_scene_handout() {
   if (!k) return;
   CHECK_EQ(k->category, "Performance");
   CHECK(choice_count(*k) == 2);
-  const char* want[2] = {"rt_scene_handout_layout=0 rt_scene_handout=0 ", "rt_scene_handout_layout=1 rt_scene_handout=2 "};
+  const char* want[2] = {"rt_scene_handout_layout=0 rt_scene_handout=0 ", "rt_scene_handout_layout=1 rt_scene_handout=2 rt_scene_handout_hit_wait=1 "};
   for (int c = 0; c < 2; ++c) {
     KVList kvs; knob_kvs(*k, c, kvs);
     std::string s; for (const auto& kv : kvs) s += kv.first + "=" + kv.second + " ";
@@ -1454,6 +1454,15 @@ static void test_scene_handout() {
   CHECK(knob_value(*k, code_defaults()) == 1);   // High = the developer defaults
   const Map release = parse_ini(read_file(BG3RTX_SOURCE_DIR "/bg3rtx.ini") + read_file(BG3RTX_SOURCE_DIR "/data/release.ini"));
   CHECK(release.count("rt_scene_handout") && release.at("rt_scene_handout") == "2");   // no release pin turns it off
+  CHECK_EQ(get(code_defaults(), "rt_scene_handout_hit_wait"), "1");
+  {  // a player file written by the launcher before the fix (two keys), and one with a stale 0: both load with the fix
+    for (const char* old : {"preset=ultra\nrt_scene_handout_layout=1\nrt_scene_handout=2\n",
+                            "preset=ultra\nrt_scene_handout_layout=1\nrt_scene_handout=2\nrt_scene_handout_hit_wait=0\n"}) {
+      Map m = code_defaults(); apply_layer(m, release); apply_layer(m, parse_ini(old)); enforce_release_policy(m);
+      CHECK_EQ(get(m, "rt_scene_handout_hit_wait"), "1");
+      CHECK(knob_value(*k, m) == 1);
+    }
+  }
   // A release player per preset: a file with only a preset line (the existing user files) gets On in High and Ultra
   // at the next game start without any edit, Off in Low and Medium.
   for (int p = 0; p < kPresetCount; ++p) {
@@ -1463,6 +1472,7 @@ static void test_scene_handout() {
     CHECK(knob_value(*k, m) == (on ? 1 : 0));
     CHECK_EQ(get(m, "rt_scene_handout_layout"), on ? "1" : "0");
     CHECK_EQ(get(m, "rt_scene_handout"), on ? "2" : "0");
+    CHECK_EQ(get(m, "rt_scene_handout_hit_wait"), "1");   // the handout never drops the native hit-material work
     Map again = m; enforce_release_policy(again); CHECK(again == m);
     // experimental_options=0 or 1 does not change it
     for (const char* e : {"0", "1"}) {
