@@ -1,9 +1,15 @@
 """Sensible gates for in-run A/B analyzers (AGENTS.md "Measuring correctly", user rule 2026-11-14).
 
-A difference FAILS only when it is beyond the run's own noise (the OFF repeats) AND beyond a materiality floor, in the
-bad direction. Below the floor it is INFO (the number is printed, never FAIL or INVALID). A change beyond the floor in
-the good direction that the design does not predict is EXPLAIN (possibly skipped work): listed at the top, not passed
-silently. Event counters (fallbacks, mismatches) stay at zero: one event is a fault. A window without enough complete
+A difference FAILS only when it is beyond the run's own noise (the OFF repeats) PLUS a materiality floor, in the bad
+direction: |ON - OFF| > noise + floor. The noise is what the OFF repeats alone can move the number by, the floor is the
+smallest change that matters; a real change that matters is the two added, not the larger of them (hq-inn-fix 211816:
+RT +0.130 ms against noise 0.095 and floor 0.113 "failed" by 0.017 ms on an 11.3 ms pass). Beyond the noise and within
+noise + floor it is INFO (the number is printed, never FAIL or INVALID). A change beyond noise + floor in the good
+direction that the design does not predict is EXPLAIN (possibly skipped work): listed at the top, not passed silently.
+A tail statistic (frame time p99: about the second worst frame of a 120-frame period) takes the full range of the OFF
+periods as its noise, not half of it. Event counters the feature owns (fallbacks, mismatches) stay at zero: one event
+is a fault. Events the baseline also has (scene wait timeouts) fail only when the ON windows count more than the OFF
+windows of the same run; in an OFF window they are the baseline, reported as INFO. A window without enough complete
 periods is "not judged"; a run is INVALID only when no decisive window can be judged.
 
 Floors (derived, stated in every report by `floors_text`):
@@ -14,7 +20,7 @@ Floors (derived, stated in every report by `floors_text`):
   is conservative. It is also below one 10-bit PQ code step (about 0.9% of luminance at these levels), so the
   presented frame can move by one code at most.
 - match percentages: 1 point (a one-frame-old scene costs tens of points: TRACK_D, 33% against 97%).
-- counts that should be equal: 1% of the OFF value, at least 1.
+- counts that should be equal: 1% of the OFF value, at least 1 (so the tolerance is the OFF spread plus 1%).
 """
 OK, INFO, EXPLAIN, FAIL = "ok", "INFO", "EXPLAIN", "FAIL"
 COST_FLOOR_MS, COST_FLOOR_REL = 0.1, 0.01
@@ -34,24 +40,31 @@ def floors_text():
     return (f"Materiality floors: cost and frame time max({COST_FLOOR_MS} ms, {COST_FLOOR_REL:.0%} of OFF); energy "
             f"{ENERGY_FLOOR_REL:.1%} of the mean scene colour (half the about 1% just-noticeable luminance difference, and "
             f"under one 10-bit PQ code step); match {MATCH_FLOOR_POINTS:g} point; equal counts 1% of OFF (at least 1). "
-            "FAIL = beyond the OFF repeats' noise and the floor, in the bad direction. EXPLAIN = beyond both in a "
-            "direction the design does not predict, or an energy difference beyond noise under the floor. INFO = under "
-            "the floor.")
+            "FAIL = beyond the OFF repeats' noise plus the floor, in the bad direction. EXPLAIN = beyond noise plus "
+            "floor in a direction the design does not predict, or an energy difference beyond noise under the floor. "
+            "INFO = beyond the noise, within noise plus floor; or an event the OFF windows have too (baseline).")
 
 
-def compare(off_a, off_b, on, floor, rule, predicted=False, off_values=()):
+def events(on, off_max):
+    """Status of an event count in an ON window against the worst OFF window of the same run: none ok; no more than
+    the baseline has INFO; more FAIL. off_max 0 (or a counter that only exists ON): one event is a fault."""
+    return OK if on <= 0 else (INFO if on <= off_max else FAIL)
+
+
+def compare(off_a, off_b, on, floor, rule, predicted=False, off_values=(), tail=False):
     """(status, delta, noise) of ON against the OFF pair. rule: "lower" (the deliverable: a rise is bad, a drop is
     predicted), "not higher" (a cost: a rise is bad, a drop needs an explanation unless `predicted`), "not lower"
     (a rise is fine), "equal" (a count: either direction needs an explanation). off_values: every OFF period value;
-    the noise is then the larger of the pair difference and half their range."""
+    the noise is then the larger of the pair difference and half their range (tail: a p99, their full range).
+    Beyond the noise and within noise + floor: INFO."""
     noise, delta = abs(off_b - off_a), on - (off_a + off_b) / 2
     if off_values:   # the single OFF periods: ON inside their range is no difference (as the energy rule)
-        noise = max(noise, (max(off_values) - min(off_values)) / 2)
+        noise = max(noise, (max(off_values) - min(off_values)) / (1 if tail else 2))
         if min(off_values) <= on <= max(off_values):
             return OK, delta, noise
     if abs(delta) <= noise:
         return OK, delta, noise
-    if abs(delta) <= floor:
+    if abs(delta) <= noise + floor:
         return INFO, delta, noise
     if rule == "equal":
         return EXPLAIN, delta, noise

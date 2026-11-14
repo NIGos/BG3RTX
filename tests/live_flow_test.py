@@ -503,6 +503,14 @@ class FlowTests(unittest.TestCase):
         j["expect_every"] = []
         p[2]["set"] += ",rt_stats=0"
         self.assertTrue(f.producer_problems(j, p))
+        # hq-s8-modes 204217: the GI far line needs rt_stats=1, the core handout line rt_scene_handout=2
+        self.assertEqual(f.producer_requirements(r"\[core\] GI far \(\d+ frames\)"), {"rt_stats": "1"})
+        self.assertEqual(f.producer_requirements(r"\[core\] scene handout: .*committed scene \d+"), {"rt_scene_handout": "2"})
+        self.assertFalse(f.producer_requirements(r"\[rt\] scene handout: \d+ frames"))
+        j["expect"] = [r"\[core\] scene handout: "]
+        self.assertTrue(f.producer_problems(j, p))
+        p[2]["set"] += ",rt_scene_handout=2"
+        self.assertFalse(f.producer_problems(j, p))
 
     def test_environment_checks_scalars_not_file_backed_job_and_counts_utf16(self):
         j, _ = fixture()

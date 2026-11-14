@@ -440,3 +440,32 @@ Open, staged (not queued): `handout_qual/jobs/hq-inn-fix.json` (predicted.json `
 2 with the fix / OFF; static, pan Q and E, the pans with RTX Hair On, 4 float traces and a hit window per state.
 Predicted: wait 8.5 to 0.3-3 ms, frame time gain 0 to 1 ms, GI trace and light rays at hits equal to OFF. It decides
 whether the handout stays On in Ultra (stays unless ON is slower beyond noise and floor, or the hit rays differ).
+
+### 8.8 The inn run and the user's decision (hq-inn-fix.1.211816, 2026-11-14)
+
+Decision (user, 2026-11-14, "Tienilo acceso"): Low-latency scene stays On by default in High and Ultra, and the hit
+wait fix (`rt_scene_handout_hit_wait=1`) is always on with it.
+
+Measured with the fix, Ultra, FG 3x, focused:
+
+| | Scene wait mean, ms | Frame time median, ms | Fallbacks | Energy against OFF |
+|---|---|---|---|---|
+| S8 (hq-s8-modes.1.205520) | 3.5 to 0.3 | unchanged (21.4 to 21.6, inside the OFF periods) | 0 | +0.06% diffuse (1.9 se), inside OFF |
+| Inn (hq-inn-fix.1.211816) | 8.5 to 2.9 | unchanged (30.0 to 30.1, noise 0.35) | 0 | +0.06% (0.4 se), inside the OFF samples |
+
+Both scenes are GPU-bound on Ultra, so the removed wait does not shorten the frame. On High at S8 the frame is about
+0.5 ms shorter (hq-s8-high). At the inn the hit work is present (light rays at hits 2.96e7 against OFF 2.91e7 / 2.82e7)
+and the ON hit window has 0 wait timeouts (the OFF hit windows had 1 and 3).
+
+The inn report first said FAIL on six lines that were no fault: RT +0.130 ms (0.017 ms over the floor on 11.3 ms), GI
++0.164 ms (noise 0.160), a static frame time p99 of +1.075 ms from 2 ON periods, the timeouts of the two OFF hit
+windows, and light rays +3% against an OFF pair 3% apart. The rule is now (branch claude/gates-refine,
+`sane_gates.py`): FAIL beyond noise plus floor; a p99 takes the full range of the OFF periods as noise; events in OFF
+windows are the baseline and ON fails only above them; equal counts allow the OFF spread plus 1%. Re-read verdicts:
+hq-inn-fix EXPLAIN (RT and GI 1.5 ms lower in the `rt_stats` hit window, not a failure), hq-s8-modes PASS.
+
+Open:
+- The benefit in CPU-bound scenes is unmeasured (both qualified scenes are GPU-bound on Ultra).
+- The FAIL of `hq-s8-ultra.1.160909` on the hair-pan frame time p99 (+4.4 ms; it still fails under the refined rule)
+  was never re-examined. That run predates the fix and its per-state columns may be shifted (its energy OFF b scene
+  wait reads 0.000 ms), so the number is not trusted either way.
