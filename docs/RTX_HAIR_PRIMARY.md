@@ -2109,6 +2109,104 @@ hx1 regenerated (predicted.json first, with the result above): one launch, about
   fast with the wheel: the far heads and the heads at the screen edge keep their strands.
 - If the live confirms it: add the key to the On bundle.
 
+## 6i. The scene pass header confirmed and adopted; hitch frames; the last switches (2026-11-14, branch claude/hair-adopt: rt_hair_header_scene_pass into the On bundle; key rt_hair_coverage_keep, off; READY_FOR_LIVE)
+
+Live hx1 190905 (S8, VALID, 19 of 19 phases, window occluded: no frame time judged). Per window, from the period lines
+(key = rt_hair_header_scene_pass; decal = scene passes whose label the decal pass took; shares of the dense samples
+of card-marked pixels: accepted / no strand on the ray):
+
+| window | key | fill | camera | frames | watchdog trips | strands->cards | cards->strands | frames all cards | strand share | still | moving (samples) | decal | other scene pass |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| load (2 lines) | 0 | - | still | 60 | 0 | 0 | 0, 6 | 49, 7 | 0.95 | 85% / 3.8% | - | 31, 42 of 60 | 0 |
+| warmup (10), warm-on (2) | 1 | on | still | 60 | 0 | 0 | 0-5 | 0 | 0.94-0.95 | 85-88% / 4.1-6.0% | - | 0 | 0 |
+| pre-in | 1 | on | dolly in | 60 | 0 | 1 (coverage stale) | 3 | 0 | 0.95 | 85% / 4.3% | 85% / 3.2% (924) | 0 | 0 |
+| pre-out (3) | 1 | on | dolly out | 60 | 0 | 0 | 0-3 | 0 | 0.93-0.95 | 80-84% / 4.8-6.3% | 84% / 4.6% (1306) | 0 | 0 |
+| in-fix | 1 | off | dolly in | 180 | 0 | 0 | 3 | 0 of 181 | 0.954 | 81% / 5.0% | 81% / 4.0% (1203) | 0 | 0 |
+| out-fix | 1 | off | dolly out | 180 | 0 | 0 | 2 | 0 of 181 | 0.932 | 85% / 4.9% | 81% / 4.1% (1306) | 0 | 0 |
+| in-fill | 1 | on | dolly in | 180 | 0 | 1 (coverage stale) | 3 | 0 of 181 | 0.949 | 83% / 5.2% | 85% / 4.0% (1205) | 0 | 0 |
+| watch-fill | 1 | on | still | 60 | 0 | 0 | 1 | 0 | 0.950 | 81% / 5.3% | - | 0 | 0 |
+| out-fill | 1 | on | dolly out | 180 | 0 | 1 (coverage stale) | 3 | 0 of 181 | 0.928 | 85% / 5.3% | 82% / 4.5% (889) | 0 | 0 |
+| orbit-r, orbit-l | 1 | on | orbit | 60 | 0 | 0 | 0 | 0 | 0.93 | 87% / 4.7% | 87-88% / 3.2-5.3% (304, 434) | 0 | 0 |
+| watch-off | 1 | off | still | 60 | 0 | 0 | 0 | 0 | 0.922 | 85% / 5.3% | - | 0 | 0 |
+| in-base | 0 | off | dolly in | 180 | 6 | 9 (frame watchdog) | 12 | 29 of 181 | 0.950 | 80% / 6.4% | 71% / 15.7% (1013) | 165 of 217 | 0 |
+| out-base | 0 | off | dolly out | 180 | 3 | 12 (frame watchdog) | 11 | 29 of 181 | 0.923 | 84% / 4.5% | 61% / 25.1% (1120) | 131 of 183 | 0 |
+
+Reading:
+- Key off: the decal pass took the label in 52-76% of all frames, still or moving (31-42 of 60, 165 of 217, 131 of
+  183): the hair traced the publish before most of the time, and it showed only when the camera moved. All 8 frame
+  watchdog lines of the run (G-buffer frames 4047-4053, 4224, 4229) are in the two key-off dollies, each "applied the
+  publish of build frame N - 1"; 14 and 6 dropouts, 51 and 38 own-bound fails.
+- Key on, card fill off (in-fix, out-fix): 0 trips, 0 switches to cards, 181 of 181 hair frames with strands, 0
+  dropouts, 0 own-bound fails in 2301 and 2186 strand draws. The moving shares are the still ones (81% / 4.0-4.1%
+  against 81-85% / 4.9-5.0%): the loss under motion is gone. Every key in view kept its strands in every moving frame.
+- Key on, all 24 period lines: decal 0, applied at the decal pass 0, by another scene pass 0. No hitch frame in this
+  run (two scene passes in one present interval), also not during the 8 LOD decodes of 47-78 ms in pre-in.
+- The 3 strands->cards switches with the key are all "coverage stale/none/invalidated" and all key 22a2 (a head at
+  x 1850-1900 of 2560 before the dolly in). in-fill: 47 frames as strands, card pixels 2869 down to 2, then none in
+  the counted frames; 28 frames later (kHoldFrames) its evidence is stale and it draws cards unseen for the rest of the
+  window (135 "coverage stale" G-buffer refusals; 24 in in-fix, where it stayed in view at 603 pixels). Not a loss.
+- What is visible: a head that comes into view (again) shows its cards for 8-10 frames, until a probe measurement is
+  read: 2-3 cards->strands switches per dolly with card runs of 10 frames (in-fix: 12e9, b513, dcbc at 24-298 card
+  pixels; out-fill: 22a2 at 329-2281).
+- Gates: with the key the worst used ratio of a swapped draw of 64 card pixels or more stayed 0.017-0.097 above its own bound
+  in every window. No threshold changed.
+- Job fault found: the orbit windows were tightened to 60 frames and turned for about a second. The next run turns
+  through a 180-frame window.
+
+History corrected. 6e read "header, TLAS, points and BLASes agree" from the build stamp. The stamp is copied when the
+header is applied, and that apply was the decal pass's of the frame before: it compared the old publish with itself.
+6d's candidate (the TLAS traced is the publish before) was right, and the keys built on the other readings
+(rt_hair_stale_publish 6a/6b, the per-draw and one-key watchdogs, the swap latch, the row and slot order of 5w) answered
+symptoms of this one cause.
+
+Changes:
+1. RTX Hair On writes `rt_hair_header_scene_pass=1` (common/settings.h; `Choice::kv` grows from 24 to 32 entries; a
+   file with the old bundle gets the key on load, complete_marked_choices). The Advanced knob stays for A/B.
+2. Hitch frames (6h "not fixed"). The scene build runs once per frame label (`rt_after_capture`), so two G-buffer
+   frames in one present interval trace the same publish; the fault was only that the second ran on the first one's
+   header tag and reused the entries sealed with it. With the key a scene pass of another command buffer recording
+   under a label already taken applies the header again (`HeaderPass::Again`), with the next tag (`gbuffer_tag`: never
+   a tag twice; the tags run one ahead of the labels until a label has no G-buffer frame), its own pending header and
+   the label's GbFrame. The first frame's submit no longer touches that GbFrame (pass serial), and the hair draws
+   find the later pending header. `hair_primary::HeaderLabels` holds the rule; the layer and the test run the same code.
+   Period line: "... by another scene pass N (...); second scene passes of an interval with their own header and tag M".
+   Tag-to-frame labels of the dense sample and watchdog lines can be one off while the tags run ahead.
+3. `rt_hair_coverage_keep` (off; Advanced knob "Strand hair: keep the last coverage verdict"; CPU only, live): coverage
+   evidence does not expire by age. The last measurement stays the verdict until a newer one, an invalidation, a latch
+   or a watchdog replaces it; a key not published for 600 frames is forgotten as before; the first swap of a key and
+   every key after a level load still need a measurement. Removes the unseen switch of a draw without card pixels and
+   the card frames of a head that comes back. Not in the bundle: it changes a gate and has no live yet.
+- Proof offline: CTest hair_groom_asset_test test_header_pass (two frames in one interval: key off 1 frame on the
+  other's header and 1 reused entry set; key on 0 and 0, no tag or pass serial twice, no velocity draw refused, for the
+  present before the scene pass, after the decal pass and after the velocity draws; three frames in one interval; the
+  tags meet the labels again after a label without a frame) and test_coverage_keep (stale after exactly 28 hidden
+  frames without the key, never with it; a culled draw after 300 frames; a failed, invalidated or new key is never
+  passed; a kept key that then fails goes to cards on its second bad measurement). settings_test, schema, UI sample.
+- Cost: none on the GPU (one more header copy in a hitch frame). No shader, no ABI, shaders/variants.txt delta 0.
+
+Could go later (after the next live): `rt_hair_stale_publish` (its camera test read 0 moved in every window, key on or
+off: it never saw this fault), `rt_hair_row_stable`, `rt_hair_watchdog_draw`, `rt_hair_watchdog_one_key`,
+`rt_hair_swap_latch`, `rt_hair_coverage_min_pixels`, and the key-off path of `header_pass` with its knob.
+
+hx1 regenerated (predicted.json first, with the 190905 result): one launch, about 140 s of phases, 25 windows.
+- Bundle alone (card fill flag off): in-on, out-on (180 frames), orbit-r, orbit-l (180 frames, turning from the first
+  second), in-shot, out-shot (120 frames), still-on, shot-on. Gates in every one: header at the scene pass only, label
+  taken by the decal pass 0, by another scene pass 0; frame watchdog 0, key watchdog 0, coverage low 0, coverage high 0,
+  latched 0, header not applied 0, other 0; 0 frames with every draw on cards; frame and key watchdog trips 0.
+  "coverage stale/none/invalidated" is open there (0 or 1 per window, the unseen switch above).
+- rt_hair_coverage_keep on (in-keep, out-keep): 0 strands->cards of any cause.
+- Card fill on (still-fill, in-fill, shot-fill, out-fill): the visual record. Full-width PNGs of the still image and
+  of the frame a second after the dolly in, each next to the same shot without the fill (still-on, shot-on).
+- Control (in-base, out-base): the bundle without the key; label taken by the decal pass 1 or more.
+- Lint live and frozen 0 failing; snapshot appended only (3 readiness queries); merge_scope tooling 0. Durations from
+  the checked-in snapshot: the live corpus holds one VALID S8 log whose two PNG trace windows are its tenth percentile
+  (5.4 fps), which budgets 33 s per 180-frame window.
+- User check after a go: S8, RTX Hair On (nothing else): zoom in and out fast with the wheel and orbit: far heads and
+  heads at the screen edge keep their strands. Then Advanced "Strand hair: keep the last coverage verdict" On: a head
+  that comes back into view shows strands at once.
+- Open: the card fill decision (user; PNG pairs of this run); `rt_hair_coverage_keep` into the bundle if its windows
+  hold; styles and LODs without a groom file keep their cards (S8: index counts 3399 and 7086).
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU
