@@ -160,8 +160,14 @@ int main(int argc, char** argv) {
   // towards the camera along the push block's forward, mask 0x04 (a card-kept groom in front of a swapped one).
   const bool twin = !bsdf && argc == 6 && std::strcmp(argv[4], "twin") == 0;
   const float twin_m = twin ? float(std::atof(argv[5])) : 0.0f;
-  if (argc < 4 || (argc >= 5 && !bsdf && !twin)) {
-    std::fprintf(stderr, "usage: hair_primary_gpu_check [bsdf] <input.bin> <check.spv> <output.bin> [twin <metres>]\n");
+  // 6g refit mode (docs/RTX_HAIR_PRIMARY.md): the layer's groom BLAS life (build with ALLOW_UPDATE | ALLOW_COMPACTION,
+  // compacted copy, in-place UPDATE every frame) while every point and the camera move by <dx dy dz> metres per frame
+  // (camera-relative points under a camera dolly). Per frame the pixels whose strand differs from the unmoved full
+  // build, for the refitted compacted BLAS, a refitted uncompacted one and a fresh full build of the same points.
+  const bool refit = !bsdf && argc == 9 && std::strcmp(argv[4], "refit") == 0;
+  if (argc < 4 || (argc >= 5 && !bsdf && !twin && !refit)) {
+    std::fprintf(stderr, "usage: hair_primary_gpu_check [bsdf] <input.bin> <check.spv> <output.bin> [twin <metres> | "
+                         "refit <dx> <dy> <dz> <frames>]\n");
     return 2;
   }
   if (bsdf) ++argv;
@@ -384,6 +390,126 @@ int main(int argc, char** argv) {
     }
   }
   vkUpdateDescriptorSets(dev, 4, w, 0, nullptr);
+  if (refit) {
+    auto pCopy = reinterpret_cast<PFN_vkCmdCopyAccelerationStructureKHR>(vkGetDeviceProcAddr(dev, "vkCmdCopyAccelerationStructureKHR"));
+    auto pProps = reinterpret_cast<PFN_vkCmdWriteAccelerationStructuresPropertiesKHR>(
+        vkGetDeviceProcAddr(dev, "vkCmdWriteAccelerationStructuresPropertiesKHR"));
+    const float step[3] = {float(std::atof(argv[5])), float(std::atof(argv[6])), float(std::atof(argv[7]))};
+    const int frames = std::max(1, std::atoi(argv[8]));
+    const VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+        VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+    VkAccelerationStructureBuildGeometryInfoKHR bi2{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+    bi2.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    bi2.flags = flags;
+    bi2.geometryCount = 1;
+    bi2.pGeometries = &g;
+    VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+    pSizes(dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi2, &ns, &sz);
+    Buf scratch = make(std::max(sz.buildScratchSize, sz.updateScratchSize) + al, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    const VkDeviceAddress scratch_at = (scratch.addr + al - 1) / al * al;
+    const VkAccelerationStructureBuildRangeInfoKHR range{ns, 0, 0, 0};
+    const VkAccelerationStructureBuildRangeInfoKHR* pr = &range;
+    auto create = [&](VkDeviceSize size) {
+      Buf st = make(size, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR);
+      VkAccelerationStructureCreateInfoKHR ci{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+      ci.buffer = st.b;
+      ci.size = size;
+      ci.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+      VkAccelerationStructureKHR as;
+      CHECK(pCreateAS(dev, &ci, nullptr, &as));
+      return as;
+    };
+    auto record = [&](VkAccelerationStructureKHR as, bool update) {
+      bi2.mode = update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+      bi2.srcAccelerationStructure = update ? as : VK_NULL_HANDLE;
+      bi2.dstAccelerationStructure = as;
+      bi2.scratchData.deviceAddress = scratch_at;
+      submit([&](VkCommandBuffer cmd) { pBuild(cmd, 1, &bi2, &pr); });
+    };
+    std::vector<char> pb(push, push + 128);
+    auto trace = [&](VkAccelerationStructureKHR b) {
+      VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+      ai.accelerationStructure = b;
+      VkAccelerationStructureInstanceKHR in = ins[0];
+      in.accelerationStructureReference = pAddr(dev, &ai);
+      std::memcpy(ibuf.map, &in, sizeof in);
+      Buf tb;
+      VkAccelerationStructureKHR t = build(VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, tg, 1, tb);
+      wa.pAccelerationStructures = &t;
+      vkUpdateDescriptorSets(dev, 1, w, 0, nullptr);
+      submit([&](VkCommandBuffer cmd) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 1, &set, 0, nullptr);
+        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 128, pb.data());
+        vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
+      });
+      std::vector<uint32_t> keys(size_t(width) * height);
+      for (size_t i = 0; i < keys.size(); ++i) std::memcpy(&keys[i], static_cast<const char*>(out.map) + i * 32, 4);
+      return keys;
+    };
+    // The updatable BLAS, its compacted copy (the layer refits that one), and a second uncompacted updatable one.
+    VkAccelerationStructureKHR full = create(sz.accelerationStructureSize), plain = create(sz.accelerationStructureSize);
+    record(full, false);
+    record(plain, false);
+    VkQueryPoolCreateInfo qpi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qpi.queryType = VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR;
+    qpi.queryCount = 1;
+    VkQueryPool qp;
+    CHECK(vkCreateQueryPool(dev, &qpi, nullptr, &qp));
+    submit([&](VkCommandBuffer cmd) {
+      vkCmdResetQueryPool(cmd, qp, 0, 1);
+      pProps(cmd, 1, &full, VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, qp, 0);
+    });
+    VkDeviceSize csize = 0;
+    CHECK(vkGetQueryPoolResults(dev, qp, 0, 1, sizeof csize, &csize, 8, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
+    VkAccelerationStructureKHR compact = create(csize);
+    submit([&](VkCommandBuffer cmd) {
+      VkCopyAccelerationStructureInfoKHR cp{VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR};
+      cp.src = full;
+      cp.dst = compact;
+      cp.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
+      pCopy(cmd, &cp);
+    });
+    const std::vector<uint32_t> base = trace(compact);
+    size_t base_hits = 0;
+    for (uint32_t k : base) base_hits += k != 0xFFFFFFFFu;
+    std::printf("{\"gpu\":\"%s\",\"segments\":%u,\"pixels\":%zu,\"baseline_hits\":%zu,\"blas_bytes\":%llu,\"compacted_bytes\":%llu,"
+                "\"step\":[%g,%g,%g],\"frames\":[", props.deviceName, ns, base.size(), base_hits,
+                (unsigned long long)sz.accelerationStructureSize, (unsigned long long)csize, step[0], step[1], step[2]);
+    std::vector<float> p0(size_t(np) * 3);
+    std::memcpy(p0.data(), points, p0.size() * 4);
+    float cam0[3];
+    std::memcpy(cam0, push, 12);
+    size_t worst = 0;
+    for (int f = 1; f <= frames; ++f) {
+      auto* dst = static_cast<float*>(pos.map);
+      for (size_t i = 0; i < p0.size(); ++i) dst[i] = p0[i] + step[i % 3] * float(f);
+      float cam[3];
+      for (int c = 0; c < 3; ++c) cam[c] = cam0[c] + step[c] * float(f);
+      std::memcpy(pb.data(), cam, 12);
+      auto diff = [&](const std::vector<uint32_t>& k, size_t* hits) {
+        size_t d = 0;
+        *hits = 0;
+        for (size_t i = 0; i < k.size(); ++i) { d += k[i] != base[i]; *hits += k[i] != 0xFFFFFFFFu; }
+        return d;
+      };
+      size_t h[3], d[3];
+      record(compact, true);
+      d[0] = diff(trace(compact), &h[0]);
+      record(plain, true);
+      d[1] = diff(trace(plain), &h[1]);
+      VkAccelerationStructureKHR fresh = create(sz.accelerationStructureSize);
+      record(fresh, false);
+      d[2] = diff(trace(fresh), &h[2]);
+      worst = std::max(worst, std::max(d[0], d[1]) > d[2] ? std::max(d[0], d[1]) - d[2] : size_t(0));
+      std::printf("%s{\"frame\":%d,\"compacted_refit\":{\"hits\":%zu,\"differ\":%zu},\"plain_refit\":{\"hits\":%zu,\"differ\":%zu},"
+                  "\"rebuild\":{\"hits\":%zu,\"differ\":%zu}}", f > 1 ? "," : "", f, h[0], d[0], h[1], d[1], h[2], d[2]);
+    }
+    std::printf("],\"refit_worse_than_rebuild_pixels\":%zu}\n", worst);
+    std::ofstream o(argv[3], std::ios::binary);
+    o.write(reinterpret_cast<const char*>(base.data()), std::streamsize(base.size() * 4));
+    return 0;
+  }
   submit([&](VkCommandBuffer cmd) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 1, &set, 0, nullptr);

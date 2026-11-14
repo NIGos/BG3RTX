@@ -556,6 +556,39 @@ def nearest_check(exe, spv, shift=0.03):
           bool(np.all(farther[loop_wrong])), rep)
 
 
+def refit_check(exe, spv):
+    """6g (docs/RTX_HAIR_PRIMARY.md): the layer refits each groom BLAS in place from camera-relative points, so a camera
+    dolly moves every point by the camera step each frame. A compacted and an uncompacted BLAS, refitted for 8 frames
+    while points and camera move together, must show the strands of a fresh full build of the same points: the same hit
+    count as the unmoved build and no more changed pixels than the rebuild (those are the float rounding of the move)."""
+    for dist, fov, n in ((10.0, 1.0, 4000), (3.0, 3.0, 4000)):
+        pts, rad, offs = synthetic(n=n)
+        pts = pts + np.array([0.0, 0.0, dist])
+        cam = primary.Camera(np.zeros(3), np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]), np.radians(fov), (256, 256))
+        s0, _ = primary.segments(pts, rad, offs)
+        for step in ((0.0, 0.0, -0.5), (0.0, 0.0, -1.3), (0.4, 0.1, -0.7)):
+            with tempfile.TemporaryDirectory() as d:
+                inp, out = Path(d) / "in.bin", Path(d) / "out.bin"
+                inp.write_bytes(b"HPGC" + struct.pack("<7I", 1, len(pts), len(s0), 256, 256, 0, 0) + push_block(cam) +
+                                np.asarray(pts, "<f4").tobytes() + np.asarray(rad, "<f4").tobytes() + s0.astype("<u4").tobytes())
+                p = subprocess.run([str(exe), str(inp), str(spv), str(out), "refit", *map(str, step), "8"],
+                                   capture_output=True, text=True)
+            name = f"refit under a {step} m/frame move at {dist} m"
+            if p.returncode:
+                check(name + " ran", False, p.stderr.strip()[:200])
+                continue
+            j = json.loads(p.stdout)
+            fr = j["frames"]
+            hits = j["baseline_hits"]
+            worst = max(max(f["compacted_refit"]["differ"], f["plain_refit"]["differ"]) - f["rebuild"]["differ"] for f in fr)
+            lost = max(hits - min(f["compacted_refit"]["hits"], f["plain_refit"]["hits"]) for f in fr)
+            noise = max(f["rebuild"]["differ"] for f in fr)
+            # 16 pixels: a rebuild picks another of two strands at equal depth in up to 0.2% of the pixels; the refit may
+            # differ from it by a handful of such ties, never by a share of the groom (a lost groom is every hit pixel).
+            check(name, hits > 20000 and lost <= noise + 16 and worst <= 16,
+                  f"hits {hits}, lost {lost}, refit differs in {worst} pixels more than a rebuild ({noise})")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -583,6 +616,8 @@ def main():
     if g is not None:
         ref = primary.trace(pts, rad, offs, cam)
         compare(g, ref, primary.gbuffer(ref, cam), strict=a.groom is None)
+    if g is not None and a.groom is None:
+        refit_check(a.exe, a.spv)
     if a.bsdf_spv:
         bsdf_check(a.exe, a.bsdf_spv)
         r_sample_check(a.exe, a.bsdf_spv)

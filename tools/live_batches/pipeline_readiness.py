@@ -140,6 +140,9 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_hair_debug_late_arrival "
     # 5v: the camera strand LOD pick and its camera BLAS/TLAS (bvhsplit, host side).
     "rt_hair_pixel_lod rt_hair_pixel_lod_k rt_hair_pixel_lod_small_keep "
+    # 6g: the card fill's header flag (hair_primary publish) and gate policy; its specialization 1053 is read when the
+    # strand pipelines are created at startup, a live change builds no pipeline.
+    "rt_hair_card_fill "
     # Elastic capture reserve policy (common/rt_capture_budget.h CaptureHeadroom, read per frame in layer/geocapture.cpp).
     "rt_capture_rise_reserve rt_alpha_floor_yield "
     # Mesh cache budget accounting (common/rt_capture_budget.h mesh_cache_charged_as, read per build/present in
