@@ -64,6 +64,21 @@ inline uint64_t pool_target(uint64_t used, uint64_t reserved, uint64_t initial) 
 inline bool pool_shrink_overlap(uint64_t target,uint64_t reserved){
  return target && target<=reserved-reserved/4;
 }
+// rt_mesh_pool_trim (claude/vram-rightsize, 2026-11-14, default 0, live). The repack moves cached meshes and hold
+// snapshots only, so it never runs with native Hair (groom points, LOD arrays and hair bounds live in the pool and
+// are written every frame): user log 22:17-22:26, 36 "shrink deferred: native hair ranges" lines, the pool at 1947 MB
+// for 400 to 1420 MB used. A trim moves nothing: the pool is replaced by a shorter one with the same offsets, like a
+// growth in reverse, when the bytes past the window's target are free. Target: the larger of the repack's target
+// (the quiet window's peak use + 25%) and the end of the last range in use, in 16 MiB; at least a quarter must be
+// saved (pool_shrink_overlap), so a trim and the next growth cannot alternate within the same demand.
+// Cost bound: one copy of the kept bytes and old + new allocated until the old scenes retire, at most once per
+// quiet window (254 frames); a later growth is the existing one (a copy, doubling).
+inline uint64_t pool_trim_target(uint64_t target,uint64_t tail,uint64_t reserved){
+ const uint64_t q=16ull<<20;
+ if(!target || tail>reserved || tail>UINT64_MAX-q)return 0;
+ const uint64_t trimmed=(std::max)(target,(tail+q-1)/q*q);
+ return pool_shrink_overlap(trimmed,reserved)?trimmed:0;
+}
 inline bool hold_move_matches(uint64_t offset,uint64_t size,uint64_t source,uint64_t bytes){
  return size && offset==source && size==bytes;
 }

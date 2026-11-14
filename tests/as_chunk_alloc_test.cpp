@@ -323,5 +323,71 @@ int main() {
     CHECK(!chunk_within_cap(4900 * MB, 1300 * MB, 128 * MB, 64 * MB, cap, true));      // past cap + 25%
     CHECK(chunk_within_cap(1ull << 40, 0, 128 * MB, 64 * MB, UINT64_MAX, false));     // guard off: unchanged
   }
+  {
+    // rt_as_chunk_fit: replay of hq-s8-ultra 2026-11-14 21:54:48-51 (448 -> 1770.1 MB reserved, 7 -> 25 chunks, 356 MB
+    // live). The cascade casters' BLAS grows from 67.0 to 79.2 MB (the sizes of the chunks freed afterwards) in 18
+    // rebuilds, 7 frames apart; a destroyed range retires after 6 frames; empty chunks stay 120 frames.
+    constexpr uint64_t MB = 1ull << 20, base = 64 * MB;
+    struct Pending { uint64_t frame; int chunk; uint64_t off, size; };
+    struct Out { uint64_t peak = 0, created = 0, end = 0; };
+    auto replay = [&](bool fit) {
+      std::vector<Chunk> chunks;
+      std::vector<Pending> pending;
+      Out out;
+      int cur = -1; uint64_t cur_off = 0, cur_size = 0;
+      for (uint64_t frame = 1; frame <= 18 * 7 + 130; ++frame) {
+        for (auto it = pending.begin(); it != pending.end();) {
+          if (!retired(it->frame, frame, frame, frame)) { ++it; continue; }
+          chunks[size_t(it->chunk)].ra.release(it->off, it->size);
+          it = pending.erase(it);
+        }
+        for (auto& c : chunks)
+          if (c.ra.reclaimable() && !keep_empty_chunk(c.ra, frame, 120, false)) c.ra = {};
+        const uint64_t step = (frame - 1) / 7;
+        if ((frame - 1) % 7 == 0 && step < 18) {
+          const uint64_t size = (uint64_t((67.0 + (79.2 - 67.0) * double(step) / 17.0) * double(MB)) + 255) / 256 * 256;
+          if (cur >= 0) { chunks[size_t(cur)].ra.mark_pending(cur_size); pending.push_back({frame, cur, cur_off, cur_size}); }
+          uint64_t off = 0;
+          int ci = allocate_fullest(chunks, size, 256, &off, -1, 2, fit);
+          if (ci < 0) {
+            Chunk c; c.ra.init(oversize_chunk_bytes(size, base, true, fit)); c.ra.arena = 2;
+            CHECK(c.ra.alloc(size, 256, &off));
+            chunks.push_back(c); ci = int(chunks.size() - 1); ++out.created;
+          }
+          cur = ci; cur_off = off; cur_size = size;
+        }
+        uint64_t reserved = 0;
+        for (const auto& c : chunks) reserved += c.ra.cap;
+        out.peak = (std::max)(out.peak, reserved); out.end = reserved;
+      }
+      return out;
+    };
+    const Out off = replay(false), on = replay(true);
+    std::printf("rt_as_chunk_fit replay (cascade BLAS 67.0 -> 79.2 MB in 18 rebuilds): chunks created %llu / %llu, peak "
+                "reserve %.0f / %.0f MB, after the reuse window %.0f / %.0f MB\n", (unsigned long long)off.created,
+                (unsigned long long)on.created, double(off.peak) / MB, double(on.peak) / MB, double(off.end) / MB,
+                double(on.end) / MB);
+    std::fflush(stdout);
+    CHECK(off.created == 18 && off.peak > 1300 * MB && off.peak < 1340 * MB);   // logged: +1322 MB in 18 chunks
+    CHECK(on.created == 2 && on.peak == 160 * MB);
+    CHECK(off.end < 80 * MB && on.end == 80 * MB);   // the live BLAS alone once the reuse window passed
+    // Sizes: exact without the key, for base-sized ranges and for the other arenas; 1/8 + a quarter base with it.
+    CHECK(oversize_chunk_bytes(67 * MB, base, true, false) == 67 * MB && oversize_chunk_bytes(67 * MB, base, false, true) == 67 * MB);
+    CHECK(oversize_chunk_bytes(10 * MB, base, true, true) == base && oversize_chunk_bytes(64 * MB, base, true, true) == base);
+    CHECK(oversize_chunk_bytes(67 * MB, base, true, true) == 80 * MB && oversize_chunk_bytes(136 * MB, base, true, true) == 160 * MB);
+    for (uint64_t sz = 65 * MB; sz <= 2047 * MB; sz += 7 * MB) {
+      const uint64_t c = oversize_chunk_bytes(sz, base, true, true);
+      CHECK(c >= sz + sz / 8 && c < sz + sz / 8 + base / 4 && c % (base / 4) == 0);
+    }
+    // Best fit: a base-sized range takes the 64 MB retained chunk, not the 136 MB one in front of it.
+    std::vector<Chunk> chunks(2);
+    chunks[0].ra.init(136 * MB); chunks[0].ra.arena = 2; chunks[0].ra.empty_since = 5;
+    chunks[1].ra.init(64 * MB); chunks[1].ra.arena = 2; chunks[1].ra.empty_since = 5;
+    uint64_t o = 0;
+    std::vector<Chunk> first = chunks;
+    CHECK(allocate_fullest(first, 8 * MB, 256, &o, -1, 1) == 0);
+    CHECK(allocate_fullest(chunks, 8 * MB, 256, &o, -1, 1, true) == 1);
+    CHECK(allocate_fullest(chunks, 100 * MB, 256, &o, -1, 2, true) == 0);
+  }
   std::printf("AS chunk allocator: %u checks passed\n", checks);
 }

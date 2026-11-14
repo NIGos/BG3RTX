@@ -294,5 +294,64 @@ int main(){
  check(elastic_growth(1024*mib,1040*mib,1100*mib)==1100*mib && elastic_growth(1024*mib,1040*mib,1030*mib)==1040*mib);
  check(elastic_growth(1024*mib,512*mib,cap)==512*mib && elastic_growth(1024*mib,1024*mib,cap)==1024*mib);
  check(elastic_growth(0,16*mib,cap)==16*mib && elastic_growth(UINT64_MAX-mib,UINT64_MAX,UINT64_MAX)==UINT64_MAX);
+ // rt_capture_demand_size / rt_capture_split_mb: replay of the user's log of 2026-11-14 22:15-22:20 (the opaque and
+ // alpha demands of the "[geo] RT capture capacity demand" lines, MiB; each held for 130 frames, longer than the
+ // 120-sample shrink window). The alpha region is the layer's: 40% of the buffer at a wide stride.
+ {struct S{double o,a;};
+  const S log_demand[]={{443.4,283.7},{524.1,299.2},{577.7,331.0},{595.3,346.1},{614.8,332.3},{607.0,335.8},
+      {594.7,249.4},{606.7,264.3},{172.4,225.1},{546.2,303.4},{697.2,363.1},{738.0,358.0},{49.2,80.4},
+      {190.6,194.6},{270.0,262.3},{310.7,248.9},{347.6,253.3},{380.5,284.3},{430.1,281.3},{492.7,285.1},{503.2,287.6}};
+  struct R{uint64_t peak=0,low=0,end=0,sum=0,frames=0,grow=0,shrink=0,short_frames=0;};
+  auto replay=[&](bool demand_size,uint32_t stride,bool peak_reserve){
+   const uint64_t preset=uint64_t(effective_mb(384,kXfbDefaultMb,stride))*mib;
+   const uint64_t floor=uint64_t(effective_mb(64,kAlphaDefaultMb,stride))*mib;
+   CaptureHeadroom headroom;RtElasticWindow window;R r;
+   uint64_t size=preset,region=0;
+   for(const S& s:log_demand)for(unsigned f=0;f<130;++f){
+    const uint64_t o=mb(s.o),a=mb(s.a);
+    region=alpha_region(size,alpha_floor(floor,size,true,88),region,a,o,true,60);
+    // What the frame needs to hold: the opaque soup and the alpha soup, each in its part of the buffer.
+    if(o>size-region || a>region)++r.short_frames;
+    const uint64_t demand=elastic_rt_demand(o,a,floor,true,60,demand_size?0:region,o);
+    const uint64_t learn=elastic_rt_demand(o,a,floor,true,60,0,o);
+    const uint64_t predicted=headroom.capacity(demand,cap,cap,1,preset,size,true,learn,peak_reserve);
+    const uint64_t wanted=(std::max)(predicted,elastic_rt_capacity(demand,cap,cap,rt_fixed_floor(preset,demand_size),size));
+    uint64_t target=(std::max)(window.observe(size,wanted,demand,true),rt_fixed_floor(preset,demand_size));
+    if(target>size){target=(std::max)(target,elastic_growth(size,target,cap));++r.grow;}
+    else if(target<size)++r.shrink;
+    size=target;
+    r.peak=(std::max)(r.peak,size);r.sum+=size;++r.frames;
+    if(s.o==49.2 && f==129)r.low=size;
+   }
+   r.end=size;return r;
+  };
+  const R old=replay(false,88,false),sized=replay(true,88,false),both=replay(true,64,true);
+  std::printf("RT capture replay (user log 22:15-22:20, 21 demand levels): preset+held region / rt_capture_demand_size / "
+              "+ rt_capture_split_mb + rt_capture_peak_reserve: peak %llu / %llu / %llu MiB, mean %llu / %llu / %llu MiB, after the low level (49 + 80 "
+              "MiB) %llu / %llu / %llu MiB, end %llu / %llu / %llu MiB; replacements up %llu / %llu / %llu, down %llu / "
+              "%llu / %llu; frames short %llu / %llu / %llu\n",
+      (unsigned long long)(old.peak/mib),(unsigned long long)(sized.peak/mib),(unsigned long long)(both.peak/mib),
+      (unsigned long long)(old.sum/old.frames/mib),(unsigned long long)(sized.sum/sized.frames/mib),
+      (unsigned long long)(both.sum/both.frames/mib),
+      (unsigned long long)(old.low/mib),(unsigned long long)(sized.low/mib),(unsigned long long)(both.low/mib),
+      (unsigned long long)(old.end/mib),(unsigned long long)(sized.end/mib),(unsigned long long)(both.end/mib),
+      (unsigned long long)old.grow,(unsigned long long)sized.grow,(unsigned long long)both.grow,
+      (unsigned long long)old.shrink,(unsigned long long)sized.shrink,(unsigned long long)both.shrink,
+      (unsigned long long)old.short_frames,(unsigned long long)sized.short_frames,(unsigned long long)both.short_frames);
+  std::fflush(stdout);
+  // The logged behaviour: 2047 MiB at the heavy view, about 1632 MiB kept for 130 MiB of soup.
+  // (The model has no replacement delay; the logged low was 1632 MiB with the rise reserve of that session.)
+  check(old.peak==cap && old.low>=1408*mib && old.low<=1700*mib);
+  check(sized.peak<=old.peak && sized.low+500*mib<old.low && sized.sum/sized.frames+200*mib<old.sum/old.frames);
+  check(both.peak+200*mib<old.peak && both.sum<=sized.sum && both.low<=sized.low);
+  // A frame is short only at a cut up from a lower level (the stated cost bound), never at a held level.
+  check(old.short_frames==0 && sized.short_frames<=3 && both.short_frames<=3);
+  // No thrash: a replacement needs a rise past the reserve or 120 low samples with 25% to spare.
+  check(sized.grow<=old.grow+4 && sized.shrink<=4 && both.shrink<=4);
+  check(rt_fixed_floor(1408*mib,false)==1408*mib && rt_fixed_floor(1408*mib,true)==16*mib);
+  check(preset_stride(88,64,true,true)==64 && preset_stride(88,64,true,false)==88 && preset_stride(88,64,false,true)==88);
+  check(preset_stride(88,88,true,true)==88 && preset_stride(88,16,true,true)==88 && preset_stride(64,64,false,true)==64);
+  check(effective_mb(384,kXfbDefaultMb,64)==1024 && effective_mb(160,kCascadeDefaultMb,64)==427 && effective_mb(64,kAlphaDefaultMb,64)==171);
+ }
  std::printf("RT elastic capture: %u CPU checks; no GPU claim\n",checks);
 }

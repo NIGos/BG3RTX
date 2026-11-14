@@ -270,6 +270,30 @@ inline uint64_t elastic_rt_capacity(uint64_t demand,uint64_t storage_limit,
  const uint64_t reserve=elastic_capacity(demand,storage_limit,kMeshPoolHardCap);
  return target<current && target<reserve?current:target;
 }
+// rt_capture_demand_size (claude/vram-rightsize, 2026-11-14, default 0, live). Two things kept the RT capture
+// far above its demand in the user's log of 22:15-22:26 (1408 to 2047 MiB held for 130 to 1100 MiB of soup):
+//  1. the preset floor above (1408 MiB at the 88-byte stride), also re-applied at every replacement;
+//  2. the demand counted the alpha region the buffer reserves for itself (40% of its own size at a wide stride,
+//     818 MiB of 2047): demand >= 0.4 x size + opaque, so a large buffer justified itself (22:20:17: opaque 49.2 +
+//     alpha 80.4 MiB gave a target of 1632 MiB).
+// With the key the demand is the partition's need without the held region (elastic_rt_demand with reserved_alpha
+// 0: opaque x 1.1 + max(alpha floor, alpha x 1.5), and opaque x 1.1 / 60% so the 40% floor still leaves the
+// opaque room), and the floor is one quantum. The first buffer of a session is still the preset (the demand of
+// a loading frame is unknown); the reserve (CaptureHeadroom: a quarter of the demand and of the preset, the
+// learned rise) and the shrink window (120 low samples, peak + 25% must fit) are unchanged: no thrash.
+// Cost bound when the demand jumps past the reserve: draws left out (alpha: made opaque) for the replacement
+// delay, 5 frames, then one replacement of at least 1/8 (elastic_growth), old + new allocated for 4 frames.
+inline uint64_t rt_fixed_floor(uint64_t preset,bool demand_size){return demand_size?16*mib:preset;}
+inline constexpr int kBaseStride=24;   // the default capture layout (the MiB presets are sized for it)
+// rt_capture_split_mb (claude/vram-rightsize, 2026-11-14, default 0, startup). The MiB presets follow the vertex
+// stride (effective_mb), and with native Hair that is 88 bytes: 1408 MiB RT, 587 MiB per cascade slot, 235 MiB
+// alpha floor. With rt_capture_wide_split active only strand-frame modules write 88 bytes (in the user's log the
+// cascade pass had 0.0 wide draws); every other draw is captured at the base stride (64), where the same
+// triangles need 1024 / 427 / 171 MiB. With the key the presets follow the base stride of an active split; the
+// wide draws' bytes are part of the alpha demand and grow the buffer like any other demand.
+inline uint32_t preset_stride(uint32_t full_stride,uint32_t base_stride,bool split_active,bool split_mb){
+ return split_mb && split_active && base_stride>=uint32_t(kBaseStride) && base_stride<full_stride?base_stride:full_stride;
+}
 // A producer can be consumed by the next two cascade builds. Their command
 // buffers may submit a frame later; use the same +2 fence coverage as scenes.
 inline bool elastic_retired(uint64_t recorded,uint64_t gpu_done,bool cascade){
@@ -317,7 +341,7 @@ inline uint64_t elastic_rt_demand(uint64_t opaque,uint64_t alpha,uint64_t floor,
 // native Hair 88), holds the same triangles in stride/24 times the bytes: a cap left at its
 // default follows the stride, rounded (384 -> 1024 and 160 -> 427 at 64 B). A cap the user
 // changed is kept as set; 24 bytes or less keeps the default.
-inline constexpr int kXfbDefaultMb=384, kCascadeDefaultMb=160, kBaseStride=24;
+inline constexpr int kXfbDefaultMb=384, kCascadeDefaultMb=160;
 // The alpha region floor (rt_alpha_mb 64) follows the stride the same way: 64 -> 171 MB at 64 B, so the
 // first frames after a scene change (region at its floor, demand from the last frame unknown) hold the
 // same triangles as at 24 B (su1 S8 2026-11-01: 0.58 alpha draws/frame made opaque in the first window).

@@ -302,10 +302,13 @@ bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint
   // per-draw/cascade rebuilds. Keep their retirement/reuse domains separate.
   // Key off retains the ordinary mixed allocator; ownership is recorded always.
   const uint32_t allocation_arena = cfg_int("rt_vram_compact", 0) ? arena : UINT32_MAX;
-  int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena);
+  // rt_as_chunk_fit (common/as_chunk_alloc.h): best fit among retained empty chunks; the cascade casters' own chunk
+  // (arena 2, rebuilt at a new size whenever the caster list changes) is sized with 1/8 of room.
+  const bool chunk_fit = cfg_int("rt_as_chunk_fit", 0) != 0;
+  int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena, chunk_fit);
   if (ci < 0) {
     const VkDeviceSize base = VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20;
-    const VkDeviceSize cs = (std::max)(base, size);
+    const VkDeviceSize cs = as_chunks::oversize_chunk_bytes(size, base, arena == 2, chunk_fit);
     const VkDeviceSize cap = vram_cap(vram_guard::kAsChunks, UINT64_MAX);
     // Retained empty chunks (rt_as_chunk_reuse_frames) too small for this range must not count against
     // the chunks' share: free them before the cap check, as the sweep would have without retention.
@@ -1976,7 +1979,10 @@ void pool_repack_begin(VkCommandBuffer cmd, uint64_t rec, uint64_t now) {
   if (!quiet) {deferred("low-demand window");return;}
   target = (std::max)(target, VkDeviceSize(g_pool_quiet.peak_target));
   if (g_pool_copy.target.b || !g_old_pools.empty()) {deferred("copy or old scene retirement");return;}
-  if (geo_native_hair_enabled()) {deferred("native hair ranges");return;}
+  // rt_mesh_pool_trim (common/vram_compact.h pool_trim_target): with native hair nothing may move; the pool is cut
+  // at the same offsets instead, under the repack's conditions on outstanding pool writers.
+  const bool hair_ranges = geo_native_hair_enabled();
+  if (hair_ranges && !cfg_int("rt_mesh_pool_trim", 0)) {deferred("native hair ranges");return;}
   {
     std::lock_guard<std::mutex> fl(g_fix_mu);
     if (!g_pool_uncertain.empty()) {deferred("uncertain pool recording");return;}
@@ -1987,6 +1993,32 @@ void pool_repack_begin(VkCommandBuffer cmd, uint64_t rec, uint64_t now) {
   }
   // Never copy data an outstanding extraction/basis/hold job can still write.
   if (!g_batches.empty()) {deferred("outstanding build results");return;}
+  if (hair_ranges) {
+    const VkDeviceSize before = g_pool.size;
+    const VkDeviceSize trimmed = vram_compact::pool_trim_target(target, g_pool_ra.tail(), before);
+    if (!trimmed) {deferred("native hair ranges (the pool's end is in use: no trim)");return;}
+    Buf nb;
+    if (!make_buf(nb, trimmed, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "mesh pool trim")) {
+      deferred("trim allocation failed");g_pool_quiet = {};return;
+    }
+    if (!g_pool_ra.shrink(trimmed)) {free_buf(nb);deferred("trim range accounting failed");g_pool_quiet = {};return;}
+    // As a growth: earlier frames' writes are copied, this frame's come after the copy, in the new pool.
+    barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, kXfer, VK_ACCESS_TRANSFER_READ_BIT);
+    VkBufferCopy r{0, 0, trimmed};
+    g_dd->vk.CmdCopyBuffer(cmd, g_pool.b, nb.b, 1, &r);
+    barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kCS | kAS, kRW);
+    g_old_pools.push_back({g_pool, now});
+    g_pool = nb;
+    ++g_pool_epoch;
+    g_pool_grew = true;
+    ++g_pool_repacks;g_pool_saved += before - trimmed;g_pool_quiet = {};
+    log("[bvh] mesh pool capacity: trimmed %.1f / %.0f -> %.0f MB at the same offsets (rt_mesh_pool_trim), epoch %llu; "
+        "old pool waits for scene retirement", double(g_pool_ra.used) / 1048576.0, double(before) / 1048576.0,
+        double(trimmed) / 1048576.0, (unsigned long long)g_pool_epoch);
+    return;
+  }
   for (const auto& p : g_pending_free) if (p.chunk < 0) {deferred("pending pool ranges");return;}
   for (const auto& [key, d] : g_dyn) if (d.hair_bounds_size) {deferred("hair bounds ranges");return;}
   for (const auto& [key, m] : g_meshes) if (m.state != kReady) {deferred("unverified mesh");return;}
@@ -2293,6 +2325,9 @@ void bvh_vram(BvhVram* out) {
   out->pool_pending = g_pool_copy.target.size;
   for (const auto& old : g_old_pools) out->pool_pending += old.buf.size;
   out->pool_repacks = g_pool_repacks;out->blas_relocated = g_relocated;
+  out->hair_pool = g_groom_pool_used;
+  for (const auto& [k, d] : g_dyn)
+    if (d.groom) out->hair_blas += d.groom->as.size + d.groom->cam_as.size;
 }
 
 bool bvh_split_wanted() { return g_on && !g_failed && cfg_hot(CfgHot::rt_bvh_split) != 0; }

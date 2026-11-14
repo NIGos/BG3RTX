@@ -156,6 +156,9 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_mesh_budget_own "
     # BLAS chunk cap by occupancy (common/as_chunk_alloc.h chunk_within_cap, layer/bvhsplit.cpp as_create): host only.
     "rt_as_cap_occupied "
+    # VRAM right-sizing (claude/vram-rightsize): capture sizing (common/rt_capture_budget.h, layer/geocapture.cpp), the
+    # mesh pool trim (common/vram_compact.h) and the BLAS chunk fit (common/as_chunk_alloc.h). Host policy, no pipeline.
+    "rt_capture_peak_reserve rt_capture_demand_size rt_capture_split_mb rt_mesh_pool_trim rt_as_chunk_fit "
     # Startup-only capture layout (common/capture_stride.h): set at launch, never toggled in a run; no core pipeline.
     "rt_capture_wide_split "
     # Scene handout: the hit-material passes take the committed pair (core/gi.cpp handout_hit_settle) and the layer

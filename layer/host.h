@@ -1073,10 +1073,13 @@ struct BvhVram {
   uint64_t as_reserved = 0, as_live = 0, as_empty = 0, lru = 0, pool = 0;
   uint64_t as_pending = 0;   // freed ranges awaiting GPU/scene-slot retirement (used - live)
   uint64_t pool_used = 0, pool_pending = 0, pool_repacks = 0, blas_relocated = 0;
+  uint64_t hair_pool = 0, hair_blas = 0;   // groom arrays in the mesh pool; groom and camera BLAS ranges in the chunks
   uint32_t chunks = 0;
 };
 void bvh_vram(BvhVram* out);
 void geo_vram(uint64_t* rt_capture, uint64_t* alpha_region, uint64_t* cascade);
+// The bytes the last recorded frames wanted (captured + left out): the RT capture, and the three cascade slots together.
+void geo_vram_used(uint64_t* rt_capture, uint64_t* cascade);
 uint64_t em_vram_bytes();
 uint64_t water_vram_bytes();
 // Device-address ranges of our buffers, named in a fault report (live or freed).

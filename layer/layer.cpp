@@ -731,6 +731,24 @@ uint64_t vram_take_ask(int yield) {
 static void log_vram_ours(uint64_t used, uint64_t budget, const BvhVram& b, uint64_t rtcap, uint64_t alpha,
                           uint64_t cascade, uint64_t recycled, uint64_t em, uint64_t water, bool low, const char* why) {
   const double mb = 1.0 / 1048576.0;
+  // Reserved against used per pool, one line per window (detailed_logging): the right-sizing observables.
+  // Used: the captures' last recorded demand, the chunks' live + pending ranges, the pool's allocated ranges.
+  if (logging::stats_enabled(cfg_int)) {
+    uint64_t rt_used = 0, cc_used = 0;
+    geo_vram_used(&rt_used, &cc_used);
+    log_stats("[mem] pools reserved/used MB: cascade capture %.0f/%.0f, RT capture %.0f/%.0f, BLAS chunks %.0f/%.0f "
+              "(live %.0f, pending %.0f, empty chunks %.0f, in %u), mesh pool %.0f/%.0f, hit-material recycled %.0f, "
+              "OMM %.0f, hair %.0f in the pool + %.0f BLAS in the chunks; VRAM used %.0f of budget %.0f; policies "
+              "chunk_fit=%d demand_size=%d split_mb=%d pool_trim=%d peak_reserve=%d",
+              double(cascade) * mb, double(cc_used) * mb, double(rtcap) * mb, double(rt_used) * mb,
+              double(b.as_reserved) * mb, double(b.as_live + b.as_pending) * mb, double(b.as_live) * mb,
+              double(b.as_pending) * mb, double(b.as_empty) * mb, b.chunks, double(b.pool + b.pool_pending) * mb,
+              double(b.pool_used) * mb, double(recycled) * mb, double(omm::live_bytes()) * mb, double(b.hair_pool) * mb,
+              double(b.hair_blas) * mb, double(used) * mb, double(budget) * mb,
+              cfg_int("rt_as_chunk_fit", 0) != 0, cfg_int("rt_capture_demand_size", 0) != 0,
+              cfg_int("rt_capture_split_mb", 0) != 0, cfg_int("rt_mesh_pool_trim", 0) != 0,
+              cfg_int("rt_capture_peak_reserve", 0) != 0);
+  }
   const uint64_t ours = b.as_reserved + b.pool + b.pool_pending + rtcap + cascade + recycled + em + water;
   log("[mem] ours (%s): BLAS chunks %.0f MB reserved in %u chunks (%.0f live, %.0f empty), mesh pool %.0f MB "
       "(%.0f used, %.0f copy/retirement, %llu repacks; %llu cached BLAS relocated), "

@@ -47,6 +47,23 @@ struct RangeAlloc {
     }
     free[off] = size;
   }
+  // rt_mesh_pool_trim: the start of the free block that ends at the capacity (cap when the last byte is in use),
+  // and cutting the capacity down to ncap >= that start. No range moves.
+  uint64_t tail() const {
+    if (free.empty()) return cap;
+    const auto last = std::prev(free.end());
+    return last->first + last->second == cap ? last->first : cap;
+  }
+  bool shrink(uint64_t ncap) {
+    if (ncap >= cap) return ncap == cap;
+    if (ncap < tail()) return false;
+    const auto last = std::prev(free.end());
+    const uint64_t start = last->first;
+    free.erase(last);
+    if (ncap > start) free[start] = ncap - start;
+    cap = ncap;
+    return true;
+  }
   void grow(uint64_t ncap) {
     if (ncap <= cap) return;
     uint64_t old = cap;
@@ -129,9 +146,27 @@ inline bool retired(uint64_t frame, uint64_t now, uint64_t gpu_done, uint64_t ol
 // Pending ranges count as occupied: they are not allocatable yet.
 // A retained empty chunk (rt_as_chunk_reuse_frames: no range, none pending, none kept) is taken by
 // any arena and joins it; with the key at 0 no chunk is retained and arenas never mix.
+//
+// rt_as_chunk_fit (claude/vram-rightsize, 2026-11-14, default 0). A range larger than a base chunk gets a chunk
+// of its own, sized exactly; the cascade casters' BLAS (arena 2, 64-136 MB) is rebuilt into a new range whenever
+// its draw list changes, each time a slightly different size. A retained empty chunk only takes a range that
+// fits, so a growing BLAS found every retained chunk too small and allocated another: hq-s8-ultra 2026-11-14
+// 21:54:48-51, 448 -> 1770 MB in 7 -> 25 chunks for 356 MB live (freed chunks of 67.0, 67.2, 72.1, 72.6, 73.8,
+// 79.2 MB in the windows after), and the user's play log the same night: 99 to 1214 MB of empty chunks in 15 of
+// 19 samples. With the key such a chunk is sized size + 1/8, rounded up to base / 4 (oversize_chunk_bytes: the
+// elastic captures' growth step), so the next rebuilds fit the retained chunk; and among retained empty chunks
+// the smallest that fits is taken (allocate_fullest best_fit), so a base-sized range does not occupy a large one.
+// Cost bound: at most size / 8 + base / 4 unused per chunk of the cycle (live + pending ranges, 2 to 8 chunks).
+inline uint64_t oversize_chunk_bytes(uint64_t size, uint64_t base, bool rebuilt, bool fit) {
+  const uint64_t exact = (std::max)(base, size);
+  if (!fit || !rebuilt || size <= base || size > UINT64_MAX / 2) return exact;
+  const uint64_t q = (std::max)(base / 4, uint64_t(1));
+  return (size + size / 8 + q - 1) / q * q;
+}
+
 template<class Chunks>
 int allocate_fullest(Chunks& chunks, uint64_t size, uint64_t align, uint64_t* off, int excluded = -1,
-                     uint32_t arena = 0) {
+                     uint32_t arena = 0, bool best_fit = false) {
   std::vector<size_t> order;
   order.reserve(chunks.size());
   for (size_t i = 0; i < chunks.size(); ++i)
@@ -141,6 +176,8 @@ int allocate_fullest(Chunks& chunks, uint64_t size, uint64_t align, uint64_t* of
   std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
     const double x = double(chunks[a].ra.used) / double(chunks[a].ra.cap);
     const double y = double(chunks[b].ra.used) / double(chunks[b].ra.cap);
+    if (best_fit && !chunks[a].ra.used && !chunks[b].ra.used && chunks[a].ra.cap != chunks[b].ra.cap)
+      return chunks[a].ra.cap < chunks[b].ra.cap;   // empty chunks: the smallest that fits
     return x != y ? x > y : a < b;
   });
   for (size_t i : order)

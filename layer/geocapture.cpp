@@ -99,11 +99,16 @@ bool g_wide_split = false;
 uint32_t g_base_stride = 16;
 uint32_t g_base_without_tileset = 16;
 // The effective capture sizes: a cap left at its default follows the stride (common/rt_capture_budget.h).
+// rt_capture_split_mb: with an active wide split the presets follow the base stride (rt_capture_budget.h preset_stride).
+static uint32_t preset_stride() {
+  return capture_budget::preset_stride(g_stride, g_base_stride, g_wide_split, cfg_int("rt_capture_split_mb", 0) != 0);
+}
+static bool rt_demand_size() { return cfg_int("rt_capture_demand_size", 0) != 0; }
 int xfb_mb() {
-  return capture_budget::effective_mb(cfg_int("rt_xfb_mb", 384), capture_budget::kXfbDefaultMb, g_stride);
+  return capture_budget::effective_mb(cfg_int("rt_xfb_mb", 384), capture_budget::kXfbDefaultMb, preset_stride());
 }
 int cascade_mb() {
-  return (std::clamp)(capture_budget::effective_mb(cfg_int("rt_cascade_mb", 160), capture_budget::kCascadeDefaultMb, g_stride),
+  return (std::clamp)(capture_budget::effective_mb(cfg_int("rt_cascade_mb", 160), capture_budget::kCascadeDefaultMb, preset_stride()),
                       4, 1024);
 }
 // Grow on overflow: a frame whose casters did not fit (buffer full) raises the next buffers to its
@@ -476,7 +481,7 @@ uint64_t elastic_cap(bool cascade){
 // Detach before recording the next producer. Existing descriptors retain the old
 // handle; keep it through the fence covering the last possible cascade consumer.
 void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
-  if(!cascade && wanted)wanted=(std::max)(wanted,uint64_t((std::max)(xfb_mb(),16))<<20);
+  if(!cascade && wanted)wanted=(std::max)(wanted,capture_budget::rt_fixed_floor(uint64_t((std::max)(xfb_mb(),16))<<20,rt_demand_size()));
   const uint64_t now=frame_index();
   if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))
     free_buf(c.elastic_old); // Only now enter the ordinary deferred destruction path.
@@ -634,7 +639,7 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
     const VkDeviceSize mb = VkDeviceSize(1) << 20, size = c.xfb.size;
     // rt_alpha_mb left at its default follows the vertex size, as rt_xfb_mb does (rt_capture_budget.h).
     VkDeviceSize floor_b = VkDeviceSize((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb", 64),
-        capture_budget::kAlphaDefaultMb, g_stride), 1)) * mb;
+        capture_budget::kAlphaDefaultMb, preset_stride()), 1)) * mb;
     // rt_alpha_floor_yield: opaque demand may shrink the region down to this stride-scaled floor, not the 40% one.
     const VkDeviceSize yield_floor=cfg_int("rt_alpha_floor_yield",0)?floor_b:UINT64_MAX;
     const VkDeviceSize fixed_size=uint64_t((std::max)(xfb_mb(),16))<<20;
@@ -1174,6 +1179,7 @@ std::mutex g_cc_mu;                 // everything below
 cascade::KeySets g_cc_keys;         // the camera source pass's draw keys (this frame and the last)
 cascade::KeySets g_cc_mesh_keys;    // its mesh keys (alpha-tested cascade draws drawn by it are skipped)
 cascade::InstanceSets g_cc_instance_keys; // same-frame mesh/model/pulled-instance keys
+std::atomic<uint64_t> g_cc_used[3];   // per cascade slot: its last recorded demand (the [mem] pools line)
 Capture g_ccap[3];                  // the captured cascade pass of frame F is g_ccap[F % 3] (a build may use F-1 or F-2)
 struct CcMeta {
   uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0;
@@ -1502,6 +1508,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   st.bytes_max = (std::max)(st.bytes_max, used);
   st.demand_max = (std::max)(st.demand_max, used + c->c_over);
   st.wide_draws += c->wide_draws; st.wide_tris += wide_tris;
+  if (c >= g_ccap && c < g_ccap + 3) g_cc_used[c - g_ccap] = used + c->c_over;
   if(cfg_int("rt_capture_elastic",0) && c->xfb.b){
     const uint64_t cap=elastic_cap(true);
     const uint64_t demand=used+c->c_over;
@@ -1656,6 +1663,11 @@ void geo_vram(uint64_t* rt_capture, uint64_t* alpha_region, uint64_t* cascade) {
   uint64_t cc = 0;
   for (const Capture& c : g_ccap) cc += c.xfb.size + c.elastic_old.size;
   *cascade = cc;
+}
+
+void geo_vram_used(uint64_t* rt_capture, uint64_t* cascade) {
+  *rt_capture = g_opaque_demand_prev.load() + g_alpha_demand_prev.load();
+  *cascade = g_cc_used[0].load() + g_cc_used[1].load() + g_cc_used[2].load();
 }
 
 bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
@@ -2233,10 +2245,12 @@ void rt_capture_stats(const Capture& c) {
     c.alpha_overflow_bytes,capture_budget::corrected_partition_feedback(g_stride));
   if(cfg_int("rt_capture_elastic",0)){
     const uint64_t floor=uint64_t((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb",64),
-                                capture_budget::kAlphaDefaultMb,g_stride),1))*capture_budget::mib;
+                                capture_budget::kAlphaDefaultMb,preset_stride()),1))*capture_budget::mib;
+    // rt_capture_demand_size: without the alpha region the buffer holds for itself, and without the preset floor.
+    const bool demand_size=rt_demand_size();
     const uint64_t demand=g_alpha_mode?capture_budget::elastic_rt_demand(g_opaque_demand_prev.load(),c.alpha_demand,
         floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60),
-        c.xfb.size-c.alpha_base,c.cursor+c.opaque_overflow_bytes):
+        demand_size?0:c.xfb.size-c.alpha_base,c.cursor+c.opaque_overflow_bytes):
         uint64_t(c.cursor+c.opaque_overflow_bytes);
     // rt_capture_rise_reserve: learn the movement reserve from the demand without the alpha region the
     // buffer reserves for itself (40% of its size at a wide stride): growing must not read as a camera step.
@@ -2247,7 +2261,7 @@ void rt_capture_stats(const Capture& c) {
         uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size,cfg_int("rt_capture_rise_reserve",0)!=0,learn,
         cfg_int("rt_capture_peak_reserve",0)!=0);
     const uint64_t wanted=(std::max)(predicted,capture_budget::elastic_rt_capacity(demand,g_storage_range,
-        elastic_cap(false),uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size));
+        elastic_cap(false),capture_budget::rt_fixed_floor(uint64_t((std::max)(xfb_mb(),16))<<20,demand_size),c.xfb.size));
     // rt_capture_stats runs only for the main (non-minor) scene capture.
     // Both streams restore reserve before the next frame reaches capacity.
     const uint64_t target=g_scratch.rt_elastic.observe(c.xfb.size,wanted,demand,true);
