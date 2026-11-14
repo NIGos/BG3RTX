@@ -1501,7 +1501,8 @@ static void test_release_rtx_hair() {
     "rt_hair_physical_origin<exp_hair_physical_origin rt_hair_coverage_union<exp_hair_coverage_union "
     "rt_hair_coverage_confirm<exp_hair_coverage_confirm rt_hair_slot_stable<exp_hair_slot_stable "
     "rt_hair_live_warmup<exp_hair_live_warmup rt_hair_groom_nearest<exp_hair_groom_nearest "
-    "rt_hair_header_cam_gpu<exp_hair_header_cam_gpu rt_hair_header_scene_pass<exp_hair_header_scene_pass ");
+    "rt_hair_header_cam_gpu<exp_hair_header_cam_gpu rt_hair_header_scene_pass<exp_hair_header_scene_pass "
+    "rt_hair_coverage_keep<exp_hair_coverage_keep ");
   // The rule's footprint: the only choice of a release control that writes a developer-reset key to another value.
   std::string touched;
   for (const auto& k : kKnobs) if (!k.dev_only && k.kind == Kind::Choice)
@@ -1544,7 +1545,8 @@ static void test_release_rtx_hair() {
   // Upgrade (complete_marked_choices): a file the launcher wrote before 2026-11-10 has RTX Hair On without the four
   // keys the bundle gained. They load as the choice's values, with no launcher save.
   static const char* const grown[] = {"rt_hair_coverage_union", "rt_hair_coverage_confirm", "rt_hair_slot_stable", "rt_hair_live_warmup",
-                                      "rt_hair_groom_nearest", "rt_hair_header_cam_gpu", "rt_hair_header_scene_pass"};
+                                      "rt_hair_groom_nearest", "rt_hair_header_cam_gpu", "rt_hair_header_scene_pass",
+                                      "rt_hair_coverage_keep"};
   Map old_on = on_map(hair, 1);
   for (const char* key : grown) CHECK(old_on.erase(key) == 1);
   m = merged(old_on);
@@ -1702,13 +1704,15 @@ static void test_strand_bundle() {
                           // 6g (user play log 2026-11-14; lives hc1 234025, hl1 000345 and 003637)
                           "rt_hair_header_cam_gpu",
                           // 6i (live hx1 190905: the decal pass took the header's label in 31-42 of 60 frames without it)
-                          "rt_hair_header_scene_pass"}) {
+                          "rt_hair_header_scene_pass",
+                          // 6k (live hx1 194658: "coverage stale" refusals 16-35 -> 0, entering head 10 -> 5 card frames)
+                          "rt_hair_coverage_keep"}) {
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=1");
     CHECK_EQ(std::string(key) + "=" + code_default(key), std::string(key) + "=0");   // off by default
   }
   // Untested strand options stay out of the bundle.
   for (const char* key : {"rt_hair_groom_tips", "rt_hair_groom_coverage", "rt_hair_macro_normal", "rt_hair_coverage_footprint",
-                          "rt_hair_coverage_min_pixels", "rt_hair_swap_latch", "rt_hair_coverage_keep"})
+                          "rt_hair_coverage_min_pixels", "rt_hair_swap_latch"})
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=<missing>");
   // 5m: the one startup reservation left in the bundle. A game started with RTX Hair off shows the restart banner for
   // it (launcher ui_state::restart_count against the session baseline); the rest of the bundle applies live.
