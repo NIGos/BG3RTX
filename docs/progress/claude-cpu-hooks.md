@@ -1,6 +1,5 @@
 ## Layer hook CPU since 2026-11-05: no base regression; lock-free leave for the strand swap hook (branch claude/cpu-hooks, READY_FOR_LIVE, 2026-11-14)
 
-- Question: did the per-frame CPU of the layer hooks regress since the cpu_opt round (12.4 -> about 11.7 ms/frame)?
 - Where 12.4 came from: `[cpu] capture hooks ... total` minus `driver draw (XFB)` ("hook bodies"), the OFF windows of
   `opt-cpu1-inn.1.025350` (12.39 / 12.38; kept in `tools/live_batches/opt_r3/cpu2/profile-cpu1.md`). Job: the
   opt-profile inn job, Ultra static, `visible_unfocused_fg` (30 fps), fg=2, dev=0, RTX Hair never started,
@@ -38,4 +37,4 @@
   job from a test tree at 2aa5dcf8 and at main, RTX Hair never started, same window mode; compare `capture hooks`.
 - To confirm this fix live: perf-ab inn, hair on windows, old vs new layer (restart): expect lower `[rt] scene wait`
   and rendered frame time with strands on; `[cpu] capture hooks` must not change (the swap hook is outside it).
-- Cost: GPU 0. Shader request delta 0, ABI unchanged, no new setting.
+  Cost: GPU 0. Shader request delta 0, ABI unchanged, no new setting.
