@@ -1,0 +1,439 @@
+{
+  "name": "hq-inn-fix",
+  "save": "The Blushing Mermaid - 96h 39m",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "timeout": 3309,
+  "max_minutes": 14,
+  "repeat": 1,
+  "live_batch": "handout-qual",
+  "fail_fast": false,
+  "stop_on_dump": false,
+  "set": "preset=ultra,dev=1,fg=3,fps_cap=0,reflex=1,rt_capture_wide_split=1,headless=0,crash_dump=1,detailed_logging=1,cpu_timing=1,rt_stats_period_frames=120,rt_timing_frames=120,rt_scene_wait_log_frames=120,fg_state_every=120,dump_images=1,dump_png_width=1280,dump_raw=0,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,qa_exposure_hold=0,rt_scene_handout_layout=1,rt_scene_handout=0,rt_hair=0,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_header_cam_gpu=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=1,rt_hair_mv_card=2,rt_hair_pixel_lod_k=1.0,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=0,rt_scene_handout_hit_wait=1",
+  "args": [
+    "-RealPresent",
+    "-Foreground",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches_staged/handout_qual/plans/hq-inn-fix.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[stats\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[mem\\]",
+    "\\[vram\\]",
+    "\\[cpu\\]",
+    "\\[bvh\\] last",
+    "\\[rt\\] scene",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "gi: trace pass",
+    "ls: local-light shadow pass GPU median",
+    "rf: reflection pass GPU median",
+    "\\[ngx\\] gpu RR:",
+    "\\[rrpost\\] gpu",
+    "\\[sl\\] gpu FG input copy:",
+    "\\[sl\\] DLSS-G frame",
+    "\\[water\\] \\w+ GPU",
+    "\\[hair primary\\] (?:frame|live|strand G-buffer)",
+    "\\[hair groom\\] (?:frame|pixel LOD)",
+    "\\[hair fibre\\]",
+    "\\[dlss5\\]",
+    "\\[crash\\]",
+    "VK_ERROR",
+    "\\[log\\]",
+    "\\[core\\] scene handout",
+    "\\[alpha\\] set 1 layout",
+    "\\[geo\\] RT capture",
+    "rt stats \\(",
+    "\\[trace\\]",
+    "\\[rrpost\\] exposure",
+    "\\[water\\] (?:reflections|compose)",
+    "\\[omm",
+    "GI far \\(",
+    "GI hit direct",
+    "\\[hit material (?:submit|query)\\]"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[cfg\\] settings read",
+    "\\[rt\\] \\+ scene handout layout: storage buffer, sampled image",
+    "\\[rt\\] scene handout layout on \\(set 1 update-after-bind\\)",
+    "\\[alpha\\] set 1 layout update-after-bind",
+    "\\[rt\\] scene handout: dummy TLAS \\(0 instances",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[trace\\] frame \\d+ written",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
+  ],
+  "expect_every": [
+    {
+      "name": "rt passes GPU ms in every window",
+      "select": "rt passes: GPU cost",
+      "match": "rt passes: GPU cost",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "GI GPU ms in every window",
+      "select": "gi: GPU cost",
+      "match": "gi: GPU cost",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene build GPU ms in every window",
+      "select": "\\[rt\\] scene build GPU",
+      "match": "\\[rt\\] scene build GPU",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene wait in every window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "\\[rt\\] scene wait: \\d+ frames",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "rendered frame time in every window",
+      "select": "\\[pace\\] rendered frame time over \\d+ frames",
+      "match": "\\[pace\\] rendered frame time over \\d+ frames",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "CPU submit in every window",
+      "select": "\\[watch\\] presents",
+      "match": "\\[watch\\] presents",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "VRAM used and budget in every window",
+      "select": "\\[mem\\] device-local VRAM",
+      "match": "\\[mem\\] device-local VRAM",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "RR GPU ms in every window",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "\\[ngx\\] gpu RR:",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "GI trace line in every window",
+      "select": "gi: trace pass",
+      "match": "gi: trace pass",
+      "windows": [
+        "static-off-a",
+        "static-on",
+        "static-off-b",
+        "pan-off-a-q",
+        "pan-off-a-e",
+        "pan-on-q",
+        "pan-on-e",
+        "pan-off-b-q",
+        "pan-off-b-e",
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "handout line in every ON window",
+      "select": "\\[rt\\] scene handout: \\d+ frames, reserved",
+      "match": "\\[rt\\] scene handout: \\d+ frames, reserved",
+      "windows": [
+        "static-on",
+        "pan-on-q",
+        "pan-on-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "core handout line in every ON window",
+      "select": "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+",
+      "match": "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+",
+      "windows": [
+        "static-on",
+        "pan-on-q",
+        "pan-on-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "hair period line in every hair window",
+      "select": "\\[hair primary\\] frame \\d+: ",
+      "match": "\\[hair primary\\] frame \\d+: ",
+      "windows": [
+        "hair-pan-off-a-q",
+        "hair-pan-off-a-e",
+        "hair-pan-on-q",
+        "hair-pan-on-e",
+        "hair-pan-off-b-q",
+        "hair-pan-off-b-e"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "GI far line in every hit window",
+      "select": "\\[core\\] GI far \\(\\d+ frames\\)",
+      "match": "\\[core\\] GI far \\(\\d+ frames\\)",
+      "windows": [
+        "hit-off-a",
+        "hit-on",
+        "hit-off-b"
+      ],
+      "period_frames": 60,
+      "sample_frames": 60,
+      "min": 1
+    },
+    {
+      "name": "scene wait line in every hit window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "\\[rt\\] scene wait: \\d+ frames",
+      "windows": [
+        "hit-off-a",
+        "hit-on",
+        "hit-off-b"
+      ],
+      "period_frames": 60,
+      "sample_frames": 60,
+      "min": 1
+    },
+    {
+      "name": "handout line in the ON hit window",
+      "select": "\\[rt\\] scene handout: \\d+ frames, reserved",
+      "match": "\\[rt\\] scene handout: \\d+ frames, reserved",
+      "windows": [
+        "hit-on"
+      ],
+      "period_frames": 60,
+      "sample_frames": 60,
+      "min": 1
+    },
+    {
+      "name": "core handout line in the ON hit window",
+      "select": "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+",
+      "match": "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+",
+      "windows": [
+        "hit-on"
+      ],
+      "period_frames": 60,
+      "sample_frames": 60,
+      "min": 1
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "\\[log\\] reached \\d+ MB",
+    "\\[rt\\] scene handout layout off",
+    "\\[rt\\] scene handout: dummy TLAS (allocation|creation) failed",
+    "\\[layer\\] optional scene handout update-after-bind request failed"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] complete phases=30\\b",
+    "^Run ended: done"
+  ],
+  "live_flow": {
+    "expected_fps": 60,
+    "settings_latency_s": 1,
+    "trace_stall_s": 3,
+    "startup_only": [
+      "rt_scene_handout_layout",
+      "fg"
+    ],
+    "fps_windows": [],
+    "trace_export": {
+      "seconds": 0.34300000000803266,
+      "quantile": 0.95,
+      "samples": 6,
+      "maximum": 0.34300000000803266
+    },
+    "trace_capture_stall": {
+      "seconds": 5.17137,
+      "source": "hx1-s8-hair-stable.1.194658.log",
+      "quantile": 0.95,
+      "samples": 6,
+      "maximum": 5.17137,
+      "logs": 2
+    }
+  },
+  "estimated_phase_seconds": 806.848,
+  "post": "python tools/live_batches_staged/handout_qual/analyze.py --job tools/live_batches_staged/handout_qual/jobs/hq-inn-fix.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
+  "post_gate": true,
+  "purpose": "Scene handout with the hit-material fix at the inn, Ultra, FG 3x, uncapped, focused: rt_scene_handout 0 / 2 / 0 with rt_scene_handout_hit_wait=1 in static and pan windows, the pan with RTX Hair On, 4 float traces per state and a short rt_stats window each. Per state: frame time median and p99, scene wait mean, GI trace and rt passes GPU ms, light rays at hits (equal to OFF), fallbacks, energy. Decides whether Low-latency scene stays On in Ultra. STAGED, not authorized."
+}

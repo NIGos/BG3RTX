@@ -89,9 +89,17 @@ class SaneGates(unittest.TestCase):
         found = hq.state_costs({"scene wait mean ms": {"energy-off-a": 3.6, "energy-fix": 1.0, "energy-off-b": 3.5},
                                 "frame time median ms": {"energy-off-a": 21.4, "energy-fix": 22.4, "energy-off-b": 21.5}})
         self.assertEqual((len(found[sane.FAIL]), len(found[sane.EXPLAIN]), len(found[sane.INFO])), (1, 0, 1))
+        # hq-s8-modes 205520: mode 1 +0.230 ms against a pair difference of 0.200 and a floor of 0.214 is inside the
+        # spread of the single OFF periods (INFO); a rise beyond that spread still fails
+        m = {"frame time median ms": {"energy-off-a": 21.285, "energy-m1": 21.615, "energy-off-b": 21.485}}
+        per = {"frame time median ms": {"energy-off-a": [21.07, 21.3, 21.27, 21.4], "energy-off-b": [21.45, 21.52, 21.7, 21.3]}}
+        self.assertEqual(len(hq.state_costs(m, None, per)[sane.FAIL]), 0)
+        self.assertEqual(len(hq.state_costs(m)[sane.FAIL]), 1)
+        m["frame time median ms"]["energy-m1"] = 21.9
+        self.assertEqual(len(hq.state_costs(m, None, per)[sane.FAIL]), 1)
 
     def test_hit_checks(self):
-        plan = [{"label": f"{kind}-{state}", "set": f"rt_scene_handout_hit_wait={int(state == 'fix')}"}
+        plan = [{"label": f"{kind}-{state}", "set": f"rt_scene_handout={2 * (state in ('m2', 'fix'))},rt_scene_handout_hit_wait={int(state == 'fix')}"}
                 for state in ("off-a", "m2", "fix", "off-b") for kind in ("energy", "hit")]
         q, c = "GI far: ambient kept at qualified hits", "hit material passes on the committed scene"
         good = {q: {"hit-off-a": 0.0077, "hit-m2": 0.0, "hit-fix": 0.0076, "hit-off-b": 0.0078},
@@ -105,6 +113,17 @@ class SaneGates(unittest.TestCase):
         found, notes = hq.hit_checks(bad, plan)
         self.assertEqual(len(found[sane.FAIL]), 4)   # a fallback, m2 and fix without qualified hits, the fix not running
         self.assertEqual(len(notes), 1)              # hit-off-b has no line: not judged
+        # the hit work: light rays at hits equal to the OFF pair; a state that loses them fails unless the job predicts it
+        r = "GI hit direct: light rays traced"
+        rays = {r: {"hit-off-a": 3.84e6, "hit-m2": 1.36e5, "hit-fix": 3.83e6, "hit-off-b": 3.83e6}}
+        self.assertEqual(len(hq.hit_checks(rays, plan, {"m2": "lower"})[0][sane.FAIL]), 0)
+        self.assertEqual(len(hq.hit_checks(rays, plan)[0][sane.FAIL]), 1)   # m2
+        del rays[r]["hit-fix"]
+        self.assertEqual(len(hq.hit_checks(rays, plan, {"m2": "lower"})[0][sane.FAIL]), 1)   # no line: no rays at all
+        # an OFF state with the (no-op) hit-wait key is not a fix state
+        off = [{"label": "hit-off-a", "set": "rt_scene_handout=0,rt_scene_handout_hit_wait=1"}]
+        self.assertEqual(hq.hit_checks({}, off), ({sane.FAIL: [], sane.EXPLAIN: [], sane.INFO: []},
+                                                  ["hit-off-a: window not judged (no 'GI far: ambient kept at qualified hits' line)"]))
 
 
 if __name__ == "__main__":

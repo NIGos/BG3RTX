@@ -32,6 +32,7 @@ pab.ROWS += [
     ("hit material fallbacks (query)", "per period", r"\[rt\] scene handout: .*fallbacks: query (\d+)"),
     ("hit material fallbacks (camera)", "per period", r"\[rt\] scene handout: .*camera (\d+)\)"),
     ("primary-ray check match", "%", r"primary-ray check match ([\d.]+)%"),
+    ("GI trace", "ms", r"gi: trace pass \(ray-traced.*GPU median ([\d.]+) ms"),
 ]
 # (row, rule), judged by tools/live_batches/sane_gates.py (user rule 2026-11-14): FAIL only beyond the OFF pair's noise
 # and the materiality floor in the bad direction. "lower" = the deliverable (a rise is bad, the drop is the design);
@@ -39,7 +40,7 @@ pab.ROWS += [
 # GPU work, and the unexplained GI trace drop of 2026-11-14 was dropped hit-material work); "equal" = a count;
 # "not lower" = a match percentage; "zero" = an event counter (one event is a fault).
 JUDGED = [("scene wait mean", "lower"), ("frame time median", "lower"), ("frame time p99", "not higher"),
-          ("RT", "not higher"), ("GI", "not higher"), ("scene build", "not higher"), ("strand G-buffer draws", "equal"),
+          ("RT", "not higher"), ("GI", "not higher"), ("GI trace", "not higher"), ("scene build", "not higher"), ("strand G-buffer draws", "equal"),
           ("scene wait timeouts", "zero"), ("handout fallbacks", "zero"), ("handout pairing mismatches", "zero"),
           ("OMM downgraded", "zero"), ("hit material fallbacks (query)", "zero"),
           ("hit material fallbacks (camera)", "zero"), ("primary-ray check match", "not lower")]
@@ -158,11 +159,12 @@ def against_off(values):
 
 
 def state_lines(log, runner, plan):
-    """(markdown rows, {line: {window: median}}): per energy / hit-* window the median [n] of each STATE_LINES value."""
+    """(markdown rows, {line: {window: median}}, {line: {window: [period values]}}): per energy / hit-* window the
+    median [n] of each STATE_LINES value."""
     lines = stamped_lines(Path(log).read_text(encoding="utf-8-sig", errors="replace"))
     wins = [w for w in windows(Path(runner).read_text(encoding="utf-8-sig", errors="replace"), plan, lines)
             if w["label"].startswith(("energy-", "hit-"))]
-    rows, medians = ["| Line | " + " | ".join(w["label"] for w in wins) + " |", "| --- |" + " --- |" * len(wins)], {}
+    rows, medians, periods = ["| Line | " + " | ".join(w["label"] for w in wins) + " |", "| --- |" + " --- |" * len(wins)], {}, {}
     for name, rx in STATE_LINES:
         cells = []
         for w in wins:
@@ -170,8 +172,9 @@ def state_lines(log, runner, plan):
             cells.append(f"{max(v) if name.endswith('(max)') else statistics.median(v):g} [n{len(v)}]" if v else "-")
             if v:   # "(max)" lines are event counters: the worst period of the window
                 medians.setdefault(name, {})[w["label"]] = max(v) if name.endswith("(max)") else statistics.median(v)
+                periods.setdefault(name, {})[w["label"]] = v
         rows.append(f"| {name} | " + " | ".join(cells) + " |")
-    return (rows if wins else []), medians
+    return (rows if wins else []), medians, periods
 
 
 def hit_checks(medians, plan, expect=None):
@@ -193,9 +196,26 @@ def hit_checks(medians, plan, expect=None):
             found[sane.INFO].append(f"{label}: {name} {v:g} (the job predicts 0: the unpublished commit-time query)")
         elif v == 0:
             found[sane.FAIL].append(f"{label}: {name} 0: the native hit-material path is off in this state")
+    # The hit work itself: light rays traced at hits equal to the OFF pair (a state that loses them is the 8.6 defect).
+    name = "GI hit direct: light rays traced"
+    rays = {k[len("hit-"):]: x for k, x in medians.get(name, {}).items() if k.startswith("hit-")}
+    if "off-a" in rays and "off-b" in rays:
+        off = (rays["off-a"] + rays["off-b"]) / 2
+        for p in plan:
+            state = p["label"][len("hit-"):]
+            if not p["label"].startswith("hit-") or state.startswith("off") or (expect or {}).get(state) == "lower":
+                continue
+            if state not in rays:
+                found[sane.FAIL].append(f"hit-{state}: no '{name}' line: no light ray at a hit (OFF {off:g})")
+                continue
+            status, d, noise = sane.compare(rays["off-a"], rays["off-b"], rays[state], sane.count_floor(off), "equal")
+            if status in (sane.EXPLAIN, sane.FAIL):   # a count beyond noise and 1%: the hit work differs
+                found[sane.FAIL].append(f"hit-{state}: {name} {rays[state]:g} against OFF {rays['off-a']:g} / "
+                                        f"{rays['off-b']:g} (delta {d:+g}, noise {noise:g})")
     name = "hit material passes on the committed scene"
     for state in sorted({p["label"].split("-", 1)[1] for p in plan
-                         if p["label"].startswith(("energy-", "hit-")) and "rt_scene_handout_hit_wait=1" in p.get("set", "")}):
+                         if p["label"].startswith(("energy-", "hit-")) and "rt_scene_handout_hit_wait=1" in p.get("set", "")
+                         and "rt_scene_handout=2" in p.get("set", "")}):
         v = [x for label, x in medians.get(name, {}).items() if label.split("-", 1)[1] == state]
         if not v:
             notes.append(f"{state}: hit-wait fix not judged (no '[core] scene handout' line in its windows)")
@@ -208,10 +228,13 @@ def hit_checks(medians, plan, expect=None):
 STATE_COSTS = [("GI trace GPU median ms", "not higher"), ("scene wait mean ms", "lower"), ("frame time median ms", "lower")]
 
 
-def state_costs(medians, expect=None):
+def state_costs(medians, expect=None, periods=None):
     """{status: [text]}: the costs of every energy state against the OFF pair. GI trace GPU ms is "not higher" (the
     handout predicts no GPU change, so a drop beyond the floor is EXPLAIN unless the job predicts it); the scene wait
-    and the frame time are the deliverable ("lower": a rise beyond noise and floor FAILS; the delta is always shown)."""
+    and the frame time are the deliverable ("lower": a rise beyond noise and floor FAILS; the delta is always shown).
+    periods: {line: {window: [period values]}}: the noise then includes the spread of the single OFF periods, as in the
+    window groups (judge); the OFF pair's two medians alone under-estimate it (hq-s8-modes 205520: mode 1 frame time
+    +0.230 ms "failed" against a pair difference of 0.200 and a floor of 0.214)."""
     found = {sane.FAIL: [], sane.EXPLAIN: [], sane.INFO: []}
     for name, rule in STATE_COSTS:
         v = {k[len("energy-"):]: x for k, x in medians.get(name, {}).items() if k.startswith("energy-")}
@@ -221,7 +244,8 @@ def state_costs(medians, expect=None):
             if state.startswith("off"):
                 continue
             floor = sane.cost_floor((v["off-a"] + v["off-b"]) / 2)
-            status, d, noise = sane.compare(v["off-a"], v["off-b"], on, floor, rule, (expect or {}).get(state) == "lower")
+            off_values = [x for w in ("energy-off-a", "energy-off-b") for x in (periods or {}).get(name, {}).get(w, [])]
+            status, d, noise = sane.compare(v["off-a"], v["off-b"], on, floor, rule, (expect or {}).get(state) == "lower", off_values)
             text = (f"energy-{state}: {name}: OFF {v['off-a']:.3f} / {v['off-b']:.3f}, {state} {on:.3f}, delta {d:+.3f}, "
                     f"noise {noise:.3f}, floor {floor:.3f}")
             if status in found:
@@ -307,11 +331,11 @@ def main():
         lambda label: ("primary-ray check match",) if label.startswith("check") else pab.REQUIRED)
     rows, found, decisive, group_notes = judge(measured, plan)
     etext, efound, epasses = energy(a.log, a.runner, plan_path, plan, job.get("energy_expect"))
-    states, medians = state_lines(a.log, a.runner, plan)
+    states, medians, periods = state_lines(a.log, a.runner, plan)
     has_energy = any(p.get("trace_at") for p in plan)
     hfound, hnotes = hit_checks(medians, plan, job.get("energy_expect"))
     notes += hnotes
-    for more in (efound or {}), state_costs(medians, job.get("energy_expect")), hfound:
+    for more in (efound or {}), state_costs(medians, job.get("energy_expect"), periods), hfound:
         for status, texts in more.items():
             found[status] += texts
     if has_energy and efound is None:

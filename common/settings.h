@@ -349,14 +349,17 @@ inline constexpr Knob kKnobs[] = {
   // (mode 0: the waiting path, whatever the device layout). Qualified live 2026-11-14 (handout_qual: inn Ultra 30.0 to
   // 26.5 ms, S8 Ultra 20.9 to 19.9 ms, 0 fallbacks) and On in High and Ultra by user decision ("Si, accendilo"), Off in
   // Low and Medium. A normal Performance control (not an opt-in knob): release resets never touch it. Without the layout
-  // on the device mode 2 does nothing (layer/rtscene.cpp handout_mode). Open: the S8 energy -0.72% (3 traces per state).
+  // on the device mode 2 does nothing (layer/rtscene.cpp handout_mode). On also writes rt_scene_handout_hit_wait=1
+  // (2026-11-14, hq-s8-modes 205520): without it mode 2 dropped the native hit-material work on Ultra (GI light rays at
+  // hits 0.14 M against 3.84 M, diffuse light -0.23%), which was most of the first Ultra "gain". With it the wait is
+  // gone (S8 3.5 to 0.3 ms), the work is back and the S8 Ultra frame time is unchanged (GPU-bound); High about -0.5 ms.
   {"scene_handout", "Low-latency scene",
-   "Fewer waits for the ray-traced scene, higher frame rate. Same image.",
+   "The lighting no longer waits for the ray-traced scene. Same image.",
    Kind::Choice, Apply::Restart, "Restart the game to turn on; turns off while playing", false,
    {{"off", "Off", 0, {{"rt_scene_handout_layout", "0"}, {"rt_scene_handout", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_scene_handout_layout", "1"}, {"rt_scene_handout", "2"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves about 1 to 3.5 ms", "Under 1 MB", "RTX 5090: about 1 ms at Water Queens House, 2.5 to 3.5 ms at the inn on Ultra. Live 2026-11-14 (focused, Frame Generation 3x, Off/On/Off in one run): inn 30.0 to 26.5 ms (scene wait 8.5 to 3.0 ms), inn with RTX Hair 31.1 to 28.6 ms, S8 20.9 to 19.9 ms; Water Queens House about 1 ms (2026-11-09). 0 fallbacks. Scene energy: inn +0.11%, S8 -0.72% (open, repeat planned)."},
-   "Today every frame's ray-traced lighting waits 3 to 9 ms for that frame's scene to be built. On removes the wait: the lighting is recorded at once and reads the scene when the GPU runs it, so the image is the same. How much frame rate this gives depends on the scene: about 1 ms where the GPU is the limit, 2.5 to 3.5 ms at the inn on Ultra. On in High and Ultra. If a frame's scene is not ready in time, that frame uses the previous frame's scene (as it does today after a long wait): moving characters' shadows can lag by one frame in such frames. It changes how the game's graphics device is set up, so turning it on needs a game restart and it may behave differently on other drivers; turning it off works while playing. After the first restart the lighting shaders rebuild once (up to a minute, the usual path runs meanwhile)."},
+    {"on", "On", kCapRayQuery, {{"rt_scene_handout_layout", "1"}, {"rt_scene_handout", "2"}, {"rt_scene_handout_hit_wait", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 1, 1}, false, {{"rt","1","Ray-tracing support"}}, false, "Performance", {"Measured", "Saves 0 to 0.5 ms", "Under 1 MB", "RTX 5090, live 2026-11-14 (focused, Frame Generation 3x, Off/On/Off in one run). Water Queens House, Ultra: scene wait 3.5 to 0.3 ms, rendered frame time unchanged (21.6 against 21.3 to 21.5 ms: the GPU is the limit), hit lighting and scene energy equal to Off, 0 fallbacks. High: about 0.5 ms saved (12.1 to 11.6 ms). The inn on Ultra is being measured again: the earlier 2.5 to 3.5 ms there was mostly bounce lighting work the first version skipped."},
+   "Today every frame's ray-traced lighting waits 3 to 9 ms for that frame's scene to be built. On removes the wait: the lighting is recorded at once and reads the scene when the GPU runs it, so the image is the same. How much frame rate this gives depends on the scene: none where the GPU is the limit (Water Queens House on Ultra), about 0.5 ms on High. On in High and Ultra. If a frame's scene is not ready in time, that frame uses the previous frame's scene (as it does today after a long wait): moving characters' shadows can lag by one frame in such frames. It changes how the game's graphics device is set up, so turning it on needs a game restart and it may behave differently on other drivers; turning it off works while playing. After the first restart the lighting shaders rebuild once (up to a minute, the usual path runs meanwhile)."},
 
   // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
   // stay off in every preset; hair origins and spill are developer-only until qualified.
@@ -1090,7 +1093,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_scene_wait", "1"},
     {"rt_scene_handout_layout", "1"},
     {"rt_scene_handout", "2"},
-    {"rt_scene_handout_hit_wait", "0"},
+    {"rt_scene_handout_hit_wait", "1"},
     {"cpu_timing", "0"},
     {"perf_submit_batch", "0"},
     {"rt_alpha_stream", "1"},
@@ -1593,6 +1596,7 @@ inline void enforce_release_policy(Map& m) {
   }
   m["rr_post"] = "1";
   m["rt_scene_compact_holds"] = "1";
+  m["rt_scene_handout_hit_wait"] = "1";   // the handout never drops the native hit-material work (SCENE_HANDOUT_DESIGN 8.6)
   m["rt_compact_hit_state"] = "1";
   m["gi_far_roof_early"] = "1";
   m["rf_compact_probe_state"] = "1";

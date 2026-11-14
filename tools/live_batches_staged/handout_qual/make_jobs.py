@@ -53,10 +53,10 @@ def window(label, kind, settings):
     return p
 
 
-def group(name, kind, hair=0):
+def group(name, kind, hair=0, extra=""):
     """off-a / on / off-b of one window kind; a moving kind runs Q then E in every state (the same ground)."""
     sides = ("",) if kind == "static" else ("-q", "-e")
-    return [window(f"{name}-{state}{side}", kind, keys(2 if state == "on" else 0, hair, int(kind == "check")))
+    return [window(f"{name}-{state}{side}", kind, keys(2 if state == "on" else 0, hair, int(kind == "check")) + extra)
             for state in ("off-a", "on", "off-b") for side in sides]
 
 
@@ -201,6 +201,56 @@ def modes():
     return plan, j
 
 
+FAR = "\\[core\\] GI far \\(\\d+ frames\\)"
+CORE = "\\[core\\] scene handout: .*hit material passes on the committed scene \\d+"
+FIX = ",rt_scene_handout_hit_wait=1"   # the shipped state since 2026-11-14 (Low-latency scene On writes it; no-op with mode 0)
+FIX_TRACES = 4
+
+
+def inn_fix():
+    """The inn, Ultra: OFF / mode 2 with rt_scene_handout_hit_wait=1 / OFF. Decides whether the handout stays on in Ultra
+    now that it no longer drops the native hit-material work (docs/SCENE_HANDOUT_DESIGN.md 8.6, 8.7). Static and pan
+    windows, the pan with RTX Hair On, then per state FIX_TRACES float traces and a short rt_stats window (hit-<state>).
+    Runner gates: the measured lines exist in the windows whose state prints them, no value (AGENTS.md sensible gates).
+    GI far needs rt_stats=1 (hit windows only); the handout lines need mode 2 (ON windows only)."""
+    warm = pab.phase
+    stats = lambda on: mode_keys(2 if on else 0, 1, 1)
+    plan = [warm("warmup", 20, keys(0) + FIX), warm("warm-on", 8, keys(2) + FIX), warm("warm-hair-on", 8, keys(2, 1) + FIX),
+            warm("warm-hair-off", 4, keys(0, 1) + FIX), warm("warm-stats", 4, stats(True)), warm("warm-off", 4, keys(0) + FIX)]
+    plan += group("static", "static", extra=FIX) + group("pan", "pan", extra=FIX)
+    plan += [warm("warm-pre-hair", 4, keys(0, 1) + FIX)] + group("hair-pan", "pan", 1, extra=FIX)
+    plan += [warm("warm-pre-energy", 4, keys(0, hold=1) + FIX)]
+    for state in ("off-a", "on", "off-b"):
+        e = energy(state, FIX_TRACES)
+        e["set"] += FIX
+        plan += [e, pab.phase(f"hit-{state}", 12, stats(state == "on"), frames=HIT_FRAMES)]
+    plan += [warm("restore", 2, keys(0) + FIX)]
+    plan, j = job("hq-inn-fix", INN, f"{START},{pab.HAIR_START},{pab.hair('on')},{keys(0)}{FIX}", plan,
+                  "Scene handout with the hit-material fix at the inn, Ultra, FG 3x, uncapped, focused: rt_scene_handout 0 / 2 "
+                  "/ 0 with rt_scene_handout_hit_wait=1 in static and pan windows, the pan with RTX Hair On, "
+                  f"{FIX_TRACES} float traces per state and a short rt_stats window each. Per state: frame time median and "
+                  "p99, scene wait mean, GI trace and rt passes GPU ms, light rays at hits (equal to OFF), fallbacks, energy. "
+                  "Decides whether Low-latency scene stays On in Ultra.")
+    timed = [p["label"] for p in plan if p.get("frames") and not p.get("trace_at") and not p["label"].startswith("hit-")]
+    hit = [p["label"] for p in plan if p["label"].startswith("hit-")]
+    period = dict(period_frames=60, sample_frames=60, min=1)
+    j["expect_every"] = ([every(n + " in every window", s, s, timed) for n, s in pab.LINES] +
+                         [every("GI trace line in every window", "gi: trace pass", "gi: trace pass", timed),
+                          every("handout line in every ON window", HANDOUT, HANDOUT, [w for w in timed if "-on" in w]),
+                          every("core handout line in every ON window", CORE, CORE, [w for w in timed if "-on" in w]),
+                          every("hair period line in every hair window", "\\[hair primary\\] frame \\d+: ",
+                                "\\[hair primary\\] frame \\d+: ", [w for w in timed if w.startswith("hair-")]),
+                          pab.every("GI far line in every hit window", FAR, FAR, hit, **period),
+                          pab.every("scene wait line in every hit window", WAIT, WAIT, hit, **period),
+                          pab.every("handout line in the ON hit window", HANDOUT, HANDOUT, ["hit-on"], **period),
+                          pab.every("core handout line in the ON hit window", CORE, CORE, ["hit-on"], **period)])
+    j["patterns"] = j["patterns"] + ["GI far \\(", "GI hit direct", "\\[hit material (?:submit|query)\\]"]
+    # Any-line expect: only startup lines and the trace lines. HANDOUT (a mode 2 line) stays out of it: live_flow would
+    # ask for every periodic expect line right after the first warm-up, which is OFF here (hq-s8-modes 204217).
+    j["expect"] = [rx for rx in j["expect"] if rx != HANDOUT]
+    return plan, j
+
+
 def high(slug, save):
     warm = pab.phase
     plan = [warm("warmup", 20, keys(0)), warm("warm-on", 8, keys(2)), warm("warm-off", 4, keys(0))]
@@ -241,7 +291,7 @@ def measured(p):
 
 def main():
     assert (HERE / "predicted.json").exists(), "predicted.json precedes the jobs"
-    made = [ultra("s8", S8, check=False), ultra("inn", INN, check=False), high("s8", S8), high("inn", INN), smoke(), energy_repeat(), check_only(), modes()]
+    made = [ultra("s8", S8, check=False), ultra("inn", INN, check=False), high("s8", S8), high("inn", INN), smoke(), energy_repeat(), check_only(), modes(), inn_fix()]
     if sys.argv[1:]:   # job names: regenerate only these (the others keep the files of their own runs)
         made = [m for m in made if m[1]["name"] in sys.argv[1:]]
     for plan, j in made:
