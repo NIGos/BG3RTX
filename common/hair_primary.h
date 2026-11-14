@@ -289,7 +289,17 @@ struct SwapGate {
   }
   bool groom_stable(uint64_t key) const { return published.count(key) && published_prev.count(key) && !retired(key); }
   bool allow_gbuffer(uint64_t key) const { return groom_stable(key); }
+  // 6k (docs/RTX_HAIR_PRIMARY.md, set with rt_hair_coverage_keep): the handshake of a head that enters the view with a
+  // kept verdict. hx1 194658: 5 card frames, 3 "strike" (2 without its groom in the publish, 1 with it in one publish
+  // only) and 2 "card depth not dropped" (the G-buffer marks the key ready, the next prepass is recorded before the
+  // publish that moves the mark to ready_prev, so it waits one frame more). With `early` a mark made since the last
+  // publish counts at once, and the G-buffer of the frame the groom is in its first publish makes it too (arriving:
+  // the next publish makes the groom stable, and that frame's G-buffer still checks it). A prepass that went first for
+  // a G-buffer that then refuses is the case the native-depth fallback already answers (DepthLatch::needs_card_depth).
+  bool early = false;
+  bool arriving(uint64_t key) const { return published.count(key) && !published_prev.count(key) && !retired(key); }
   bool allow_prepass(uint64_t key) const {
+    if (early && ready_now.count(key) && published.count(key) && !retired(key)) return true;
     return groom_stable(key) && (gbuffer_prev.count(key) || ready_prev.count(key));
   }
   bool allow_velocity(uint64_t key) const { return groom_stable(key) && gbuffer_prev.count(key); }

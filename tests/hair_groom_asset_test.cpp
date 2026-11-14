@@ -141,6 +141,62 @@ static void test_prepass_gbuffer_bootstrap() {
   g.publish(&k, 1, 5); g.publish(&k, 1, 6);
   CHECK(!g.allow_prepass(k));                        // a reset drops readiness
 }
+// 6k: a head that enters the view with a kept coverage verdict (every gate but the strike and the card depth passes).
+// Its groom is in the publish from frame `first` on. Returns the card frames from that publish to the first strand
+// G-buffer. applied: the header the arriving frame's G-buffer applied holds the key (its record-time publish is the
+// newest one); leaves: the groom is gone again from the publish after its first.
+static unsigned entering_cards(bool early, bool applied, bool leaves, unsigned* fallbacks) {
+  hair_primary::SwapGate gate;
+  hair_primary::DepthLatch latch;
+  gate.early = early;
+  const uint64_t key = 0x244b, first = 103;
+  unsigned cards = 0;
+  *fallbacks = 0;
+  for (uint64_t f = 100; f < 120; ++f) {
+    if (gate.allow_prepass(key) && hair_primary::prepass_drop_allowed(f, f, true, true, latch.allow_prepass(key, f)))
+      latch.prepass(key, f);   // recorded before the build that publishes f
+    const bool in = f >= first && !(leaves && f > first);
+    gate.publish(&key, in ? 1u : 0u, f);
+    if (!gate.allow_gbuffer(key)) {   // "strike"
+      if (early && applied && gate.arriving(key)) gate.gbuffer_ready(key);
+    } else if (latch.dropped(key, f)) {
+      CHECK(gate.published.count(key) && gate.published_prev.count(key));   // strands only with a stable groom
+      return cards;
+    } else {
+      gate.gbuffer_ready(key);        // "card depth not dropped"
+    }
+    if (latch.needs_card_depth(key, f, false)) ++*fallbacks;   // the card draw restores the native depth
+    cards += f >= first;
+  }
+  return cards;
+}
+static void test_entering_head() {
+  unsigned fb = 0;
+  CHECK(entering_cards(false, true, false, &fb) == 3 && fb == 0);   // 1 strike + 2 card depth, as hx1 194658 (after 2 unpublished)
+  CHECK(entering_cards(true, true, false, &fb) == 1 && fb == 0);    // the arriving frame arms the prepass
+  CHECK(entering_cards(true, false, false, &fb) == 2 && fb == 0);   // its header did not hold the key: one frame later
+  // The groom leaves after its first publish: no strand frame, and every prepass that went first met the fallback.
+  CHECK(entering_cards(true, true, true, &fb) == 17 && fb >= 1);
+  CHECK(entering_cards(false, true, true, &fb) == 17 && fb == 0);
+  // The mark is of this publish only, and never without the groom in the publish; velocity is unchanged.
+  hair_primary::SwapGate g;
+  const uint64_t k = 9;
+  g.early = true;
+  g.publish(&k, 1, 1);
+  CHECK(g.arriving(k) && !g.allow_prepass(k));
+  g.gbuffer_ready(k);
+  CHECK(g.allow_prepass(k) && !g.allow_gbuffer(k) && !g.allow_velocity(k));
+  g.publish(nullptr, 0, 2);
+  CHECK(!g.allow_prepass(k) && !g.arriving(k));
+  g.publish(&k, 1, 3); g.publish(&k, 1, 4);
+  CHECK(!g.arriving(k) && !g.allow_prepass(k));
+  g.gbuffer_ready(k);
+  CHECK(g.allow_prepass(k));
+  g.early = false;
+  CHECK(!g.allow_prepass(k));   // key off: the mark waits for the next publish, as before
+  g.publish(&k, 1, 5);
+  CHECK(g.allow_prepass(k));
+}
 // rt_hair_primary_hold (2026-11-07 hair-flicker): draw 9861, about 430 card pixels, measured 0.833..0.925 per window
 // around the 0.891 bound. The strict gate flips strands/cards with the count noise; the hold keeps a swapping key on
 // strands while each measurement is inside the bounds widened by its own noise, and still drops it on a real mismatch.
@@ -1613,7 +1669,8 @@ int main() {  test_round3();
   test_participation();
   test_upload_submission(); test_compaction_submission(); test_uv_submission(); test_count_submission();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
-  test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
+  test_prepass_gbuffer_bootstrap();
+  test_entering_head(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
   test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish(); test_card_fill(); test_header_pass(); test_coverage_keep();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.

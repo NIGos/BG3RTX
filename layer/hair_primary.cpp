@@ -1952,7 +1952,11 @@ static bool hair_primary_swap_locked(VkCommandBuffer cmd, CmdState* s, const Dra
   // The first gate that refuses this draw (period line "swap refusals"); the decision itself is unchanged.
   using hair_primary::Refusal;
   Refusal why = Refusal::Count;
-  auto refuse = [&](Refusal r) { if (why == Refusal::Count) why = r; };
+  bool other_gate = false;   // 6k: a gate other than the strike and the card depth refused
+  auto refuse = [&](Refusal r) {
+    if (why == Refusal::Count) why = r;
+    other_gate |= r != Refusal::Strike && r != Refusal::NotDropped;
+  };
   const auto cover = g_coverage.why(key, now + 1);
   if (g_published + 2 < now + 1) refuse(Refusal::Publish);
   else if (g_load.quiet(now)) refuse(Refusal::Quiet);
@@ -2000,8 +2004,9 @@ static bool hair_primary_swap_locked(VkCommandBuffer cmd, CmdState* s, const Dra
     else if (!allowed) g_switches.prepass_refused(key, now, cause);
   }
   // Every G-buffer gate passed but the card depth was still there: the next prepass may drop it (SwapGate ready_*).
-  if (pass == Pass::Gbuffer && why == Refusal::NotDropped && draw < hair_primary::kDrawSlots && dv != g_draw_variants.end() &&
-      dv->second.strand[draw])
+  // 6k (SwapGate::early): also when the only other refusal is the strike of a groom in its first publish.
+  if (pass == Pass::Gbuffer && draw < hair_primary::kDrawSlots && dv != g_draw_variants.end() && dv->second.strand[draw] &&
+      (why == Refusal::NotDropped || (why == Refusal::Strike && !other_gate && g_gate.early && g_gate.arriving(key))))
     g_gate.gbuffer_ready(key);
   if (pass == Pass::Gbuffer)
     g_depth.observe_pipeline(key, now, draw < hair_primary::kDrawSlots && dv != g_draw_variants.end() && dv->second.strand[draw],
@@ -2318,6 +2323,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   g_cfg_dense = cfg_int("rt_hair_dense_sample", 0) != 0;                  // 6f: copy and log the dense samples
   g_coverage.confirm = cfg_int("rt_hair_coverage_confirm", 0) != 0;       // 5u: two bad measurements in a row
   g_coverage.keep = cfg_int("rt_hair_coverage_keep", 0) != 0;             // 6i: evidence does not expire by age
+  g_gate.early = g_coverage.keep;                                         // 6k: and its handshake is not waited for twice
   g_coverage.min_pixels = cfg_int("rt_hair_coverage_min_pixels", 0) != 0; // 5u audit: < 64 card pixels: no evidence
   if (!g_coverage.confirm) g_coverage.bad_run.clear();
   // Round 3 (aa98b960) had joined this statement into the comment above: the publish gate then refused every
