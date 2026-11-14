@@ -770,6 +770,73 @@ static void test_coverage_footprint() {
 // watchdog trips on single frames). Without the fill: the second low measurement puts the key on cards. With it: the
 // key stays strands through a loss shorter than kFillConfirm measurements (the fill shows the missing pixels as cards)
 // and goes to cards only on a sustained one; a key on cards, missing or stale evidence and coverage high are unchanged.
+// 6h rt_hair_header_scene_pass: the passes of a frame in recording order (scene G-buffer pass with the hair draws, decal
+// pass, velocity draws), with the present that advances frame_index at a given place. The publish a frame's hair traces:
+// its own (the submit upgrade of the header applied at its scene pass) or the one the last apply left on the GPU.
+struct HeaderPassRun { int stale = 0, hair = 0, velocity_refused = 0; hair_primary::HeaderPassStats st; };
+static HeaderPassRun header_pass_run(bool scene_only, int present_after, int frames, int double_at = -1) {
+  using namespace hair_primary;
+  HeaderPassRun r;
+  uint64_t fi = 100, applied = 0;
+  bool applied_decal = false;
+  int on_gpu = -1;   // the publish (frame number) of the header on the GPU
+  for (int g = 0; g < frames; ++g) {
+    // present_after: 0 before the scene pass, 1 between the scene and the decal pass, 2 after the decal pass,
+    // 3 after the velocity draws. double_at: that frame's present comes only after the next frame's passes.
+    auto present = [&](int at) { if (present_after == at && g != double_at) ++fi; };
+    present(0);
+    HeaderPass h = header_pass(kScenePassTargets, scene_only, applied, fi + 1);
+    r.st.add(h, true, applied_decal);
+    if (h == HeaderPass::Apply) { applied = fi + 1; applied_decal = false; on_gpu = g; }   // upgraded to this frame's build
+    ++r.hair;
+    r.stale += on_gpu != g;
+    present(1);
+    h = header_pass(4, scene_only, applied, fi + 1);
+    r.st.add(h, false, applied_decal);
+    if (h == HeaderPass::Apply) { applied = fi + 1; applied_decal = true; on_gpu = g; }
+    present(2);
+    r.velocity_refused += !header_applied_for(applied, fi, true, scene_only);
+    present(3);
+    if (g == double_at + 1 && double_at >= 0) fi += 2;   // the late present and this frame's own
+  }
+  return r;
+}
+static void test_header_pass() {
+  using namespace hair_primary;
+  CHECK(kScenePassTargets == 5u);
+  CHECK(header_pass(3, false, 0, 7) == HeaderPass::NotGbuffer && header_pass(3, true, 0, 7) == HeaderPass::NotGbuffer);
+  CHECK(header_pass(4, false, 6, 7) == HeaderPass::Apply && header_pass(4, true, 6, 7) == HeaderPass::Decal);
+  CHECK(header_pass(4, true, 7, 7) == HeaderPass::Decal);
+  CHECK(header_pass(5, false, 6, 7) == HeaderPass::Apply && header_pass(5, true, 6, 7) == HeaderPass::Apply);
+  CHECK(header_pass(5, false, 7, 7) == HeaderPass::Taken && header_pass(5, true, 7, 7) == HeaderPass::Taken);
+  // Key off, as before: label now + 1 only, for both passes.
+  CHECK(header_applied_for(8, 7, false, false) && header_applied_for(8, 7, true, false));
+  CHECK(!header_applied_for(7, 7, false, false) && !header_applied_for(7, 7, true, false) && !header_applied_for(9, 7, true, false));
+  // Key on: a velocity draw recorded after the present still finds its frame's label; a G-buffer draw does not change.
+  CHECK(header_applied_for(8, 7, true, true) && header_applied_for(7, 7, true, true) && !header_applied_for(6, 7, true, true));
+  CHECK(header_applied_for(8, 7, false, true) && !header_applied_for(7, 7, false, true));
+  for (int present_after : {0, 2, 3}) for (bool key : {false, true}) {   // the present outside the two passes: no change
+    const HeaderPassRun r = header_pass_run(key, present_after, 60);
+    CHECK(r.stale == 0 && r.st.scene == 60 && r.st.decal == 0 && r.st.taken_decal == 0 && r.st.taken_scene == 0);
+    CHECK(r.st.decal_skipped == (key ? 60u : 0u));
+  }
+  CHECK(header_pass_run(false, 0, 60).velocity_refused == 0 && header_pass_run(true, 0, 60).velocity_refused == 0);
+  {   // The present between the scene and the decal pass (hx1 180928's dolly): key off, the decal pass takes every label
+      // and every frame's hair traces the publish before; key on, every frame its own, velocity still swapped.
+    const HeaderPassRun off = header_pass_run(false, 1, 60), on = header_pass_run(true, 1, 60);
+    CHECK(off.stale == 59 && off.st.scene == 1 && off.st.decal == 60 && off.st.taken_decal == 59 && off.st.taken_scene == 0);
+    CHECK(off.velocity_refused == 0);
+    CHECK(on.stale == 0 && on.st.scene == 60 && on.st.decal == 0 && on.st.decal_skipped == 60 && on.st.taken_decal == 0);
+    CHECK(on.velocity_refused == 0);
+  }
+  {   // Two G-buffer frames inside one present interval (a hitch): the second one's label is taken by the first scene
+      // pass with or without the key (counted; not fixed by the key).
+    const HeaderPassRun off = header_pass_run(false, 0, 60, 20), on = header_pass_run(true, 0, 60, 20);
+    CHECK(off.stale == 1 && off.st.taken_scene == 1 && off.st.taken_decal == 0);
+    CHECK(on.stale == 1 && on.st.taken_scene == 1 && on.st.taken_decal == 0);
+  }
+}
+
 static void test_card_fill() {
   using namespace hair_primary;
   CHECK(kFlagCardFill == 512u);   // shaders/rt/hair_primary_gbuffer.hlsl hair_primary_flag_card_fill
@@ -1447,7 +1514,7 @@ int main() {  test_round3();
   test_gbuffer_depth_latch(); test_prepass_drop_decision(); test_card_accepted_totals(); test_period_failures();
   test_prepass_gbuffer_bootstrap(); test_refusal_tally(); test_coverage_hold(); test_dropout(); test_frame_tags(); test_lod_keep(); test_upgrade_safe();
   test_current_pick(); test_coverage_footprint(); test_strand_snapshot_pairing();
-  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish(); test_card_fill();
+  test_swap_transitions(); test_swap_latch(); test_coverage_union(); test_coverage_audit(); test_late_arrival(); test_tlas_check(); test_camera_steps(); test_vp_eye(); test_rebase_sample(); test_build_stamp(); test_dense_sample(); test_stale_publish(); test_card_fill(); test_header_pass();
   {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
     using namespace hair_primary;
     const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
