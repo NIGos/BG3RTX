@@ -2675,6 +2675,10 @@ bool sl_note_image_destroyed(VkImage image, bool wait) {
       for (auto it=g_tag_views.begin();it!=g_tag_views.end();)
         if (it->second==image) it=g_tag_views.erase(it); else ++it;
     }
+    // The noted layouts too (sl_note_submit wrote them while the image was watched): a reused handle must not
+    // start from the destroyed image's layout (layout_of), and the maps must not keep one entry per rotated image.
+    // Only for images that were FG inputs: every other destroy of the game stays free of this lock.
+    if (recorded) {std::lock_guard<std::mutex> lock(g_mu); g_layout.erase(image); g_input_layout.erase(image);}
     return true;
   }
   uint32_t current_roles = 0;
