@@ -10,12 +10,11 @@
 - Fix, off by default: `rt_scene_handout_hit_wait=1`. Hit-material passes of a handout frame take the committed pair
   (one wait, at the first such pass); the layer skips the commit-time query. No ABI, shader or variant change.
   Build and 226 CTests passed; unit case in native_hit_order_test. Cost unknown until live.
-- READY_FOR_LIVE, staged: `handout_qual/jobs/hq-s8-modes.json` (0 / 1 / 2 / 2 + fix / 0, 8 traces and an rt_stats
-  window per state, about 5.5 minutes after load, lint live and frozen 0 failing).
+- READY_FOR_LIVE, staged: `handout_qual/jobs/hq-s8-modes.json` (0 / 1 / 2 / 2 + fix / 0), lint 0 failing.
 - Sensible gates (user rule 2026-11-14, AGENTS.md): `tools/live_batches/sane_gates.py`, used by handout_qual and
   perf_ab. FAIL only beyond the OFF noise and a floor (cost max(0.1 ms, 1%), energy 0.5%, match 1 point); under it
   INFO; an unpredicted cost drop or a sub-visible energy difference is EXPLAIN; short windows are "not judged".
-  hq-s8-modes runner gates only check that the lines exist; values are judged by the analyzer. tests/sane_gates_test.py.
+  hq-s8-modes runner gates only check that the lines exist. tests/sane_gates_test.py.
 - Today's logs under the new rules: hq-smoke-s8 PASS; hq-s8-high PASS; hq-inn-high PASS; hq-s8-energy EXPLAIN
   (-0.20%, GI trace -1.27 ms); hq-inn-ultra EXPLAIN (RT -3.5, GI -3.4 ms in the pans); hq-s8-ultra FAIL (hair-pan
   frame time p99 +4.4 ms: ON periods 25.5 / 32.0 / 30.4 against OFF 25.0-27.1; energy not judged, 0 traces mapped).
