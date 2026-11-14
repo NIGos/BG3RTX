@@ -2207,6 +2207,98 @@ hx1 regenerated (predicted.json first, with the 190905 result): one launch, abou
 - Open: the card fill decision (user; PNG pairs of this run); `rt_hair_coverage_keep` into the bundle if its windows
   hold; styles and LODs without a groom file keep their cards (S8: index counts 3399 and 7086).
 
+## 6j. Final live hx1 194658: the bundle holds; coverage keep and card fill read (2026-11-14, branch claude/hair-final-report: docs only)
+
+Live hx1 194658 (S8, VALID, 25 of 25 phases, 229 s; window occluded in 372 of 372 checks: no frame time judged).
+Per window from the period lines. hp = rt_hair_header_scene_pass, keep = rt_hair_coverage_keep; strand draws = main
+G-buffer hair draws drawn as strands / all; dense shares = accepted / no strand on the ray; decal = scene passes whose
+label the decal pass took; other = by another scene pass (hitch frames) / second passes with their own header.
+
+| window | hp | fill | keep | camera | frames | watchdog trips | strands->cards | cards->strands (card run) | frames all cards | strand draws | still | moving (samples) | decal | other | GPU ms |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| warmup (10 lines), warm-on | 1 | 0 | 0 | still | 60 | 0 | 0 | 0-5 (first swaps) | 0 | 420/420 to 720/720 | 84-89% / 3.0-5.4% | - | 0 | 0 / 0 | 0.13-0.16 |
+| warm-ab (2 lines) | 0 | 1 | 1 | still | 60 | 0 | 0 | 0 | 0 | 720/720 | 85-89% / 5.0-5.1% | - | 19, 41 of 60 | 0 / 0 | 0.14-0.15 |
+| pre-in | 1 | 0 | 0 | dolly in | 60 | 0 | 1 (coverage stale, 244b) | 3 (17) | 0 | 716/769 | 83% / 4.5% | 80% / 4.1% (827) | 0 | 0 / 0 | 0.19 |
+| pre-out (3 lines) | 1 | 0 | 0 | dolly out | 60 | 0 | 0 | 0-3 | 0 | 720/780 to 720/720 | 78-85% / 4.0-5.1% | 83% / 5.0% (1439) | 0 | 0 / 0 | 0.15-0.33 |
+| in-on | 1 | 0 | 0 | dolly in | 180 | 0 | 0 | 3 (10) | 0 of 181 | 2306/2336 | 80% / 4.5% | 79% / 5.6% (1204) | 0 | 0 / 0 | 0.27 |
+| out-on | 1 | 0 | 0 | dolly out | 180 | 0 | 0 | 2 (10) | 0 of 181 | 2183/2203 | 85% / 4.8% | 83% / 4.9% (1301) | 0 | 0 / 0 | 0.16 |
+| orbit-r | 1 | 0 | 0 | orbit | 180 | 0 | 0 | 2 (10-12) | 0 of 181 | 2165/2187 | 84% / 4.5% | 84% / 4.5% (4094) | 0 | 0 / 0 | 0.16 |
+| orbit-l | 1 | 0 | 0 | orbit | 180 | 0 | 0 | 2 (10) | 0 of 181 | 2166/2186 | 82% / 3.4% | 82% / 3.9% (4307) | 0 | 0 / 0 | 0.19 |
+| still-on (PNG) | 1 | 0 | 0 | still | 60 | 0 | 0 | 0 | 0 of 61 | 732/732 | 85% / 4.5% | - | 0 | 0 / 0 | 0.20 |
+| in-shot | 1 | 0 | 0 | dolly in | 120 | 0 | 0 | 3 (10) | 0 of 121 | 1525/1555 | 83% / 4.6% | 81% / 5.0% (1204) | 0 | 0 / 0 | 0.27 |
+| shot-on (PNG) | 1 | 0 | 0 | still, near | 60 | 0 | 1 (coverage stale, 244b) | 0 | 0 of 61 | 736/793 | 80% / 4.8% | - | 0 | 0 / 0 | 0.32 |
+| out-shot | 1 | 0 | 0 | dolly out | 120 | 0 | 0 | 3 (10) | 0 of 121 | 1445/1483 | 87% / 4.2% | 80% / 4.4% (1343) | 0 | 0 / 0 | 0.16 |
+| in-keep | 1 | 0 | 1 | dolly in | 180 | 0 | 0 | 3 (5) | 0 of 181 | 2319/2334 | 81% / 4.6% | 80% / 4.5% (1212) | 0 | 0 / 0 | 0.31 |
+| out-keep | 1 | 0 | 1 | dolly out | 180 | 0 | 0 | 2 (5) | 0 of 181 | 2198/2208 | 85% / 4.7% | 86% / 3.3% (1478) | 0 | 0 / 0 | 0.17 |
+| still-fill (PNG) | 1 | 1 | 0 | still | 60 | 0 | 0 | 0 | 0 of 61 | 732/732 | 90% / 3.6% | - | 0 | 0 / 0 | 0.15 |
+| in-fill | 1 | 1 | 0 | dolly in | 120 | 0 | 0 | 3 (10) | 0 of 121 | 1520/1550 | 83% / 4.8% | 83% / 4.2% (1188) | 0 | 0 / 0 | 0.22 |
+| shot-fill (PNG) | 1 | 1 | 0 | still, near | 60 | 0 | 1 (coverage stale, 244b) | 0 | 0 of 61 | 756/793 | 82% / 6.5% | - | 0 | 0 / 0 | 0.35 |
+| out-fill | 1 | 1 | 0 | dolly out | 120 | 0 | 0 | 3 (10) | 0 of 121 | 1445/1486 | 86% / 4.6% | 84% / 4.5% (1311) | 0 | 0 / 0 | 0.17 |
+| in-base | 0 | 0 | 0 | dolly in | 180 | 7 | 10 (frame watchdog 10) | 12 (29) | 29 of 181 | 1946/2334 | 82% / 4.7% | 59% / 27.4% (1166) | 179 of 216 | 0 / 0 | 0.27 |
+| out-base | 0 | 0 | 0 | dolly out | 180 | 1 | 17 (frame watchdog 12, coverage low 3, other 2) | 16 (23) | 23 of 181 | 1908/2208 | 87% / 4.3% | 70% / 14.4% (1170) | 129 of 184 | 0 / 0 | 0.17 |
+
+Gates (a fail needs more than the spread of the still key-on lines: accepted 78-90%, no strand 3.0-6.5%):
+- Header: all 32 key-on period lines read "at the decal pass 0", "label taken by the decal pass 0", "by
+  another scene pass 0". PASS. Control: 179 and 129 labels taken, all 8 watchdog lines of the run (G-buffer frames
+  4974-4980 and 5157, each "applied the publish of build frame N - 1"), 13 and 2 dropouts, 58 and 37 own-bound fails.
+- Bundle alone, the 6 moving windows (in-on, out-on, orbit-r, orbit-l, in-shot, out-shot): 0 strands->cards of any
+  cause, 0 frame watchdog trips, 0 frames with every draw on cards, own-bound fails 0, strand draws 97.4-99.1%. PASS.
+  The draws left on cards are heads that enter the view: 2-3 per window, 10 frames each (8 "coverage stale" + 2 "card
+  depth not dropped"; in-on: 30 = 2336 - 2306). No head in view lost its strands in a moving frame.
+- Dense samples, moving against still: 79-84% / 3.9-5.6% against 80-87% / 3.4-4.8%. Largest gap +1.1 points of "no
+  strand" (in-on), inside the still spread. PASS. Control: 59% / 27.4% and 70% / 14.4%.
+- rt_hair_coverage_keep (in-keep, out-keep): 0 strands->cards of any cause, 0 trips, own-bound fails 0. PASS. "coverage
+  stale" refusals 0 (16-35 in every other moving window); a head that enters the view draws cards for 5 frames, not 10.
+- Hitch frames: none in the run ("by another scene pass" 0 and "second scene passes with their own header and tag" 0
+  in all 36 lines). The per-recording header of 6i was not exercised in game; its proof stays the CTest.
+- Cost: strand G-buffer draws 0.13-0.20 ms zoomed out, 0.27-0.35 ms in the windows that hold the near view. Keep: 0.31
+  and 0.17 ms against 0.27 and 0.16 (in-on, out-on). Fill: 0.15 and 0.35 ms against 0.20 and 0.32 (6-13 timed frames
+  each). No difference outside the spread: neither key has a measurable GPU cost here.
+
+Not as predicted:
+- The 3 "coverage stale" switches (pre-in, shot-on, shot-fill) are key 244b at 0-1 card pixels: the head leaves the
+  screen in the dolly in and goes stale 28 frames later, which falls into the still window after a 120-frame dolly
+  (predicted 0 in still windows). Unseen. In in-on 244b stayed in view (605 pixels): no switch.
+- Keep: cards->strands 3 and 2 (predicted 0 or 1). The verdict is kept, but an entering head still waits 3 frames at the
+  "strike" gate and 2 at "card depth not dropped". The 0 switches of in-keep and out-keep do not separate the key from
+  the bundle (in-on and out-on also read 0; 244b stayed in view there); the stale refusals and the card runs do.
+- "dropouts" with the key on (pre-in 24, pre-out 4, orbit-r 1) are all "no card marker" at 0 / 0 pixels (244b, 9775):
+  draws without a card pixel, counted, not a loss.
+
+Card fill (rt_hair_card_fill), the pairs in `docs/hair_fill/` (final image i11704 at 2560, levels / 0.70 in both;
+G-buffer albedo; crops 3x nearest; |difference| x4). The cameras match (near view: identical; still: within 0-2 px).
+- What it changes: the card-marked pixels without an accepted strand draw the card instead of what is behind. Counted
+  frames: zoomed out 151 of 2915 card pixels without the fill and 161 of 2857 with it (5.2-5.6%, about 13 pixels a
+  head); near view 883 of 19597 and 1005 of 19935 (4.5-5.0%). In the G-buffer albedo they are single dark or skin
+  pixels scattered between the strands and along the outline, not a band at the tips or the parting.
+- G-buffer albedo, pixels darker than 0.6 of the hair median in a disc inside the hair: wizard crown 2.1% -> 1.7%,
+  front head 6.1% -> 5.8%, elf 5.4% -> 3.6%. Final image, mean RGB of the same discs: 119/115/111 -> 119/115/112,
+  106/102/102 -> 105/102/102, 76/75/78 -> 75/74/77: no change after lighting and RR.
+- No seam and no colour step between card and strand pixels in any crop, still or a second after the dolly. The
+  differences in the pairs are the idle animation (the halo, the black-haired woman turning, the angel's pose).
+- Recommendation: keep it an Advanced option, not in the bundle. No visible gain in this scene; the loss it was built
+  for is gone with the header fix (0 dropouts, 0 trips without it); it turns the frame watchdog into a report and holds
+  a failing key for 28 measurements instead of 2; it needs a restart. The user decides with the pairs.
+
+Recommendations:
+1. `rt_hair_coverage_keep` into the On bundle: 0 switches, 0 trips, own-bound fails 0, stale refusals 16-35 -> 0, entry
+   card runs 10 -> 5 frames, CPU only. Open: no kept verdict failed in the run (that path is proven only by the CTest).
+2. Card fill: Advanced option (above).
+3. Removable now (all off in this run, and the bundle held): `rt_hair_stale_publish` (its check read "camera moved
+   since the publish 0" in all 36 lines, also in the control: low risk); `rt_hair_row_stable`, `rt_hair_watchdog_draw`,
+   `rt_hair_watchdog_one_key`, `rt_hair_swap_latch`, `rt_hair_coverage_min_pixels` with their Advanced knobs (low risk:
+   answers to symptoms of the decal header; latched keys 0, per-draw trips 0). The key-off path of
+   `rt_hair_header_scene_pass` and its knob: medium risk, it is the only A/B of the fix; remove it after a release has
+   run with the bundle. Keep the frame watchdog and the header pass, coverage and dense sample lines (they detect a
+   regression or a hitch frame); `rt_hair_dense_sample` stays a diagnostic key, off.
+4. Left for "100%": styles without a groom file keep their cards (S8: 2 draws a frame, index counts 3399 and 7086; run
+   tools.hair_groom.batch for them); hitch frames unproven in game (0 seen in 190905 and 194658); the 5 card frames of
+   an entering head with keep (strike 3 + card depth 2).
+
+User check: S8 (Water Queens House), RTX Hair On alone. Zoom in and out fast with the wheel and orbit: every head in
+view keeps its strands; a head that enters the view shows cards for about 10 frames (5 with Advanced "Strand hair: keep
+the last coverage verdict" On). Card fill: `docs/hair_fill/shot_heads_final_a.png`, `_b.png`, `still_heads_final.png`.
+
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings
   inverse to the game's decoders, fibre normal) and its Python twin `tools/hair_groom/primary.py` with a CPU
