@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG3RTX launcher rework: mockups</title>
+<style>
+:root{--bg:#0f1114;--surface:#171a1f;--line:#2c3139;--text:#eee8da;--text-2:#bcb6a7;--text-3:#948f83;--accent:#d9ae68;--info:#7fc4d6;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 "Lato","Segoe UI",system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:40px 24px 64px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:18px;margin:36px 0 10px}p{margin:0 0 12px;color:var(--text-2)}
+a{color:var(--info);text-underline-offset:2px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.card h3{margin:0 0 4px;font-size:17px}.card .rec{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.card img{width:100%;border:1px solid var(--line);border-radius:6px;margin:10px 0;display:block}
+.card ul{margin:8px 0 0;padding-left:18px;color:var(--text-2)}.card li{margin:3px 0}
+.open{display:inline-block;margin-top:12px;padding:8px 16px;border-radius:6px;background:var(--accent);color:#1b1408;font-weight:700;text-decoration:none}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:8px 10px;border-top:1px solid var(--line);vertical-align:top}
+th{color:var(--text-3);font-size:12px;letter-spacing:.06em;text-transform:uppercase;border-top:0}td{color:var(--text-2)}td:first-child{color:var(--text);white-space:nowrap}
+.note{font-size:13px;color:var(--text-3)}
+</style></head><body><main>
+<h1>BG3RTX launcher rework: mockups</h1>
+<p>Two directions for the same content: every control of 0.9.6 with its real name, choices and costs. Both use
+the same rules for saving, restart, dependencies and experimental options (see <a href="../PROPOSAL.md">PROPOSAL.md</a>;
+the problems they answer are in <a href="../AUDIT.md">AUDIT.md</a>). The black bar at the top of each mockup is not
+part of the design: it switches between the designed states. Controls can be clicked; turn RTX Hair off to see a
+dependency change.</p>
+
+<div class="two">
+<div class="card"><div class="rec">Recommended</div><h3>Direction A: sidebar, rows, detail panel</h3>
+<a href="a.html"><img src="shots/a-lighting.png" alt="Direction A, Lighting page"></a>
+<ul><li>Eight pages in a sidebar, close to today's; Play and the version always at the bottom left.</li>
+<li>One compact row per setting, grouped; children indented under their parent.</li>
+<li>Click a row: what it does, cost, when it takes effect, what it needs and the preset values appear on the right.</li>
+<li>Experimental options live on one page, with their switch.</li></ul>
+<a class="open" href="a.html">Open Direction A</a></div>
+<div class="card"><div class="rec" style="color:var(--text-3)">Alternative</div><h3>Direction B: four tabs, grouped cards</h3>
+<a href="b.html"><img src="shots/b-picture.png" alt="Direction B, Picture page"></a>
+<ul><li>Four tabs: Home, Picture, Performance, Keys &amp; help. Play always at the top right.</li>
+<li>One card per topic with the main controls; the rest behind "more options".</li>
+<li>Details open under the row with the (i) button; preset tiles with descriptions on Home.</li>
+<li>Experimental options stay on their page, in a marked section with the switch.</li></ul>
+<a class="open" href="b.html">Open Direction B</a></div>
+</div>
+
+<h2>Differences</h2>
+<table><tr><th></th><th>Direction A</th><th>Direction B</th></tr>
+<tr><td>Finding a control</td><td>Everything on a page is visible; one to two screens per page</td><td>Fewer places to look, but 6 of the 27 controls are one click deeper and Picture is a long page</td></tr>
+<tr><td>Learning what a control does</td><td>Detail panel, always in the same place</td><td>Inline under the row; pushes the page down</td></tr>
+<tr><td>First run</td><td>Preset buttons; description on Home</td><td>Preset tiles with descriptions: clearer for a new player</td></tr>
+<tr><td>Experimental</td><td>One page: easy to see everything that is not qualified</td><td>In context, per page: easy to relate to its feature, but split in two places</td></tr>
+<tr><td>Distance from today's code</td><td>Small: same pages and categories; cards become rows</td><td>Larger: pages no longer match the settings categories</td></tr>
+<tr><td>Small window (1000 x 700)</td><td>Detail moves under the row</td><td>Unchanged single column</td></tr></table>
+
+<h2>Recommendation</h2>
+<p><b>Direction A</b>, optionally with B's preset tiles on Home. BG3RTX players tune settings and compare costs:
+A keeps every control visible, puts cost and restart information in fixed places and scales as controls are
+added. It also keeps the page of each control equal to its category in <code>settings.h</code>, so the first
+three implementation phases need no bridge change. B is friendlier at first sight but hides six
+controls behind disclosures, which is the kind of surprise the audit is trying to remove.</p>
+
+<h2>Designed states (deep links)</h2>
+<table><tr><th>State</th><th>A</th><th>B</th></tr>
+<tr><td>Home, saved</td><td><a href="a.html#page=home">open</a></td><td><a href="b.html#page=home">open</a></td></tr>
+<tr><td>Long preparation running</td><td><a href="a.html#page=home&state=prep">open</a></td><td><a href="b.html#page=home&state=prep">open</a></td></tr>
+<tr><td>Error: game folder missing</td><td><a href="a.html#page=home&state=missing">open</a></td><td><a href="b.html#page=home&state=missing">open</a></td></tr>
+<tr><td>Lighting with the RTX Hair group</td><td><a href="a.html#page=lighting&sel=exp_hair_groom_primary">open</a></td><td><a href="b.html#page=lighting&scroll=g-hair">open</a></td></tr>
+<tr><td>Dependency change (RTX Hair off)</td><td><a href="a.html#page=lighting&state=dependency&sel=exp_hair_groom_primary">open</a></td><td><a href="b.html#page=lighting&state=dependency&scroll=g-hair">open</a></td></tr>
+<tr><td>Surfaces</td><td><a href="a.html#page=surfaces">open</a></td><td><a href="b.html#page=lighting&scroll=g-surfaces">open</a></td></tr>
+<tr><td>Performance, unsaved changes</td><td><a href="a.html#page=performance&state=unsaved">open</a></td><td><a href="b.html#page=performance&state=unsaved&open=m-speed">open</a></td></tr>
+<tr><td>Review dialog</td><td><a href="a.html#page=performance&state=unsaved&dialog=review">open</a></td><td><a href="b.html#page=performance&state=unsaved&dialog=review">open</a></td></tr>
+<tr><td>Restart needed</td><td><a href="a.html#page=help&state=restart&sel=detailed_logging">open</a></td><td><a href="b.html#page=help&state=restart&sel=detailed_logging">open</a></td></tr>
+<tr><td>DLSS 5</td><td><a href="a.html#page=dlss5">open</a></td><td><a href="b.html#page=lighting&scroll=g-dlss5&open=m-dlss5">open</a></td></tr>
+<tr><td>Experimental, switch on / off</td><td><a href="a.html#page=experimental">on</a> · <a href="a.html#page=experimental&exp=0">off</a></td><td><a href="b.html#page=performance&scroll=g-pexp">on</a> · <a href="b.html#page=performance&scroll=g-pexp&exp=0">off</a></td></tr>
+<tr><td>Hotkeys, Help &amp; support</td><td><a href="a.html#page=hotkeys">keys</a> · <a href="a.html#page=help">help</a></td><td><a href="b.html#page=help">open</a></td></tr>
+<tr><td>Light theme</td><td><a href="a.html#page=lighting&theme=light">open</a></td><td><a href="b.html#page=lighting&theme=light">open</a></td></tr></table>
+<p class="note" style="margin-top:16px">Screenshots of these states are in <a href="shots/">shots/</a>. The two files are generated by
+<code>build_mockups.py</code> from one table of controls, so a copy change is made once. Sample values: Ultra with RTX Hair
+on, an RTX 5090, version 0.9.6. Not designed here: developer mode pages, the report dialog (kept as it is) and the basic
+fallback window.</p>
+</main></body></html>
