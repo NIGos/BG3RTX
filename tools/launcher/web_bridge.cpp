@@ -123,136 +123,184 @@ std::string label(int i,int value){
   if(k.slider.has_off&&value==0)return "Off";const std::string unit=k.slider.unit?k.slider.unit:"";
   return std::to_string(value)+(unit.empty()||unit=="%"?unit:" "+unit);
 }
-// The whole set of in-game shortcuts: each valid alone, no two the same (hotkeys::validate per pair).
-template<class A> std::string shortcuts_error(const A& s){
-  for(size_t i=0;i<s.size();++i)for(size_t j=i+1;j<s.size();++j){auto e=bg3::hotkeys::validate(s[i],s[j]);if(!e.empty())return e;}
-  if(s.size()==1)return bg3::hotkeys::validate(s[0],"None");
-  return {};
-}
-// One review line: "Name: from → to", marked when the change waits for the next game start.
+// One change: "Name: from → to", marked when it waits for the next game start.
 std::string change_line(int i,int from,int to){
   return std::string(st::kKnobs[i].label)+": "+label(i,from)+" \xE2\x86\x92 "+label(i,to)+
     (st::transition_apply(st::kKnobs[i],from,to)==st::Apply::Restart?" (after a game restart)":"");
 }
+// How a change reaches the running game, in the page's words. Every click is written at once (no Save).
+const char* apply_text(st::Apply mode,bool release){
+  if(!release)return st::apply_label(mode,false);
+  switch(mode){
+    case st::Apply::Live:return "Applies at once";
+    case st::Apply::Hitch:return "Applies at once; may briefly pause";
+    case st::Apply::Restart:return "Restart the game to apply";
+    default:return "";
+  }
 }
-Bridge::Bridge(State& state,Hooks hooks):state_(state),hooks_(std::move(hooks)),saved_(state.values),saved_preset_(state.preset) {
+}
+Bridge::Bridge(State& state,Hooks hooks):state_(state),hooks_(std::move(hooks)) {
   auto m=effective();for(size_t i=0;i<kShortcutCount;++i){auto v=st::lookup(m,bg3::hotkeys::ids[i]);if(!v.empty())state_.shortcuts[i]=state_.loaded_shortcuts[i]=v;}dev=st::same_value(st::lookup(m,"dev"),"1");
-  experimental=saved_experimental_=!dev&&st::same_value(st::lookup(m,"experimental_options"),"1");
+  experimental=!dev&&st::same_value(st::lookup(m,"experimental_options"),"1");
   for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k)||(k.kind==st::Kind::Choice&&!st::choice_visible(k,state_.values[i],dev,opt_in())))state_.values[i]=-1;}
-  saved_=state_.values;
 }
-st::Map Bridge::effective() const {st::Map m;st::apply_layer(m,state_.base);st::apply_layer(m,state_.user);for(int i=0;i<st::kKnobCount;++i){st::KVList kv;st::knob_kvs(st::kKnobs[i],state_.values[i],kv);for(auto& v:kv)m[v.first]=v.second;}return m;}
-int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L"")+int(!dev&&experimental!=saved_experimental_)+int(state_.dlss5_runtime_path!=state_.loaded_dlss5_runtime_path)+changed_shortcuts());}
-int Bridge::changed_shortcuts() const {int n=0;for(size_t i=0;i<kShortcutCount;++i)n+=int(state_.shortcuts[i]!=state_.loaded_shortcuts[i]);return n;}
+st::Map Bridge::effective(const State& s) const {st::Map m;st::apply_layer(m,s.base);st::apply_layer(m,s.user);for(int i=0;i<st::kKnobCount;++i){st::KVList kv;st::knob_kvs(st::kKnobs[i],s.values[i],kv);for(auto& v:kv)m[v.first]=v.second;}return m;}
+st::Map Bridge::effective() const {return effective(state_);}
 bool Bridge::shown(const st::Knob& k) const {return st::knob_visible(k,dev,opt_in());}
 bool Bridge::is_collection_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="prepareReport";}
 bool Bridge::is_export_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="exportReport";}
 bool Bridge::is_cancel_collection_intent(const std::string& message){Object o;if(!Parser{message}.parse(o))return false;auto type=get<std::string>(o,"type");return type=="closeReport"||type=="cancelReport";}
-void Bridge::set_compatibility(GraphicsInspection p,int selected){pending_play_=false;preview_kind_.clear();inspection_=std::move(p);selected_=selected<0?default_adapter(inspection_):selected;compatibility_=assess_compatibility(inspection_,selected_);state_.caps=compatibility_.caps;state_.suggested=compatibility_.model_preset;state_.have_gpu=selected_>=0&&size_t(selected_)<inspection_.adapters.size();if(state_.have_gpu)state_.gpu=inspection_.adapters[selected_].gpu;}
-bool Bridge::save_preview(bool enable_required){
-  auto shortcut_error=shortcuts_error(state_.shortcuts);
-  if(!shortcut_error.empty()){blocked_={shortcut_error};preview_kind_="save";return false;}
-  auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental,opt_in(),&saved_);
-  preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;ab_selection_.append(preview_keys_);blocked_=p.blocked;changes_.clear();
-  for(int i:p.changed)changes_.push_back(change_line(i,state_.values[i],p.values[i]));
-  for(auto& kv:p.required_keys){
+void Bridge::set_compatibility(GraphicsInspection p,int selected){inspection_=std::move(p);selected_=selected<0?default_adapter(inspection_):selected;compatibility_=assess_compatibility(inspection_,selected_);state_.caps=compatibility_.caps;state_.suggested=compatibility_.model_preset;state_.have_gpu=selected_>=0&&size_t(selected_)<inspection_.adapters.size();if(state_.have_gpu)state_.gpu=inspection_.adapters[selected_].gpu;}
+// Dependencies of an edited set of values, resolved as the click is made (docs/ui_rework/PROPOSAL.md 2.3): what the
+// player turned down since `before` stays down and lowers what needs it; everything else gets its prerequisites
+// raised, with the startup keys they need. A need that cannot be met blocks the change, and nothing is written.
+bool Bridge::resolve(State& next,const std::vector<int>& before,st::KVList& keys,std::string& blocked) const {
+  auto p=st::preview_dependencies(next.values,effective(next),next.caps,true,dev,experimental,opt_in(),&before);
+  if(!p.blocked.empty()){blocked=join(p.blocked,". ")+".";return false;}
+  next.values=p.values;keys=p.required_keys;return true;
+}
+// Instant apply: `next` is written through the save hook now. On success it becomes the state, the previous state
+// becomes the one Undo restores, and the notice names the change and everything that changed with it. On failure
+// nothing changes (the page keeps showing what is on disk) and `retry` can be sent again.
+bool Bridge::commit(State next,bool next_experimental,st::KVList keys,const std::string& headline,const std::string& anchor,bool undoable){
+  Pending attempt{next,next_experimental,keys,headline,anchor,undoable};
+  const Undo previous{state_.values,state_.preset,state_.shortcuts,state_.dlss5_runtime_path,experimental};
+  // The release opt-in travels with the settings it unlocks; Off removes the key.
+  if(!dev)next.user_text=with_raw_key(next.user_text,"experimental_options",next_experimental?"1":"");
+  // Startup keys the change needs (never silently written): named with the setting that needs them.
+  std::vector<std::string> key_lines;
+  for(auto& kv:keys){
     std::string name="Required startup setting";
-    for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k))continue;
-      for(auto& n:k.required_on)if(n.key&&kv.first==n.key&&preview_values_[i]>=n.min_choice){name=std::string(k.label)+": "+n.label;break;}
-      if(name!="Required startup setting")break;
+    for(int i=0;i<st::kKnobCount&&name=="Required startup setting";++i){auto& k=st::kKnobs[i];if(!shown(k))continue;
+      for(auto& n:k.required_on)if(n.key&&kv.first==n.key&&next.values[i]>=n.min_choice){name=std::string(k.label)+": "+n.label;break;}
     }
-    changes_.push_back(name+": set at the next game start");
+    key_lines.push_back(name+": set at the next game start");
   }
-  return blocked_.empty();
+  ab_selection_.append(keys);
+  std::string error;
+  if(hooks_.save&&!hooks_.save(next,keys,error)){
+    write_error_=error.empty()?"Settings not saved. Nothing was changed.":error;retry_=std::move(attempt);has_retry_=true;notice_.clear();notice_also_.clear();status_.clear();return false;
+  }
+  // Every knob that moved besides the one clicked: lowered dependents (remembered for when their prerequisite comes
+  // back in this session), raised prerequisites, restored dependents.
+  std::vector<std::string> also;const int clicked=st::knob_index(anchor);
+  for(int i=0;i<st::kKnobCount;++i){
+    if(next.values[i]==previous.values[i]||i==clicked)continue;
+    if(shown(st::kKnobs[i])||st::opt_in_knob(st::kKnobs[i]))also.push_back(change_line(i,previous.values[i],next.values[i]));
+  }
+  also.insert(also.end(),key_lines.begin(),key_lines.end());
+  state_=std::move(next);state_.loaded_dlss5_runtime_path=state_.dlss5_runtime_path;state_.loaded_shortcuts=state_.shortcuts;experimental=next_experimental;
+  ab_selection_.pending=false;write_error_.clear();has_retry_=false;status_.clear();
+  notice_=headline;notice_also_=std::move(also);notice_anchor_=anchor;
+  undo_=previous;can_undo_=undoable;return true;
 }
 std::string Bridge::handle(const std::string& message){
   Object o;if(!Parser{message}.parse(o)){status_="Launcher request failed. Reopen the launcher.";return state_json();}
   auto type=get<std::string>(o,"type");
   auto refresh_runtime=[&](){if(hooks_.dlss5RuntimeStatus)state_.dlss5_runtime_status=hooks_.dlss5RuntimeStatus(state_.dlss5_runtime_path);};
   if(type=="init"||type=="state")return state_json();
-  if(type=="cancel"){pending_play_=false;preview_kind_.clear();changes_.clear();blocked_.clear();return state_json();}
-  if(type=="confirm"){
-    if(preview_kind_=="preset"){state_.values=preview_values_;state_.preset=preview_preset_;preview_kind_.clear();}
-    else if(preview_kind_=="save"&&blocked_.empty()){
-      State candidate=state_;candidate.values=preview_values_;std::string error;
-      // The release opt-in travels with the settings it unlocks; Off removes the key.
-      if(!dev)candidate.user_text=with_raw_key(candidate.user_text,"experimental_options",experimental?"1":"");
-      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);state_.loaded_dlss5_runtime_path=state_.dlss5_runtime_path;state_.loaded_shortcuts=state_.shortcuts;ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;saved_experimental_=experimental;preview_kind_.clear();status_="Saved.";}
-      else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;if(changes_.empty())preview_kind_.clear();}
-    }
-    if(pending_play_&&preview_kind_.empty()){
-      pending_play_=false;std::string error;
-      if(!can_play_||!hooks_.play||!hooks_.play(error))status_=error.empty()?"Settings saved, but the game could not start. See Help & support.":error;
-      else{status_=error.empty()?"Game started.":error;can_play_=false;}
-    }return state_json();
-  }
-  // An edit invalidates the exact preview to prevent stale confirmations.
-  if(type=="shortcut"||type=="resetShortcut"||type=="set"||type=="preset"||type=="discard"||type=="experimental"||type=="browseDlss5Runtime"||type=="clearDlss5Runtime"){preview_kind_.clear();pending_play_=false;}
+  // Retry: the write that failed, exactly as it was (no dialog is opened again).
+  if(type=="retry"){if(has_retry_){const Pending a=retry_;commit(a.next,a.experimental,a.keys,a.headline,a.anchor,a.undoable);}return state_json();}
+  if(type=="dismiss"){notice_.clear();notice_also_.clear();can_undo_=false;write_error_.clear();has_retry_=false;return state_json();}
   if(type=="shortcut"||type=="resetShortcut"){
     auto id=get<std::string>(o,"id");int index=-1;
     for(size_t i=0;i<kShortcutCount;++i)if(id==bg3::hotkeys::ids[i])index=int(i);
     if(index<0){status_="Unknown keyboard shortcut.";return state_json();}
     auto value=type=="resetShortcut"?std::string(bg3::hotkeys::defaults[index]):get<std::string>(o,"value");
-    // A change is checked against every other binding; Save checks the whole set again.
+    // A change is checked against every other binding before it is written.
     auto error=bg3::hotkeys::validate_change(value,"None");
     for(size_t i=0;i<kShortcutCount&&error.empty();++i)if(int(i)!=index)error=bg3::hotkeys::validate_change(value,state_.shortcuts[i]);
+    State next=state_;
+    if(error.empty())next.shortcuts[index]=bg3::hotkeys::format(bg3::hotkeys::parse(value));
     if(!error.empty())status_=error;
-    else {state_.shortcuts[index]=bg3::hotkeys::format(bg3::hotkeys::parse(value));status_="Keyboard shortcut changed. Save to apply.";}
+    else if(next.shortcuts[index]!=state_.shortcuts[index])
+      commit(std::move(next),experimental,{},std::string("In-game key changed: ")+state_.shortcuts[index]+" \xE2\x86\x92 "+bg3::hotkeys::format(bg3::hotkeys::parse(value)),id);
   }
   else if(type=="set"){
     int i=st::knob_index(get<std::string>(o,"id"));int value=get<int>(o,"value",INT_MIN);
     if(i<0||!shown(st::kKnobs[i])){status_="This option is unavailable. Check its requirements in Help & support.";return state_json();}
     auto& k=st::kKnobs[i];bool valid=k.kind==st::Kind::Choice?st::choice_available(k,value,dev,experimental,state_.caps,opt_in()):((k.slider.has_off&&value==0)||(value>=k.slider.min&&value<=k.slider.max&&(value-k.slider.min)%k.slider.step==0));
-    if(st::choice_requires_experimental(k,value)&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value,opt_in());state_.values[i]=value;status_.clear();
-      // One option turns on what it needs (all or nothing); an unmet need keeps showing its reason on the card.
-      std::vector<int> raised;
-      if(k.kind==st::Kind::Choice&&value>0&&st::raise_needs(state_.values,i,value,dev,experimental,state_.caps,opt_in(),&raised)&&!raised.empty()){
-        std::vector<std::string> names;for(int j:raised)names.push_back(st::kKnobs[j].label);
-        status_="Also turned on: "+join(names,", ")+". Save to apply.";
-      }
-    }else status_="This option is unavailable. Check its requirements in Help & support.";
+    if(st::choice_requires_experimental(k,value)&&!experimental)valid=false;
+    if(!valid){status_="This option is unavailable. Check its requirements in Help & support.";return state_json();}
+    if(value==state_.values[i])return state_json();
+    State next=state_;next.values[i]=value;
+    // One option turns on what it needs (all or nothing); what cannot be raised is reported by resolve().
+    if(k.kind==st::Kind::Choice&&value>0)st::raise_needs(next.values,i,value,dev,experimental,state_.caps,opt_in());
+    // A dependent that was lowered with its prerequisite comes back with it (this session; the file has no memory).
+    auto remembered=remembered_;remembered.erase(i);
+    for(auto it=remembered.begin();it!=remembered.end();){
+      const auto& d=st::kKnobs[it->first];const int want=it->second;
+      const bool back=next.values[it->first]>=0&&next.values[it->first]<want&&st::choice_available(d,want,dev,experimental,state_.caps,opt_in())&&st::unmet_need(d,want,next.values).empty();
+      if(back){next.values[it->first]=want;it=remembered.erase(it);}else ++it;
+    }
+    st::KVList keys;std::string blocked;
+    if(!resolve(next,state_.values,keys,blocked)){status_=std::string(k.label)+" was not changed. "+blocked;return state_json();}
+    for(int j=0;j<st::kKnobCount;++j)if(j!=i&&st::kKnobs[j].kind==st::Kind::Choice&&state_.values[j]>0&&next.values[j]>=0&&next.values[j]<state_.values[j])remembered[j]=state_.values[j];
+    auto selection=ab_selection_;ab_selection_.touch(k,value,opt_in());
+    if(commit(std::move(next),experimental,keys,change_line(i,state_.values[i],value),k.id))remembered_=std::move(remembered);
+    else ab_selection_=selection;
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Preset unavailable. Choose another preset.";return state_json();}
-    preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
-    for(int i=0;i<st::kKnobCount;++i){if(!shown(st::kKnobs[i])||std::string(st::kKnobs[i].category)=="Support")preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(change_line(i,state_.values[i],preview_values_[i]));}
+    State next=state_;next.preset=p;next.values=st::preset_values_for(p,state_.caps);
+    for(int i=0;i<st::kKnobCount;++i)if(!shown(st::kKnobs[i])||std::string(st::kKnobs[i].category)=="Support")next.values[i]=state_.values[i];
+    st::KVList keys;std::string blocked;
+    if(!resolve(next,next.values,keys,blocked)){status_=std::string("Preset ")+st::kPresetLabel[p]+" was not applied. "+blocked;return state_json();}
+    if(commit(std::move(next),experimental,keys,std::string("Preset ")+st::kPresetLabel[p]+" applied",{}))remembered_.clear();
   }else if(type=="experimental"){
     bool on=get<bool>(o,"value");
     if(dev)experimental=on;
     else if(on!=experimental){
       // Release opt-in: shown options start from their stored value; hiding restores Off (qualified).
-      experimental=on;
+      State next=state_;
       for(int i=0;i<st::kKnobCount;++i)if(st::opt_in_knob(st::kKnobs[i])){
-        if(on){if(state_.values[i]<0)state_.values[i]=0;if(saved_[i]<0)saved_[i]=0;}
-        else state_.values[i]=0;
+        if(on){if(next.values[i]<0)next.values[i]=0;}
+        else next.values[i]=0;
       }
-      status_=on?"Experimental options shown. Save to keep them.":"Experimental options hidden and reset to Off.";
+      st::KVList keys;std::string blocked;
+      if(!on){
+        // Hiding also turns off the unqualified choices of qualified knobs (Low-latency scene) and what needs them.
+        for(int i=0;i<st::kKnobCount;++i)if(st::kKnobs[i].kind==st::Kind::Choice&&next.values[i]>0&&st::choice_requires_experimental(st::kKnobs[i],next.values[i]))next.values[i]=0;
+        if(!resolve(next,state_.values,keys,blocked)){status_="Experimental options were not hidden. "+blocked;return state_json();}
+      }
+      if(commit(std::move(next),on,keys,on?"Experimental options shown":"Experimental options hidden and set to Off",{}))remembered_.clear();
     }
   }
-  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;state_.shortcuts=state_.loaded_shortcuts;state_.dlss5_runtime_path=state_.loaded_dlss5_runtime_path;refresh_runtime();if(!dev)experimental=saved_experimental_;status_="Changes discarded.";}
-  else if(type=="save"){
-    // Nothing to review (no dependent change, no startup key, nothing blocked): save at once, as Play does. The
-    // review dialog used to open on every Save with "No settings change", which trained players to confirm unread.
-    pending_play_=false;
-    if(save_preview(get<std::string>(o,"policy")=="enable")&&changes_.empty())return handle("{\"type\":\"confirm\"}");
+  else if(type=="undo"){
+    if(!can_undo_)return state_json();
+    State next=state_;next.values=undo_.values;next.preset=undo_.preset;next.shortcuts=undo_.shortcuts;next.dlss5_runtime_path=undo_.dlss5_runtime_path;
+    if(commit(std::move(next),undo_.experimental,{},"Undone",{},false)){remembered_.clear();notice_also_.clear();refresh_runtime();}
   }
   else if(type=="play"){
     if(!can_play_)status_="Choose the game folder or close the running game to enable Play.";
     else{
-      pending_play_=true;save_preview(true);
-      if(blocked_.empty()&&changes_.empty())return handle("{\"type\":\"confirm\"}");
+      // The file is already what the page shows. A file from an older version may still lack a prerequisite or a
+      // startup key: those are written first, and named.
+      State next=state_;st::KVList keys;std::string blocked;
+      if(!resolve(next,next.values,keys,blocked)){status_="The game was not started. "+blocked;return state_json();}
+      if((next.values!=state_.values||!keys.empty())&&!commit(std::move(next),experimental,keys,"Settings completed before Play",{}))return state_json();
+      std::string error;
+      if(!hooks_.play||!hooks_.play(error))status_=error.empty()?"The game could not start. See Help & support.":error;
+      else{status_=error.empty()?"Game started.":error;can_play_=false;}
     }
   }else if(type=="report"){report_visible_=true;report_hint_=hooks_.reportHint?hooks_.reportHint():"";}
   else if(type=="closeReport"){report_visible_=false;}
   else if(type=="cancelReport"){status_="Report cancelled.";}
   else if(type=="browseGame"){if(hooks_.browseGame)game_path_=hooks_.browseGame();}
-  else if(type=="browseDlss5Runtime"){
-    if(hooks_.browseDlss5Runtime){state_.dlss5_runtime_path=hooks_.browseDlss5Runtime();refresh_runtime();status_="Runtime file selected. Save, then restart the game to use DLSS 5.";}
+  else if(type=="browseDlss5Runtime"||type=="clearDlss5Runtime"){
+    State next=state_;
+    if(type=="clearDlss5Runtime")next.dlss5_runtime_path.clear();
+    else if(hooks_.browseDlss5Runtime)next.dlss5_runtime_path=hooks_.browseDlss5Runtime();
+    // A cancelled picker returns the path it was given: nothing to write.
+    if(next.dlss5_runtime_path!=state_.dlss5_runtime_path){
+      const bool cleared=next.dlss5_runtime_path.empty();
+      commit(std::move(next),experimental,{},cleared?"DLSS 5 runtime: looking in the game folder":"DLSS 5 runtime file chosen. Restart the game to use it",{});
+      refresh_runtime();
+    }
   }
-  else if(type=="clearDlss5Runtime"){state_.dlss5_runtime_path.clear();refresh_runtime();status_="DLSS 5 will look in the game folder. Save to keep this change.";}
   else if(type=="recheck"){if(hooks_.recheck)set_compatibility(hooks_.recheck());}
   else if(type=="notices"){if(hooks_.notices)hooks_.notices();}
   else if(type=="prep"){
-    // Preparation card: launcher-only settings, applied at once (no Save, not counted as unsaved).
+    // Preparation: launcher-only settings, applied at once by the host (not part of the game's settings).
     const auto action=get<std::string>(o,"action");const int value=get<int>(o,"value",0);
     if(!hooks_.prepare||!hooks_.prepare(action,value))status_="Preparation is unavailable. Reopen the launcher.";
   }
@@ -270,12 +318,13 @@ std::string Bridge::handle(const std::string& message){
 std::string Bridge::state_json() const {
   auto preset_values=st::preset_values_for(state_.preset,state_.caps);bool custom=false;
   for(int i=0;i<st::kKnobCount;++i)if(shown(st::kKnobs[i])&&std::string(st::kKnobs[i].category)!="Support"&&state_.values[i]!=preset_values[i])custom=true;
-  std::string out="{\"type\":\"state\",\"preset\":"+std::to_string(state_.preset)+",\"presetLabel\":"+q(st::kPresetLabel[state_.preset])+",\"recommendedPreset\":"+std::to_string(state_.suggested)+",\"dirty\":"+std::to_string(dirty())+",\"unsavedCount\":"+std::to_string(dirty())+",\"restartNeeded\":"+b(restart_count_>0)+",\"restartCount\":"+std::to_string(restart_count_)+",\"restartBanner\":"+q(ui_state::restart_banner(restart_count_))+",\"experimental\":"+b(experimental)+",\"developer\":"+b(dev)+",\"status\":"+q(status_)+",\"canPlay\":"+b(can_play_)+",\"settings\":[";
+  const int restart_total=int(restart_names_.size())+restart_others_;
+  std::string out="{\"type\":\"state\",\"preset\":"+std::to_string(state_.preset)+",\"presetLabel\":"+q(st::kPresetLabel[state_.preset])+",\"recommendedPreset\":"+std::to_string(state_.suggested)+",\"restartNeeded\":"+b(restart_total>0)+",\"restartCount\":"+std::to_string(restart_total)+",\"restartBanner\":"+q(ui_state::restart_banner(restart_names_,restart_others_))+",\"restartNames\":"+strings(restart_names_)+",\"experimental\":"+b(experimental)+",\"developer\":"+b(dev)+",\"status\":"+q(status_)+",\"canPlay\":"+b(can_play_)+",\"settings\":[";
   bool first=true;for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k))continue;if(!first)out+=",";first=false;
     int value=state_.values[i];std::string maturity=k.experimental?"experimental":st::choice_maturity(k,value);
     // Opted-in release options use release copy and live on their own Experimental page.
     const bool opted=!dev&&st::opt_in_knob(k),developer=k.dev_only&&!opted;
-    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(opted?"Experimental":k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(developer)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(std::string(k.cost.provenance)=="No qualified measurement available."?"":k.cost.provenance)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],value),!developer))+",\"applyNote\":"+q(developer?k.apply_note:"")+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
+    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(opted?"Experimental":k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(developer)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(std::string(k.cost.provenance)=="No qualified measurement available."?"":k.cost.provenance)+",\"apply\":"+q(apply_text(st::transition_apply(k,value,value),!developer))+",\"applyNote\":"+q(developer?k.apply_note:"")+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
     bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev,opt_in()))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps,opt_in());
       std::string reason,requirements;
       if(developer){
@@ -286,7 +335,7 @@ std::string Bridge::state_json() const {
         for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);if(j>=0){if(!requirements.empty())requirements+="; ";requirements+=std::string("needs ")+st::kKnobs[j].label+" "+label(j,n.min_choice);}}
         for(auto& n:k.required_on)if(n.key&&c>=n.min_choice){if(!requirements.empty())requirements+="; ";requirements+=std::string("needs ")+n.label;}
       }else{reason=release_reason(k,c,state_.caps,state_.values);requirements=release_requirements(k,c);}
-      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],c),!developer))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
+      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(apply_text(st::transition_apply(k,value,c),!developer))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
     out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
   }
   std::string gpu=inspection_.adapters.size()>1?"GPU not chosen":"GPU not detected",vram="Not detected",driver="Driver not detected";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Driver not detected":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}
@@ -304,7 +353,9 @@ std::string Bridge::state_json() const {
   out+=",\"dlss5RuntimePath\":"+q(state_.dlss5_runtime_path)+",\"dlss5RuntimeStatus\":"+q(state_.dlss5_runtime_status.empty()?"Runtime status is checked when the game folder or selected file changes. NVIDIA-signed runtimes are preferred.":state_.dlss5_runtime_status);
   out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Generated frames do not increase the rendered frame rate.\"";
   if(hooks_.preparation){const auto prep=hooks_.preparation();if(!prep.empty())out+=",\"preparation\":"+prep;}
-  out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"presetLabel\":"+q(preview_preset_>=0?st::kPresetLabel[preview_preset_]:st::kPresetLabel[state_.preset])+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
+  // The last change (what, what changed with it, where, whether Undo can restore it) and a failed write (with Retry).
+  out+=",\"notice\":{\"text\":"+q(notice_)+",\"also\":"+strings(notice_also_)+",\"anchor\":"+q(notice_anchor_)+",\"undo\":"+b(can_undo_&&!notice_.empty())+"}";
+  out+=",\"writeError\":{\"text\":"+q(write_error_)+",\"retry\":"+b(has_retry_)+"}";
   out+=std::string(",\"report\":{\"visible\":")+b(report_visible_)+",\"privacy\":"+q(diagnostics::privacy_text)+",\"loggingHint\":"+q(report_hint_)+",\"bytes\":"+std::to_string(report_.bytes)+",\"status\":"+std::to_string(int(report_.status))+",\"message\":"+q(report_.message)+",\"files\":[";
   first=true;for(auto& f:report_.files){if(!first)out+=",";first=false;out+="{\"name\":"+q(f.name)+",\"text\":"+q(f.binary?std::string():f.text)+",\"note\":"+q(f.note)+",\"size\":"+std::to_string(f.text.size())+(f.binary?",\"binary\":true":"")+"}";}
   return out+"]}}";

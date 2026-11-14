@@ -1,4 +1,7 @@
 /* UI is a renderer. The native bridge owns policy, dependencies, edits and persistence.
+   Instant apply: a click sends its change and the bridge writes it at once. There is no Save and no review step;
+   the bridge answers with what changed (state.notice, with Undo), what waits for a game restart
+   (state.restartNames) and, when the file could not be written, state.writeError with Retry.
    Layout (docs/ui_rework/PROPOSAL.md, Direction A): sidebar with Play, preset in the header, setting rows in groups,
    detail panel for the selected row. */
 'use strict';
@@ -17,7 +20,7 @@ if(query.has('chrome'))$('titlebar').hidden=false;
 let state = null;
 const sampleView=query.get('view')||'';
 // Review views (--screenshot-view) open the page they show.
-const viewSection={missing:'Home',probe:'Support',support:'Support',surfaces:'Surfaces',performance:'Performance',experimental:'Experimental',advanced:'Advanced',hotkeys:'Hotkeys',lighting:'Lighting',dlss5:'DLSS 5'};
+const viewSection={missing:'Home',notice:'Lighting',probe:'Support',support:'Support',surfaces:'Surfaces',performance:'Performance',experimental:'Experimental',advanced:'Advanced',hotkeys:'Hotkeys',lighting:'Lighting',dlss5:'DLSS 5'};
 let section = query.get('section') || viewSection[sampleView] || 'Home';
 let experimentalOpen = query.has('experimental')||sampleView==='experimental';
 // The selected row of each page (its details show in the panel) and open disclosures survive bridge refreshes.
@@ -86,7 +89,7 @@ const hotkeyFor={dlss5_nr:'hotkey_dlss5',exp_hair_groom_primary:'hotkey_rtx_hair
 const hotkeyName=id=>(hotkeyInfo[id]||[id])[0];
 function openSection(id,focus,select) {section=id;if(select)selected[id]=select;render(state);$('main').scrollTop=0;if(focus)$(focus)?.focus?.();}
 function el(tag, className, text) { const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e; }
-function send(type, extra={}) { if(sample) { $('status').textContent='Sample preview: actions do not change settings or launch the game';return; } window.chrome?.webview?.postMessage({type,...extra}); }
+function send(type, extra={}) { if(sample) { $('changes').hidden=false;$('status').textContent='Sample preview: actions do not change settings or launch the game';return; } window.chrome?.webview?.postMessage({type,...extra}); }
 function measured(text) {return !!text && !/unknown|not measured|not detected|unavailable/i.test(text);}
 function pill(text,kind) {return el('span','pill '+(kind||''),text);}
 function badge(text,kind,title) {const b=el('span','badge'+(kind?' '+kind:''),text);if(title)b.title=title;return b;}
@@ -219,6 +222,9 @@ function row(s,opts={}) {
  text.append(meta);
  const [needs,control]=settingControl(s);text.append(needs);
  if(opts.parentOff)text.append(el('p','cost','Only has an effect while '+opts.parentName+' is on. Its value is kept.'));
+ // What changed with this click, where the click was made (the status strip repeats it on every page).
+ const n=state.notice||{};
+ if(n.anchor===s.id&&(n.also||[]).length){const note=el('p','also');note.id='row-also';note.setAttribute('role','status');note.append(el('span','','Also changed: '+n.also.join('; ')+'. '));if(n.undo)note.append(linkButton('row-undo','Undo',()=>send('undo')));text.append(note);}
  const side=el('div','row-control');side.append(control);
  c.append(text,side);
  if(s.id==='dlss5_nr')c.append(runtimeFile(s));
@@ -398,9 +404,7 @@ function statusPanel() {
  const warn=(c.warnings||[]).join(' '),known=measured(c.gpu||'')&&!/not (chosen|detected)/i.test(c.gpu||'');
  if(warn||!known)item('gpu','warn',warn||'The graphics card could not be checked.',btn('home-recheck','Check again',()=>send('recheck')));
  const mods=state.modStatus||'';if(/missing/i.test(mods))item('mods','err','Mod files are missing. Install BG3RTX again.');
- if(state.error)item('error','err',state.error);
- const count=state.unsavedCount??state.dirty??0;
- if(count)item('unsaved','warn',count+' unsaved '+(count===1?'change':'changes')+'.',btn('home-save','Save',()=>send('save',{policy:'enable'})));
+ if(state.writeError?.text)item('error','err',state.writeError.text,state.writeError.retry?btn('home-retry','Retry',()=>send('retry')):null);
  if(state.restartNeeded)item('restart','warn',(state.restartBanner||'Restart the game to apply saved changes').replace(/\.$/,'')+'.');
  const hair=(prep.items||[]).find(i=>i.id==='hair'),shaders=(prep.items||[]).find(i=>i.id==='shaders');
  if(hair?.state==='failed')item('hair','warn','RTX Hair style conversion stopped. See Preparation below.');
@@ -512,7 +516,7 @@ function renderNavigation() {
 }
 function render(next) {
  const focused=document.activeElement?.id;
- const focusedDialog=['confirmation','report-dialog'].find(id=>$(id).open&&$(id).contains(document.activeElement));
+ const focusedDialog=['report-dialog'].find(id=>$(id).open&&$(id).contains(document.activeElement));
  state=next;if(state.experimental!==undefined)experimentalOpen=state.experimental;
  if(!visibleSections().includes(section))section=section==='Advanced'&&visibleSections().includes('Hotkeys')?'Hotkeys':'Lighting';
  $('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
@@ -523,41 +527,43 @@ function render(next) {
  $('hero-version').textContent='BG3RTX '+(state.version||'version unavailable');
  const warnings=$('warnings');warnings.replaceChildren();
  if(state.gamePath===''&&section!=='Home'){const n=el('div','notice setup'),b=el('button','btn small primary','Choose folder…');n.setAttribute('role','alert');b.id='notice-browse';b.onclick=()=>send('browseGame');n.append(icon('Needs'),el('span','',"Baldur's Gate 3 was not found. Choose the folder that contains bin\\bg3.exe to turn Play on."),b);warnings.append(n);}
- if(state.error&&section!=='Home'){const n=el('div','notice error');n.setAttribute('role','alert');n.append(icon('Needs'),el('span','',state.error));warnings.append(n);}
+ // A failed write: nothing changed; the page keeps showing what is in the file. Retry repeats the same write.
+ if(state.writeError?.text){const n=el('div','notice error');n.id='write-error';n.setAttribute('role','alert');n.append(icon('Needs'),el('span','',state.writeError.text));
+  if(state.writeError.retry){const b=el('button','btn small primary','Retry');b.id='retry-write';b.onclick=()=>send('retry');n.append(b);}
+  const x=el('button','btn small','Dismiss');x.id='dismiss-error';x.onclick=()=>send('dismiss');n.append(x);warnings.append(n);}
  if(state.restartNeeded){const n=el('div','notice restart');n.id='restart-banner';n.setAttribute('role','status');n.append(icon('Needs'),el('span','',state.restartBanner||'Restart the game to apply saved changes.'));warnings.append(n);}
  renderFooter();
  $('play').disabled=!state.canPlay;
  $('play-note').textContent=state.canPlay?'':state.gamePath===''?'Choose the game folder first':'Close the running game to play again';
- renderSettings();renderPreview();renderReport();
- if(focused){const target=$(focused);if(target&&((focusedDialog&&$(focusedDialog).open&&$(focusedDialog).contains(target))||(!$('confirmation').open&&!$('report-dialog').open)))target.focus({preventScroll:true});}
+ renderSettings();renderReport();
+ if(focused){const target=$(focused);if(target&&((focusedDialog&&$(focusedDialog).open&&$(focusedDialog).contains(target))||!$('report-dialog').open))target.focus({preventScroll:true});}
 }
+// Status strip: the last change (with what changed with it and Undo) or a message from the bridge. Hidden otherwise.
 function renderFooter() {
- const count=state.unsavedCount??state.dirty??0;
- $('status').textContent=state.status||(count?count+' unsaved '+(count===1?'change':'changes'):'Saved.');
- $('discard').disabled=!count;$('save').disabled=!count;
-}
-function renderPreview() {
- const p=state.preview,d=$('confirmation');if(!p?.kind){if(d.open)d.close();return;}const root=$('confirmation-copy');root.replaceChildren();$('confirmation-title').textContent=p.kind==='preset'?'Review preset: '+(p.presetLabel||state.presetLabel):'Review required settings';const pi=['Low','Medium','High','Ultra'].indexOf(p.presetLabel);if(p.kind==='preset'&&state.presetDescriptions?.[pi])root.append(el('p','',state.presetDescriptions[pi]));if(!(p.changes||[]).length)root.append(el('p','','No settings change.'));const ul=el('ul','help-copy');(p.changes||[]).forEach(c=>ul.append(el('li','',c)));root.append(ul);(p.blocked||[]).forEach(c=>root.append(el('p','notice',c)));$('confirm-preview').disabled=!!p.blocked?.length;showDialog(d);
+ const n=state.notice||{},also=(n.also||[]).length?' Also changed: '+n.also.join('; ')+'.':'';
+ const text=n.text?n.text+'.'+also:state.status||'';
+ $('changes').hidden=!text;$('status').textContent=text;
+ $('undo').hidden=!n.undo;$('dismiss').hidden=!n.text;
 }
 function renderReport() {
  const r=state.report,d=$('report-dialog');if(!r?.visible){if(d.open)d.close();return;}$('logging-hint').textContent=r.loggingHint||'';$('logging-hint').hidden=!r.loggingHint;$('privacy').textContent=r.privacy||'Saves selected logs, settings and graphics details as a ZIP on your PC. Personal paths are partly removed; review every file before sharing. Nothing is uploaded. Screenshots and crash dumps are excluded; your latest save is added only if you tick it.';
  const root=$('report-preview'),notice=state.status&&/report|package/i.test(state.status)?state.status:'';
  const signature=JSON.stringify([r,notice]);if(signature===reportSignature){showDialog(d);return;}reportSignature=signature;rememberDisclosures(root);root.replaceChildren();if(r.message)root.append(el('p','help-copy',r.message));if(state.status&&/report|package/i.test(state.status))root.append(el('p','notice',state.status));const files=r.files||[];if(files.length){root.append(el('h3','','Preview · '+files.length+' files · '+(r.bytes||0).toLocaleString()+' bytes'));const ul=el('ul','report-list');files.forEach(f=>{const li=el('li');li.append(el('b','',f.name+' · '+f.size.toLocaleString()+' bytes'));if(f.note)li.append(el('p','',f.note));if(f.binary){ul.append(li);return;}const details=el('details'),summary=el('summary','','View file contents');details.id='report-file-'+encodeURIComponent(f.name);summary.id='report-summary-'+encodeURIComponent(f.name);restoreDisclosure(details);details.append(summary,el('pre','',f.text||''));li.append(details);ul.append(li);});root.append(ul);}$('export-report').hidden=!files.length;$('prepare-report').textContent=files.length?'Refresh preview':'Preview files';showDialog(d);
 }
-$('discard').onclick=()=>send('discard');$('save').onclick=()=>send('save',{policy:'enable'});$('play').onclick=()=>send('play');$('cancel-preview').onclick=()=>send('cancel');$('confirm-preview').onclick=()=>send('confirm');$('confirmation').addEventListener('cancel',e=>{e.preventDefault();send('cancel');});
+$('undo').onclick=()=>send('undo');$('dismiss').onclick=()=>send('dismiss');$('play').onclick=()=>send('play');
 $('close-report').onclick=()=>{$('report-dialog').close();send('closeReport');};$('report-dialog').addEventListener('cancel',()=>send('closeReport'));$('prepare-report').onclick=()=>{if(!sample){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report…';$('cancel-report').hidden=false;$('prepare-report').disabled=true;}send('prepareReport',{issue:$('issue').value,logs:$('include-logs').checked,settings:$('include-settings').checked,system:$('include-system').checked,save:!!$('include-save').checked});};$('cancel-report').onclick=()=>send('cancelReport');$('export-report').onclick=()=>send('exportReport');
 window.chrome?.webview?.addEventListener('message',e=>{const data=typeof e.data==='string'?JSON.parse(e.data):e.data;if(data.type==='state'){render(data);if(sample)reviewView(true);}else if(data.type==='progress'){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report: '+data.done+' / '+data.total;$('cancel-report').hidden=false;}});
 // Review views (--screenshot-view) adjust the sample, or the host's review state, before rendering again.
 function reviewView(host) {
- {if(sampleView==='error')state.error='Settings could not be saved. The destination could not be replaced because another application is using it. Your edits are preserved. Close the application and try again. Windows error 32: the process cannot access the file because it is being used by another process.';if(sampleView==='missing'&&!host){state.gamePath='';state.compatibility.warnings=['Choose the game folder containing bin\\bg3.exe. Settings browsing remains available.'];}if(sampleView==='probe'&&!host){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
- if(sampleView==='restart'){state.dirty=0;state.unsavedCount=0;state.status='Saved';state.restartNeeded=true;state.restartCount=3;state.restartBanner='Restart the game to apply 3 changes';render(state);}
+ {if(sampleView==='error')state.writeError={text:'Settings not saved. Nothing was changed.\nThe file is in use by another application (Windows error 32). Close it and try again.',retry:true};if(sampleView==='notice'){state.settings.find(s=>s.id==='exp_hair_groom_primary').value=0;}if(sampleView==='notice')state.notice={text:'RTX Hair: On \u2192 Off',also:['Strand hair edge resolve: Analytic coverage \u2192 Off'],anchor:'exp_hair_groom_primary',undo:true};if(sampleView==='missing'&&!host){state.gamePath='';state.compatibility.warnings=['Choose the game folder containing bin\\bg3.exe. Settings browsing remains available.'];}if(sampleView==='probe'&&!host){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
+ if(sampleView==='restart'){state.restartNeeded=true;state.restartCount=2;state.restartNames=['Hair shadows','Water lighting'];state.restartBanner='Restart the game to apply: Hair shadows, Water lighting.';state.notice={text:'Water lighting: Off \u2192 Reflections (after a game restart)',also:[],anchor:'exp_water',undo:true};render(state);}
  if((query.has('report')||sampleView==='report')&&!state.report?.files?.length){state.report={visible:true,privacy:'Creates a ZIP on your PC with BG3RTX logs, graphics settings, version and system graphics details. Logs may contain file paths. We remove common personal path details, but you should review the files before sharing. Nothing is uploaded. Screenshots and crash dumps are excluded; your latest save is added only if you tick it.',files:[{name:'CONTENTS.txt',size:248,text:'Sample preview only. No files have been collected.'},{name:'graphics.txt',size:112,text:'Sample adapter: NVIDIA GeForce RTX 5090\nDriver: 621.01\nAdapter used by the game: unconfirmed'}],bytes:360};renderReport();}
  if(sampleView==='experimental'||query.has('bottom'))$('main').scrollTop=$('main').scrollHeight;
 }
 if(sample) {
  const unqualified=['scene_handout','dlss5_nr'];
  const restartIds=['rt_geometry','exp_hidden_surface','exp_water','frame_generation','detailed_logging','dlss5_nr','scene_handout','water_surface_fresnel','fg_present_metering','exp_native_coverage','hair_motion_stability'];
- const choices=(id,labels,current)=>labels.map((label,value)=>({label,value,enabled:true,maturity:value&&unqualified.includes(id)?'awaiting_qualification':'qualified',apply:restartIds.includes(id)&&value!==current&&!(labels[0]==='Off'&&value===0&&id!=='rt_geometry'&&id!=='frame_generation'&&id!=='exp_hidden_surface'&&id!=='detailed_logging'&&id!=='dlss5_nr')?'Restart the game to apply':'Applies after saving'}));
+ const choices=(id,labels,current)=>labels.map((label,value)=>({label,value,enabled:true,maturity:value&&unqualified.includes(id)?'awaiting_qualification':'qualified',apply:restartIds.includes(id)&&value!==current&&!(labels[0]==='Off'&&value===0&&id!=='rt_geometry'&&id!=='frame_generation'&&id!=='exp_hidden_surface'&&id!=='detailed_logging'&&id!=='dlss5_nr')?'Restart the game to apply':'Applies at once'}));
  const settings=[
  ['rr','DLSS Ray Reconstruction','Lighting',['Off','On'],1,'Reduces noise in ray-traced lighting.'],
  ['rt_geometry','Ray-tracing detail','Lighting',['Off','Solid surfaces','Include foliage'],2,'Chooses what ray-traced lighting and shadows include: solid surfaces only, or also foliage, grates and chains.'],
@@ -586,7 +592,7 @@ if(sample) {
  ['fg_destroy_wait_exact','Frame generation pacing test','Experimental',['Standard','Deferred'],0,'Experimental: may reduce frame generation stutter when the game replaces temporary images. Cost and smoothness are unqualified.'],
  ['fg_present_metering','Multi-frame presentation test','Experimental',['Standard','Driver metering'],0,'Experimental: enables an optional driver presentation capability for frame generation. Smoothness and cost are unqualified.'],
  ['exp_hair_strand_aa','Strand hair edge resolve','Experimental',['Off','Strands unresolved','Analytic coverage'],0,"Experimental: how on-screen strand edges enter Ray Reconstruction. The game's hair dither resolve no longer mixes strands by the hair cards' dither pattern; with analytic coverage, thin strands at the edges are blended with their background by their exact pixel coverage instead of flickering. Appearance and cost are unqualified."]
- ].filter(x=>x[2]!=='Experimental'||experimentalOpen).map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(id,levels,value),cost:'Not measured (sample)',apply:['rt_geometry','detailed_logging','dlss5_nr','fg_present_metering'].includes(id)?'Restart the game to apply':['rr','exp_gi_rt_pipeline_reorder'].includes(id)?'Applies after saving; may briefly pause':'Applies after saving',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
+ ].filter(x=>x[2]!=='Experimental'||experimentalOpen).map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(id,levels,value),cost:'Not measured (sample)',apply:['rt_geometry','detailed_logging','dlss5_nr','fg_present_metering'].includes(id)?'Restart the game to apply':['rr','exp_gi_rt_pipeline_reorder'].includes(id)?'Applies at once; may briefly pause':'Applies at once',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
  // RTX Hair conversion: ?view=granny has the player's granny2.dll and All styles; ?view=hairerror a stopped run.
  const granny=sampleView==='granny',stopped=sampleView==='hairerror';
  const preparation={items:[
@@ -596,7 +602,7 @@ if(sample) {
   hair:{ready:412,captured:430,...(granny?{total:1530,source:'all',etaSeconds:7300}:{source:'seen',etaSeconds:2100}),finished:granny?412:430,needed:granny?1530:559,bytes:1.1e9,...(stopped?{error:'granny2.dll could not be loaded.'}:{})},
   granny:granny||stopped?{path:'C:\\Tools\\ExportTool\\granny2.dll',ok:true}:{path:'',ok:false},convertAllReason:granny||stopped?'':'Needs granny2.dll: choose it below.'};
  // The WebView host sends its review state (real settings table); a plain browser uses this sample.
- if(!window.chrome?.webview){render({type:'state',version:'Sample',modStatus:'Mod files present',preset:3,presetLabel:'Ultra',recommendedPreset:3,custom:true,presetDescriptions:['Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.','Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.','Adds foliage to ray tracing, Full local light shadows and Standard reflections.','Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.'],experimental:experimentalOpen,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:true,gamePath:'C:\\Games\\Baldurs Gate 3',compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[],details:['Hardware ray tracing supported.','Driver 621.01 supported.']},settings,status:'1 unsaved change · Sample preview',
+ if(!window.chrome?.webview){render({type:'state',version:'Sample',modStatus:'Mod files present',preset:3,presetLabel:'Ultra',recommendedPreset:3,custom:true,presetDescriptions:['Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.','Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.','Adds foliage to ray tracing, Full local light shadows and Standard reflections.','Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.'],experimental:experimentalOpen,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',canPlay:true,gamePath:'C:\\Games\\Baldurs Gate 3',compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[],details:['Hardware ray tracing supported.','Driver 621.01 supported.']},settings,status:'',
   shortcuts:{hotkey_rt_toggle:'Ctrl+Shift+F9',hotkey_dlss5:'Ctrl+Shift+F8',hotkey_rtx_hair:'Ctrl+Shift+F7'},shortcutDefaults:{hotkey_rt_toggle:'Ctrl+Shift+F9',hotkey_dlss5:'Ctrl+Shift+F8',hotkey_rtx_hair:'Ctrl+Shift+F7'},preparation});
  reviewView(false);}
 } else send('init');

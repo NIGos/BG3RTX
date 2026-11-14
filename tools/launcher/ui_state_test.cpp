@@ -28,6 +28,19 @@ int main() {
   check(ui::restart_count(start,start)==0); // Saving a revert clears it.
   check(ui::restart_banner(3)=="Restart the game to apply 3 changes.");
   check(ui::restart_banner(1)=="Restart the game to apply 1 change.");check(ui::restart_banner(0).empty());
+  // The same changes by name: settings a player can see, then the count of the rest. Same total as restart_count.
+  {
+    st::Map from{{"rt_hit_material","0"},{"rt_hit_material_wind_rgb","0"},{"rt_alpha","0"},{"rt","0"}},to=from;
+    to["rt_alpha"]="1";to["rt"]="1";to["rt_hit_material"]="1";to["fps_cap"]="60";
+    int others=-1;auto names=ui::restart_names(from,to,&others);
+    check(int(names.size())+others==ui::restart_count(from,to));
+    check(std::find(names.begin(),names.end(),"Ray-tracing detail")!=names.end());
+    check(std::find(names.begin(),names.end(),"Rendered frame limit")==names.end());   // a live change is not listed
+    check(ui::restart_names(from,from,&others).empty()&&others==0);
+    check(ui::restart_banner({"Water lighting","Hair shadows"},0)=="Restart the game to apply: Water lighting, Hair shadows.");
+    check(ui::restart_banner({"Water lighting"},2)=="Restart the game to apply: Water lighting and 2 more settings.");
+    check(ui::restart_banner({},1)=="Restart the game to apply 1 change."&&ui::restart_banner({},0).empty());
+  }
   for(const char* initial:{"0","1"}){
     st::Map startup{{"rt_native_tileset",initial}},candidate=startup;
     candidate["rt_native_tileset"]=initial[0]=='0'?"1":"0";

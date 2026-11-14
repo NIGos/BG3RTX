@@ -60,6 +60,49 @@ render(fixture);
  ids.get('preset-reset').onclick();assert.deepStrictEqual(msg(),{type:'preset',value:fixture.preset});
  render(fixture);
 }
+// Instant apply: no Save, no Discard, no review dialog. A click sends its change; the bridge answers with what changed.
+{
+ for(const id of ['save','discard','confirmation','confirm-preview','cancel-preview','home-save'])assert(!ids.has(id),id+' belongs to the old Save flow');
+ const source=fs.readFileSync('tools/launcher/ui/app.js','utf8');
+ for(const gone of ["send('save'","send('discard'","send('confirm'","send('cancel'","unsavedCount","state.preview"])assert(!source.includes(gone),gone+' left in app.js');
+ // Nothing to say: the status strip is hidden. A message from the bridge shows it, without Undo.
+ render({...fixture,status:''});assert(ids.get('changes').hidden,'status strip hidden when there is nothing to say');
+ render({...fixture,status:'Report saved on your PC.'});assert(!ids.get('changes').hidden&&ids.get('status').textContent==='Report saved on your PC.'&&ids.get('undo').hidden&&ids.get('dismiss').hidden);
+ // A change: what changed, what changed with it, Undo and Dismiss; the same list sits in the row that was clicked.
+ const notice={text:'RTX Hair: On → Off',also:['Strand hair edge resolve: Analytic coverage → Off'],anchor:'exp_hair_groom_primary',undo:true};
+ render({...fixture,status:'',notice});
+ assert.strictEqual(ids.get('status').textContent,'RTX Hair: On → Off. Also changed: Strand hair edge resolve: Analytic coverage → Off.');
+ assert(!ids.get('changes').hidden&&!ids.get('undo').hidden&&!ids.get('dismiss').hidden);
+ ids.get('undo').onclick();assert.deepStrictEqual(msg(),{type:'undo'});
+ ids.get('dismiss').onclick();assert.deepStrictEqual(msg(),{type:'dismiss'});
+ go('Lighting');
+ assert(all(ids.get('card-exp_hair_groom_primary')).includes(ids.get('row-also')),'the dependency note sits in the row that was clicked');
+ assert(/Also changed: Strand hair edge resolve: Analytic coverage → Off/.test(text(ids.get('row-also')))&&ids.get('row-also').attributes.role==='status');
+ ids.get('row-undo').onclick();assert.deepStrictEqual(msg(),{type:'undo'});
+ // A change with nothing else: no note in the row; Undo only while the bridge offers it.
+ render({...fixture,notice:{text:'Reflections: Rough → Standard',also:[],anchor:'reflections',undo:true}});go('Surfaces');
+ assert(!onPage('row-also')&&!ids.get('undo').hidden);
+ render({...fixture,notice:{text:'Undone',also:[],anchor:'',undo:false}});assert(ids.get('undo').hidden&&ids.get('status').textContent==='Undone.');
+ // A failed write: a red banner on every page with the host's message, Retry and Dismiss; nothing else changes.
+ const failed={...fixture,status:'',writeError:{text:'Settings not saved. Nothing was changed.\nWindows error 32',retry:true}};
+ for(const p of ['Home','Lighting','Support']){render(failed);go(p);
+  assert(ids.get('warnings').children.includes(ids.get('write-error'))&&ids.get('write-error').attributes.role==='alert',p+' shows the failed write');
+  assert(/Windows error 32/.test(text(ids.get('write-error'))));}
+ ids.get('retry-write').onclick();assert.deepStrictEqual(msg(),{type:'retry'});
+ ids.get('dismiss-error').onclick();assert.deepStrictEqual(msg(),{type:'dismiss'});
+ go('Home');assert(onPage('home-status-error'));ids.get('home-retry').onclick();assert.deepStrictEqual(msg(),{type:'retry'});
+ render({...failed,writeError:{text:'Review mode cannot write settings.',retry:false}});assert(!ids.get('warnings').children.some(e=>all(e).some(x=>x.id==='retry-write')),'no Retry when nothing waits');
+ // Restart indicator: calm, on every page, with the names; the rows that wait carry "Restart pending".
+ const waiting={...fixture,status:'',restartNeeded:true,restartCount:2,restartNames:['Ray-tracing detail','Water lighting'],restartBanner:'Restart the game to apply: Ray-tracing detail, Water lighting.'};
+ for(const p of ['Home','Lighting','Surfaces','Hotkeys']){render(waiting);go(p);
+  assert(ids.get('warnings').children.includes(ids.get('restart-banner'))&&ids.get('restart-banner').attributes.role==='status',p+' restart indicator');
+  assert.strictEqual(all(ids.get('restart-banner')).find(e=>e.tagName==='span'&&e.className==='').textContent,'Restart the game to apply: Ray-tracing detail, Water lighting.');}
+ go('Lighting');assert(all(ids.get('card-rt_geometry')).some(e=>e.className==='badge pending'&&e.textContent==='Restart pending'));
+ assert(!all(ids.get('card-rr')).some(e=>e.className==='badge pending'));
+ go('Surfaces');assert(all(ids.get('card-exp_water')).some(e=>e.className==='badge pending'));
+ go('Home');assert(/Restart the game to apply: Ray-tracing detail, Water lighting\./.test(text(ids.get('home-status-restart'))));
+ render(fixture);
+}
 // Home: headline, only what needs attention, preparation, the preset and the keys. No settings of its own.
 {
  for(const id of ['home-play-card','home-attention','home-preparation','home-shaders','home-preset','home-keys'])assert(onPage(id),id+' missing on Home');
@@ -205,10 +248,10 @@ for(const id of ['box_lights','exp_hidden_surface','hair_distant_detail','hair_m
  const fg=fixture.settings.find(s=>s.id==='frame_generation');
  assert.strictEqual(badgeOf('frame_generation'),fg.value===0?'Restart':'Restart for Off');
  go('Lighting');
- const custom={id:'test-toggle',title:'Toggle fixture',category:'Lighting',value:0,apply:'Applies after saving',description:'x',choices:[{value:0,label:'Off',apply:'Applies after saving',enabled:true},{value:1,label:'On',apply:'Restart the game to apply',enabled:true}]};
+ const custom={id:'test-toggle',title:'Toggle fixture',category:'Lighting',value:0,apply:'Applies at once',description:'x',choices:[{value:0,label:'Off',apply:'Applies at once',enabled:true},{value:1,label:'On',apply:'Restart the game to apply',enabled:true}]};
  render({...fixture,settings:[...fixture.settings,custom]});assert.strictEqual(badgeOf('test-toggle'),'Restart to turn on');
  assert(all(ids.get('card-test-toggle')).length&&page().some(e=>e.className==='group-title'&&e.textContent==='More'),'an unlisted setting gets a last group');
- render({...fixture,settings:[...fixture.settings,{...custom,value:1,choices:[custom.choices[0],{...custom.choices[1],apply:'Applies after saving'}]}]});assert.strictEqual(badgeOf('test-toggle'),undefined);
+ render({...fixture,settings:[...fixture.settings,{...custom,value:1,choices:[custom.choices[0],{...custom.choices[1],apply:'Applies at once'}]}]});assert.strictEqual(badgeOf('test-toggle'),undefined);
  render(fixture);
 }
 // Performance: Tracing speed is collapsed by default and remembers being opened.
@@ -302,10 +345,10 @@ render(reportState);assert.strictEqual(ids.get('report-summary-graphics.txt'),re
 render({...reportState,report:{...report,files:[{...report.files[0],text:'Updated sanitized text'}]}});
 assert.notStrictEqual(ids.get('report-summary-graphics.txt'),reportSummary);assert(ids.get('report-file-graphics.txt').open,'updated report disclosure collapsed');assert.strictEqual(document.activeElement,ids.get('report-summary-graphics.txt'),'updated report lost dialog focus');
 // Requirement copy: one deduplicated line per row naming only the choices affected.
-const needsCard={id:'test-needs',title:'Needs fixture',category:'Surfaces',value:0,apply:'Applies after saving',choices:[
- {value:0,label:'Off',apply:'Applies after saving',reason:'',requirements:''},
- {value:1,label:'Glossy',apply:'Applies after saving',reason:'Needs Ray-tracing detail: Solid surfaces',requirements:'Hardware ray tracing; Ray-tracing detail: Solid surfaces'},
- {value:2,label:'Rough',apply:'Applies after saving',reason:'Needs Ray-tracing detail: Solid surfaces',requirements:'Hardware ray tracing; Ray-tracing detail: Solid surfaces'},
+const needsCard={id:'test-needs',title:'Needs fixture',category:'Surfaces',value:0,apply:'Applies at once',choices:[
+ {value:0,label:'Off',apply:'Applies at once',reason:'',requirements:''},
+ {value:1,label:'Glossy',apply:'Applies at once',reason:'Needs Ray-tracing detail: Solid surfaces',requirements:'Hardware ray tracing; Ray-tracing detail: Solid surfaces'},
+ {value:2,label:'Rough',apply:'Applies at once',reason:'Needs Ray-tracing detail: Solid surfaces',requirements:'Hardware ray tracing; Ray-tracing detail: Solid surfaces'},
  {value:3,label:'Water',apply:'Restart the game to apply',reason:'Needs Water lighting: Reflections',requirements:'Water lighting: Reflections'}]};
 render({...fixture,settings:[...fixture.settings,needsCard]});go('Surfaces');
 const needLine=ids.get('needs-test-needs').children[1].textContent;

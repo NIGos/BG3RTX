@@ -25,10 +25,16 @@ print("Version, unchecked status and A1 cost provenance retained; unknown cost p
 
 assert state["restartCount"] == 0 and state["restartBanner"] == ""
 for setting in state["settings"]:
-    assert setting["apply"] in {"Applies after saving", "Applies after saving; may briefly pause", "Restart the game to apply"}, setting["id"]
+    assert setting["apply"] in {"Applies at once", "Applies at once; may briefly pause", "Restart the game to apply"}, setting["id"]
     for choice in setting["choices"]:
-        assert choice["apply"] in {"Applies after saving", "Applies after saving; may briefly pause", "Restart the game to apply"}
-print("Every card and choice has an explicit apply badge; no pending restart at baseline.")
+        assert choice["apply"] in {"Applies at once", "Applies at once; may briefly pause", "Restart the game to apply"}
+assert state["restartNames"] == [] and not state["restartNeeded"]
+# Instant apply: no unsaved-change count and no review; the last change, its Undo and a failed write have their fields.
+for gone in ("dirty", "unsavedCount", "preview"):
+    assert gone not in state, gone
+assert state["notice"] == {"text": "", "also": [], "anchor": "", "undo": False}
+assert state["writeError"] == {"text": "", "retry": False}
+print("Every row and choice says how it applies; nothing pending, no notice and no failed write at baseline.")
 
 assert far["title"] == "Off-screen bounce light"
 assert [c["label"] for c in far["choices"]] == ["Off", "Near", "Far (6 m)"]
