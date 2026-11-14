@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 gate = Path(__file__).resolve().parents[1] / 'scripts' / 'merge-green.ps1'
@@ -26,6 +27,18 @@ def write(root, path, text):
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(text)
 
+# The full and shader scopes also run the tooling suite of scripts/merge_scope.py (since 2026-11-06): it reads the
+# py_test registry in CMakeLists.txt and runs these tests from the merged tree. The fixtures carry passing stand-ins.
+sys.path.insert(0, str(gate.parent))
+import merge_scope  # noqa: E402
+
+def tooling_stubs(root, cmake=''):
+    write(root, 'CMakeLists.txt', cmake + 'foreach(py_test ' + ' '.join(merge_scope.TOOL_TESTS) + ')\nendforeach()\n')
+    for name in merge_scope.TOOL_TESTS:
+        write(root, f'tests/{name}_test.py', 'raise SystemExit(0)\n')
+    for name in merge_scope.CAMERA_TESTS:
+        write(root, 'tests/' + name, 'exit 0\n')
+
 for mode in ('invalid-ref', 'build-fail', 'shader-fail', 'qa-fail', 'success'):
     with tempfile.TemporaryDirectory(prefix='merge-gate-', dir=scratch) as tmp:
         root = Path(tmp)
@@ -41,6 +54,7 @@ for mode in ('invalid-ref', 'build-fail', 'shader-fail', 'qa-fail', 'success'):
         write(root, 'tools/compile_shaders.py', 'raise SystemExit(' + ('1' if mode == 'shader-fail' else '0') + ')\n')
         write(root, 'tests/qa_detectors_test.py', 'raise SystemExit(' + ('1' if mode == 'qa-fail' else '0') + ')\n')
         write(root, 'scripts/test-tree.ps1', "Set-Content -LiteralPath 'refreshed.txt' -Value done\n")
+        tooling_stubs(root)
         git(root, 'add', '.')
         git(root, 'commit', '-qm', 'feature fixture')
         git(root, 'switch', '-q', 'main')
@@ -81,9 +95,9 @@ for mode in ('adds-files', 'adds-files-test-fail'):
         git(root, 'config', 'user.name', 'Merge gate fixture')
         git(root, 'config', 'user.email', 'fixture@example.invalid')
         write(root, '.gitignore', '/build/\n')
-        for helper in ('build.ps1', 'low-priority.ps1', 'longrun.ps1'):   # build.ps1 dot-sources the other two
+        for helper in ('build.ps1', 'low-priority.ps1', 'longrun.ps1', 'app-control.ps1'):   # build.ps1 dot-sources the other three
             write(root, 'scripts/' + helper, (gate.parent / helper).read_text())
-        write(root, 'CMakeLists.txt', CMAKE_FIXTURE)
+        tooling_stubs(root, CMAKE_FIXTURE)
         write(root, 'check.cmake', CHECK)
         write(root, 'src/a.cpp', 'int a;\n')
         write(root, 'tools/compile_shaders.py', 'raise SystemExit(0)\n')

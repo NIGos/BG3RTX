@@ -5,6 +5,12 @@ pass a batch folder or a single job JSON. `lean_dryrun.ps1` runs this check befo
 its reuse cache and fake queue. No command in this helper launches the game.
 The current per-job findings are in [live_flow_audit.md](live_flow_audit.md).
 
+The whole-tree run ends with two counts: the active jobs (`"active": true` in `duration_lint.json`, kept to today's
+rules; any failure there fails the run) and the historical jobs (run before the readiness, window and warm-up rules
+of 2026-11-05 and kept as the record of what ran; their findings are counted, not gated). On 2026-11-14: 17 active,
+0 failing; 107 historical, 71 with findings. A folder, a job file, `--job-names` and `--preflight` check exactly
+what they name. Jobs waiting for a live go are in `tools/live_batches_staged/` (see its README).
+
 The corpus reads `captures/queue/results.jsonl` from this checkout, falling back
 to the main checkout for a linked worktree. Only rows with `valid: true` qualify.
 FPS modelling uses all readable VALID logs by default; --newest can bound it.

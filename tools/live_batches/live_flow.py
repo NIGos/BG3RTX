@@ -123,6 +123,19 @@ def job_files(directory):
     return sorted(directory.glob("jobs/*.json")) + sorted(directory.glob("*/jobs/*.json"))
 
 
+def split_counts(results, active):
+    """(active jobs, active failing, historical jobs, historical with findings) of a report's jobs.
+
+    Historical jobs ran before the current readiness, window and warm-up rules; they are kept as the record of what
+    was run and are not maintained, so their findings are counted apart and never fail the whole-tree check."""
+    counts = [0, 0, 0, 0]
+    for path, result in results.items():
+        base = 0 if Path(path) in active else 2
+        counts[base] += 1
+        counts[base + 1] += bool(result.get("problems"))
+    return tuple(counts)
+
+
 def active_job_files():
     """Explicit inventory; historical artifacts remain available for audit."""
     inventory = read(ROOT / "tools/live_batches/duration_lint.json")
@@ -1129,8 +1142,18 @@ def main(argv=None):
     if not frozen:
         write(a.cache, index)
     unproven = sum(bool(r.get("replay", {}).get("problems")) for r in report["jobs"].values())
-    print(f"replay gates: {len(report['jobs'])} jobs, {unproven} with unsatisfied historical evidence (see report)", flush=True)
-    print(f"live-flow: {len(report['jobs'])} jobs, {failures} failing", flush=True)
+    if not frozen:   # the frozen snapshot holds no logs to replay: its count would be every job
+        print(f"replay gates: {len(report['jobs'])} jobs, {unproven} with unsatisfied historical evidence (see report)", flush=True)
+    # The whole tree: only the active jobs (duration_lint.json) are held to today's rules. A folder, a job file,
+    # --job-names and --preflight check exactly what they name.
+    whole_tree = Path(a.target).resolve() == (ROOT / "tools/live_batches").resolve() and not (a.active or a.job_names or a.preflight)
+    if whole_tree:
+        n_active, f_active, n_old, f_old = split_counts(report["jobs"], active_job_files())
+        print(f"live-flow: {n_active} active jobs, {f_active} failing; {n_old} historical jobs, {f_old} with findings "
+              "(run before the current rules, kept as a record, not gated)", flush=True)
+        failures = f_active
+    else:
+        print(f"live-flow: {len(report['jobs'])} jobs, {failures} failing", flush=True)
     return int(bool(failures or a.replay_only and unproven))
 
 

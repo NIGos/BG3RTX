@@ -5,11 +5,12 @@
 #   .\scripts\build.ps1 -Launcher     build only the player launcher, bin\BG3RTX.exe
 #   .\scripts\build.ps1 -ReleaseLayer build only the lean release layer, build-nodiag\bin\
 #   .\scripts\build.ps1 -Test         build everything, then run every registered CTest
-#   .\scriptsuild.ps1 -Test -TestRegex <regex>  build, then run selected CTests
+#   .\scripts\build.ps1 -Test -TestRegex <regex>  build, then run selected CTests
 param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$ReleaseLayer, [switch]$Test, [string]$Config = "RelWithDebInfo", [string]$TestRegex = "")
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "low-priority.ps1")
 . (Join-Path $PSScriptRoot "longrun.ps1")
+. (Join-Path $PSScriptRoot "app-control.ps1")
 $root = Split-Path $PSScriptRoot
 $build = Join-Path $root "build"
 
@@ -65,6 +66,9 @@ if (-not $Watch) {
     # supplies a source-consumer regex. An empty
     # test registry is a configuration failure, not a successful validation.
     # ctest prints one line per finished test (n/total, time); the slowest ones are summarised after it.
+    # Fresh test executables are what Smart App Control blocks: name it before a wall of "failed to start" results.
+    $blocked = Get-SmartAppControlHint 'the test executables'
+    if ($blocked) { Write-Warning $blocked }
     Start-LongrunStep 'ctest'
     $times = New-Object System.Collections.Generic.List[object]
     $testArgs = @()
@@ -81,7 +85,7 @@ if (-not $Watch) {
       Write-Host ("slowest tests of {0} ({1:N0} s summed): {2}" -f $times.Count, $sum, ($top -join ', '))
     }
     Write-LongrunSummary 'build.ps1 steps'
-    if ($code) { throw "unit tests failed" }
+    if ($code) { throw ("unit tests failed. $blocked").Trim() }
   }
   return
 }
