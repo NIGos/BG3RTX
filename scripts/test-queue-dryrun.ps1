@@ -34,6 +34,9 @@ $jobs = @(
      patterns = @('\[fake\] game exits'); expect = @('\[fake\] game exits'); expect_runner = @('Run ended: done') },
   @{ name = 'l-post-fails'; save = 'Rivington'; set='gi=6'; traces=1; patterns=$guard;
      post='exit /b 7'; post_gate=$true },
+  # A post written with 'python' (34 job files are) passes its gate where only the 'py' launcher resolves.
+  @{ name = 'l2-post-python'; save = 'Rivington'; set='gi=6'; traces=1; patterns=$guard;
+     post='python -c pass'; post_gate=$true },
   @{ name = 'm-forbidden'; save = 'Rivington'; set='gi=6'; traces=1; patterns=$guard;
      forbid=@('\[core\] guard:') },
   @{ name='n-visible-unfocused'; save='Rivington'; set='fg=4,headless=1'; traces=1; session=$true;
@@ -75,7 +78,7 @@ function Check([string]$what, [bool]$ok) {
 }
 function Has($lines, [string]$re) { [bool](@($lines) -match $re) }
 function Sess($k) { ($by[$k].session -split '#')[0] }
-Check "16 jobs, 17 runs recorded" ($recs.Count -eq 17)
+Check "17 jobs, 18 runs recorded" ($recs.Count -eq 18)
 Check "a, b, c share one session" ((Sess "a-gi0#1") -and (Sess "a-gi0#1") -eq (Sess "b-gi1-phases#1") -and (Sess "b-gi1-phases#1") -eq (Sess "c-refl0#1"))
 Check "a is run 1 of its session (nothing saved), c run 3 (saved > 0)" ($by["a-gi0#1"].saved_sec -eq 0 -and $by["c-refl0#1"].session -like "*#3" -and $by["c-refl0#1"].saved_sec -gt 0)
 Check "a sees its own setting (gi=0)" (Has $by["a-gi0#1"].lines 'gi=0 ')
@@ -93,6 +96,7 @@ Check "j: relaunched after the stall, sees gi=6" ((Sess "j-after-stall#1") -ne (
 Check "every normal run reports done unless faulted" (-not ($recs | Where-Object { $_.job -notmatch '^(d-nv|i-stall|k-single-exit)$' -and $_.outcome -notmatch 'Run ended: done' }))
 Check 'early single-run exit is INVALID even when every game-log expect matches' (-not $by['k-single-exit#1'].valid -and $by['k-single-exit#1'].outcome -match 'successful terminal state')
 Check 'failed post-analysis gate is INVALID' (-not $by['l-post-fails#1'].valid -and $by['l-post-fails#1'].outcome -match 'post-analysis gate passed')
+Check "a 'python' post runs through the py launcher and passes its gate" ($by['l2-post-python#1'].valid)
 Check 'forbidden fault pattern is INVALID' (-not $by['m-forbidden#1'].valid -and $by['m-forbidden#1'].outcome -match 'forbidden log pattern')
 Check 'expect_every: every selected line matches -> valid' ($by['o-every-holds#1'].valid)
 Check 'expect_every: plain expect matches but every-window gate fails -> INVALID' (-not $by['p-every-fails#1'].valid -and $by['p-every-fails#1'].outcome -match 'every-window')

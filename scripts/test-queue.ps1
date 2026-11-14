@@ -622,6 +622,9 @@ function Run-Job($file) {
       Push-Location $tree
       try {
         $postCommand = $job.post.Replace('{captures}',($caps -join ' ')).Replace('{log}',[string]$r.keptLog).Replace('{runner}',[string]$r.runner_log).Replace('{status}',[string]$r.status)
+        # 'python' can be the Microsoft Store alias ("Python was not found": it failed the post gate of two complete
+        # runs on 2026-11-14). A post that starts with it runs through the launcher, like the runner's own tools.
+        if ($postCommand -match '^\s*python3?\s' -and (Get-Command py -ErrorAction SilentlyContinue)) { $postCommand = $postCommand -replace '^\s*python3?\s','py -3 ' }
         $lines += @(cmd /c "$postCommand 2>&1" | ForEach-Object { "$_" } | Select-Object -Last 6)
         if ($job.post_gate -and $LASTEXITCODE -ne 0) { $r.completed=$false; $r.runner_missing+=@('post-analysis gate passed') }
       }
