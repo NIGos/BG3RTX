@@ -403,5 +403,47 @@ int main(){
   check(alpha_region(G,409*M,0,0,0,true,60)==409*M);
   check(alpha_region(G,409*M,409*M,2*M,100*M,true,60)==409*M);   // loading: no shrink below the floor
  }
+ // rt_capture_peak_reserve: the cascade demand lines of the user's sessions of 2026-11-14 22:13-22:26 (MiB, in log
+ // order). Same history with the key off and on; per sample the capacity one cascade slot would get.
+ {static const uint16_t demand[]={182,182,182,199,192,197,203,207,215,287,331,408,537,537,537,545,545,545,54,54,54,
+   539,545,582,581,578,579,581,182,182,182,193,207,216,215,318,320,542,555,555,555,65,65,65,456,469,499,532,491,489,
+   506,550,509,513,528,530,538,565,567,568,554,100,100,100,536,527,557,555,541,555,568,70,70,70,428,453,499,499,499,
+   69,69,69,329,334,364,364,362,373,372,373,408,409,409,451,451,436,455,455,493,509,479,55,55,55,67,71,69,371,371,
+   426,426,426,436,472,437,459,451,460,475,480,488,491,489,488,493,500,502,517,519,528};
+  const uint64_t cap=kMeshPoolHardCap,preset=587*mib;
+  CaptureHeadroom off,on;
+  uint64_t off_prev=0,on_prev=0,high_off=0,high_on=0,high_n=0,low_off=0,low_on=0,low_n=0;unsigned regress=0;
+  for(size_t i=0;i<sizeof demand/sizeof demand[0];++i){
+   const uint64_t d=uint64_t(demand[i])*mib;
+   // A sample the old reserve held (its previous capacity fits it) must fit the new one too.
+   if(i>30 && off_prev>=d && on_prev<d)++regress;
+   off_prev=off.capacity(d,cap,cap,3,preset,0,true);
+   on_prev=on.capacity(d,cap,cap,3,preset,0,true,UINT64_MAX,true);
+   check(on_prev<=off_prev && on_prev>=d+d/4 && on.rise==off.rise);
+   if(i>30 && demand[i]>=450){high_off+=off_prev;high_on+=on_prev;++high_n;}
+   if(i>30 && demand[i]<=110){low_off+=off_prev;low_on+=on_prev;++low_n;check(on_prev==off_prev);}
+  }
+  check(regress==0 && high_n>40 && low_n>10);
+  const double mb_off=double(high_off)/double(high_n)/double(mib),mb_on=double(high_on)/double(high_n)/double(mib);
+  std::printf("peak reserve replay: high level %.0f -> %.0f MiB per slot (3 slots: -%.0f MiB); low level unchanged "
+              "(%.0f MiB); 0 samples that fitted before and not now\n",mb_off,mb_on,3.0*(mb_off-mb_on),
+              double(low_off)/double(low_n)/double(mib));
+  check(mb_off>1000.0 && mb_on<800.0);
+  // A pan beyond the window's peak keeps the reserve of the rise in progress.
+  CaptureHeadroom ramp;
+  for(uint64_t d=100;d<=900;d+=40){
+   const uint64_t c=ramp.capacity(d*mib,cap,cap,1,0,0,true,UINT64_MAX,true);
+   check(c>=(d+(d>100?200:0))*mib || c>=(d+d/4)*mib);   // 5 samples x 40 MiB once the history holds them
+  }
+  check(ramp.capacity(900*mib,cap,cap,1,0,0,true,UINT64_MAX,true)>=1100*mib);
+  // Decay: after two windows at the low level the high level leaves the peak and the reserve is the 25% rule.
+  CaptureHeadroom decay;
+  decay.capacity(60*mib,cap,cap,3,0,0,true,UINT64_MAX,true);
+  decay.capacity(580*mib,cap,cap,3,0,0,true,UINT64_MAX,true);
+  check(decay.capacity(60*mib,cap,cap,3,0,0,true,UINT64_MAX,true)>=580*mib);
+  uint64_t last=0;
+  for(uint64_t i=0;i<2*CaptureHeadroom::kPeakWindow+2;++i)last=decay.capacity(60*mib,cap,cap,3,0,0,true,UINT64_MAX,true);
+  check(last==80*mib && decay.rise==520*mib);
+ }
  std::printf("RT capture budget: %u CPU checks; explicit MB limits unchanged; no GPU claim\n",checks);
 }

@@ -1,4 +1,5 @@
 #include "../common/vram_compact.h"
+#include "../common/as_chunk_alloc.h"
 #include <cstdio>
 #include <cstdlib>
 using namespace bg3;
@@ -187,6 +188,43 @@ int main() {
     for (uint64_t i = 1; i <= 8193; ++i) big[i] = 1;
     vram_compact::prune_records(big, 8193, none, [](uint64_t) {});
     CHECK(big.size() == 4097 && big.begin()->first == 4097);
+  }
+  {
+    // rt_mesh_pool_trim, the user's log of 2026-11-14: the pool at 1947 MB, never repacked with native hair.
+    constexpr uint64_t MB = 1ull << 20;
+    // 22:24:23-22:25:45: use 535-672 MB, the window's target 1353 MB, the highest groom range uploaded since
+    // 22:24 ends at 452 MB and the highest of the session still loaded at 1162 MB: trimmed to 1353 MB (-594).
+    CHECK(pool_trim_target(1353 * MB, 1162 * MB, 1947 * MB) == 1353 * MB);
+    CHECK(pool_trim_target(1353 * MB, 452 * MB, 1947 * MB) == 1353 * MB);
+    // 22:19: a groom at 1585 MB: the end is in use, less than a quarter to save, no trim (and no thrash).
+    CHECK(pool_trim_target(1213 * MB, 1585 * MB, 1947 * MB) == 0);
+    CHECK(pool_trim_target(1213 * MB, 1400 * MB + 5, 1947 * MB) == 1408 * MB);   // the tail, in 16 MiB
+    CHECK(pool_trim_target(1213 * MB, 1461 * MB, 1947 * MB) == 0);               // 1472 > 75% of 1947
+    CHECK(pool_trim_target(0, 100 * MB, 1947 * MB) == 0 && pool_trim_target(600 * MB, 1947 * MB, 1947 * MB) == 0);
+    CHECK(pool_trim_target(600 * MB, 3000 * MB, 1947 * MB) == 0);
+    // The allocator: the tail is the free block at the end; a shrink keeps every range and offset.
+    as_chunks::RangeAlloc ra;
+    ra.init(1947 * MB);
+    uint64_t a = 0, b = 0, c = 0;
+    CHECK(ra.tail() == 0);
+    CHECK(ra.alloc(600 * MB, 16, &a) && ra.alloc(500 * MB, 16, &b) && ra.alloc(62 * MB, 16, &c));
+    CHECK(a == 0 && b == 600 * MB && c == 1100 * MB && ra.tail() == 1162 * MB);
+    ra.release(b, 500 * MB);                                 // a hole below the last range does not move the tail
+    CHECK(ra.tail() == 1162 * MB && ra.used == 662 * MB);
+    CHECK(!ra.shrink(1161 * MB) && ra.cap == 1947 * MB);     // would cut a live range
+    const uint64_t t = pool_trim_target(pool_target(ra.used, ra.cap, 256 * MB), ra.tail(), ra.cap);
+    CHECK(t == 1168 * MB && ra.shrink(t) && ra.cap == t && ra.used == 662 * MB && ra.tail() == 1162 * MB);
+    uint64_t d = 0, e = 0;
+    CHECK(ra.alloc(500 * MB, 16, &d) && d == 600 * MB);      // the hole is still there
+    CHECK(ra.alloc(6 * MB, 16, &e) && e == 1162 * MB && ra.tail() == t && !ra.alloc(16, 16, &e));
+    CHECK(ra.shrink(t) && !ra.shrink(t - 16));
+    ra.grow(2 * t);                                          // and it grows again as before
+    CHECK(ra.cap == 2 * t && ra.tail() == t && ra.alloc(100 * MB, 16, &e) && e == t);
+    as_chunks::RangeAlloc full;
+    full.init(64 * MB);
+    CHECK(full.alloc(64 * MB, 16, &a) && full.tail() == 64 * MB && full.shrink(64 * MB) && !full.shrink(32 * MB));
+    full.release(32 * MB, 32 * MB);
+    CHECK(full.tail() == 32 * MB && full.shrink(32 * MB) && full.cap == 32 * MB && full.free.empty());
   }
   std::printf("VRAM compact: %u checks passed\n", checks);
 }
