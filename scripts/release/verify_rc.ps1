@@ -317,6 +317,9 @@ try {
   if ($NoBuild) {
     $lines += 'This invocation used -NoBuild: only existing output presence/cache paths and lean configuration were checked. Compilation and source freshness require separate build evidence; rerun the default command after the last promotions.'
   }
+  # The hand-written readiness section below the generated table survives a rerun.
+  $kept = if (Test-Path -LiteralPath $report -PathType Leaf) { [regex]::Match((Get-Content -LiteralPath $report -Raw -Encoding UTF8), '(?ms)^## Release readiness.*\z').Value } else { '' }
+  if ($kept) { $lines += @('', $kept.TrimEnd()) }
   $lines | Set-Content -LiteralPath $report -Encoding UTF8
   Write-Host "Report: $report"
 }

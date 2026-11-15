@@ -1562,6 +1562,33 @@ static void test_release_rtx_hair() {
       CHECK(find_knob(id) == nullptr);
   }
   CHECK_EQ(get(m, "rt_hair"), "1");   // the Ctrl+Shift+F7 master is a separate key (layer/util.cpp hair_gated)
+  {   // Release 0.9.6 (user decision 2026-11-15: RTX Hair ships Off, opt-in). In every preset and without a user file
+      // the control is Off and no bundle key is on; turning it On from the launcher keeps all 26 keys of today's bundle
+      // in every preset, with and without "Show experimental options" (0.9.5-beta: the release policy undid it).
+    int bundle = 0;
+    for (const KV& kv : hair.choices[1].kv) if (kv.key) ++bundle;
+    CHECK(bundle == 26);
+    for (const int p : {-1, int(kLow), int(kMedium), int(kHigh), int(kUltra)}) {
+      Map user; if (p >= 0) user["preset"] = kPresetId[p];
+      Map fresh = code_defaults(); apply_layer(fresh, release); if (p >= 0) apply_layer(fresh, user);
+      CHECK_EQ(get(fresh, "dev"), "0"); CHECK(knob_value(hair, fresh) == 0);
+      for (const KV& kv : hair.choices[1].kv) if (kv.key) CHECK_EQ(std::string(kv.key) + "=" + get(fresh, kv.key), std::string(kv.key) + "=0");
+      CHECK_EQ(get(fresh, "rt_hair_pixel_lod"), "0");
+      CHECK_EQ(get(fresh, "rt_hair_mv_card"), p == kLow || p == kMedium ? "0" : "2");   // motion stability: High, Ultra (and the packaged default)
+      for (const char* diag : {"rt_hair_dense_sample", "rt_hair_card_fill", "rt_hair_groom_async", "rt_as_chunk_fit"})
+        CHECK_EQ(std::string(diag) + "=" + get(fresh, diag), std::string(diag) + "=0");
+      if (p < 0) continue;
+      for (const char* opt : {"0", "1"}) {
+        Map on_user = on_map(hair, 1); on_user["preset"] = kPresetId[p]; on_user["experimental_options"] = opt;
+        on_user["rt_hair_dense_sample"] = "1"; on_user["rt_hair_card_fill"] = "1";   // a stale diagnostic and a developer knob
+        Map r = code_defaults(); apply_layer(r, release); apply_layer(r, on_user);
+        CHECK(knob_value(hair, r) == 1);
+        for (const KV& kv : hair.choices[1].kv) if (kv.key) CHECK_EQ(std::string(kPresetId[p]) + opt + ":" + kv.key + "=" + get(r, kv.key), std::string(kPresetId[p]) + opt + ":" + kv.key + "=" + kv.value);
+        CHECK_EQ(get(r, "rt_hair_dense_sample"), "0"); CHECK_EQ(get(r, "rt_hair_card_fill"), "0");
+        Map again = r; enforce_release_policy(again); CHECK(again == r);
+      }
+    }
+  }
   // Off with the rest of the bundle left at 1: every developer-owned key is reset, as before.
   Map off = on; off["rt_hair_groom_primary"] = "0"; off["rt_hair_capture"] = "0";
   m = merged(off);

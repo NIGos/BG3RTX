@@ -36,7 +36,7 @@ This is a beta. Expect bugs. Please report them (see "Reporting a bug").
 3. Start **BG3RTX** (`bin\BG3RTX.exe`). It finds Steam installs by itself; otherwise use
    **Choose game folder…** and pick the folder that contains `bin\bg3.exe`.
 4. Pick a preset (hover a preset to see what it does and which one is suggested for your GPU),
-   then press **Play**. Play saves your changes first.
+   then press **Play**. A setting applies the moment you click it; there is no Save button.
 5. In the game's Graphics options set the upscaler to **DLSS** (Quality recommended). Ray
    Reconstruction replaces the game's DLSS; it does not run with FSR, XeSS or TAA.
 
@@ -65,11 +65,13 @@ and clear any Steam launch option; there is no installed Vulkan layer to unregis
 | High | High | Adds foliage, grates and chains to the RT scene, Full local-light shadows and Standard reflections; opacity micromaps and cutout masks speed up foliage shadows. |
 | Ultra | Highest | Two-ray GI, hidden roofs, Full local and interior light shadows with faster light sampling, Rough reflections, water with refraction, Far (6 m) off-screen bounce light, stock hair/scalp shadows and depth of field/bloom smoothing. Rendered frame limit 58 fps. |
 
+High and Ultra also turn on **Low-latency scene** (the lighting no longer waits for the ray-traced scene; saves 0 to
+0.5 ms, same image) and **RTX Hair motion stability** (only acts when RTX Hair is on).
 Reference measurements come from an RTX 5090, not a GPU support matrix or an FPS guarantee.
 Long-session acceptance is still open.
 Every control, its choices and restart requirements are in `docs\USER_SETTINGS.md`.
 Lighting, Surfaces and Performance contain player controls; Help & support contains the game folder,
-compatibility, memory and reporting help, and the Preparation status (shaders, strand hair). Visible hair is the game's stock hair unless **Lighting > RTX Hair** is on (beta, off in every preset, restart to apply).
+compatibility, memory and reporting help, and the Preparation status (shaders, strand hair). Visible hair is the game's stock hair unless **Lighting > RTX Hair** is on (beta, off in every preset; it turns on and off while you play, also with Ctrl+Shift+F7).
 
 ### VRAM guidance
 
@@ -83,7 +85,8 @@ allocations from the higher preset may remain. The game, other applications and 
 ### Included features and measured costs
 
 These scene-specific GPU pass measurements are not additive and do not predict your frame rate.
-Stock hair stays visible; no replacement hair is part of this release.
+Stock hair stays visible unless you turn on RTX Hair (beta, off in every preset). Its cost is not measured across scenes yet.
+Video memory for ray tracing is sized by what the scene needs; this is always on and has no control.
 
 | Feature | Recorded evidence / cost on the test system |
 |---|---|
@@ -96,21 +99,21 @@ Stock hair stays visible; no replacement hair is part of this release.
 | Water reflections, shadows, refraction and camera correction | Estimated 0.5-0.7 ms in total (final water pass about 0.15 ms); reflections stay on while the camera turns |
 | Depth of field and bloom smoothing | About 0.15 ms and about 250 MiB of video memory; subtle, most visible in dialogue |
 
-**Experimental:** Water surface reflections (Fresnel) is off in every preset. Turn on
-**Show experimental options** in the launcher to try it; it needs a game restart. Options rejected
-in testing are not part of this release.
+**Experimental:** Water surface reflections (Fresnel), Strand hair edge resolve and two Frame Generation
+pacing tests are off in every preset. Turn on **Show experimental options** on the launcher's Experimental
+page to try them; the settings guide says which need a game restart. Options rejected in testing are not
+part of this release.
 
 **Compare with the original image:** by default, press **Ctrl+Shift+F9** in game to switch every ray-traced effect off
 and on again. DLSS and frame generation stay as they are. **Ctrl+Shift+F10** switches the last
-Experimental option off and on, but only options that apply without a restart; in this release
-there is none, so it has no effect yet. **Ctrl+Shift+F8** toggles experimental DLSS 5 Neural Rendering
+Experimental option you changed off and on, but only options that apply without a restart. **Ctrl+Shift+F8** toggles experimental DLSS 5 Neural Rendering
 when it was enabled at game start. DLSS 5 has its own launcher page, runtime picker and status.
 It needs your own x64 `nvngx_dlssnr.dll` version 310.8 or 310.9; no DLSS 5 runtime is bundled.
 Before Play with Ray Reconstruction On, the launcher restores the game's DLSS upscaler,
 backs up `graphicSettings.lsx` as `.lsx.bg3rtx-bak`, and keeps an existing DLSS quality mode.
 Set `game_dlss_guard=0` in `bg3rtx_user.ini` to disable this repair.
-Customise the RT shortcut on Advanced and the DLSS 5 shortcut on DLSS 5 under Keyboard shortcuts.
-Choose None to disable or Reset to default to restore; save changes to apply.
+Change the in-game keys on the launcher's **Hotkeys** page. **Clear** disables a key and **Reset to** restores
+its default; a key change applies at once.
 
 ## Known limits (beta)
 
@@ -119,6 +122,8 @@ Choose None to disable or Reset to default to restore; save changes to apply.
 - Long sessions (several hours) are not tested yet. The log is capped (two files of at most 64 MB).
 - Frame generation Off/on, geometry and first capture activation need a restart (see settings guide).
 - First enabling stock hair/scalp capture compiles shaders. Expect a pause or stutter while compilation finishes.
+- RTX Hair (beta): a hair style that is not converted yet stays as the game's hair; hair on distant characters
+  can look softer; a head that comes into view shows the game's hair for a few frames (about 3) first.
 - VRAM pressure is a particular risk on 12-16 GB cards. Long sessions and level changes can retain memory,
   even on larger cards. See VRAM guidance above.
 - The water flicker seen at the port is also present in the game's own water. BG3RTX does not fix it.
@@ -139,7 +144,8 @@ BG3RTX writes `bg3rtx.log` in its install folder (`%LOCALAPPDATA%\Programs\BG3RT
 next game start it becomes `bg3rtx.prev.log`, so only two log files are kept. Long sessions also rotate logs.
 Collect a report immediately after the problem, before launching again.
 
-1. Run **Diagnostics.cmd** from the installed BG3RTX folder. It creates a local report ZIP and prints
+1. Use **Create a report** in the launcher (Home, or Help & support), or run **Diagnostics.cmd** from the
+   installed BG3RTX folder. It creates a local report ZIP and prints
    its location and contents. Nothing is uploaded. Open `CONTENTS.txt` and review the ZIP before sharing.
 2. Attach the ZIP on the Nexus mod page's Bugs tab. Add your GPU and VRAM size, driver version,
    preset, game version, and any other graphics mods.
