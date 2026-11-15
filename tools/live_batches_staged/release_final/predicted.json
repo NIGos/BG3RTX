@@ -1,0 +1,41 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md). STAGED, not queued, not authorized: needs a user go for this batch.",
+  "status": "READY_FOR_LIVE",
+  "queue_only": [
+    "final-s8-ultra-high",
+    "final-stock-hair-dialogue1"
+  ],
+  "launches": 2,
+  "scenes": 2,
+  "profile": "data/release.ini + launcher preset through common/settings.h (release_qual/profile.cpp), dev=0; qualification-only overrides are log periods, detailed_logging and the one float export per static phase",
+  "input_sha256": {
+    "common/settings.h": "2bbd12e4dd7a327419a0ba84fe2b01ea2a06aa2ee6e1889f9802e89a16f70b88",
+    "data/release.ini": "cb63a0b9368544d94d676bd3fd0fb4fd6b3f6f4edd852ff9f4736328d2d37df8",
+    "bg3rtx.ini": "0bd56b93f5fc60ffc9a52e13d52b865a5f77eaa54bec75c4f5697aade3b04b8f"
+  },
+  "release_profile_checked": {
+    "dev": "0",
+    "rt_scene_handout": "2",
+    "rt_scene_handout_layout": "1",
+    "rt_scene_handout_hit_wait": "1",
+    "rt_capture_peak_reserve": "1",
+    "rt_capture_demand_size": "1",
+    "rt_capture_split_mb": "1",
+    "rt_mesh_pool_trim": "1",
+    "rt_hair_groom_primary": "0",
+    "rt_hair_groom": "0"
+  },
+  "observable": "The release profile of 0.9.6 (Ultra and High at Water Queens House, Ultra in Dialogue1) runs every measured window without a fault after the changes of 2026-11-14/15: scene handout default, VRAM policies, hair fixes with RTX Hair Off.",
+  "pass_rule": "Every gate of the 2026-11-04 final qualification (water traced and composed, finite, driver-budget VRAM, 0 RT capture drops, 0 alpha region overflow, cascade buffer full 0, scene wait 0 timeouts, current TLAS, RR/post/GI cost lines, OMM same-ray check on High, native hair and scalp records in the dialogue, one master OFF/ON cycle) plus, in the five S8 cost windows of each preset: every first RT query handed out, handout fallbacks 0, pairing mismatches 0, OMM downgraded 0, hit-material fallbacks 0. No crash, device loss or strand producer. These are counts of real faults: 0, no tolerance.",
+  "predicted_today": {
+    "scene wait S8 (High and Ultra, handout On)": "mean about 0.3 ms (0.28 in hq-s8-modes 205520; 3.5 without); 0 timeouts; reported, the gate is the fault counts (docs/SCENE_HANDOUT_DESIGN.md 8.7)",
+    "handout": "0 fallbacks, 0 pairing mismatches in every cost window (8.5 to 8.8)",
+    "VRAM policies": "RT capture first buffer 1024 MB, cascade 3 x 427 MB, 0 dropped draws, guard quiet (hx1 001645, docs/HANDOFF_SESSION.md); VRAM used about 0.8 GB below the 2026-11-04 receipts at S8; reported",
+    "hair": "stock cards: no [hair primary] or [hair groom] activity line in any window",
+    "GPU ms": "RT, GI, RR and post within the rel1/rel2/rel3 observed ranges; GI trace may read 0.2-0.4 ms lower with the handout (seen in one rerun, EXPLAIN): report it, do not count it as a gain",
+    "energy": "one float pre-post export per profile, reported; no same-profile baseline exists, so no energy pass or fail"
+  },
+  "not_judged": "frame time and presented captures (the window may be occluded); GPU ms deltas against the 2026-11-04 references are descriptive (release_qual/predicted_final.json); card or strand counts.",
+  "if_it_fails": "A handout fallback or mismatch in a steady window: report the reason counts of the line; the release decision is Low-latency scene Off in the presets (one choice index per preset). A dropped opaque draw: report the capture line; the decision is rt_capture_demand_size or rt_capture_peak_reserve off.",
+  "human_review": "Dialogue PNG: stock cards visible, face and neck shadows. S8 PNGs: cutout silhouettes, water edges."
+}

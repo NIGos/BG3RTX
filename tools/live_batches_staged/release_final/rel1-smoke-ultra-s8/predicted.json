@@ -1,0 +1,14 @@
+{
+  "job": "rel1-smoke-ultra-s8",
+  "status": "READY_FOR_LIVE",
+  "observable": "Release Ultra S8 smoke: static, Q/E pans and rotations, water/RT participation and one master toggle; no captures.",
+  "pass_rule": "Every measured window: water traced/composed and finite, driver-budget VRAM, zero RT capture/alpha overflow, cascade buffer full 0 and scene timeouts 0. Current TLAS and RT GPU cost must appear. One ab_off 0->1->0 cycle restores RT. No crash, device loss or strand producer.",
+  "profile": "data/release.ini + launcher preset via common/settings.h",
+  "rendering_overrides": {},
+  "input_sha256": {
+    "common/settings.h": "2bbd12e4dd7a327419a0ba84fe2b01ea2a06aa2ee6e1889f9802e89a16f70b88",
+    "data/release.ini": "cb63a0b9368544d94d676bd3fd0fb4fd6b3f6f4edd852ff9f4736328d2d37df8",
+    "bg3rtx.ini": "0bd56b93f5fc60ffc9a52e13d52b865a5f77eaa54bec75c4f5697aade3b04b8f"
+  },
+  "visual_acceptance": "Log-only release smoke; no captures."
+}

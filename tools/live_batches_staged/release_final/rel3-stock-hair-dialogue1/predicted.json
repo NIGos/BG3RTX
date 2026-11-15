@@ -1,0 +1,14 @@
+{
+  "job": "rel3-stock-hair-dialogue1",
+  "status": "READY_FOR_LIVE",
+  "observable": "Dialogue1 release Ultra stock cards: startup is first enable; native hair/scalp participate; inspect face/neck shadows in the static PNG.",
+  "pass_rule": "Every judged window: hair/scalp records > 0, invalid/bounds 0, pending/waiting/started builds 0, no capacity loss or scene timeouts. Cost windows: RT/GI ms and VRAM within driver budget. All windows: no strand producer/device loss. One static PNG requires human inspection for visible cards and face/neck shadows; aggregate character counters do not locate the face/neck.",
+  "profile": "data/release.ini + launcher preset via common/settings.h",
+  "rendering_overrides": {},
+  "input_sha256": {
+    "common/settings.h": "2bbd12e4dd7a327419a0ba84fe2b01ea2a06aa2ee6e1889f9802e89a16f70b88",
+    "data/release.ini": "cb63a0b9368544d94d676bd3fd0fb4fd6b3f6f4edd852ff9f4736328d2d37df8",
+    "bg3rtx.ini": "0bd56b93f5fc60ffc9a52e13d52b865a5f77eaa54bec75c4f5697aade3b04b8f"
+  },
+  "visual_acceptance": "Inspect the single static PNG for visible cards and face/neck shadows."
+}

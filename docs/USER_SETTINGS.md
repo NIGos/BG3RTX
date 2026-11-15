@@ -51,7 +51,7 @@ Select a row to see what it does, its GPU cost, when it takes effect, what it ne
 | Performance | Frame rate | Frame Generation | Off / 2x / 3x / 4x | On or off: restart; 2x/3x/4x: at once |
 | Performance | Frame rate | NVIDIA Reflex | Off / On / On + Boost | At once; Frame Generation needs On or On + Boost |
 | Performance | Frame rate | Rendered frame limit | Off / 30-240 fps, step 1 | At once (when you release the slider); counts rendered frames; On starts at 58 fps |
-| Performance | Frame rate | Low-latency scene | Off / On | On: restart; Off: at once; On in High and Ultra (user decision 2026-11-14), always with the hit wait fix. Removes most of the scene wait (3.5 to 0.3 ms at Water Queens House, 8.5 to 2.9 ms at the inn, Ultra); frame time unchanged on Ultra in both (GPU-bound), about 0.5 ms saved on High at Water Queens House; 0 fallbacks, same brightness. Not yet measured in CPU-bound scenes |
+| Performance | Frame rate | Low-latency scene | Off / On | On: restart; Off: at once; On in High and Ultra. Removes most of the scene wait (3.5 to 0.3 ms at Water Queens House, 8.5 to 2.9 ms at the inn, Ultra); frame time unchanged on Ultra in both (GPU-bound), about 0.5 ms saved on High at Water Queens House; 0 fallbacks, same brightness. Not yet measured in CPU-bound scenes |
 | Performance | Tracing speed | Faster bounce light tracing | Off / On | At once; same image, on in every preset |
 | Performance | Tracing speed | Bounce trace reordering | Off / By hit kind / By hit kind and object | At once, may briefly pause |
 | DLSS 5 | DLSS 5 | DLSS 5 Neural Rendering (Experimental) | Off / On, runtime file | Restart to activate; its key toggles live after activation |
@@ -71,8 +71,10 @@ reports, tips and the version.
 Visible hair is the game's stock hair. With Hair shadows On, the game's hair and scalp cast
 ray-traced shadows. The first start after turning it on compiles shaders and can pause or stutter.
 No replacement hair files are included. **Lighting > RTX Hair** (beta, Off in every preset; turns on and off
-while playing) shows hair as ray-traced strands: a style gets strands after the game has shown it once and the launcher
-has converted it (Home > Preparation).
+while playing, also with Ctrl+Shift+F7) shows hair as ray-traced strands: a style gets strands after the game has
+shown it once and the launcher has converted it (Home > Preparation). A style that is not converted yet stays as the
+game's hair, hair on distant characters can look softer, and a head that comes into view shows the game's hair for
+a few frames (about 3) first.
 
 Off-screen bounce light also carries light from glowing surfaces. Far extends sunlight bounce to 6 m.
 Interior light shadows respect the game's shadow flags, including lights whose shadows were
@@ -84,15 +86,18 @@ intentionally disabled. Water levels include the lower levels.
 |---|---|
 | Low | Sun shadows and Indirect lighting: Visible surfaces; DLSS Ray Reconstruction, Ray-tracing detail, Local light shadows, Reflections, Water lighting, Off-screen bounce light and Hair shadows: Off |
 | Medium | DLSS Ray Reconstruction: On; Ray-tracing detail: Solid surfaces; Sun shadows and Indirect lighting: Ray-traced; Local light shadows: Fast; Reflections: Glossy |
-| High | DLSS Ray Reconstruction: On; Ray-tracing detail: Include foliage; Sun shadows and Indirect lighting: Ray-traced; Local light shadows: Full; Reflections: Standard; automatic opacity micromaps and cutout masks |
-| Ultra | DLSS Ray Reconstruction: On; Ray-tracing detail: Include foliage; Sun shadows: Include hidden roofs; Indirect lighting: Ray-traced high (two rays); Local light shadows: Full, with faster light sampling in busy interiors; Interior light shadows: On; Reflections: Rough; Water lighting: Include refraction; Off-screen bounce light: Far (6 m); Hair shadows and Depth of field and bloom smoothing: On; Rendered frame limit: 58 fps; automatic opacity micromaps and cutout masks |
+| High | DLSS Ray Reconstruction: On; Ray-tracing detail: Include foliage; Sun shadows and Indirect lighting: Ray-traced; Local light shadows: Full; Reflections: Standard; Low-latency scene and RTX Hair motion stability: On; automatic opacity micromaps and cutout masks |
+| Ultra | DLSS Ray Reconstruction: On; Ray-tracing detail: Include foliage; Sun shadows: Include hidden roofs; Indirect lighting: Ray-traced high (two rays); Local light shadows: Full, with faster light sampling in busy interiors; Interior light shadows: On; Reflections: Rough; Water lighting: Include refraction; Off-screen bounce light: Far (6 m); Hair shadows and Depth of field and bloom smoothing: On; Rendered frame limit: 58 fps; Low-latency scene and RTX Hair motion stability: On; automatic opacity micromaps and cutout masks |
 
 All presets trace at full resolution. Reflex is On and supported Frame Generation defaults to 2x.
 The rendered frame limit is Off except for Ultra's 58 fps. A limit is a ceiling, not a performance promise.
 Opacity micromaps and offline cutout masks apply automatically only with High and Ultra and
 Ray-tracing detail set to Include foliage. Hardware and the locally prepared masks must support
 them; otherwise the standard path is used. Water camera correction follows Water lighting, and the
-far indirect-light roof fix is always on. These automatic paths have no controls.
+far indirect-light roof fix is always on. Video memory for ray tracing is sized by what the scene needs and
+shrinks again when the need falls (always on). These automatic paths have no controls.
+RTX Hair is Off in every preset; RTX Hair detail at distance is Full in every preset. RTX Hair motion
+stability only acts when RTX Hair is on.
 
 Release mode resets hidden developer overrides from older user INIs. Obsolete Far + reflections
 maps to Far (6 m), Tilesets maps to Hair shadows On, Full + shadowed lights maps to Full, and the

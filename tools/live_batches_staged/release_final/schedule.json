@@ -1,0 +1,22 @@
+{
+  "final-s8-ultra-high": {
+    "save": "Water Queens House",
+    "load_allowance_seconds": 120,
+    "scheduled_seconds": 99.55799999999999,
+    "readiness_seconds": 8.708,
+    "expected_minutes": 3.8,
+    "hard_timeout_seconds": 300,
+    "captures": 2,
+    "disk_estimate_mb": 130
+  },
+  "final-stock-hair-dialogue1": {
+    "save": "Test Dialogue1",
+    "load_allowance_seconds": 120,
+    "scheduled_seconds": 81.3,
+    "readiness_seconds": 0,
+    "expected_minutes": 3.35,
+    "hard_timeout_seconds": 300,
+    "captures": 1,
+    "disk_estimate_mb": 70
+  }
+}

@@ -2,7 +2,7 @@
 # powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1
 # No game, launcher, upload, Git mutation, shortcut or existing installation runs.
 # Setup is compiled and executed only against the isolated throwaway tree.
-param([ValidateRange(1,100000)][int]$ExpectedFiles = 223, [switch]$NoBuild)
+param([ValidateRange(1,100000)][int]$ExpectedFiles = 230, [switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -185,7 +185,7 @@ try {
   Require ($differences.Count -eq 0 -and $countDelta -eq 0 -and @($manifest | Group-Object | Where-Object Count -gt 1).Count -eq 0) $detail
   $runtimeGuard = Quote (Join-Path $root 'tests\package_runtime_test.py')
   $runtimePlan = Quote (Join-Path $planRoot 'payload-list.json')
-  Run 'runtime payload dependencies' ("python $runtimeGuard --plan $runtimePlan; if (`$LASTEXITCODE -ne 0) { throw 'Runtime payload dependency guard failed' }")
+  Run 'runtime payload dependencies' ("py -3 $runtimeGuard --plan $runtimePlan; if (`$LASTEXITCODE -ne 0) { throw 'Runtime payload dependency guard failed' }")
   $detail += ' Runtime source dependencies covered.'
   Pass 'Manifest' $detail
   Pass 'Archive' ("Real ZIP, {0:N2} MiB; SHA256 {1}; symbols kept in separate archive." -f ((Get-Item -LiteralPath $archive).Length / 1MB), (Hash $archive))
@@ -317,6 +317,9 @@ try {
   if ($NoBuild) {
     $lines += 'This invocation used -NoBuild: only existing output presence/cache paths and lean configuration were checked. Compilation and source freshness require separate build evidence; rerun the default command after the last promotions.'
   }
+  # The hand-written readiness section below the generated table survives a rerun.
+  $kept = if (Test-Path -LiteralPath $report -PathType Leaf) { [regex]::Match((Get-Content -LiteralPath $report -Raw -Encoding UTF8), '(?ms)^## Release readiness.*\z').Value } else { '' }
+  if ($kept) { $lines += @('', $kept.TrimEnd()) }
   $lines | Set-Content -LiteralPath $report -Encoding UTF8
   Write-Host "Report: $report"
 }
