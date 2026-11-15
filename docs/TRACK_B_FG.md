@@ -366,6 +366,18 @@ minutes, with more than 7 minutes of frame generation in the last one.
 | `sl_init_after_create` | 0 | with `sl_init_at=0`: run `slSetVulkanInfo` at the game's NGX Init (stubbed while shared) instead of the first `vkGetDeviceQueue`. ReShade (a layer above ours) gets queues inside its own `vkCreateDevice`, before the loader has filled the device table, so NGX loaded null device functions and Streamline crashed (2026-11-05, `common/sl_init_trigger.h`). The first swapchain stays the fallback |
 | `sl_veh` | 1 | log fatal exceptions (module+offset and stack) before the game's crash handler exits silently |
 
+### `sl_init_after_create` live rs1: ReShade was not active (branch reshade-compat, 2026-11-05; landed 2026-11-15)
+- Live rs1 (2026-11-05 11:54, Water Queens House, key on), INVALID for its question: `[compat] ReShade not loaded`.
+  ReShade 6's global layer only activates for apps with a ReShade.ini; the one in the game folder was there at
+  11:27 (ReShade.log) and was removed before 11:28. So the ReShade case is still unverified.
+  What it did show with the key on, without ReShade: trigger = the game's NGX Init, `slSetVulkanInfo: ok`,
+  DLSS-G supported, FG 2.00 displayed/rendered, no mini-dump, no NGX entry-point failure.
+  RR did not engage (`RR skipped this frame: guide producer has not been submitted`, SR stayed): the same
+  happened in rel1-smoke-ultra-s8 at 11:35 without this key, so it is a separate, pre-existing intermittent issue.
+- Queue lessons: a job `tree` is relative to the repo root; receipt hashes must be computed in Windows
+  PowerShell 5.1 (the auto-run child re-checks there; pwsh 7 formats the job's floats differently).
+- Next: one rerun with ReShade enabled for BG3 again (the user's choice), then default 1 if the gates hold.
+
 ## Verified with the display on (2026-10-26)
 All runs used real presentation and HDR10 output (swapchain RGB10A2), with RR, RT shadows, the alpha-tested BVH and ray-traced GI on.
 

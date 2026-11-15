@@ -92,7 +92,7 @@ the prototype measured no difference (3.4 s vs 3.1-3.4 s), a full union may be ~
 Identity changes meaning: a key's code now lives in the base module, so "key off = byte-identical SPIR-V"
 becomes "key off = the same program": the module specialized with the constants at 0, frozen and folded
 (`spirv-opt --freeze-spec-const --fold-spec-const-op-composite -O`), equals the previous commit's module
-through the same passes, compared up to id numbering (canonical() in tools/spec_constant_proto.py, ~3 s
+through the same passes, compared up to id numbering (canonical() in tools/spirv_equivalence.py, used by tools/spec_constant_proto.py, ~3 s
 per module). A replay pack run (bit-identical outputs) is the end-to-end check per family.
 
 ### Migration plan (user decision 2026-11-02: reach the final variant set first, then compile once)

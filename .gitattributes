@@ -3,3 +3,6 @@
 *.cmd text eol=crlf
 *.png binary
 *.dll binary
+
+# Licence evidence must retain the original source bytes and hashes.
+docs/release/licences/** -text -whitespace
