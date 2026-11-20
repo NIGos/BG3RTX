@@ -127,5 +127,21 @@ int main() {
     return std::strcmp(key,"rt_scene_compact_holds")==0;
   });
   if (scene_mask!=(1u<<4) || !epoch.update(scene_mask) || epoch.accepts(queued_off)) return 30;
+  // rt_hold_pack_base: 64- and 80-byte layouts pack like 88 only with the key; 24 and 40 never; alpha kinds as before.
+  for (uint32_t stride : {24u, 40u, 64u, 80u, 88u}) {
+    if (dyn_hold_stride(stride,true,false,0,true)!=(stride>=64u?24u:stride)) return 31;
+    if (dyn_hold_stride(stride,true,false,0,false)!=(stride>=88u?24u:stride)) return 32;
+    if (dyn_hold_stride(stride,false,false,0,true)!=stride) return 33;
+    for (uint32_t kind=0;kind<9;++kind)
+      if (dyn_hold_stride(stride,true,true,kind,true)!=(stride>=64u && kind>=1u && kind<=3u?24u:stride)) return 34;
+  }
+  // Without native hair the pack is requested only with the key, under the same trim, hold and camera rules.
+  if (dyn_hold_compact_requested(false,true,true,4,false) || !dyn_hold_compact_requested(false,true,true,4,false,true) ||
+      dyn_hold_compact_requested(false,true,true,4,true,true) || dyn_hold_compact_requested(false,true,true,0,false,true) ||
+      dyn_hold_compact_requested(false,false,false,4,false,true)) return 35;
+  // A packed snapshot is valid only while a pack is on; an unpacked one only at the slot's stride.
+  if (!dyn_hold_stride_ok(64,64,false,false) || dyn_hold_stride_ok(24,64,false,false) ||
+      !dyn_hold_stride_ok(24,64,false,true) || !dyn_hold_stride_ok(24,88,true,false) ||
+      dyn_hold_stride_ok(88,64,true,true)) return 36;
   return 0;
 }
