@@ -197,6 +197,12 @@ static const uint kGiFarStatFirst = 372u, kGiFarStatCount = 11u;
 // unknown (no trust slot: Push::ls_flags bit 25; no asset DB roofs: header flag 2). Conservative: the
 // native ambient stays for those rays.
 [[vk::constant_id(1038)]] const uint kGiFarRoofEarly = 0u;
+// gi_far_roof_emission (constant 1054, default 0: experimental, needs a PT-reference A/B): the roof rule for the emission
+// of a hidden hit too. A hidden emitter beyond R0 seen through a padded roof volume is the same leak as the screen hit
+// the rule drops (the cut-away roof would have hidden it), so its emission is left out; occlusion is unchanged.
+#if RT_HIT_EMISSION
+[[vk::constant_id(1054)]] const uint kGiFarRoofEmission = 0u;
+#endif
 // Only the ORIGINAL origin inside the first padded volume is a proof. Unknown data,
 // invalid volumes/rays and subnormal directions retain the complete original path.
 bool gi_far_inside_first_roof(float3 o, float3 d, float t) {
@@ -522,7 +528,17 @@ void main(uint3 tid : SV_DispatchThreadID) {
     // occlusion is unchanged); the point/spot (and sun) term below adds to it.
     if (!visible && !aborted && t >= 0.0 && pc.gi_rt_fallback == 0u) {
       const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
+#if RT_HIT_GI_SUN && (RT_GI_FAR || defined(RT_SPEC_GI_FAR))
+      // gi_far_roof_emission: the roof test only for an emitter found beyond R0 (the screen branch's rule).
+      const bool em_roof = kGiFarRoofEmission != 0u
+#if defined(RT_SPEC_GI_FAR)
+          && kSpecGiFar != 0u
+#endif
+          && t > RB && any(he.radiance > 0.0) && !gi_far_roof_clear(o, dir, t);
+      if (!em_roof) bounce += he.radiance * w;
+#else
       bounce += he.radiance * w;
+#endif
       if (pc.rt_stats != 0u) hit_em_count(0u, he, dot(he.radiance * w, float3(0.2126, 0.7152, 0.0722)), fp.x ^ fp.y);
     }
 #endif

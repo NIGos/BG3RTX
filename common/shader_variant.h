@@ -79,6 +79,9 @@ enum SpecId : unsigned {
   // 6g rt_hair_card_fill: a card-marked strand G-buffer fragment without a strand draws its card (rt/hair_primary_gbuffer);
   // added to the per-slot strand pipelines' specialization only when on.
   kSpecIdHairCardFill = 1053,
+  // gi_far_roof_emission (shaders/gi/gi_trace_rt.hlsl, the gi_hit_sun _em files with gi_far): the far roof rule for
+  // the emission of hidden hits too. Experimental, default 0; added to the specialization only when on.
+  kSpecIdGiFarRoofEmission = 1054,
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;
