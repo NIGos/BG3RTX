@@ -9,6 +9,7 @@ Faster, less memory
 Stability
 - Video memory guard: after Windows lowered the game's video memory budget once, BG3RTX could stay in its low-memory mode for the rest of the session (objects left out of ray tracing, stutter). It now recovers when the budget comes back. Not yet confirmed in a long play session.
 - A hair style that does not fit in memory no longer stops the ray-traced scene from being rebuilt; only that style is left out for that frame.
+- When memory for hair was short, RTX Hair could unpack one hair style up to 9 times (pauses over 100 ms). It is now unpacked once. Fixed offline, not yet confirmed in play.
 
 RTX Hair (beta, off by default)
 - Fixed: in 0.9.5-beta the option could be turned on but drew no strands.
@@ -31,4 +32,5 @@ Known
 - Tested only on an RTX 5090 with driver 621.01.
 - RTX Hair cost is not measured across scenes yet. Strand edges can still show light dithering in motion.
 - After a fast zoom out in a large interior, ray-tracing memory stays high for about 15 seconds.
+- A game start can spend 15 to 50 seconds longer creating shaders (hair shader variants the driver could not reuse from the last start), also with RTX Hair off. A fix is built but not yet tested.
 - The DLSS 5 runtime is not included; you provide it.

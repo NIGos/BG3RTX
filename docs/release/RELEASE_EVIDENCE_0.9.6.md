@@ -31,6 +31,7 @@ Baseline: the published 0.9.5-beta package is commit cb2d03f2 (2026-11-09 15:08,
 | Guard stayed low after one budget drop; fixed; not confirmed in play | A14 7-30; PROGRESS 94 ("unconfirmed in play") |
 | A hair style that does not fit no longer stops the scene build | A11 996-1004 (fix 1, key-independent; rv3 183745: 118 of 120 frames skipped before) |
 | Stale record of a destroyed FG input removed | PROGRESS 48 (offline) |
+| A style unpacked up to 9 times; now once; offline only | `docs/progress/claude-final-layer.md` 2-9 (user log 2026-11-20 16:45-16:50: two groom LODs decoded 9 times each, 1.07 s, under five 100 ms hitches; fix in main 745a1fff, on, no key) |
 
 ## RTX Hair
 
@@ -70,9 +71,13 @@ Baseline: the published 0.9.5-beta package is commit cb2d03f2 (2026-11-09 15:08,
 | RTX 5090 and driver 621.01 only | `docs/release/README.md` 16-21; HANDOFF "Release profile" |
 | Inn after a dolly: 2.3-2.7 GB held for 0.65-0.8 GB live; 0.9-1.0 GB after about 15 s | PROGRESS 33-34 |
 | No VRAM recommendations; Act 2/3 and long sessions untested | `docs/release/README.md` 74-81, 117-119 |
+| Start 15-50 s longer creating hair shader variants, also with RTX Hair off | `docs/progress/claude-final-layer.md` 5-7, 20-23 (14.7-48.5 s in 18 of 25 queue launches; user logs 17.4 s and 19.6 s); `layer/tracker.cpp` 658 calls `hair_primary_note_pipelines` for every hair pipeline, not gated by `rt_hair`; the fix `rt_hair_header_early` is 0 and READY_FOR_LIVE |
 
 ## Left out of the player text on purpose
 
+- `rt_hold_pack_base`, `rt_hair_header_early` and `gi_far_roof_emission` (all 0, READY_FOR_LIVE, 2026-11-20); the
+  tracker's descriptor-set maps now erased and `refresh()` reading its keys once per frame (main 745a1fff): no
+  measured player effect.
 - `rt_hair_groom_async` (off, READY_FOR_LIVE) and the GI image reallocation fix at level loads
   (`rr_mode_latch`, READY_FOR_LIVE): built, unverified live (PROGRESS 44-46, 50-55). No gain is claimed.
 - GI cost 2026-11-05 against 2026-11-14 (A14 152-170): the baseline predates 0.9.5, and 0.9.5 already claimed the GI gain.
