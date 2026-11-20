@@ -269,7 +269,9 @@ LRESULT CALLBACK window_proc(HWND window,UINT message,WPARAM w,LPARAM l) {
       }
       invalidate_caption(*h);return 0;
     case WM_GETMINMAXINFO:reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={px(*h,736),px(*h,620)};return 0;
-    case WM_TIMER:if(w==2)capture(*h);else if(w==3){h->result=2;DestroyWindow(window);}else refresh(*h);return 0;
+    // Timer 3: the page did not load within a minute. A review shot fails; the player's window falls back to the native
+    // launcher (run() returns -1) instead of closing without any window.
+    case WM_TIMER:if(w==2)capture(*h);else if(w==3){h->result=2;h->failed=h->shot.empty();DestroyWindow(window);}else refresh(*h);return 0;
     case work_done:if(h->worker.joinable())h->worker.join();h->busy=false;
       if(!h->after_work.empty()){h->reply=h->bridge->handle(h->after_work);h->after_work.clear();}
       send(*h,h->reply);return 0;
