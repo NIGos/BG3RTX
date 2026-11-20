@@ -18,7 +18,7 @@ Fixes (image identical unless noted; no ABI change, no new key, `shaders/variant
   (rt_debug 21-24, stats, WATER_RR_HIT). Experimental water only.
 - `core/gi.cpp`: a refused rt_debug dispatch no longer skips run_post's tail (history parity, closing barrier,
   restore_bindings); a refused pan_primary restores the game's bindings before returning. Debug paths only.
-- Identity vs e2770961: 201 / 225 byte-identical; the 24 changed are exactly the requests of the three files.
+  Identity vs e2770961: 201 / 225 byte-identical, the 24 changed are the three files' requests. 238 / 238 CTests.
 
 Found, not fixed (owner or A/B needed):
 - Water game-shadow record (`common/water_fs_patch.h:699`, layer): Dg = D (1 - Vg) / Vg is NaN at Vg = 0, so fully
@@ -32,13 +32,10 @@ Found, not fixed (owner or A/B needed):
   alpha-test footprint is one mip too coarse. Image-changing, small.
 - CPU: `stats_enabled()` (5 lookups, ~25 calls per frame) and ~100 raw cfg lookups in run_pre/run_post: about
   40 us per frame together; a per-frame memo like `core/frame_memo.h`.
-- Local shadows exact-k: no image-identical early-out (the sun AO give-back changes pixels without lights).
 
 Read and clean: GI screen part of gi_trace_rt (1-355, 737-end), gi_composite, gi_ao_apply, gi_contact, gi_trace,
 rt_origin, rt_sun_resolve, rt_local_shadows (all variants), rt_reflections, water_compose / view, rr_post,
 rr_guides, rr_strand_aa, hair fibre passes, hair_primary_*; every dispatch grid in core/*.cpp matches numthreads.
-Tools item (stream C), `release_shader_equivalence.py --freeze-spec`: no crash reproduced in 3 min on the 5
-hit_sun_em requests (baseline 967b68cc; 8d870bf4 now stops on removed id 1012). Two tool problems: `opt()` in
-`spirv_equivalence.py` raises with stdout+stderr only, so a native spirv-opt crash prints no text (add the exit
-code and the input file); and after a request's first DIFFERENT it keeps checking every Cartesian assignment
-(12292 checks, about 3.5 h here) instead of stopping.
+Tools (stream C), `--freeze-spec`: no crash in 3 min on hit_sun_em (baseline 967b68cc). `spirv_equivalence.opt()`
+prints stdout+stderr only, so a native spirv-opt crash has no text (add exit code, input); after a first DIFFERENT
+it still checks every Cartesian assignment (12292 here, about 3.5 h) instead of stopping.
