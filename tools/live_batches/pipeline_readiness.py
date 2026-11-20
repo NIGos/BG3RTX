@@ -131,7 +131,7 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     # 5i shared draw key: the groom rows' key filter (bvhsplit). CPU only.
     "rt_hair_shared_key "
     # Removed 2026-11-14 (docs/RTX_HAIR_PRIMARY.md 6k): no code reads these keys. They stay known here only so that
-    # the historical staged jobs that set them (hair_cam, hair_late, hair_final, hair_pixel_lod) still lint.
+    # historical jobs that set them still lint.
     "rt_hair_watchdog_draw rt_hair_watchdog_one_key rt_hair_swap_latch rt_hair_coverage_min_pixels "
     "rt_hair_row_stable rt_hair_stale_publish "
     # 5u: two bad coverage measurements in a row (hair_primary CoverageGate::confirm). CPU only.
