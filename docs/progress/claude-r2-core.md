@@ -32,7 +32,6 @@ Found, not fixed (owner or A/B needed):
   alpha-test footprint is one mip too coarse. Image-changing, small.
 - CPU: `stats_enabled()` (5 lookups, ~25 calls per frame) and ~100 raw cfg lookups in run_pre/run_post: about
   40 us per frame together; a per-frame memo like `core/frame_memo.h`.
-
 Read and clean: GI screen part of gi_trace_rt (1-355, 737-end), gi_composite, gi_ao_apply, gi_contact, gi_trace,
 rt_origin, rt_sun_resolve, rt_local_shadows (all variants), rt_reflections, water_compose / view, rr_post,
 rr_guides, rr_strand_aa, hair fibre passes, hair_primary_*; every dispatch grid in core/*.cpp matches numthreads.
