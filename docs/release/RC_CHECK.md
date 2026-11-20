@@ -1,27 +1,27 @@
 ﻿# Release candidate check
 
-Date: 2026-11-15 08:38:51 +01:00. Commit: 976df3df83fe40991efbae26b4edd612f430bc13.
+Date: 2026-11-20 18:21:51 +01:00. Commit: 745a1fff162db78d82e5e380b7893965b3443cb3.
 Source state at start: clean tracked files (untracked files excluded).
-Result: FAIL. Candidate version: rc-20261115-976df3df-ac5a93c6.
+Result: PASS with 1 skipped row. Candidate version: rc-20261120-745a1fff-125a3f0d.
 
 Rerun: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1`.
 
 | Item | Result | Evidence |
 |---|---|---|
 | Build | PASS | Core, launcher and lean layer built from this tree; diagnostics OFF. No shader compile or game run. |
-| Archive | PASS | Real ZIP, 73.68 MiB; SHA256 27d5452033644cf7a6c0909d049d5af8faef8daed0f7e40ead0dfa6d208e7bc1; symbols kept in separate archive. |
+| Archive | PASS | Real ZIP, 73.77 MiB; SHA256 5a5d04dd2bb87e7c2dd45a486b40489696a9d920ade822b73f821ec119d04848; symbols kept in separate archive. |
 | Manifest | PASS | 230 files; expected 230 (delta 0); 0 differences across ZIP / extracted / files.txt / source plan. Runtime source dependencies covered. |
 | Hashes | PASS | 12 shipped DLLs and launcher match build/copy sources; 227 verbatim files checked; 9 Streamline DLLs match production SDK. |
 | Exclusions | PASS | 0 symbols, developer tools, SDK payloads, Aftermath DLLs, Python or unexpected binaries. Private symbols outside player ZIP. |
 | Licences | PASS | 16 required notices plus project licences and font OFL present, verbatim hashes checked; README licence lines 3-4 PASS. |
-| Version | PASS | rc-20261115-976df3df-ac5a93c6; commit matches HEAD; layer lean. |
+| Version | PASS | rc-20261120-745a1fff-125a3f0d; commit matches HEAD; layer lean. |
 | Install | PASS | 230 real payload files hash-match after install; fake game unchanged; 3 original collisions backed up. |
 | Update | PASS | 230 files hash-match after same-candidate update; corrupted installed DLL repaired; original backups, settings and unrelated file preserved. |
 | Uninstall | PASS | 5/5 original files restored byte-for-byte; fake game unchanged; no owned payload/metadata remains. |
-| Setup | FAIL | verify compiled Setup failed (exit 1); see E:\Storage\Code Projects\BG3RTX\.claude\worktrees\release-prep\.scratch\rc\20261115-083602-ac5a93c6\verify_compiled_Setup.stdout.log and E:\Storage\Code Projects\BG3RTX\.claude\worktrees\release-prep\.scratch\rc\20261115-083602-ac5a93c6\verify_compiled_Setup.stderr.log |
+| Setup | SKIPPED | skipped: another BG3RTX install present (C:\Users\quali\AppData\Local\Programs\BG3RTX\, 0.9.6-hairtest10). The compiled Setup was not run, so it is not qualified here: run verify_rc on a PC without a BG3RTX install, or uninstall it first. |
 | Cleanup | PASS | Owned TEMP test tree deleted; no existing installation, cache, shortcuts or game files changed. Setup Apps cleanup is checked in the Setup row. |
 
-Archive: E:\Storage\Code Projects\BG3RTX\.claude\worktrees\release-prep\.scratch\rc\20261115-083602-ac5a93c6\BG3RTX-rc-20261115-976df3df-ac5a93c6.zip
+Archive: E:\Storage\Code Projects\BG3RTX\.scratch\rc\20261120-181950-125a3f0d\BG3RTX-rc-20261120-745a1fff-125a3f0d.zip
 
 Scope: real ZIP legacy install.ps1/uninstall.ps1 route, no shortcut, settings retained. Update reapplies this candidate, not a different release.
 Only synthetic installer child shells mock named-process discovery, as release_install_test.py does; build process guards remain real. No game or payload binary executes.
