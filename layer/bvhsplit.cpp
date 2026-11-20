@@ -1985,6 +1985,13 @@ uint32_t status_slots(uint32_t n) {
   uint32_t s = g_status_next;
   if (s + n > kStatusSlots) s = 0;
   g_status_next = s + n;
+  // A batch still waiting for its done word (up to 240 frames: a recorded command buffer not yet submitted) whose slot
+  // the ring hands out again would read a later batch's done word as its own. Not seen; counted so a log proves it.
+  static uint64_t aliased = 0;
+  for (const JobBatch& b : g_batches)
+    if (!b.relocation && b.done_slot >= s && b.done_slot < s + n && (++aliased & (aliased - 1)) == 0)
+      log("[bvh] status ring wrapped onto the done word of a batch still pending (frame %llu, %llu times)",
+          (unsigned long long)b.frame, (unsigned long long)aliased);
   std::memset(g_status.map + VkDeviceSize(s) * 16, 0, size_t(n) * 16);
   return s;
 }
@@ -2352,6 +2359,7 @@ void bvh_vram(BvhVram* out) {
     out->as_pending += c.ra.used - (std::min)(c.ra.used, c.ra.live);
     out->as_empty += c.ra.reclaimable() ? c.buf.size : 0;
     if (c.ra.used) out->as_holes += c.ra.cap - c.ra.used;
+    if (c.ra.used && c.buf.size > base) out->as_holes_large += c.ra.cap - c.ra.used;
     out->as_arena[(std::min)(c.ra.arena, 2u)] += c.buf.size;
     out->as_oversize += c.buf.size > base;
     ++out->chunks;

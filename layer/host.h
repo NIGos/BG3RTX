@@ -1090,6 +1090,7 @@ struct BvhVram {
   // Where the reserve sits (claude/final-layer): free bytes inside chunks that hold a range (holes), reserved bytes per
   // arena (0 cached meshes, 1 per-draw and groom, 2 cascade casters) and chunks larger than a base chunk.
   uint64_t as_holes = 0, as_arena[3] = {};
+  uint64_t as_holes_large = 0;   // of as_holes: in chunks larger than a base chunk (rt_as_size_class)
   uint32_t as_oversize = 0;
   uint32_t chunks = 0;
 };
