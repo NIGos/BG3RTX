@@ -37,7 +37,7 @@ enum SpecId : unsigned {
   kSpecIdHairOrigin = 1009,          // S3  RT_HAIR_PHYSICAL_ORIGIN
   kSpecIdScalpHair = 1010,           // S3  RT_NATIVE_SCALP + RT_NATIVE_HAIR (always together)
   kSpecIdOccStats = 1011,            // S3  RT_OCC_STATS (branch worktree-agent-a0c9be1ab336eae1a)
-  kSpecIdOmmScene = 1012,            // S4  RT_OMM_SCENE
+  // Retired: 1012 RT_OMM_SCENE (S4 rejected: OMM stays a layout define). Never reuse.
   kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
   kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
@@ -79,6 +79,9 @@ enum SpecId : unsigned {
   // 6g rt_hair_card_fill: a card-marked strand G-buffer fragment without a strand draws its card (rt/hair_primary_gbuffer);
   // added to the per-slot strand pipelines' specialization only when on.
   kSpecIdHairCardFill = 1053,
+  // gi_far_roof_emission (shaders/gi/gi_trace_rt.hlsl, the gi_hit_sun _em files with gi_far): the far roof rule for
+  // the emission of hidden hits too. Experimental, default 0; added to the specialization only when on.
+  kSpecIdGiFarRoofEmission = 1054,
 };
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;
@@ -251,7 +254,9 @@ inline std::string request(const char* file, unsigned flags) {
   if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb);
   // rt_spec_cascade is the only cascade path (qualified): every cascade pass gets the spec build.
   if (cascade_entry(file)) flags |= kSpecCascade;
-  if (flags & kSpecCascade) flags &= ~unsigned(kCascade);   // the constant, not the request, carries it
+  // The constant, not the request, carries kCascade: every kCascade file is a cascade_entry (allowed), so the old
+  // RT_CASCADE_MASKS / RT_CASCADE_SUN request defines can no longer be produced.
+  if (flags & kSpecCascade) flags &= ~unsigned(kCascade);
   std::string out = file;
   char sep = '?';
   auto add = [&](const char* def) {
@@ -270,10 +275,6 @@ inline std::string request(const char* file, unsigned flags) {
   // Steps S2a + S2c: rt_hit_material_instanced (1003) and wind RGB (1004) are constants of one module
   // per hit-material file (core/gi.cpp refresh): RT_SPEC_HIT_INST=1 always, never RT_HIT_INSTANCED or its sub-defines.
   if (hit_material_entry(file)) add("RT_SPEC_HIT_INST=1");
-  if (flags & kCascade) {
-    add("RT_CASCADE_MASKS=1");
-    if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF
-  }
   if (flags & kSpecCascade) {
     add("RT_SPEC_CASCADE=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_SPEC_CASCADE_SUN=1");

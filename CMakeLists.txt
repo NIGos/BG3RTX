@@ -765,3 +765,6 @@ add_test(NAME recording_history_test COMMAND recording_history_test)
 add_executable(core_completion_lease_test tests/core_completion_lease_test.cpp)
 target_include_directories(core_completion_lease_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME core_completion_lease_test COMMAND core_completion_lease_test)
+
+add_executable(frame_memo_test tests/frame_memo_test.cpp)
+add_test(NAME frame_memo_test COMMAND frame_memo_test)

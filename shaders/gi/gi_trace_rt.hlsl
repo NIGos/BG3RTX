@@ -83,7 +83,8 @@
 //   417: qualified-hit rays whose term is not finite and >= 0: the ray takes fallback0 (occlusion w, no
 //        bounce: exactly the key-off ray), never the poisoned sum;
 //   418: pixels whose mean bounce exceeds the half-float maximum 65504 (the giRaw encoding), stored as
-//        65504 instead of +Inf (the energy above the encoding limit is lost, counted here).
+//        65504 instead of +Inf (the energy above the encoding limit is lost, counted here); a NaN channel
+//        (also counted here) stores 0.
 static const uint kGiHitNfFirst = 417u;
 static const float kGiRawHalfMax = 65504.0;
 bool gi_hit_term_ok(float3 c, uint bin) {
@@ -197,6 +198,12 @@ static const uint kGiFarStatFirst = 372u, kGiFarStatCount = 11u;
 // unknown (no trust slot: Push::ls_flags bit 25; no asset DB roofs: header flag 2). Conservative: the
 // native ambient stays for those rays.
 [[vk::constant_id(1038)]] const uint kGiFarRoofEarly = 0u;
+// gi_far_roof_emission (constant 1054, default 0: experimental, needs a PT-reference A/B): the roof rule for the emission
+// of a hidden hit too. A hidden emitter beyond R0 seen through a padded roof volume is the same leak as the screen hit
+// the rule drops (the cut-away roof would have hidden it), so its emission is left out; occlusion is unchanged.
+#if RT_HIT_EMISSION
+[[vk::constant_id(1054)]] const uint kGiFarRoofEmission = 0u;
+#endif
 // Only the ORIGINAL origin inside the first padded volume is a proof. Unknown data,
 // invalid volumes/rays and subnormal directions retain the complete original path.
 bool gi_far_inside_first_roof(float3 o, float3 d, float t) {
@@ -287,9 +294,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
   g_rt_pass = kRtPassGI;   // aborted queries count as this pass's unknowns (rt_common.hlsli)
   uint2 id = tid.xy;
-#ifdef GI_DEBUG_SWIZZLE
-  id ^= uint2(GI_DEBUG_SWIZZLE, GI_DEBUG_SWIZZLE);   // offline diagnosis: another thread / group computes each pixel
-#endif
   if (any(id >= pc.half)) return;
   uint2 fp = gi_fp(id);
   float d = gDepth.Load(int3(fp, 0));
@@ -309,12 +313,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   RtCone cone = {dist * pa * 2.0, pa * 2.0};   // half resolution
   const float4 org = rt_origin_at(fp);
 #if RT_GI_FAR
-#ifdef GI_FAR_M
-  // Offline only (frame_replay --define GI_FAR_M=6): a replay pack's push holds the base pass's radius.
-  const float R = max(float(GI_FAR_M), pc.gi_rt_radius);
-#else
   const float R = max(pc.radius, pc.gi_rt_radius);
-#endif
 #if SHARC_QUERY_PASS
   const float RB = max(shc.gi_base_radius, 0.01);   // the base radius (SHaRC's gi_base_radius)
 #else
@@ -530,7 +529,17 @@ void main(uint3 tid : SV_DispatchThreadID) {
     // occlusion is unchanged); the point/spot (and sun) term below adds to it.
     if (!visible && !aborted && t >= 0.0 && pc.gi_rt_fallback == 0u) {
       const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
+#if RT_HIT_GI_SUN && (RT_GI_FAR || defined(RT_SPEC_GI_FAR))
+      // gi_far_roof_emission: the roof test only for an emitter found beyond R0 (the screen branch's rule).
+      const bool em_roof = kGiFarRoofEmission != 0u
+#if defined(RT_SPEC_GI_FAR)
+          && kSpecGiFar != 0u
+#endif
+          && t > RB && any(he.radiance > 0.0) && !gi_far_roof_clear(o, dir, t);
+      if (!em_roof) bounce += he.radiance * w;
+#else
       bounce += he.radiance * w;
+#endif
       if (pc.rt_stats != 0u) hit_em_count(0u, he, dot(he.radiance * w, float3(0.2126, 0.7152, 0.0722)), fp.x ^ fp.y);
     }
 #endif
@@ -745,7 +754,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 gi_out = bounce / n;   // every term finite and >= 0: only an overflow can exceed the half maximum
   const bool gi_over = !all(gi_out <= kGiRawHalfMax);
   if (pc.rt_stats != 0u) stat_add(kGiHitNfFirst + 1u, gi_over, (id.x >> 3) * 7 + (id.y >> 3) * 13);
-  gi_out = select(gi_out <= kGiRawHalfMax, gi_out, kGiRawHalfMax.xxx);
+  // Finite only: an overflow (or +Inf) stores the half maximum; a NaN (no term can make one today: every hidden-hit
+  // term passed gi_hit_term_ok, prevRadiance reads are finite) stores no bounce, fallback0's value, never 65504.
+  // Finite inputs take the same value as before.
+  gi_out = select(gi_out <= kGiRawHalfMax, gi_out, select(gi_out > kGiRawHalfMax, kGiRawHalfMax.xxx, 0.0.xxx));
   giRaw[id] = float4(gi_out, saturate(1.0 - occ / n));
 #else
   giRaw[id] = float4(bounce / n, saturate(1.0 - occ / n));
