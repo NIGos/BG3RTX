@@ -16,11 +16,30 @@ RX = re.compile(r"%\d+")
 DEF = re.compile(r"\s*(%\d+) = (Op\w+)(.*)$")
 
 
-def opt(tool, src, dst, *passes):
+# Windows NTSTATUS exit codes of a crashed process (Python reports them unsigned): a crash prints nothing.
+CRASH_CODES = {0xC0000005: "access violation", 0xC00000FD: "stack overflow", 0xC0000409: "fail-fast / stack buffer overrun",
+               0xC0000017: "out of memory", 0xC000001D: "illegal instruction", 0xC0000094: "integer divide by zero",
+               0xC0000374: "heap corruption"}
+
+
+class OptError(RuntimeError):
+    """spirv-opt failed: the passes, the exit code (named when it is a crash), its output, and the stage of
+    `specialize` that ran it. A crash has no output; the code says which."""
+
+    def __init__(self, passes, returncode, output, stage=""):
+        self.passes, self.returncode, self.output, self.stage = tuple(passes), returncode, output.strip(), stage
+        code = returncode & 0xFFFFFFFF
+        self.crashed = code >= 0xC0000000 or returncode < 0
+        what = f"exit {returncode}" + (f" (0x{code:08X} {CRASH_CODES.get(code, 'crash')})" if self.crashed else "")
+        super().__init__(f"spirv-opt{' ' + stage if stage else ''} [{' '.join(self.passes)}]: {what}: "
+                         f"{self.output or '(no output)'}")
+
+
+def opt(tool, src, dst, *passes, stage=""):
     r = subprocess.run([str(tool.dxc.with_name("spirv-opt.exe")), *passes, str(src), "-o", str(dst)],
                        capture_output=True, text=True)
     if r.returncode:
-        raise RuntimeError(f"spirv-opt {passes}: {r.stdout}{r.stderr}")
+        raise OptError(passes, r.returncode, f"{r.stdout}{r.stderr}", stage)
     return dst
 
 
@@ -213,13 +232,22 @@ def freeze_except(src, dst, preserve):
     return dst
 
 
-def specialize(tool, src, dst, assignments, preserve=()):
+OPTIMIZE = ("-O", "--remove-unused-interface-variables", "--trim-capabilities")
+# The schedules a caller may pick. Any schedule is sound for equality when BOTH sides run the same one (every pass
+# preserves semantics; equal canonical output then proves equal programs); a shorter one only finds fewer equalities.
+# "single": one optimizer round instead of two, for a module on which the second round crashes spirv-opt.
+SCHEDULES = {"full": 2, "single": 1}
+
+
+def specialize(tool, src, dst, assignments, preserve=(), schedule="full"):
     """Set release values, freeze constants except symbolic ``preserve`` IDs, fold and optimize.
 
-    Call on both sides with the same complete assignment. Unused interface variables
+    Call on both sides with the same complete assignment and the same ``schedule``. Unused interface variables
     and capabilities describe no live operations after folding and are trimmed equally.
-    Each invocation owns its intermediates, including when called concurrently.
+    Each invocation owns its intermediates, including when called concurrently. A failing spirv-opt raises
+    OptError with its stage ("assign", "freeze", "optimize 1", "optimize 2").
     """
+    rounds = SCHEDULES[schedule]
     preserve = set(preserve)
     if preserve & assignments.keys():
         raise ValueError("cannot assign a preserved symbolic specialization constant")
@@ -231,15 +259,18 @@ def specialize(tool, src, dst, assignments, preserve=()):
         if assignments:
             assigned = opt(tool, src, tmp / "assigned.spv",
                            "--set-spec-const-default-value=" + " ".join(
-                               f"{k}:{v}" for k, v in sorted(assignments.items())))
+                               f"{k}:{v}" for k, v in sorted(assignments.items())), stage="assign")
         if preserve:
             frozen = freeze_except(assigned, tmp / "selective.spv", preserve)
-            frozen = opt(tool, frozen, tmp / "frozen.spv", "--fold-spec-const-op-composite")
+            frozen = opt(tool, frozen, tmp / "frozen.spv", "--fold-spec-const-op-composite", stage="freeze")
         else:
-            frozen = opt(tool, assigned, tmp / "frozen.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
+            frozen = opt(tool, assigned, tmp / "frozen.spv", "--freeze-spec-const", "--fold-spec-const-op-composite",
+                         stage="freeze")
         # Specialization can expose constant branches only after the first optimizer
         # schedule has visited CFG cleanup. Repeat the same semantics-preserving
         # schedule on both sides so those dead selections do not cause false failures.
-        optimized = opt(tool, frozen, tmp / "optimized.spv", "-O",
-                        "--remove-unused-interface-variables", "--trim-capabilities")
-        return opt(tool, optimized, dst, "-O", "--remove-unused-interface-variables", "--trim-capabilities")
+        current = frozen
+        for n in range(1, rounds + 1):
+            current = opt(tool, current, dst if n == rounds else tmp / f"optimized{n}.spv", *OPTIMIZE,
+                          stage=f"optimize {n}")
+        return current
