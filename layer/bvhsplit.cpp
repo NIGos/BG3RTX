@@ -288,10 +288,14 @@ VkDeviceSize g_as_refused = 0, g_pool_refused = 0;
 uint64_t g_as_refusals = 0;
 bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint32_t arena, const char* capped_what);
 VkDeviceSize as_bytes();   // live + pending bytes of every chunk (rt_as_cap_occupied)
+// Refused BLAS requests per class (arena 0 cached, 1 per-draw and groom, 2 cascade casters) and cascade rebuilds that
+// kept the previous BLAS (rt_cascade_keep_refused) or left the casters out, since the last `[bvh] BLAS refusals` line.
+uint64_t g_as_refused_class[3] = {}, g_casc_kept = 0, g_casc_left_out = 0, g_refusal_line_frame = 0;
 bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr, uint32_t arena = 0,
                const char* capped_what = "BLAS chunk for an unguarded build (over the chunks' cap)") {
   const bool ok = as_create_raw(size, out, guard_what, arena, capped_what);
   if (!ok && arena != 0) { g_as_refused += size; ++g_as_refusals; }
+  if (!ok) ++g_as_refused_class[arena < 3 ? arena : 1];
   return ok;
 }
 bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint32_t arena, const char* capped_what) {
@@ -305,9 +309,12 @@ bool as_create_raw(VkDeviceSize size, AsAlloc& out, const char* guard_what, uint
   // rt_as_chunk_fit (common/as_chunk_alloc.h): best fit among retained empty chunks; the cascade casters' own chunk
   // (arena 2, rebuilt at a new size whenever the caster list changes) is sized with 1/8 of room.
   const bool chunk_fit = cfg_int("rt_as_chunk_fit", 0) != 0;
-  int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena, chunk_fit);
+  const VkDeviceSize base = VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20;
+  // rt_as_size_class (as_chunks::same_class): ranges up to a base chunk stay out of larger chunks and back.
+  const VkDeviceSize class_base = cfg_int("rt_as_size_class", 0) ? base : 0;
+  int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena, chunk_fit,
+                                       class_base);
   if (ci < 0) {
-    const VkDeviceSize base = VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20;
     const VkDeviceSize cs = as_chunks::oversize_chunk_bytes(size, base, arena == 2, chunk_fit);
     const VkDeviceSize cap = vram_cap(vram_guard::kAsChunks, UINT64_MAX);
     // Retained empty chunks (rt_as_chunk_reuse_frames) too small for this range must not count against
@@ -596,6 +603,10 @@ std::unordered_map<uint64_t, DynSlot> g_dyn;
 AsAlloc g_casc_as;
 uint64_t g_casc_sig = 0;          // the draw list g_casc_as was built from (rt_cascade_refit)
 uint32_t g_casc_tris = 0, g_casc_refits = 0;
+// rt_cascade_keep_refused: the camera-relative origin g_casc_as's soup was built or refitted against (the instance
+// translation plus that build's camera, cascade::rebase), so a kept BLAS is translated into a later build's space.
+float g_casc_origin[3] = {};
+bool g_casc_origin_ok = false;
 uint32_t g_casc_wide_tris = 0;    // rt_capture_wide_split: its second geometry (wide casters; 0 none)
 VkDeviceSize g_casc_update_scratch = 0;
 uint64_t g_casc_n_build = 0, g_casc_n_refit = 0;
@@ -2249,6 +2260,7 @@ void bvh_device_destroyed(DeviceData* dd) {
     if (s.groom && s.groom->readback.b) free_buf(s.groom->readback);
   }
   as_destroy(g_casc_as);
+  g_casc_origin_ok = false;
   for (JobBatch& b : g_batches)
     for (Swap& s : b.swaps) as_destroy(s.c);
   g_batches.clear();
@@ -3704,13 +3716,33 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     casc_refit = casc_refit_on && g_casc_as.as && g_casc_sig == cap.cascade_sig && g_casc_tris == cap.cascade_tris &&
                  g_casc_wide_tris == cap.cascade_wide_tris &&
                  g_casc_update_scratch && g_casc_refits < uint32_t((std::max)(cfg_int("rt_cascade_rebuild_frames", 60), 1));
-    bool ok = casc_refit;
+    bool ok = casc_refit, kept = false;
+    float build_cam[3] = {};
+    uint64_t build_cam_frame = 0;
+    const bool have_cam = rt_current_build_camera(build_cam, &build_cam_frame);
+    VkAccelerationStructureBuildSizesInfoKHR sz{};
     if (!casc_refit) {
-      if (g_casc_as.as) as_destroy(g_casc_as);
-      const VkAccelerationStructureBuildSizesInfoKHR sz =
-          blas_sizes2(cap.cascade_tris, cap.cascade_stride, cap.cascade_wide_tris, cap.cascade_wide_stride, casc_flags);
-      ok = as_create(sz.accelerationStructureSize, g_casc_as, nullptr, 2,
-                     "BLAS chunk for the cascade casters (left out this frame)");
+      sz = blas_sizes2(cap.cascade_tris, cap.cascade_stride, cap.cascade_wide_tris, cap.cascade_wide_stride, casc_flags);
+      // rt_cascade_keep_refused (default 0, live): the new BLAS is created before the previous one is released; if the
+      // chunks refuse it, the previous BLAS (an earlier caster list, kept whole) is traced this frame, translated from
+      // its own origin, instead of no casters at all (user log 2026-11-20 16:47-16:48: 137 refusals of this BLAS during a
+      // dolly, the sun shadows of those frames had no casters). Its build state (signature, triangle counts, update
+      // scratch) stays the kept BLAS's, so a later refit never runs over another list; the next build retries the rebuild.
+      if (cfg_int("rt_cascade_keep_refused", 0) && g_casc_as.as && g_casc_origin_ok && have_cam) {
+        AsAlloc fresh;
+        ok = as_create(sz.accelerationStructureSize, fresh, nullptr, 2,
+                       "BLAS chunk for the cascade casters (previous BLAS kept this frame)");
+        if (ok) { as_destroy(g_casc_as); g_casc_as = fresh; }
+        else kept = true;
+      } else {
+        if (g_casc_as.as) as_destroy(g_casc_as);
+        ok = as_create(sz.accelerationStructureSize, g_casc_as, nullptr, 2,
+                       "BLAS chunk for the cascade casters (left out this frame)");
+      }
+    }
+    if (kept) {
+      ++g_casc_kept;
+    } else if (!casc_refit) {
       casc_scratch = sz.buildScratchSize;
       g_casc_update_scratch = casc_refit_on ? sz.updateScratchSize : 0;
       g_casc_sig = cap.cascade_sig;
@@ -3728,24 +3760,32 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           (unsigned long long)g_casc_n_refit);
     if (ok) {
       casc_build = true;
+      g_casc_origin_ok = have_cam;
+      for (int k = 0; k < 3; ++k) g_casc_origin[k] = cap.cascade_t[k] + build_cam[k];
+    }
+    if (ok || kept) {
       VkAccelerationStructureInstanceKHR in{};
       in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
-      for (int k = 0; k < 3; ++k) in.transform.matrix[k][3] = cap.cascade_t[k];
+      float t[3] = {cap.cascade_t[0], cap.cascade_t[1], cap.cascade_t[2]};
+      if (kept) cascade::rebase(g_casc_origin, build_cam, t);   // the kept soup's origin into this build's space
+      for (int k = 0; k < 3; ++k) in.transform.matrix[k][3] = t[k];
       in.instanceCustomIndex = cascade::kCustomIndex;
       in.mask = cascade::kMask;
       in.instanceShaderBindingTableRecordOffset = 0;
       in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
       in.accelerationStructureReference = g_casc_as.addr;
       const uint32_t inf[4] = {0, cap.cascade_stride & 0xffu, 0, 0};
-      slot_casc = {n, cap.cascade_tris, cap.cascade_stride, cap.cascade_xfb, cap.cascade_frame, cap.cascade_sig};
+      if (!kept) slot_casc = {n, cap.cascade_tris, cap.cascade_stride, cap.cascade_xfb, cap.cascade_frame, cap.cascade_sig};
       std::memcpy(inst_out + n, &in, sizeof in);
       std::memcpy(info_out + n * 4, inf, sizeof inf);
       inst_ref.push_back(in.accelerationStructureReference);
       inst_flags.push_back(in.flags);
       ++n;
-      geo_cascade_note_build(0, cap.cascade_tris);
+      if (kept) geo_cascade_note_build(5, 0);   // refused, as before; counted apart in the refusals line
+      else geo_cascade_note_build(0, cap.cascade_tris);
     } else {
       geo_cascade_note_build(5, 0);
+      ++g_casc_left_out;
     }
   } else if (g_casc_as.as) {
     as_destroy(g_casc_as);   // the key went off, or no soup this frame
@@ -5305,6 +5345,31 @@ void bvh_on_present() {
     c.ra = as_chunks::ChunkRanges{}; // keep the vector slot: AsAlloc indices stay stable
   }
   if (g_relocating_chunk >= 0 && !g_chunks[g_relocating_chunk].buf.b) g_relocating_chunk = -1;
+  // Refused BLAS requests by class, at most once per 300 frames and only when there were some (always on: the class
+  // that lost its geometry, and whether the cascade casters were kept or left out, decide the next fix).
+  if (now >= g_refusal_line_frame + 300) {
+    const uint64_t any = g_as_refused_class[0] + g_as_refused_class[1] + g_as_refused_class[2];
+    if (any) {
+      VkDeviceSize live = 0, used = 0;
+      size_t chunks = 0, large = 0;
+      const VkDeviceSize base = VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20;
+      for (const AsChunk& c : g_chunks) {
+        if (!c.buf.b) continue;
+        ++chunks; large += c.ra.cap > base; live += c.ra.live; used += c.ra.used;
+      }
+      log("[bvh] BLAS refusals in %llu frames: cached %llu, per-draw/groom %llu, cascade casters %llu (previous BLAS kept "
+          "%llu, left out %llu); chunks %.0f MB reserved in %zu (%zu larger than a base chunk), %.0f live, %.0f pending "
+          "(rt_as_size_class=%d, rt_cascade_keep_refused=%d)",
+          (unsigned long long)(now - g_refusal_line_frame), (unsigned long long)g_as_refused_class[0],
+          (unsigned long long)g_as_refused_class[1], (unsigned long long)g_as_refused_class[2],
+          (unsigned long long)g_casc_kept, (unsigned long long)g_casc_left_out, double(as_reserved()) / 1048576.0, chunks,
+          large, double(live) / 1048576.0, double(used - (std::min)(used, live)) / 1048576.0,
+          cfg_int("rt_as_size_class", 0), cfg_int("rt_cascade_keep_refused", 0));
+    }
+    g_as_refused_class[0] = g_as_refused_class[1] = g_as_refused_class[2] = 0;
+    g_casc_kept = g_casc_left_out = 0;
+    g_refusal_line_frame = now;
+  }
   if (const VkDeviceSize ask = vram_take_ask(vram_guard::kYieldMeshLru)) {
     std::vector<std::pair<uint64_t, uint64_t>> old;   // last used, key
     for (auto& [k, m] : g_meshes)
