@@ -49,6 +49,7 @@
 #include "sharc.h"
 #include "sun_trust.h"
 #include "rr_mode_latch.h"
+#include "frame_memo.h"
 
 // D-EM (Bg3HostApi::rt_emissive, Bg3EmissiveInfo): the SHaRC injection adds the game's effects-target
 // emission. It follows BG3RTX_HOST_HAS_RT_EMISSIVE, which the D-EM host_api.h is to define (an ABI
@@ -1266,6 +1267,17 @@ bool ensure_rf_hit_contract() {
   return true;
 }
 
+// refresh() runs about 25 times per frame: its host lookups (cfg_int keys, persist words) are read once per frame
+// index (core/frame_memo.h; under g_prewarm_mu, as refresh). A key change applies from the next frame.
+bg3::FrameMemo<int> g_refresh_cfg;
+bg3::FrameMemo<void*> g_refresh_persist;
+int refresh_cfg(const char* key, int fallback) {
+  return g_refresh_cfg.get(host->frame_index(), key, [&] { return host->cfg_int(key, fallback); });
+}
+void* refresh_persist(const char* key, size_t size) {
+  return g_refresh_persist.get(host->frame_index(), key, [&] { return host->persist(key, size); });
+}
+
 // raygen (gi_rt_pipeline): the file's ray generation request (shader_variant.h kRtPipeline, lib profile) and its
 // reorder constant 1050; build_pipeline then creates a ray tracing pipeline.
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE, bool raygen = false) {
@@ -1277,27 +1289,27 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // ls_box_cascade_old=1 (diagnostic A/B, live): the box passes trace 0xFF again, as before the 2026-11-02 fix, so
   // the stale cascade copy shadows local/box lights (rt_occ_stats "cascade" kind under local/box shows it).
   const bool box_old = std::strncmp(file, "gi/rt_local_shadows", 19) == 0 && std::strstr(file, "_box") &&
-                       host->cfg_int("ls_box_cascade_old", 0) != 0;
-  const bool cascade = sv::cascade_entry(file) && host->cfg_int("rt_cascade_casters", 0) != 0 && !box_old;
+                       refresh_cfg("ls_box_cascade_old", 0) != 0;
+  const bool cascade = sv::cascade_entry(file) && refresh_cfg("rt_cascade_casters", 0) != 0 && !box_old;
   // Include box/native/check helpers too: each may reach rt_common through
   // includes even when it is outside the variant list.
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
-      host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
+      refresh_persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
   // Constant 1013 selects the hit GI program; its value joins the pipeline key.
   const bool occ_stats = &p == &g_ls_full_box_occ;
-  const bool rf_gi = sv::rf_hit_gi_entry(file) && host->cfg_int("rf_hit_gi", 0) > 0;
-  const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
-  if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
+  const bool rf_gi = sv::rf_hit_gi_entry(file) && refresh_cfg("rf_hit_gi", 0) > 0;
+  const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(refresh_persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
+  if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(refresh_persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   const bool physical_origin=scalp && g_hair_origin_frame && bg3::hair_origin::alternate_entry(file);
-  const bool tileset=std::strncmp(file,"gi/",3)==0 && bg3::native_tileset::enabled(static_cast<uint32_t*>(host->persist(bg3::native_tileset::capability_key,sizeof(uint32_t))));
+  const bool tileset=std::strncmp(file,"gi/",3)==0 && bg3::native_tileset::enabled(static_cast<uint32_t*>(refresh_persist(bg3::native_tileset::capability_key,sizeof(uint32_t))));
   // rt_hit_material_instanced at startup (the layer's capability word): RT_HIT_INSTANCED on the consumers.
-  const bool instanced=sv::hit_material_entry(file) && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::instanced_capability_key,sizeof(uint32_t))));
+  const bool instanced=sv::hit_material_entry(file) && bg3::native_hit::capable(static_cast<uint32_t*>(refresh_persist(bg3::native_hit::instanced_capability_key,sizeof(uint32_t))));
   // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"): the gi_hit_sun files with RT_GI_FAR, live.
-  const bool far_on=sv::gi_far_entry(file) && host->cfg_int("gi_far",0)!=0;
+  const bool far_on=sv::gi_far_entry(file) && refresh_cfg("gi_far",0)!=0;
   // rt_hit_material_wind_rgb at startup: its clip counters (RT_HIT_WIND_RGB). Constant for the session,
   // so it shares the instanced variant slot (the request string is compared below).
-  const bool wind_rgb=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::wind_rgb_capability_key,sizeof(uint32_t))));
-  const bool hair_groom = scalp && host->cfg_int("rt_hair_groom", 0) != 0;
+  const bool wind_rgb=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(refresh_persist(bg3::native_hit::wind_rgb_capability_key,sizeof(uint32_t))));
+  const bool hair_groom = scalp && refresh_cfg("rt_hair_groom", 0) != 0;
   const unsigned variant = sv::hair_groom_slot(file, hair_groom) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
   // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
@@ -1326,7 +1338,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
   if (std::strncmp(file, "gi/rt_reflections", 17) == 0)
     // Every RF request contains the same independent receiver-probe block.
-    specs.add(sv::kSpecIdRfCompactProbeState, host->cfg_int("rf_compact_probe_state", 1) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdRfCompactProbeState, refresh_cfg("rf_compact_probe_state", 1) != 0 ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);
   if (hit_family) {
@@ -1342,15 +1354,15 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(sv::kSpecIdGiFarRoofEarly,
               host->cfg_int("rt_stats", 0) == 0 && host->cfg_int("gi_far_roof_early", 1) != 0 ? 1u : 0u);
     // gi_far_roof_emission (experimental, default 0, live): only when on, so key-off pipelines keep their specialization.
-    if (far_on && host->cfg_int("gi_far_roof_emission", 0) != 0) specs.add(sv::kSpecIdGiFarRoofEmission, 1u);
+    if (far_on && refresh_cfg("gi_far_roof_emission", 0) != 0) specs.add(sv::kSpecIdGiFarRoofEmission, 1u);
   }
   // gi_rt_pipeline_reorder (default 1, hit kind): 0 when the driver reports no reordering (common/rt_pipeline.h).
-  if (raygen) specs.add(sv::kSpecIdGiSer, bg3::rt_pipeline::reorder_spec(host->cfg_int("gi_rt_pipeline_reorder", 1), host->rt_pipeline.reorder_hint != 0));
+  if (raygen) specs.add(sv::kSpecIdGiSer, bg3::rt_pipeline::reorder_spec(refresh_cfg("gi_rt_pipeline_reorder", 1), host->rt_pipeline.reorder_hint != 0));
   // rt_scene_handout (live, docs/SCENE_HANDOUT_DESIGN.md increment 2): every scene trace by the stamp's TLAS address.
   // gScene (binding 18) stays the TLAS the pass would trace, so either value traces the same scene.
-  if (host->cfg_int("rt_scene_handout", 0) != 0) specs.add(sv::kSpecIdSceneHandout, 1u);
+  if (refresh_cfg("rt_scene_handout", 0) != 0) specs.add(sv::kSpecIdSceneHandout, 1u);
   if (std::strncmp(file, "gi/gi_trace_rt", 14) == 0)
-    specs.add(sv::kSpecIdCompactHitState, host->cfg_int("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdCompactHitState, refresh_cfg("rt_compact_hit_state", 1) != 0 ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
     specs.add(sv::kSpecIdTileset, tileset ? 1u : 0u);
     specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
@@ -1358,9 +1370,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     // rt_hair_groom (docs/RTX_HAIR_INTEGRATION.md, live after a startup with it on): the strand groom in the
     // secondary queries; nothing changes until the layer publishes a groom TLAS in the scene stamp.
     specs.add(sv::kSpecIdHairGroom, hair_groom ? 1u : 0u);
-    specs.add(sv::kSpecIdHairGroomShadowT, host->cfg_int("rt_hair_groom_shadow_t", 0) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdHairGroomShadowT, refresh_cfg("rt_hair_groom_shadow_t", 0) != 0 ? 1u : 0u);
     // rt_hair_groom_ao_t (M2.3): the AO/GI hemisphere rays pass strands with the same transmittance.
-    specs.add(sv::kSpecIdHairGroomAoT, host->cfg_int("rt_hair_groom_ao_t", 0) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdHairGroomAoT, refresh_cfg("rt_hair_groom_ao_t", 0) != 0 ? 1u : 0u);
   }
   if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0 || std::strcmp(file, "gi/hair_fibre_spec.hlsl") == 0 ||
       &p == &g_composite_fibre) {   // layer's hair primary header
@@ -1372,8 +1384,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_hair_fibre_mapped (M4.3): the fibre pass also replaces the mapped local lights' hair term.
   // rt_hair_fibre=2: the in-frame check (the game's terms in place of the fibre response; must equal key off).
   if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0) {
-    specs.add(sv::kSpecIdHairFibreMapped, host->cfg_int("rt_hair_fibre_mapped", 0) != 0 ? 1u : 0u);
-    specs.add(sv::kSpecIdHairFibreCheck, host->cfg_int("rt_hair_fibre", 0) == 2 ? 1u : 0u);
+    specs.add(sv::kSpecIdHairFibreMapped, refresh_cfg("rt_hair_fibre_mapped", 0) != 0 ? 1u : 0u);
+    specs.add(sv::kSpecIdHairFibreCheck, refresh_cfg("rt_hair_fibre", 0) == 2 ? 1u : 0u);
   }
   slot_key += specs.key();
   Pipe::Variant& slot = p.variants[slot_key + "|" + std::to_string(uint64_t(lay))];
