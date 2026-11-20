@@ -449,7 +449,7 @@ function renderHome(root) {
  const report=el('p','help-copy home-report');report.id='home-report';report.append(el('span','','Problem? '),linkButton('home-report-open','Create a report…',()=>send('report')));
  attention.append(ah,statusPanel(),report);left.append(attention);
  const prep=state.preparation||{},jobs=[shaderJob(prep),hairJob(prep)].filter(Boolean);
- left.append(group('Preparation','Runs in the background. Never blocks Play.',jobs,{id:'home-preparation'}));
+ left.append(group('Preparation','Runs while this window is open, also minimised; it continues where it stopped. Never blocks Play.',jobs,{id:'home-preparation'}));
  const index=state.preset,pp=el('div','pad');pp.append(el('h3','row-title',['Low','Medium','High','Ultra'][index]||'Preset'),el('p','description',state.presetDescriptions?.[index]||''));
  if(state.custom)pp.append(el('p','cost','You changed some settings from this preset. "Reset to '+(['Low','Medium','High','Ultra'][index]||'preset')+'" at the top right brings it back.'));
  right.append(group('This preset','',[pp],{id:'home-preset'}));
@@ -465,7 +465,9 @@ function renderSupport(root) {
  gt.append(gh,el('p','detail-heading','Compatibility'),el('p','description pre',[memory.gpu,...(memory.details||[]).filter(x=>x&&x!==memory.memory)].filter(Boolean).join('\n')),
   el('p','detail-heading','Video memory'),el('p','description pre',memory.memory||(measured(memory.vram)?memory.vram:'Not checked yet. Use Check again.')));
  const recheck=el('button','btn','Check again');recheck.id='support-recheck';recheck.onclick=()=>send('recheck');const gc=el('div','row-control');
- if((memory.adapters||[]).length>1){const wrap=el('span','select-wrap'),select=el('select');select.id='support-adapter';select.setAttribute('aria-label','GPU');const unknown=el('option','','Choose GPU');unknown.value='-1';select.append(unknown);memory.adapters.forEach(a=>{const option=el('option','',a.label);option.value=a.value;option.selected=a.value===memory.selected;select.append(option);});select.onchange=()=>send('adapter',{value:Number(select.value)});wrap.append(select);gc.append(wrap);}
+ if((memory.adapters||[]).length>1){const wrap=el('span','select-wrap'),select=el('select');select.id='support-adapter';select.setAttribute('aria-label','GPU');const unknown=el('option','','Choose GPU');unknown.value='-1';select.append(unknown);memory.adapters.forEach(a=>{const option=el('option','',a.label);option.value=a.value;option.selected=a.value===memory.selected;select.append(option);});select.onchange=()=>{dragging=false;deferred=null;send('adapter',{value:Number(select.value)});};
+  // Like a held slider: a refresh (every 2 s while shaders or hair styles prepare) would close the open list.
+  select.onpointerdown=()=>{dragging=true;};select.onblur=()=>setTimeout(endDrag,0);wrap.append(select);gc.append(wrap);}
  gc.append(recheck);gfx.append(gt,gc);
  root.append(group('Game and graphics','',[setup,gfx],{id:'support-game'}));
  const rep=el('div','row'),rt=el('div','row-text');rt.append(el('h3','row-title','Report a problem'),el('p','description','Builds a ZIP on your PC with logs, settings and graphics details. You see every file first. Nothing is uploaded.'));
@@ -561,9 +563,12 @@ function render(next) {
 }
 // Status strip: the last change (with what changed with it and Undo) or a message from the bridge. Hidden otherwise.
 function renderFooter() {
- const n=state.notice||{},also=(n.also||[]).length?' Also changed: '+n.also.join('; ')+'.':'';
+ // A preset moves many settings: the strip names three and counts the rest (the full list is its tooltip), so it
+ // stays one or two lines in a narrow window.
+ const n=state.notice||{},list=n.also||[],shown=list.length>4?list.slice(0,3):list;
+ const also=list.length?' Also changed: '+shown.join('; ')+(shown.length<list.length?'; and '+(list.length-shown.length)+' more':'')+'.':'';
  const text=n.text?n.text+'.'+also:state.status||'';
- $('changes').className=text?'':'idle';$('status').textContent=text;
+ $('changes').className=text?'':'idle';$('status').textContent=text;$('status').title=list.length>shown.length?n.text+'. Also changed: '+list.join('; ')+'.':'';
  $('undo').hidden=!n.undo;$('dismiss').hidden=!n.text;
 }
 function renderReport() {
@@ -580,6 +585,8 @@ window.chrome?.webview?.addEventListener('message',e=>{const data=typeof e.data=
 // Review views (--screenshot-view) adjust the sample, or the host's review state, before rendering again.
 function reviewView(host) {
  {if(sampleView==='error')state.writeError={text:'Settings not saved. Nothing was changed.\nThe file is in use by another application (Windows error 32). Close it and try again.',retry:true};if(sampleView==='notice'){state.settings.find(s=>s.id==='exp_hair_groom_primary').value=0;}if(sampleView==='notice')state.notice={text:'RTX Hair: On \u2192 Off',also:['Strand hair edge resolve: Analytic coverage \u2192 Off'],anchor:'exp_hair_groom_primary',undo:true};if(sampleView==='missing'&&!host){state.gamePath='';state.canPlay=false;}if(sampleView==='probe'&&!host){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
+ // A preset change: the strip names every setting it moved (Ultra to High: nine).
+ if(sampleView==='preset'){state.preset=2;state.custom=false;state.notice={text:'Preset High applied',also:['Sun shadows: Include hidden roofs → Ray-traced','Indirect lighting: Ray-traced high → Ray-traced','Interior light shadows: On → Off','Reflections: Rough → Standard','Water lighting: Include refraction → Off','Off-screen bounce light: Far (6 m) → Off (after a game restart)','Depth of field and bloom smoothing: On → Off','Hair shadows: On → Off','Rendered frame limit: 58 fps → Off'],anchor:'',undo:true};render(state);}
  if(sampleView==='restart'){state.restartNeeded=true;state.restartCount=2;state.restartNames=['Hair shadows','Water lighting'];state.restartBanner='Restart the game to apply: Hair shadows, Water lighting.';state.notice={text:'Water lighting: Off \u2192 Reflections (after a game restart)',also:[],anchor:'exp_water',undo:true};render(state);}
  if((query.has('report')||sampleView==='report')&&!state.report?.files?.length){state.report={visible:true,privacy:'Creates a ZIP on your PC with BG3RTX logs, graphics settings, version and system graphics details. Logs may contain file paths. We remove common personal path details, but you should review the files before sharing. Nothing is uploaded. Screenshots and crash dumps are excluded; your latest save is added only if you tick it.',files:[{name:'CONTENTS.txt',size:248,text:'Sample preview only. No files have been collected.'},{name:'graphics.txt',size:112,text:'Sample adapter: NVIDIA GeForce RTX 5090\nDriver: 621.01\nAdapter used by the game: unconfirmed'}],bytes:360};renderReport();}
  if(sampleView==='experimental'||query.has('bottom'))$('main').scrollTop=$('main').scrollHeight;
@@ -627,7 +634,7 @@ if(sample) {
   hair:{ready:412,captured:430,...(granny?{total:1530,source:'all',etaSeconds:7300}:{source:'seen',etaSeconds:2100}),finished:granny?412:430,needed:granny?1530:559,bytes:1.1e9,...(stopped?{error:'granny2.dll could not be loaded.'}:{})},
   granny:granny||stopped?{path:'C:\\Tools\\ExportTool\\granny2.dll',ok:true}:{path:'',ok:false},convertAllReason:granny||stopped?'':'Needs granny2.dll: choose it below.'};
  // The WebView host sends its review state (real settings table); a plain browser uses this sample.
- if(!window.chrome?.webview){render({type:'state',version:'Sample',modStatus:'Mod files present',preset:3,presetLabel:'Ultra',recommendedPreset:3,custom:true,presetDescriptions:['Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.','Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.','Adds foliage to ray tracing, Full local light shadows and Standard reflections.','Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.'],experimental:experimentalOpen,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',canPlay:true,gamePath:'C:\\Games\\Baldurs Gate 3',compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[],details:['Hardware ray tracing supported.','Driver 621.01 supported.']},settings,status:'',
+ if(!window.chrome?.webview){render({type:'state',version:'Sample',modStatus:'Mod files present',preset:3,presetLabel:'Ultra',recommendedPreset:3,custom:true,presetDescriptions:['Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.','Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.','Adds foliage to ray tracing, Full local light shadows, Standard reflections and Low-latency scene.','Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.'],experimental:experimentalOpen,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',canPlay:true,gamePath:'C:\\Games\\Baldurs Gate 3',compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[],details:['Hardware ray tracing supported.','Driver 621.01 supported.']},settings,status:'',
   shortcuts:{hotkey_rt_toggle:'Ctrl+Shift+F9',hotkey_dlss5:'Ctrl+Shift+F8',hotkey_rtx_hair:'Ctrl+Shift+F7'},shortcutDefaults:{hotkey_rt_toggle:'Ctrl+Shift+F9',hotkey_dlss5:'Ctrl+Shift+F8',hotkey_rtx_hair:'Ctrl+Shift+F7'},preparation});
  reviewView(false);}
 } else send('init');

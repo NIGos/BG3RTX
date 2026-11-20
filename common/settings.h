@@ -40,7 +40,7 @@ inline constexpr const char* kPresetLabel[kPresetCount] = {"Low", "Medium", "Hig
 inline constexpr const char* kPresetDesc[kPresetCount] = {
     "Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.",
     "Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.",
-    "Adds foliage to ray tracing, Full local light shadows and Standard reflections.",
+    "Adds foliage to ray tracing, Full local light shadows, Standard reflections and Low-latency scene.",
     "Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, "
     "Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.",
 };

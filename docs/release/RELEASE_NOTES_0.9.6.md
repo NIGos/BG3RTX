@@ -45,7 +45,7 @@ preset**. The game's own hair is what you see unless you turn it on.
 
 How to turn it on:
 
-- In the launcher: **Lighting > RTX Hair**, or the RTX Hair card on **Home**.
+- In the launcher: **Lighting > RTX Hair** (marked Beta).
 - In game: **Ctrl+Shift+F7** (you can change the key on the Hotkeys page). It switches while you play.
 - A hair style gets strands after the game has shown it once and the launcher has converted it. Home shows the
   progress under Preparation. "Convert all styles" is optional and needs a `granny2.dll` that you provide;
@@ -68,7 +68,8 @@ Known limits of RTX Hair:
 
 - A hair style that has not been converted stays as the game's hair. Some styles in the test scene are not
   converted yet.
-- Hair on distant characters can look softer than the game's hair.
+- Hair on distant characters can look softer than the game's hair: there a strand is much thinner than a pixel,
+  and the image shows the average of many strands.
 - A head that comes into view shows the game's hair for a few frames (about 3) before its strands appear. In the
   last test run two longer cases (6 and 9 frames) were seen and are not explained yet.
 - The cost of RTX Hair depends on how much hair is on screen. It is not measured across scenes yet. The strand

@@ -34,7 +34,7 @@ This is a beta. Expect bugs. Please report them (see "Reporting a bug").
    `powershell -ExecutionPolicy Bypass -File install.ps1 -Destination "D:\Mods\BG3RTX"`.
    You can also skip the installer and run `bin\BG3RTX.exe` straight from the unzipped folder.
 3. Start **BG3RTX** (`bin\BG3RTX.exe`). It finds Steam installs by itself; otherwise use
-   **Choose game folder…** and pick the folder that contains `bin\bg3.exe`.
+   **Choose folder…** and pick the folder that contains `bin\bg3.exe`.
 4. Pick a preset (hover a preset to see what it does and which one is suggested for your GPU),
    then press **Play**. A setting applies the moment you click it; there is no Save button.
 5. In the game's Graphics options set the upscaler to **DLSS** (Quality recommended). Ray
@@ -70,8 +70,8 @@ High and Ultra also turn on **Low-latency scene** (the lighting no longer waits 
 Reference measurements come from an RTX 5090, not a GPU support matrix or an FPS guarantee.
 Long-session acceptance is still open.
 Every control, its choices and restart requirements are in `docs\USER_SETTINGS.md`.
-Lighting, Surfaces and Performance contain player controls; Help & support contains the game folder,
-compatibility, memory and reporting help, and the Preparation status (shaders, strand hair). Visible hair is the game's stock hair unless **Lighting > RTX Hair** is on (beta, off in every preset; it turns on and off while you play, also with Ctrl+Shift+F7).
+Lighting, Surfaces and Performance contain player controls; Home shows what needs attention and the Preparation
+status (shaders, RTX Hair styles); Help & support contains the game folder, compatibility, memory and reporting help. Visible hair is the game's stock hair unless **Lighting > RTX Hair** is on (beta, off in every preset; it turns on and off while you play, also with Ctrl+Shift+F7).
 
 ### VRAM guidance
 

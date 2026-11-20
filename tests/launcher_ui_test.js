@@ -83,6 +83,16 @@ render(fixture);
  render({...fixture,notice:{text:'Reflections: Rough → Standard',also:[],anchor:'reflections',undo:true}});go('Surfaces');
  assert(!onPage('row-also')&&!ids.get('undo').hidden);
  render({...fixture,notice:{text:'Undone',also:[],anchor:'',undo:false}});assert(ids.get('undo').hidden&&ids.get('status').textContent==='Undone.');
+ // A preset moves many settings: the strip names three and counts the rest; the tooltip has them all. Four still fit.
+ {const also=['A: 1 → 0','B: 1 → 0','C: 1 → 0','D: 1 → 0','E: 1 → 0','F: 1 → 0'];
+  render({...fixture,notice:{text:'Preset High applied',also,anchor:'',undo:true}});
+  assert.strictEqual(ids.get('status').textContent,'Preset High applied. Also changed: A: 1 → 0; B: 1 → 0; C: 1 → 0; and 3 more.');
+  assert.strictEqual(ids.get('status').title,'Preset High applied. Also changed: '+also.join('; ')+'.');
+  render({...fixture,notice:{text:'Preset High applied',also:also.slice(0,4),anchor:'',undo:true}});
+  assert.strictEqual(ids.get('status').textContent,'Preset High applied. Also changed: '+also.slice(0,4).join('; ')+'.');
+  assert.strictEqual(ids.get('status').title,'','no tooltip when the strip names every change');}
+ // Preparation runs in the launcher's own processes: closing the window stops it (it resumes next time). Say so.
+ go('Home');assert(/Runs while this window is open/.test(text(ids.get('section-content'))),'Preparation says it needs the window');
  // A failed write: a red banner on every page with the host's message, Retry and Dismiss; nothing else changes.
  const failed={...fixture,status:'',writeError:{text:'Settings not saved. Nothing was changed.\nWindows error 32',retry:true}};
  for(const p of ['Home','Lighting','Support']){render(failed);go(p);
@@ -341,6 +351,14 @@ assert(notices&&notices.textContent==='Fonts and third-party notices');
 notices.onclick({preventDefault(){}});assert.strictEqual(sent.at(-1).type,'notices');
 render({...fixture,compatibility:{...fixture.compatibility,adapters:[{value:0,label:'A'},{value:1,label:'B'}],selected:-1}});
 ids.get('support-adapter').value='1';ids.get('support-adapter').onchange();assert.deepStrictEqual(msg(),{type:'adapter',value:1});
+// An open GPU list is not rebuilt (and closed) by a refresh: the state waits until the list is left.
+{const two={...fixture,compatibility:{...fixture.compatibility,adapters:[{value:0,label:'A'},{value:1,label:'B'}],selected:-1}};
+ render(two);const open=ids.get('support-adapter');open.onpointerdown();render({...two,status:'refresh'});
+ assert.strictEqual(ids.get('support-adapter'),open,'GPU list rebuilt while open');
+ open.onblur();assert.notStrictEqual(ids.get('support-adapter'),open,'deferred state not rendered when the list is left');
+ const again=ids.get('support-adapter');again.onpointerdown();render({...two,status:'stale'});again.value='0';again.onchange();
+ assert.deepStrictEqual(msg(),{type:'adapter',value:0});render(two);assert.notStrictEqual(ids.get('support-adapter'),again,'the reply after a choice renders');
+ render(fixture);}
 // Explicit bridge authorization, rather than the presence of a developer row.
 const dev={...fixture.settings[0],id:'test-dev',developer:true};
 render({...fixture,settings:[...fixture.settings,dev]});assert(!inNav('Developer'));
