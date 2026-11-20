@@ -28,4 +28,9 @@
   Decisive: ON "free in partly used chunks (N in chunks over a base chunk)" N at most 30 MB against 300-2000 MB OFF;
   refusals ON <= OFF; energy within 0.5%; GPU ms equal. At this machine's 4224 MB cap refusals may be 0 in both states:
   then `rt_cascade_keep_refused` is not exercised there.
+- Water M5.4c at Vg = 0 (`common/water_fs_patch.h:699`, coordinator item): Dg = D (1 - Vg) / Vg is 0 x inf = NaN
+  there, the compose rejects the record (`g_ok`) and keeps C. No small fix: D = Vg D_u, so at Vg = 0 the FS holds no
+  D_u (lum(D) is 0 too); D_u needs the cloud-layer phi chain of Lsun rebuilt with Vg = 1 (its products sit in branch
+  blocks that do not dominate the stores). A guard Dg = 0 changes no pixel (the record still has no sun term: `sunrec`
+  false), only the gsh counters. Not changed; the fully game-shadowed water keeps the game's shadow.
 - Stream C: `pipeline_readiness.py` gained the two keys (host only, no pipeline).
