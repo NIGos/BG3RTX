@@ -3614,7 +3614,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   }
   if ((s.pan || host->cfg_int("rt_primary_check", 0)) && tlas &&
       refresh(g_pan_primary, primary_shader, g_rt_layout)) {
-    if(!dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true))return false;
+    // rt_origin above may have bound its pipeline and push set: hand the game its own back.
+    if(!dispatch(cmd, g_pan_primary, b, pc, g_w, g_h, true)){host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);return false;}
     Bg3Binding im{};
     im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     im.layout = VK_IMAGE_LAYOUT_GENERAL; im.width = g_w; im.height = g_h;
@@ -4102,7 +4103,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   if (s.tlas && pc.rt_debug >= 1 && pc.rt_debug <= 8) {
     memory_barrier(cmd, kCS, kCS);
     bind_rt(b, s.tlas, s.alpha);
-    if(!dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true))return;
+    // Optional view: a refused dispatch (pipeline building, traversal check) must not skip the
+    // rest of run_post (history parity, the closing barrier, restore_bindings).
+    (void)dispatch(cmd, g_rt_debug, b, pc, g_w, g_h, true);
   }
   if(s.tlas && pc.rt_debug==9 && host->cfg_int("rt_hit_material",0) &&
      bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) &&
