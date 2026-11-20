@@ -437,7 +437,16 @@ void main(uint3 tid : SV_DispatchThreadID) {
 
   // These read-only inputs are not modified by traversal or native hit shading.
   // Keep every probe expression and its accumulation order identical to the OFF block.
-  if (kRfCompactProbeState != 0u) {
+  // With w = 0 (no tier (a) hit: rough, unsupported, miss, hidden, off screen, aborted) the probe
+  // term only enters as delta = 0 * (Trt - Tp): the output is max(gs + delta, 0) with delta a
+  // zero (or NaN, then the guard below keeps gs) for any finite Tp and E, so it is skipped
+  // unless validation, a debug view or the counters read it. (A NaN w gives NaN either way.)
+  if (kRfCompactProbeState != 0u && !(w > 0.0) && !validate && pc.rf_debug == 0 && pc.rf_stats == 0) {
+    cl = uint4(0, 0, 0, 0);
+    E = 0.0;
+    n_local = 0u;
+    Tp = 0.0;
+  } else if (kRfCompactProbeState != 0u) {
   cl = bg3_cluster_raw(fp, d);
   float3 S = bg3_spec_ambient(sf.P, sf.N, sf.V, sf.f0, sf.a, cl, E, n_local);
   float so = bg3_spec_occlusion(fp, sf.nov_raw, sf.a);
