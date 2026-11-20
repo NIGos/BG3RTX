@@ -83,7 +83,8 @@
 //   417: qualified-hit rays whose term is not finite and >= 0: the ray takes fallback0 (occlusion w, no
 //        bounce: exactly the key-off ray), never the poisoned sum;
 //   418: pixels whose mean bounce exceeds the half-float maximum 65504 (the giRaw encoding), stored as
-//        65504 instead of +Inf (the energy above the encoding limit is lost, counted here).
+//        65504 instead of +Inf (the energy above the encoding limit is lost, counted here); a NaN channel
+//        (also counted here) stores 0.
 static const uint kGiHitNfFirst = 417u;
 static const float kGiRawHalfMax = 65504.0;
 bool gi_hit_term_ok(float3 c, uint bin) {
@@ -753,7 +754,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 gi_out = bounce / n;   // every term finite and >= 0: only an overflow can exceed the half maximum
   const bool gi_over = !all(gi_out <= kGiRawHalfMax);
   if (pc.rt_stats != 0u) stat_add(kGiHitNfFirst + 1u, gi_over, (id.x >> 3) * 7 + (id.y >> 3) * 13);
-  gi_out = select(gi_out <= kGiRawHalfMax, gi_out, kGiRawHalfMax.xxx);
+  // Finite only: an overflow (or +Inf) stores the half maximum; a NaN (no term can make one today: every hidden-hit
+  // term passed gi_hit_term_ok, prevRadiance reads are finite) stores no bounce, fallback0's value, never 65504.
+  // Finite inputs take the same value as before.
+  gi_out = select(gi_out <= kGiRawHalfMax, gi_out, select(gi_out > kGiRawHalfMax, kGiRawHalfMax.xxx, 0.0.xxx));
   giRaw[id] = float4(gi_out, saturate(1.0 - occ / n));
 #else
   giRaw[id] = float4(bounce / n, saturate(1.0 - occ / n));
