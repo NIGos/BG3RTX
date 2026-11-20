@@ -8,21 +8,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 $install = Join-Path $TestRoot 'setup installed beta'
-$keyName = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{8A32895E-1307-462E-B807-BE5B8072A9F5}_is1'
 function Require([bool]$ok, [string]$message) { if (-not $ok) { throw $message } }
 . (Join-Path $PSScriptRoot '..\app-control.ps1')
-function AppsEntries {
-  foreach ($view in @([Microsoft.Win32.RegistryView]::Registry32, [Microsoft.Win32.RegistryView]::Registry64)) {
-    $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser, $view)
-    try {
-      $key = $base.OpenSubKey($keyName)
-      if ($key) {
-        try { [pscustomobject]@{ Location = $key.GetValue('InstallLocation'); Icon = $key.GetValue('DisplayIcon'); Version = $key.GetValue('DisplayVersion') } }
-        finally { $key.Dispose() }
-      }
-    } finally { $base.Dispose() }
-  }
-}
+. (Join-Path $PSScriptRoot 'setup_presence.ps1')
+function AppsEntries { Get-BG3RTXAppsEntries }
 function Execute([string]$exe, [string]$arguments) {
   Write-Host "[$(Get-Date -Format HH:mm:ss)] Setup test: $exe $arguments"
   # A fresh, unsigned Setup is what Smart App Control blocks: say so instead of a bare start failure or exit code.
