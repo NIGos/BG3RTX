@@ -166,6 +166,10 @@ class Request(unittest.TestCase):
         self.assertTrue(row["fallbacks"])
         self.assertEqual(row["fallbacks"][0]["entry"], "main")
         self.assertEqual(len(steps), 2 * n)
+        # "main" is universal (2 explicit checks); "other" fails its universal check and stops at the first of its
+        # n Cartesian assignments: the first difference decides, the rest count as failed.
+        self.assertEqual(row["actual_frozen_checks"], 3)
+        self.assertEqual(sum(steps), n)
 
 
 if __name__ == "__main__":

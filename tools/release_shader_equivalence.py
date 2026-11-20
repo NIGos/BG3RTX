@@ -11,7 +11,8 @@ every address without choosing artificial numeric values. This domain contract
 is pinned to the reviewed bundle35 settings policy and fails closed if it changes.
 By default each entry first attempts universal symbolic equality over retained
 constants. If it succeeds, explicit all-zero/all-one specializations additionally
-exercise every retained Boolean value. Otherwise all combinations are checked.
+exercise every retained Boolean value. Otherwise all combinations are checked, up to
+the first difference, which decides the request (the rest count as failed).
 --exhaustive always checks every combination even after symbolic equality.
 --current REV compares a commit instead of this worktree (e.g. one change against its parent).
 
@@ -246,6 +247,13 @@ def check_request(item):
                         print(f"DIFFERENT: {r}: {first}", flush=True)
                     _WORKER_PROGRESS.put(bad)
                     reported += 1
+                    # The first difference decides the request. Without --exhaustive the rest of a failed
+                    # universal check's Cartesian cross (2^13 = 8192 assignments per hit_sun_em entry, about 4
+                    # spirv-opt runs each: an ETA of 13 h on 2026-11-20) is counted as failed, not ground through.
+                    if first and not exhaustive:
+                        break
+                if first and not exhaustive:
+                    break
                 # These states are proven by symbolic equality; the row records
                 # their coverage separately from the actual normalization checks.
                 if universal and len(selected) < len(values):
