@@ -287,9 +287,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #endif
   g_rt_pass = kRtPassGI;   // aborted queries count as this pass's unknowns (rt_common.hlsli)
   uint2 id = tid.xy;
-#ifdef GI_DEBUG_SWIZZLE
-  id ^= uint2(GI_DEBUG_SWIZZLE, GI_DEBUG_SWIZZLE);   // offline diagnosis: another thread / group computes each pixel
-#endif
   if (any(id >= pc.half)) return;
   uint2 fp = gi_fp(id);
   float d = gDepth.Load(int3(fp, 0));
@@ -309,12 +306,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   RtCone cone = {dist * pa * 2.0, pa * 2.0};   // half resolution
   const float4 org = rt_origin_at(fp);
 #if RT_GI_FAR
-#ifdef GI_FAR_M
-  // Offline only (frame_replay --define GI_FAR_M=6): a replay pack's push holds the base pass's radius.
-  const float R = max(float(GI_FAR_M), pc.gi_rt_radius);
-#else
   const float R = max(pc.radius, pc.gi_rt_radius);
-#endif
 #if SHARC_QUERY_PASS
   const float RB = max(shc.gi_base_radius, 0.01);   // the base radius (SHaRC's gi_base_radius)
 #else
