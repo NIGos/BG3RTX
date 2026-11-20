@@ -1,0 +1,42 @@
+{
+  "status": "READY_FOR_LIVE candidate; prepared only, not queued or authorized; known fixture validation finding remains",
+  "scene": "S8 Water Queens House",
+  "preset": "ultra",
+  "fg": 2,
+  "sequence": [
+    "OFF",
+    "ON",
+    "OFF",
+    "ON"
+  ],
+  "frames_per_window": 600,
+  "bypass": "dlss5_nr latched 1; dlss5_nr_bypass=1/0/1/0; history resets on resume",
+  "placement": "same Vulkan command buffer after successful pre-post RR, before rrpost temporal/final and FG",
+  "gpu_prediction": "Standalone signed 310.8.0 3840x1600 NR+codec median 6.785024 ms, p90 7.379104 ms. Descriptive prior only; game guides/shared NGX/FG can differ. Report every ON window; no invented hard ms threshold.",
+  "pass_requires": [
+    "NR created and GPU interval present in every ON window",
+    "No NR failure or device loss",
+    "FG displayed/rendered 2.00 in every measured window",
+    "One static OFF/ON PNG pair for user review"
+  ],
+  "quality": "No quality pass from logs alone. Inspect lighting, face/detail changes, HDR energy, ghosting, water and UI; fixture internal layout error remains an explicit unresolved risk. PNGs alone do not establish linear-HDR energy equivalence.",
+  "runtime": "Launcher stages signed-preferred user DLL in bin/sl before starting; this staged job never copies a DLL or starts launcher. Coordinator must prepare runtime via normal launcher before authorizing serial queue. Current custom 310.8.3 is core-rejected; use signed 310.8.0 user path.",
+  "restore": "Final bypass=1; serial queue restores original INI. No NVIDIA runtime packaged.",
+  "budget": "Four windows: 600 measured rendered frames +30 settling, 24.6 s estimate each from current corpus model; separate fresh QUIET ready phases. 153.1 s scheduled after load. Two PNG traces follow all costs; dump_images=1 exercised without capture in warmup. No raw/float bursts. Hard cap 15 minutes.",
+  "settling_frames_per_window": 30,
+  "runner_frames": 630,
+  "preflight": {
+    "mode": "non-frozen runner corpus",
+    "result": "1 job, 0 failing",
+    "valid_logs": 64,
+    "saves": 7,
+    "scheduled_after_load_s": 153.1,
+    "minimum_after_load_s": 153.1,
+    "expected_readiness_s": 0.016,
+    "readiness_timeout_allowance_s": 74,
+    "cost_window_s": 24.6,
+    "corpus_rendered_fps": 25.70694087400778,
+    "note": "Future NR log evidence/readiness remains unproven; this is offline preflight, not a live pass."
+  },
+  "gate_samples": "10 complete periodic log records per measured window (60-frame producer cadence), retaining the 600 measured-frame budget; all previous NR/FG/no-failure checks retained."
+}
