@@ -167,8 +167,9 @@ def tooling_checks(root, paths):
     # registry, configure, C++ executable, DXC, or live QA invocation is needed.
     for name in tooling_tests(root, paths):
         print(f'tooling CTest: {name}_test', flush=True)
+        # CTest's environment (CMakeLists.txt py_test: PYTHONPATH is the source root), so `from tools...` imports.
         subprocess.run([sys.executable, str(root / f'tests/{name}_test.py')],
-                       cwd=root, check=True)
+                       cwd=root, check=True, env={**os.environ, 'PYTHONPATH': str(root)})
     for name in CAMERA_TESTS:
         print(f'tooling check: {name}', flush=True)
         subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',

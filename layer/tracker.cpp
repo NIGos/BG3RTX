@@ -502,7 +502,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, co
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     for (uint32_t i = 0; i < ai->descriptorSetCount; ++i){
-      descriptor_set_allocated(tracker(), out[i], ai->pSetLayouts[i]);
+      descriptor_set_allocated(tracker(), out[i], ai->pSetLayouts[i], ai->descriptorPool);
       omm::sampler_set_allocated(device_of(device),out[i],ai->pSetLayouts[i],ai->descriptorPool,ai->pNext==nullptr);
     }
   }
@@ -512,14 +512,33 @@ static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device, co
 static VKAPI_ATTR void VKAPI_CALL DestroyDescriptorSetLayout(VkDevice device,VkDescriptorSetLayout layout,const VkAllocationCallbacks* alloc){
   omm::sampler_layout_destroyed(device_of(device),layout);device_of(device)->vk.DestroyDescriptorSetLayout(device,layout,alloc);
 }
+// The tracker forgets freed sets and every set of a reset or destroyed pool (common/descriptor_epoch.h). Layouts stay
+// in layout_dynamic after vkDestroyDescriptorSetLayout: sets allocated from a destroyed layout may still be bound
+// (the spec allows it), and a reused handle value is overwritten by its CreateDescriptorSetLayout.
 static VKAPI_ATTR VkResult VKAPI_CALL FreeDescriptorSets(VkDevice device,VkDescriptorPool pool,uint32_t count,const VkDescriptorSet* sets){
-  auto* dd=device_of(device);const auto r=dd->vk.FreeDescriptorSets(device,pool,count,sets);if(r==VK_SUCCESS)omm::sampler_sets_freed(dd,count,sets);return r;
+  auto* dd=device_of(device);const auto r=dd->vk.FreeDescriptorSets(device,pool,count,sets);
+  if(r==VK_SUCCESS){
+    omm::sampler_sets_freed(dd,count,sets);
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    descriptor_sets_freed(tracker(),pool,sets,size_t(count));
+  }
+  return r;
 }
 static VKAPI_ATTR VkResult VKAPI_CALL ResetDescriptorPool(VkDevice device,VkDescriptorPool pool,VkDescriptorPoolResetFlags flags){
-  auto* dd=device_of(device);const auto r=dd->vk.ResetDescriptorPool(device,pool,flags);if(r==VK_SUCCESS)omm::sampler_pool_reset(dd,pool);return r;
+  auto* dd=device_of(device);const auto r=dd->vk.ResetDescriptorPool(device,pool,flags);
+  if(r==VK_SUCCESS){
+    omm::sampler_pool_reset(dd,pool);
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    descriptor_pool_reset(tracker(),pool);
+  }
+  return r;
 }
 static VKAPI_ATTR void VKAPI_CALL DestroyDescriptorPool(VkDevice device,VkDescriptorPool pool,const VkAllocationCallbacks* alloc){
   auto* dd=device_of(device);omm::sampler_pool_reset(dd,pool);dd->vk.DestroyDescriptorPool(device,pool,alloc);
+  if(pool){
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    descriptor_pool_reset(tracker(),pool);
+  }
 }
 static VKAPI_ATTR VkResult VKAPI_CALL CreateSampler(VkDevice device,const VkSamplerCreateInfo* info,const VkAllocationCallbacks* alloc,VkSampler* sampler){
   auto* dd=device_of(device);const auto r=dd->vk.CreateSampler(device,info,alloc,sampler);if(r==VK_SUCCESS)omm::sampler_created(dd,*sampler,*info);return r;

@@ -59,8 +59,15 @@ uint64_t hash64(const void* data, size_t size);   // FNV-1a 64
 // ---- config (util.cpp) ----
 void cfg_poll();                       // re-reads bg3rtx.ini when it changes
 int cfg_int(const char* key, int fallback);
+// logging::stats_enabled(cfg_int), cached by every cfg_poll with the hot keys (util.cpp cfg_hot_refresh; 5 locked
+// lookups per call before); -1 until the first poll (and in tests that stub cfg_int).
+inline std::atomic<int> g_stats_logging_cache{-1};
+inline bool stats_logging() {
+  const int cached = g_stats_logging_cache.load(std::memory_order_relaxed);
+  return cached < 0 ? logging::stats_enabled(cfg_int) : cached != 0;
+}
 template<class... Args> inline void log_stats(const char* fmt, Args... args) {
-  if (logging::stats_enabled(cfg_int)) log(fmt, args...);
+  if (stats_logging()) log(fmt, args...);
 }
 inline unsigned stats_period(unsigned native) { return stats_window::period(cfg_int, native); }
 // rt_order_trace=N: log record/submit order of the scene build and the RT passes for N
@@ -82,7 +89,8 @@ enum class CfgHot : int {
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_cascade_index, rt_alpha_cut,
   rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   rt_water_shadows, rt_water_ls_shadows, rt_water_refraction, rt_hit_material_recycle, rt_hit_material_capture_unlocked, rt_hit_material_lean_hooks,
-  perf_hitmat_lists, perf_hook_state, rt_hair_groom, rt_hair_groom_primary, cpu_opt1, cpu_opt2, cpu_opt3, rt_hair_pool_trim, rt_dyn_hold, Count
+  perf_hitmat_lists, perf_hook_state, rt_hair_groom, rt_hair_groom_primary, cpu_opt1, cpu_opt2, cpu_opt3, rt_hair_pool_trim, rt_dyn_hold,
+  rt_cascade_alpha, rt_cascade_alpha_dedupe, Count
 };
 int cfg_hot(CfgHot key);
 
@@ -180,6 +188,11 @@ struct Tracker {
   // consumed in this order.
   std::unordered_map<VkDescriptorSetLayout, std::vector<std::pair<uint32_t, uint32_t>>> layout_dynamic;
   std::unordered_map<VkDescriptorSet, VkDescriptorSetLayout> set_layouts;
+  // The pool of every live set and the sets of every pool (common/descriptor_epoch.h): freed, reset and destroyed
+  // pools' sets leave the maps above.
+  std::unordered_map<VkDescriptorSet, VkDescriptorPool> set_pools;
+  std::unordered_map<VkDescriptorPool, std::vector<VkDescriptorSet>> pool_sets;
+  std::unordered_map<VkDescriptorPool, size_t> pool_stale;
   std::unordered_map<VkDescriptorUpdateTemplate, std::vector<VkDescriptorUpdateTemplateEntry>> templates;
   // Host-visible memory, so uniform buffer contents can be read on the CPU.
   std::unordered_map<VkBuffer, std::pair<VkDeviceMemory, VkDeviceSize>> buffer_mem;
@@ -1074,6 +1087,10 @@ struct BvhVram {
   uint64_t as_pending = 0;   // freed ranges awaiting GPU/scene-slot retirement (used - live)
   uint64_t pool_used = 0, pool_pending = 0, pool_repacks = 0, blas_relocated = 0;
   uint64_t hair_pool = 0, hair_blas = 0;   // groom arrays in the mesh pool; groom and camera BLAS ranges in the chunks
+  // Where the reserve sits (claude/final-layer): free bytes inside chunks that hold a range (holes), reserved bytes per
+  // arena (0 cached meshes, 1 per-draw and groom, 2 cascade casters) and chunks larger than a base chunk.
+  uint64_t as_holes = 0, as_arena[3] = {};
+  uint32_t as_oversize = 0;
   uint32_t chunks = 0;
 };
 void bvh_vram(BvhVram* out);

@@ -995,6 +995,12 @@ void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci) {
   VkPhysicalDeviceProperties props{};
   if (dd->inst && dd->inst->GetPhysicalDeviceProperties) dd->inst->GetPhysicalDeviceProperties(dd->physical, &props);
   g_ts_period = props.limits.timestampPeriod > 0 ? props.limits.timestampPeriod : 1.0f;
+  // rt_hair_header_early (claude/final-layer 2026-11-20, default 0, startup): the header is allocated here, in the
+  // device's fixed startup sequence, instead of with the first hair pipeline amid the game's level-load allocations.
+  // Its address is a specialization constant of all 519 strand variants, so a new address each launch misses the
+  // driver's pipeline cache: 14.7-48.5 s of pipeline creation in 18 of the last 25 queue launches and in the user's two
+  // (17.4 and 19.6 s), 190-501 ms in the 7 launches whose header landed at the previous launch's address.
+  if (cfg_int("rt_hair_header_early", 0) != 0) header_ready();
 }
 
 void hair_primary_device_destroyed(DeviceData* dd) {
@@ -2224,6 +2230,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint
   g_cfg_union = cfg_int("rt_hair_coverage_union", 0) != 0;               // 5u: judge every accepted strand pixel
   g_cfg_dense = cfg_int("rt_hair_dense_sample", 0) != 0;                  // 6f: copy and log the dense samples
+  if (!g_cfg_dense && !g_dense_anchor.empty()) { g_dense_anchor.clear(); g_dense_first.clear(); }   // per draw key, else never freed
   g_coverage.confirm = cfg_int("rt_hair_coverage_confirm", 0) != 0;       // 5u: two bad measurements in a row
   g_coverage.keep = cfg_int("rt_hair_coverage_keep", 0) != 0;             // 6i: evidence does not expire by age
   g_gate.early = g_coverage.keep;                                         // 6k: and its handshake is not waited for twice
@@ -2368,6 +2375,9 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
           double(hair_primary::kDenseMovingStep), moving);
       g_dense = hair_primary::DenseStats{};
       g_dense_lines = 0;
+      // An anchor more than kDensePairTags behind the last sampled tag can no longer pair: same drift, bounded map.
+      for (auto it = g_dense_anchor.begin(); it != g_dense_anchor.end();)
+        it = g_dense_cam_tag - it->second.tag > kDensePairTags ? g_dense_anchor.erase(it) : std::next(it);
     }
     log_stats("[hair primary] build stamp (last %u frames): counted G-buffer frames whose groom points and BLASes were of "
         "the applied publish's build %llu, of a newer build %llu (older TLAS and rows over refit BLASes), of an older "
