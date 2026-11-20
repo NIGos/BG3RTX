@@ -7,7 +7,6 @@ window, a pan Q and E back, a wheel dolly out and in, and a static energy window
 predicted.json precedes the jobs. Helpers are perf_ab's and handout_qual's (one copy). Nothing here writes a watched
 queue inbox.
 """
-import json
 from pathlib import Path
 import sys
 
@@ -47,10 +46,7 @@ def window(label, kind, on):
 
 def energy(state, on):
     """Static, exposure held, TRACES float traces (handout_qual's energy phase)."""
-    p = pab.phase(f"energy-{state}", 14.2 + 5 * (TRACES - 3), keys(on, hold=1), frames=60)
-    p.update(trace_at=[1 + 5 * i for i in range(TRACES)], motion_start=17 + 5 * (TRACES - 3),
-             motion_end=17 + 5 * (TRACES - 3))
-    return p
+    return pab.energy_phase(f"energy-{state}", keys(on, hold=1), TRACES)
 
 
 def every(*a, **kw):
@@ -101,11 +97,7 @@ def measured(p):
 def main():
     assert (HERE / "predicted.json").exists(), "predicted.json precedes the jobs"
     made = [job("s8", pab.S8), job("inn", pab.INN)]
-    for plan, j in made:
-        for folder, value in (("plans", plan), ("jobs", j)):
-            (HERE / folder).mkdir(exist_ok=True)
-            (HERE / folder / f"{j['name']}.json").write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8",
-                                                             newline="\n")
+    pab.write_made(HERE, made)
     added = pab.retime([j["name"] for _, j in made], here=HERE, measured=measured)
     print("Generated", ", ".join(j["name"] for _, j in made), f"- no queue staging; {added} new entries appended to "
           "lint_corpus_snapshot.json")
