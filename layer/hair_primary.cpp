@@ -995,6 +995,12 @@ void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci) {
   VkPhysicalDeviceProperties props{};
   if (dd->inst && dd->inst->GetPhysicalDeviceProperties) dd->inst->GetPhysicalDeviceProperties(dd->physical, &props);
   g_ts_period = props.limits.timestampPeriod > 0 ? props.limits.timestampPeriod : 1.0f;
+  // rt_hair_header_early (claude/final-layer 2026-11-20, default 0, startup): the header is allocated here, in the
+  // device's fixed startup sequence, instead of with the first hair pipeline amid the game's level-load allocations.
+  // Its address is a specialization constant of all 519 strand variants, so a new address each launch misses the
+  // driver's pipeline cache: 14.7-48.5 s of pipeline creation in 18 of the last 25 queue launches and in the user's two
+  // (17.4 and 19.6 s), 190-501 ms in the 7 launches whose header landed at the previous launch's address.
+  if (cfg_int("rt_hair_header_early", 0) != 0) header_ready();
 }
 
 void hair_primary_device_destroyed(DeviceData* dd) {
