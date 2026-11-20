@@ -1,0 +1,17 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-20, branch claude/r2-layer. STAGED, not queued, not authorized.",
+  "question": "With rt_as_size_class=1 and rt_cascade_keep_refused=1, do the BLAS chunks of the inn dolly stop holding small ranges in chunks larger than 64 MB, with fewer or equal refusals, no casters left out, and the same energy?",
+  "evidence": "User log 2026-11-20 16:47-16:48 (0.9.6-hairtest18, Ultra, FG 2x): 162 BLAS chunk refusals, 137 in windows led by the cascade casters (99-189 MB, left out those frames); 4.0 GB reserved in 25-31 chunks (mean 155 MB) for 0.55-1.35 GB live, 0 empty at 16:48:11. Queue log vr-inn.1.233221: reserved 2.0-3.7 GB for 0.53-0.82 GB live, pending under 230 MB, 0 refusals at a 4224 MB cap. Replay: as_chunk_alloc_test dolly, 8 seeds: 53 refusals (all cascade) -> 2, reserve mean 3812 -> 3713 MB for 1459 live.",
+  "design": "One launch at the inn (vr-inn's save), Ultra, RTX Hair On, FG 3x, visible_unfocused_fg, detailed_logging=1. States off-a / on / off-b (both keys toggled live together). Per state: static 3 periods, wheel dolly out and in (2 periods each), twice, then a static energy window (exposure held, 4 float traces). Rows from the always-on '[mem] ours (window)' line (one per 120-frame window with detailed_logging): reserved, live, pending, free in partly used chunks and its part in chunks over a base chunk, chunks over a base chunk, and the keys' state.",
+  "noise_rule": "Every threshold is the OFF repeat of the same run: noise(metric) = |off-b - off-a| of the same window kind, plus the AGENTS.md floors (energy 0.5%, counts 1%, cost max(0.1 ms, 1%)).",
+  "predicted": {
+    "holes_in_large_chunks": "ON: 'free in partly used chunks (N in chunks over a base chunk)' N at most one cascade or groom chunk's tail (0-30 MB) in every window; OFF: 300-2000 MB after the first dolly (the colonised cascade and groom chunks). The decisive observable.",
+    "reserved_minus_live": "ON lower than the OFF mean in the dolly windows by 0-600 MB (replay: -100 MB mean at the cap; at the inn the cap is not reached, so the empty retained large chunks may keep the reserve equal). Equal within noise in the static windows. A rise beyond noise plus 1% is a FAIL.",
+    "refusals": "At the inn with a 4224 MB cap the OFF state may show 0 refusals (vr-inn 233221: 0); then ON 0 too, and rt_cascade_keep_refused is not exercised ('[bvh] BLAS refusals' absent). Any ON refusal count above the OFF windows' is a FAIL. If refusals occur, 'left out' must be 0 in ON and every cascade refusal 'previous BLAS kept'.",
+    "faults": "0 in every state: no VK_ERROR_DEVICE_LOST, no crash, guard never LOW.",
+    "gpu_ms": "Scene build GPU ms and rt passes GPU ms equal within noise (no shader change; placement only).",
+    "energy": "Static, exposure held: ON mean inside the OFF pair's range widened by 0.5%."
+  },
+  "decision": "rt_as_size_class becomes a default candidate if holes in large chunks fall beyond noise with no rise in refusals, reserve, GPU ms or energy. rt_cascade_keep_refused stays READY_FOR_LIVE until a run with refusals shows kept frames (it needs a lower budget than this machine's); it may still ship on with the class key since it changes nothing without a refusal.",
+  "not_measured_here": "Frame time from occluded windows; the per-frame cost of the extra key reads (2 cfg_int per BLAS create and per cascade build, under 0.01 ms)."
+}

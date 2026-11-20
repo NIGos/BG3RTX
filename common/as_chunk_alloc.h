@@ -164,14 +164,28 @@ inline uint64_t oversize_chunk_bytes(uint64_t size, uint64_t base, bool rebuilt,
   return (size + size / 8 + q - 1) / q * q;
 }
 
+// rt_as_size_class (claude/r2-layer, 2026-11-20, default 0): a range of at most a base chunk only goes into chunks
+// of at most a base chunk, a larger range only into larger chunks (same_class). The user's log of 2026-11-20
+// 16:47-16:48 (Ultra, a dolly at the inn): 137 of 162 BLAS chunk refusals were the cascade casters' BLAS (99-189 MB)
+// at the chunks' cap with 4.0 GB reserved in 25-31 chunks (mean 155 MB, so most of them larger than a base chunk)
+// for 0.55-1.35 GB live, 0 empty at 16:48:11. A chunk made for a cascade or groom BLAS is taken, once retained
+// empty or through its tail, by per-draw and cached ranges of 0.1-16 MB (the fullest chunk first, any arena may
+// join a retained one); one surviving small range then pins 100-190 MB that no later range larger than 64 MB can
+// use, so the next cascade rebuild needs a new chunk past the cap. With the key small ranges never enter a large
+// chunk: it empties when its one range retires, and is reused by the next large range or freed at the cap check.
+inline bool same_class(uint64_t chunk_cap, uint64_t size, uint64_t base) {
+  return !base || (size > base) == (chunk_cap > base);
+}
+
 template<class Chunks>
 int allocate_fullest(Chunks& chunks, uint64_t size, uint64_t align, uint64_t* off, int excluded = -1,
-                     uint32_t arena = 0, bool best_fit = false) {
+                     uint32_t arena = 0, bool best_fit = false, uint64_t class_base = 0) {
   std::vector<size_t> order;
   order.reserve(chunks.size());
   for (size_t i = 0; i < chunks.size(); ++i)
     if (int(i) != excluded && chunks[i].ra.cap &&
         (arena == UINT32_MAX || chunks[i].ra.arena == arena || chunks[i].ra.retained()) &&
+        same_class(chunks[i].ra.cap, size, class_base) &&
         chunks[i].ra.cap - chunks[i].ra.used >= size) order.push_back(i);
   std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
     const double x = double(chunks[a].ra.used) / double(chunks[a].ra.cap);

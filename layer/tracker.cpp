@@ -794,10 +794,14 @@ static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, con
   omm::content_image_destroyed(device_of(device),img);
   ngx_on_destroy_image(img);  // our views of it go first
   rrpost_forget_image(img);
-  device_of(device)->vk.DestroyImage(device, img, a);
+  // Our records go before the driver's destroy: the handle may be reused at once by a CreateImage on another
+  // thread, whose new record an erase after the destroy would remove (as DestroyBuffer).
   ngx_forget_image(img);
-  std::unique_lock<std::shared_mutex> lock(tracker().mu);
-  tracker().images.erase(img);
+  {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    tracker().images.erase(img);
+  }
+  device_of(device)->vk.DestroyImage(device, img, a);
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkImageViewCreateInfo* ci,
@@ -819,9 +823,11 @@ static VKAPI_ATTR void VKAPI_CALL DestroyImageView(VkDevice device, VkImageView 
     return;
   }
   omm::content_view_destroyed(device_of(device),v);
+  {
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);   // before the destroy: see DestroyImage
+    tracker().views.erase(v);
+  }
   device_of(device)->vk.DestroyImageView(device, v, a);
-  std::unique_lock<std::shared_mutex> lock(tracker().mu);
-  tracker().views.erase(v);
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo* ci,
@@ -1082,9 +1088,13 @@ static VKAPI_ATTR void VKAPI_CALL DestroyBuffer(VkDevice device, VkBuffer b, con
   // Our caches keyed by the buffer go first: the handle may be reused at once.
   bvh_forget_buffer(b);
   geo_forget_buffer(b);
+  {
+    // Before the destroy too: a CreateBuffer + BindBufferMemory of the reused handle on another thread would
+    // otherwise lose its buffer_mem record to this erase (camera, ring and constant reads of that buffer fail).
+    std::unique_lock<std::shared_mutex> lock(tracker().mu);
+    tracker().buffer_mem.erase(b);
+  }
   device_of(device)->vk.DestroyBuffer(device, b, a);
-  std::unique_lock<std::shared_mutex> lock(tracker().mu);
-  tracker().buffer_mem.erase(b);
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL MapMemory(VkDevice device, VkDeviceMemory m, VkDeviceSize o, VkDeviceSize size,
