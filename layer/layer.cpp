@@ -763,12 +763,15 @@ static void log_vram_ours(uint64_t used, uint64_t budget, const BvhVram& b, uint
               entries, set_layouts, layouts, pools, pool_list);
   }
   const uint64_t ours = b.as_reserved + b.pool + b.pool_pending + rtcap + cascade + recycled + em + water;
-  log("[mem] ours (%s): BLAS chunks %.0f MB reserved in %u chunks (%.0f live, %.0f empty), mesh pool %.0f MB "
+  log("[mem] ours (%s): BLAS chunks %.0f MB reserved in %u chunks (%.0f live, %.0f empty, %.0f pending, %.0f free in "
+      "partly used chunks; cached/per-draw+groom/cascade %.0f/%.0f/%.0f MB, %u over a base chunk), mesh pool %.0f MB "
       "(%.0f used, %.0f copy/retirement, %llu repacks; %llu cached BLAS relocated), "
       "RT capture %.0f MB (alpha region %.0f), cascade capture %.0f MB, hit-material recycled %.0f MB, em soup %.0f MB, "
       "water soup %.0f MB; tracked %.0f MB of used %.0f MB (rest: game, core GI/RR images, untracked %.0f MB), "
       "budget %.0f MB (%s); guard %s",
-      why, double(b.as_reserved) * mb, b.chunks, double(b.as_live) * mb, double(b.as_empty) * mb, double(b.pool) * mb,
+      why, double(b.as_reserved) * mb, b.chunks, double(b.as_live) * mb, double(b.as_empty) * mb,
+      double(b.as_pending) * mb, double(b.as_holes) * mb, double(b.as_arena[0]) * mb, double(b.as_arena[1]) * mb,
+      double(b.as_arena[2]) * mb, b.as_oversize, double(b.pool) * mb,
       double(b.pool_used) * mb, double(b.pool_pending) * mb, (unsigned long long)b.pool_repacks, (unsigned long long)b.blas_relocated,
       double(rtcap) * mb, double(alpha) * mb, double(cascade) * mb, double(recycled) * mb, double(em) * mb,
       double(water) * mb, double(ours) * mb, double(used) * mb, double(used > ours ? used - ours : 0) * mb,

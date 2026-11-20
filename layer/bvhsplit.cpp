@@ -2332,12 +2332,16 @@ void bvh_vram(BvhVram* out) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   const uint64_t now = frame_index();
+  const VkDeviceSize base = VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20;
   for (const AsChunk& c : g_chunks) {
     if (!c.buf.b) continue;
     out->as_reserved += c.buf.size;
     out->as_live += c.ra.live;
     out->as_pending += c.ra.used - (std::min)(c.ra.used, c.ra.live);
     out->as_empty += c.ra.reclaimable() ? c.buf.size : 0;
+    if (c.ra.used) out->as_holes += c.ra.cap - c.ra.used;
+    out->as_arena[(std::min)(c.ra.arena, 2u)] += c.buf.size;
+    out->as_oversize += c.buf.size > base;
     ++out->chunks;
   }
   for (const auto& [k, m] : g_meshes)

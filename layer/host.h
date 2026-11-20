@@ -1079,6 +1079,10 @@ struct BvhVram {
   uint64_t as_pending = 0;   // freed ranges awaiting GPU/scene-slot retirement (used - live)
   uint64_t pool_used = 0, pool_pending = 0, pool_repacks = 0, blas_relocated = 0;
   uint64_t hair_pool = 0, hair_blas = 0;   // groom arrays in the mesh pool; groom and camera BLAS ranges in the chunks
+  // Where the reserve sits (claude/final-layer): free bytes inside chunks that hold a range (holes), reserved bytes per
+  // arena (0 cached meshes, 1 per-draw and groom, 2 cascade casters) and chunks larger than a base chunk.
+  uint64_t as_holes = 0, as_arena[3] = {};
+  uint32_t as_oversize = 0;
   uint32_t chunks = 0;
 };
 void bvh_vram(BvhVram* out);
