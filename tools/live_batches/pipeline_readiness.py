@@ -29,6 +29,8 @@ GI_TRACE = r"gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\.hlsl[^ ]* generation "
 TABLE["rt_compact_hit_state"] = [GI_TRACE]
 # GI roof rejection, specialization 1038 (forced OFF when rt_stats != 0).
 TABLE["gi_far_roof_early"] = [GI_TRACE]
+# Far roof rule for hidden-hit emission, specialization 1054 (core/gi.cpp, gi_far files only; claude/final-core).
+TABLE["gi_far_roof_emission"] = [GI_TRACE]
 # RF specialization 1031; newly selected and cached variants both need fresh QUIET.
 TABLE["rf_compact_probe_state"] = [r"gi: gi/rt_reflections[^ /]*\.hlsl[^ ]* generation "]
 GI_QUERY = [GI_TRACE, r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation ",
