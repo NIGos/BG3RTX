@@ -556,6 +556,8 @@ static const CfgHotKey kCfgHot[] = {
   {"cpu_opt3", 1},
   {"rt_hair_pool_trim", 1},
   {"rt_dyn_hold", 4},
+  {"rt_cascade_alpha", 2},          // per cascade caster draw (geocapture)
+  {"rt_cascade_alpha_dedupe", 1},
 };
 static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
 static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];
@@ -563,8 +565,10 @@ static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];
 static void cfg_hot_refresh() {
   for (size_t i = 0; i < size_t(CfgHot::Count); ++i)
     g_cfg_hot[i].store(cfg_int(kCfgHot[i].key, kCfgHot[i].fallback), std::memory_order_relaxed);
+  g_stats_logging_cache.store(logging::stats_enabled(cfg_int) ? 1 : 0, std::memory_order_relaxed);
   g_cfg_hot_ready.store(true, std::memory_order_release);
 }
+
 
 int cfg_hot(CfgHot key) {
   const size_t i = size_t(key);

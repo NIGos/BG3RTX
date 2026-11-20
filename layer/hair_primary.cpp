@@ -2224,6 +2224,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   g_coverage.footprint = cfg_int("rt_hair_coverage_footprint", 0) != 0;   // the bound at each measurement's footprint
   g_cfg_union = cfg_int("rt_hair_coverage_union", 0) != 0;               // 5u: judge every accepted strand pixel
   g_cfg_dense = cfg_int("rt_hair_dense_sample", 0) != 0;                  // 6f: copy and log the dense samples
+  if (!g_cfg_dense && !g_dense_anchor.empty()) { g_dense_anchor.clear(); g_dense_first.clear(); }   // per draw key, else never freed
   g_coverage.confirm = cfg_int("rt_hair_coverage_confirm", 0) != 0;       // 5u: two bad measurements in a row
   g_coverage.keep = cfg_int("rt_hair_coverage_keep", 0) != 0;             // 6i: evidence does not expire by age
   g_gate.early = g_coverage.keep;                                         // 6k: and its handshake is not waited for twice
@@ -2368,6 +2369,9 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
           double(hair_primary::kDenseMovingStep), moving);
       g_dense = hair_primary::DenseStats{};
       g_dense_lines = 0;
+      // An anchor more than kDensePairTags behind the last sampled tag can no longer pair: same drift, bounded map.
+      for (auto it = g_dense_anchor.begin(); it != g_dense_anchor.end();)
+        it = g_dense_cam_tag - it->second.tag > kDensePairTags ? g_dense_anchor.erase(it) : std::next(it);
     }
     log_stats("[hair primary] build stamp (last %u frames): counted G-buffer frames whose groom points and BLASes were of "
         "the applied publish's build %llu, of a newer build %llu (older TLAS and rows over refit BLASes), of an older "
