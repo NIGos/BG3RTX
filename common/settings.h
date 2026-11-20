@@ -839,6 +839,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_mesh_pool_trim", "1"},
     {"rt_as_chunk_fit", "0"},
     {"rt_hair_groom_async", "0"},
+    {"rt_hold_pack_base", "0"},
+    {"rt_hair_header_early", "0"},
     {"rt_as_chunk_reuse_frames", "120"},
     {"rt_as_cap_occupied", "0"},
     {"rt_shadows", "1"},
