@@ -187,8 +187,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float t_off = 1.0;
   if (traced && ((tflags & 1u) != 0 || pc.rt_debug == 6)) {
     const float3 cam_abs = sunCam2.c[13].xyz;
-    if ((tflags & 2u) != 0) roof = sun_under_roof(P, L, cam_abs);
     if ((tflags & 4u) != 0) t_off = sun_offscreen_trust(P, L, cam_abs.y);
+    // The roof test (every roof volume per pixel) only where its answer is read:
+    // rt_sun_resolve.hlsl writes lerp(mask, lerp(keep, vis, trust), s) with keep = fold in
+    // rt_sun_roof_mode 0, which is lerp(mask, vis, s) for any trust when vis == fold (bit-exact:
+    // fold + trust * 0). Its roof-query sizing reads `roof` only where t_off <= 0 (t_off > 0
+    // counts the pixel anyway). The debug views and the trust counters read the code itself.
+    const bool roof_read = vis != fold || t_off <= 0.0 || st_u(24) != 0u || pc.rt_debug != 0 || (tflags & 8u) != 0;
+    if ((tflags & 2u) != 0 && roof_read) roof = sun_under_roof(P, L, cam_abs);
   }
   if (!primary_check) {
     check = fold;

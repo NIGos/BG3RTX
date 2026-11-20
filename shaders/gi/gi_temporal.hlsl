@@ -31,6 +31,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (any(id >= pc.half)) return;
   float4 cur = giRaw[id];
   float cd = giRawDepth[id];
+  // RR mode (core/gi.cpp: history 1, no accumulation of our own): the output is the fresh
+  // sample whatever the history, so no reprojection, history or depth-slope loads. (FMix with
+  // a = 1 may evaluate as hist + (cur - hist), which is not exactly cur: this is the intended value.)
+  if (pc.history == 1.0) {
+    giHistOut[id] = cur;
+    giHistDepthOut[id] = cd;
+    return;
+  }
   int2 hp = int2(id);
   const float2 cur_px = gi_sample_px(int2(id));   // the sample cd belongs to
   float2 prev_px = cur_px;                        // where its surface was last frame

@@ -1,4 +1,6 @@
 #include "../common/as_chunk_alloc.h"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -109,7 +111,137 @@ static FragResult fragmentation(bool occupied_cap) {
   return r;
 }
 
+// rt_as_size_class replay of the user's dolly (log 2026-11-20 16:47-16:48, inn, Ultra): the fragmentation is not
+// given, it grows from the traffic. Per-draw BLAS of 0.1-16 MB (arena 1, 250-650 draws following the dolly, 4% of
+// them replaced and 3% rebuilt into a new range per frame), cached meshes of 0.2-4 MB (arena 0, slow churn),
+// 4 grooms of 72-136 MB (arena 1, a LOD change every 90 frames, compacted to a third), the cascade casters' BLAS
+// of 99-189 MB (arena 2) rebuilt in 70% of the frames; ranges retire after 7 frames; empty chunks retained 120
+// frames; arenas separate (rt_vram_compact=1); the chunks' cap 4045 MB (budget 30089 MB). Same random sequence
+// both ways. Refusals: new chunks refused at the cap, as as_create.
+struct DollyResult {
+  unsigned refused = 0, casc_refused = 0, frames = 0;
+  uint64_t peak_reserved = 0, live_at_peak = 0, sum_reserved = 0, sum_live = 0;
+};
+static DollyResult dolly(bool size_class, uint64_t seed, bool print = false, bool fit = false) {
+  constexpr uint64_t MB = 1ull << 20, base = 64 * MB, cap = 4045 * MB;
+  struct Pending { uint64_t frame; int chunk; uint64_t off, size; };
+  struct Range { int chunk = -1; uint64_t off = 0, size = 0; };
+  std::vector<Chunk> cs;
+  std::vector<Pending> pending;
+  DollyResult r;
+  uint64_t rng = 0x2026112016470000ull + seed * 0x9e3779b97f4a7c15ull;
+  auto rnd = [&] { rng = rng * 6364136223846793005ull + 1442695040888963407ull; return uint32_t(rng >> 33); };
+  auto uni = [&](uint64_t lo, uint64_t hi) { return lo + rnd() % (hi - lo + 1); };
+  auto reserved = [&] { uint64_t n = 0; for (const auto& c : cs) n += c.ra.cap; return n; };
+  uint64_t frame = 1;
+  auto create = [&](uint64_t size, uint32_t arena, Range& out) {
+    size = (size + 255) / 256 * 256;
+    uint64_t off = 0;
+    int ci = allocate_fullest(cs, size, 256, &off, -1, arena, fit, size_class ? base : 0);
+    if (ci < 0) {
+      const uint64_t chunk = oversize_chunk_bytes(size, base, arena == 2, fit);
+      if (reserved() + chunk > cap)
+        for (auto& c : cs) if (c.ra.cap && c.ra.reclaimable() && c.ra.empty_since) c.ra = {};
+      if (!unguarded_chunk_ok(reserved(), chunk, cap)) { ++r.refused; out = {}; return false; }
+      Chunk c; c.ra.init(chunk); c.ra.arena = arena; c.ra.alloc(size, 256, &off);
+      for (size_t i = 0; i < cs.size() && ci < 0; ++i) if (!cs[i].ra.cap) cs[i] = c, ci = int(i);
+      if (ci < 0) { cs.push_back(c); ci = int(cs.size() - 1); }
+    }
+    out = {ci, off, size};
+    return true;
+  };
+  auto destroy = [&](Range& a) {
+    if (a.chunk < 0) return;
+    cs[a.chunk].ra.mark_pending(a.size);
+    pending.push_back({frame, a.chunk, a.off, a.size});
+    a = {};
+  };
+  auto draw_size = [&] {   // log-uniform-ish 0.05-6.4 MB
+    const uint32_t k = rnd() % 8;
+    return (MB / 20) << k;
+  };
+  std::vector<Range> draws, cached;
+  Range groom[4], casc;
+  for (frame = 1; frame <= 1500; ++frame) {
+    for (auto it = pending.begin(); it != pending.end();) {
+      if (!retired(it->frame, frame, frame - 2, frame - 1)) { ++it; continue; }
+      cs[it->chunk].ra.release(it->off, it->size); it = pending.erase(it);
+    }
+    for (auto& c : cs) if (c.ra.cap && c.ra.reclaimable() && !keep_empty_chunk(c.ra, frame, 120, false)) c.ra = {};
+    // The dolly: out and back, 250-650 per-draw BLAS.
+    const double phase = double(frame % 600) / 600.0;
+    const size_t want = size_t(300 + 450 * (phase < 0.5 ? 2 * phase : 2 - 2 * phase));
+    while (draws.size() > want) { destroy(draws[rnd() % draws.size()]); draws.erase(std::remove_if(draws.begin(), draws.end(), [](const Range& a) { return a.chunk < 0; }), draws.end()); }
+    const size_t replace = draws.size() * 4 / 100, rebuild = draws.size() * 3 / 100;
+    for (size_t i = 0; i < replace && !draws.empty(); ++i) { Range& d = draws[rnd() % draws.size()]; destroy(d); create(draw_size(), 1, d); }
+    for (size_t i = 0; i < rebuild && !draws.empty(); ++i) {
+      Range& d = draws[rnd() % draws.size()];
+      const uint64_t s = d.size ? d.size : draw_size();
+      destroy(d); create(s, 1, d);
+    }
+    while (draws.size() < want) { Range d; if (create(draw_size(), 1, d)) draws.push_back(d); else break; }
+    draws.erase(std::remove_if(draws.begin(), draws.end(), [](const Range& a) { return a.chunk < 0; }), draws.end());
+    // Cached meshes: 2 new per frame, at most 300 (the oldest evicted).
+    for (int i = 0; i < 2; ++i) {
+      Range m; if (create(uni(MB / 10, 2 * MB), 0, m)) cached.push_back(m);
+      if (cached.size() > 300) { destroy(cached.front()); cached.erase(cached.begin()); }
+    }
+    // Grooms: a LOD change rebuilds at 72-136 MB, then the compacted copy (a third) replaces it 2 frames later.
+    for (int g = 0; g < 4; ++g) {
+      const uint64_t t = (frame + uint64_t(g) * 23) % 90;
+      if (t == 0) { destroy(groom[g]); create(uni(72, 136) * MB, 1, groom[g]); }
+      else if (t == 2 && groom[g].size > base) { Range c; if (create(groom[g].size / 3, 1, c)) { destroy(groom[g]); groom[g] = c; } }
+    }
+    // The cascade casters: rebuilt when the list changes (70% of the frames in motion), 99-189 MB.
+    if (!casc.size || rnd() % 10 < 7) {
+      destroy(casc);
+      const uint64_t s = 99 * MB + uint64_t(90.0 * MB * (0.5 + 0.5 * std::sin(double(frame) / 97.0))) + uni(0, 4) * MB;
+      const unsigned before = r.refused;
+      create(s, 2, casc);
+      if (r.refused != before && frame > 120) ++r.casc_refused;
+    }
+    if (frame <= 120) { r.refused = 0; continue; }   // warm-up
+    uint64_t res = 0, live = 0;
+    for (const auto& c : cs) { res += c.ra.cap; live += c.ra.live; }
+    ++r.frames; r.sum_reserved += res; r.sum_live += live;
+    if (res > r.peak_reserved) { r.peak_reserved = res; r.live_at_peak = live; }
+    if (print && frame % 150 == 0) {
+      uint64_t big = 0, big_live = 0; unsigned nbig = 0;
+      for (const auto& c : cs) if (c.ra.cap > base) { ++nbig; big += c.ra.cap; big_live += c.ra.live; }
+      std::printf("  frame %llu: reserved %llu MB in chunks, live %llu MB; %u large chunks %llu MB (%llu live)\n",
+                  (unsigned long long)frame, (unsigned long long)(res / MB), (unsigned long long)(live / MB), nbig,
+                  (unsigned long long)(big / MB), (unsigned long long)(big_live / MB));
+    }
+  }
+  return r;
+}
+
 int main() {
+  {
+    // Eight seeds of the same traffic, summed: the key must never add a refusal, remove at least 3 in 4, and never
+    // raise the mean reserve. rt_as_chunk_fit with or without the key was worse in this replay (not used).
+    DollyResult off_r, on_r;
+    unsigned seeds_with_refusals = 0;
+    for (uint64_t seed = 0; seed < 8; ++seed) {
+      const DollyResult a = dolly(false, seed, std::getenv("AS_CHUNK_PRINT") != nullptr), b = dolly(true, seed);
+      seeds_with_refusals += a.casc_refused != 0;
+      off_r.refused += a.refused; off_r.casc_refused += a.casc_refused; off_r.frames += a.frames;
+      off_r.sum_reserved += a.sum_reserved; off_r.sum_live += a.sum_live;
+      on_r.refused += b.refused; on_r.casc_refused += b.casc_refused; on_r.frames += b.frames;
+      on_r.sum_reserved += b.sum_reserved; on_r.sum_live += b.sum_live;
+      if (std::getenv("AS_CHUNK_PRINT"))
+        std::printf("  seed %llu: refusals %u (%u cascade) -> %u (%u); reserved mean %.0f -> %.0f MB, live %.0f MB\n",
+                    (unsigned long long)seed, a.refused, a.casc_refused, b.refused, b.casc_refused,
+                    a.sum_reserved / 1048576.0 / a.frames, b.sum_reserved / 1048576.0 / b.frames, a.sum_live / 1048576.0 / a.frames);
+      CHECK(b.refused <= a.refused);
+    }
+    constexpr double MB = 1048576.0;
+    std::printf("rt_as_size_class dolly replay (8 seeds x 1380 frames): refusals %u (%u cascade, in %u seeds) -> %u (%u); "
+                "reserved mean %.0f -> %.0f MB for %.0f live\n", off_r.refused, off_r.casc_refused, seeds_with_refusals,
+                on_r.refused, on_r.casc_refused, off_r.sum_reserved / MB / off_r.frames, on_r.sum_reserved / MB / on_r.frames,
+                off_r.sum_live / MB / off_r.frames);
+    CHECK(seeds_with_refusals >= 4 && on_r.refused * 4 <= off_r.refused && on_r.sum_reserved <= off_r.sum_reserved);
+  }
   uint64_t off = 0;
   // Live ownership ends immediately, but occupied bytes survive all pending
   // frames. A long GPU stall must never turn into a free at 240 presents.

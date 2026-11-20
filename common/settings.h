@@ -843,6 +843,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_header_early", "0"},
     {"rt_as_chunk_reuse_frames", "120"},
     {"rt_as_cap_occupied", "0"},
+    {"rt_as_size_class", "0"},
+    {"rt_cascade_keep_refused", "0"},
     {"rt_shadows", "1"},
     {"contact_shadows", "1"},
     {"rt_strength", "1.0"},

@@ -166,6 +166,9 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     # Hold snapshot pack for the 64-byte layout (claude/final-layer, common/dyn_hold.h): the layer's hold_pack compute
     # pipeline, already made for the 88-byte hair draws; the strand header at device creation (startup only, not toggled).
     "rt_hold_pack_base rt_hair_header_early "
+    # BLAS chunk size classes and the kept cascade BLAS on a refusal (claude/r2-layer, common/as_chunk_alloc.h same_class,
+    # layer/bvhsplit.cpp as_create and the cascade build): host placement only, no pipeline.
+    "rt_as_size_class rt_cascade_keep_refused "
     # Scene handout: the hit-material passes take the committed pair (core/gi.cpp handout_hit_settle) and the layer
     # skips the commit-time query (layer/rtscene.cpp). The same pipelines (constant 1051 follows rt_scene_handout).
     "rt_scene_handout_hit_wait".split())

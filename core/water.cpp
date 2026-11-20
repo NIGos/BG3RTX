@@ -1446,14 +1446,22 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
     }
   }
   const uint32_t gx = (in.w + kGroup - 1) / kGroup, gy = (in.h + kGroup - 1) / kGroup;
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_primary.p);
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 0, kNumBind, wr);
-  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 1, 1, &in.alpha, 0, nullptr);
-  vk.CmdPushConstants(cmd, g_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, in.push_bytes, in.push);
-  vk.CmdDispatch(cmd, gx, gy, 1);
-  memory_barrier(cmd, kCS, kCS);
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_reflect.p);
-  vk.CmdDispatch(cmd, gx, gy, 1);
+  // wOut / wT feed only the rt_debug 21-24 views and the stats lines; rfHitDist only with
+  // WATER_RR_HIT. The compose traces its own rays (water_copy), so without any reader the
+  // two full-screen passes are skipped (the image is unchanged: nothing else reads them).
+  const int view = host->cfg_int("rt_debug", 0);
+  const bool traced = in.rf_hit != VK_NULL_HANDLE || (view >= 21 && view <= 24) ||
+                      bg3::logging::stats_enabled(host->cfg_int);
+  if (traced) {
+    vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_primary.p);
+    vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 0, kNumBind, wr);
+    vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 1, 1, &in.alpha, 0, nullptr);
+    vk.CmdPushConstants(cmd, g_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, in.push_bytes, in.push);
+    vk.CmdDispatch(cmd, gx, gy, 1);
+    memory_barrier(cmd, kCS, kCS);
+    vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_reflect.p);
+    vk.CmdDispatch(cmd, gx, gy, 1);
+  }
   if (g_timed[slot]) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_qp, slot * 2 + 1);
   // The views (later passes, other command buffers), the copy of the counters to this slot and
   // its host read kRing frames later.
@@ -1462,7 +1470,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   vk.CmdCopyBuffer(cmd, g_dev, g_host, 1, &cp);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
   g_written[slot] = true;
-  g_out_frame = now;
+  if (traced) g_out_frame = now;
   g_out_w = in.w, g_out_h = in.h;
   if (compose_wanted() || shadows_wanted() || ls_wanted() || refr_wanted()) {
     compose_at_lighting(cmd, in, alpha_layout);
