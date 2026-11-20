@@ -3,7 +3,7 @@
   "presets": [
     {"id": "low", "label": "Low", "description": "Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.", "extra": {"rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1", "rf_compact_probe_state": "1"}},
     {"id": "medium", "label": "Medium", "description": "Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.", "extra": {"rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1", "rf_compact_probe_state": "1"}},
-    {"id": "high", "label": "High", "description": "Adds foliage to ray tracing, Full local light shadows and Standard reflections.", "extra": {"rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1", "rf_compact_probe_state": "1"}},
+    {"id": "high", "label": "High", "description": "Adds foliage to ray tracing, Full local light shadows, Standard reflections and Low-latency scene.", "extra": {"rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1", "rf_compact_probe_state": "1"}},
     {"id": "ultra", "label": "Ultra", "description": "Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.", "extra": {"rt_rebuild_frames": "600", "rt_scene_compact_holds": "1", "rt_compact_hit_state": "1", "gi_far_roof_early": "1", "rf_compact_probe_state": "1"}}
   ],
   "knobs": [

@@ -75,7 +75,8 @@ Tools and launcher:
 - Final live hx1 202905 (S8): 0 strands->cards in every bundle window. An entering head shows cards for about 3 frames.
 - Open: styles without a groom file stay cards (S8 index counts 3399 and 7086). Hitch frames are fixed offline only.
 - `rt_hair_card_fill` is an Advanced option outside the bundle (no visible gain). `rt_hair_dense_sample` is a diagnostic.
-- RTX Hair is still Off in every preset and hidden in release. The user decides whether it goes On in a preset.
+- RTX Hair is Off in every preset. In release it is an opt-in Beta control (Lighting > RTX Hair, Ctrl+Shift+F7). The user
+  decides whether it goes On in a preset.
 - Launcher controls: "RTX Hair detail at distance" (Off / 1/4 / 1/8, live) and "RTX Hair motion stability"
   (`rt_hair_mv_card=2`, On in High and Ultra, restart).
 - Staged jobs and their state: `tools/live_batches_staged/README.md` (hx1 in `hair_stable/` is current).
@@ -121,7 +122,8 @@ Tools and launcher:
 - Stock visible hair. Ultra: temporal post, exact-k, two GI rays. High: OMM and offline masks.
 - Always on: wf9 water camera correction, far-GI roof-leak fix. Low-latency scene On in High and Ultra.
 - The four VRAM right-sizing policies are On by default (2026-11-14 night).
-- Experimental: only Water surface reflections (off). Strand hair hidden. Tilesets hidden and off.
+- Experimental page (behind "Show experimental options", all off): Water surface reflections, two FG pacing tests, Strand
+  hair edge resolve. RTX Hair: Beta control on Lighting, off. Tilesets hidden and off.
 - Ctrl+Shift+F9 master RT toggle. GPL-3.0-or-later plus NVIDIA exception. "Tested only on RTX 5090".
 - Asset database ships in the archive (user decision). Nothing is uploaded by agents.
 
