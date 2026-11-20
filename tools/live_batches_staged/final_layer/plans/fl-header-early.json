@@ -1,0 +1,52 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 20.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 20.0,
+    "motion_end": 20.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair_header_early=1",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[auto\\] scene ready"
+    ],
+    "wait_log_timeout": 120
+  },
+  {
+    "label": "static",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 11.87,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 11.87,
+    "motion_end": 11.87,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hair_header_early=1",
+    "frames": 300,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[pace\\] rendered frame time over \\d+ frames",
+      "\\[watch\\] presents",
+      "\\[mem\\] device-local VRAM",
+      "\\[ngx\\] gpu RR:"
+    ],
+    "wait_log_timeout": 30
+  }
+]

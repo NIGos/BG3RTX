@@ -131,7 +131,7 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     # 5i shared draw key: the groom rows' key filter (bvhsplit). CPU only.
     "rt_hair_shared_key "
     # Removed 2026-11-14 (docs/RTX_HAIR_PRIMARY.md 6k): no code reads these keys. They stay known here only so that
-    # the historical staged jobs that set them (hair_cam, hair_late, hair_final, hair_pixel_lod) still lint.
+    # historical jobs that set them still lint.
     "rt_hair_watchdog_draw rt_hair_watchdog_one_key rt_hair_swap_latch rt_hair_coverage_min_pixels "
     "rt_hair_row_stable rt_hair_stale_publish "
     # 5u: two bad coverage measurements in a row (hair_primary CoverageGate::confirm). CPU only.
@@ -161,6 +161,9 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_capture_peak_reserve rt_capture_demand_size rt_capture_split_mb rt_mesh_pool_trim rt_as_chunk_fit "
     # Startup-only capture layout (common/capture_stride.h): set at launch, never toggled in a run; no core pipeline.
     "rt_capture_wide_split "
+    # Hold snapshot pack for the 64-byte layout (claude/final-layer, common/dyn_hold.h): the layer's hold_pack compute
+    # pipeline, already made for the 88-byte hair draws; the strand header at device creation (startup only, not toggled).
+    "rt_hold_pack_base rt_hair_header_early "
     # Scene handout: the hit-material passes take the committed pair (core/gi.cpp handout_hit_settle) and the layer
     # skips the commit-time query (layer/rtscene.cpp). The same pipelines (constant 1051 follows rt_scene_handout).
     "rt_scene_handout_hit_wait".split())

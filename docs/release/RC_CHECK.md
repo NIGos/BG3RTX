@@ -91,7 +91,9 @@ Later commits on the branch change only this file and `docs/progress/`, which ar
    never ran. Two entering-head card runs of 6 and 9 frames in hx1 202905 are unexplained. Not a blocker (Off, Beta).
 9. **ReShade.** The player README says ReShade 6 works (tested 2026-11-05); the rs1 run of 2026-11-14 was INVALID.
    Not a blocker; the claim rests on the older test.
-10. **"Softer look at distance"** in the notes' RTX Hair limits has no measurement in the docs (user observation only).
+10. **"Softer look at distance"** in the notes' RTX Hair limits is backed offline by the pixel-LOD study
+    (docs/RTX_HAIR_PRIMARY.md 5v; sub-pixel strands average to a smoother image than the cards; cited in
+    RELEASE_EVIDENCE_0.9.6.md). One groom, no motion, no live comparison.
 11. **Scope never tested:** any card other than the RTX 5090, any driver other than 621.01, Act 2 and most of Act 3,
     sessions of several hours, a fresh PC without the SDKs, and the native fallback window's Beta label for RTX Hair
     (the badge is in the WebView page only). Not blockers for a beta that says "Tested only on RTX 5090".

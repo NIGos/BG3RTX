@@ -40,7 +40,7 @@ inline constexpr const char* kPresetLabel[kPresetCount] = {"Low", "Medium", "Hig
 inline constexpr const char* kPresetDesc[kPresetCount] = {
     "Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.",
     "Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.",
-    "Adds foliage to ray tracing, Full local light shadows and Standard reflections.",
+    "Adds foliage to ray tracing, Full local light shadows, Standard reflections and Low-latency scene.",
     "Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, "
     "Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.",
 };
@@ -839,6 +839,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_mesh_pool_trim", "1"},
     {"rt_as_chunk_fit", "0"},
     {"rt_hair_groom_async", "0"},
+    {"rt_hold_pack_base", "0"},
+    {"rt_hair_header_early", "0"},
     {"rt_as_chunk_reuse_frames", "120"},
     {"rt_as_cap_occupied", "0"},
     {"rt_shadows", "1"},

@@ -357,7 +357,7 @@ so it takes effect after the restart); Low and Medium expand to Off; a file with
 Check in game: restart on High or Ultra; the log has `[rt] scene handout` lines with 0 fallbacks and `[rt] scene wait`
 lines near 0 ms; Performance > Low-latency scene Off (live) shows the OFF frame time to compare.
 
-### 8.6 Launcher
+### 8.5b Launcher
 
 Performance page, Frame rate group, "Low-latency scene" (`scene_handout`): Off / On. On writes
 `rt_scene_handout_layout=1`, `rt_scene_handout=2` and `rt_scene_handout_hit_wait=1`, needs a game restart (Off is
@@ -388,7 +388,7 @@ order proof (`ordered_before_query`, common/native_hit_order.h) and publishes wo
 check is right: the query's dispatches would read rows the packet has not written yet. Nothing counted it: the
 handout line's `failed 0 (fallbacks: query 0, camera 0)` only covers the CPU side of the commit.
 
-Fix, off by default (`rt_scene_handout_hit_wait=1`, live key, bg3rtx.ini): a hit-material pass of a handout frame
+Fix (`rt_scene_handout_hit_wait=1`, live key, bg3rtx.ini; first off by default, on since 8.7): a hit-material pass of a handout frame
 takes the committed pair instead (core/gi.cpp `handout_hit_settle` before the four `rt_hit_material_use` sites:
 `rt_hit_material`, the hit reference, reflections hit shading, hit GI). That is the frame's one wait, moved from the
 first RT query to the first hit-material pass; the query is then the lighting's own, as without the handout. The layer
@@ -439,7 +439,7 @@ Default (correctness first): the Low-latency scene On choice writes `rt_scene_ha
 and `bg3rtx.ini` are 1; the release policy keeps it at 1, so a player file written before the fix (two keys, or only
 a preset) loads with it. settings_test `test_scene_handout` pins it. Off does not write the key (no-op with mode 0).
 
-Open, staged (not queued): `handout_qual/jobs/hq-inn-fix.json` (predicted.json `hq-inn-fix`): the inn, Ultra, OFF / mode
+Done in 8.8 (it ran as hq-inn-fix.1.211816): `handout_qual/jobs/hq-inn-fix.json` (predicted.json `hq-inn-fix`): the inn, Ultra, OFF / mode
 2 with the fix / OFF; static, pan Q and E, the pans with RTX Hair On, 4 float traces and a hit window per state.
 Predicted: wait 8.5 to 0.3-3 ms, frame time gain 0 to 1 ms, GI trace and light rays at hits equal to OFF. It decides
 whether the handout stays On in Ultra (stays unless ON is slower beyond noise and floor, or the hit rays differ).

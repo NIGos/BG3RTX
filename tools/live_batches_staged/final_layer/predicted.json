@@ -1,0 +1,27 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-20, branch claude/final-layer. STAGED, not queued, not authorized.",
+  "questions": {
+    "fl-s8-holdpack": "With rt_hold_pack_base=1, are static-camera hold snapshots of the 64-byte layout packed to 24 bytes without changing what is drawn?",
+    "fl-header-early": "With rt_hair_header_early=1, does the strand header get the same address in two launches, so the second launch's 519 strand variants hit the driver's pipeline cache?"
+  },
+  "evidence": "hq-s8-ultra 2026-11-14: 247 hold snapshots, 91.5 MB copied per static-camera build at the 64-byte stride. Strand variants: 14.7-48.5 s of pipeline creation in 18 of the last 25 queue launches (header address new each launch), 190-501 ms in the 7 whose address repeated the previous launch's; the user's logs 17.4 s (2026-11-20) and 19.6 s (2026-11-14).",
+  "noise_rule": "Every threshold is the OFF repeat of the same run (off-b against off-a); materiality floors of tools/live_batches/sane_gates.py (cost max(0.1 ms, 1%), energy 0.5%, counts 1%).",
+  "predicted": {
+    "fl-s8-holdpack": {
+      "hold_bytes": "ON: '[bvh] last N builds' line shows hold pack bytes per build about 34 MB (24/64 of the OFF copy bytes) and copy bytes near 0 for the 64-byte draws; OFF: copy about 91.5 MB per build, pack 0 (no native hair at S8 static besides the 88-byte hair draws, which pack in both states).",
+      "mesh_pool": "ON: pool used lower by about 57 MB in the static windows (the snapshots' ranges).",
+      "gpu_ms": "Scene build GPU ms ON lower by 0.03-0.08 ms or within noise (the copy reads 91.5 MB and writes 91.5 MB; the pack reads about half and writes 34 MB). Never higher beyond noise plus floor.",
+      "held_draws": "Held-draw rejections for stride ('why 2', rt_stability_log) 0 in every ON window; held draws per window equal to OFF within the count floor.",
+      "energy": "ON mean of the pre-post scene colour inside the OFF pair's range plus 0.5% (held instances read position and UV only).",
+      "faults": "0: no VK_ERROR, no crash, no core fault."
+    },
+    "fl-header-early": {
+      "address": "Both launches log the same '[hair primary] header at 0x...' address.",
+      "first_launch": "'strand variants: 519 pipelines in N ms': 10-50 s if the address is new to the driver cache, under 1 s if a previous launch already used it.",
+      "second_launch": "'strand variants: 519 pipelines in N ms' under 1000 ms.",
+      "faults": "0: no VK_ERROR, no crash, strands draw as before (no hair switch counts change: rt_hair stays at the release default, off)."
+    }
+  },
+  "decision": "rt_hold_pack_base becomes a default candidate if the bytes fall as predicted with energy, held draws and GPU ms within noise. rt_hair_header_early becomes a default candidate if the address repeats and the second launch is under 1 s; if the address still moves, the key stays 0 and the fix is a capture-replay address (bufferDeviceAddressCaptureReplay), not small.",
+  "not_measured_here": "The BLAS chunk reserve split (always-on [mem] ours line, read from the next user log), the groom decode fix (read from the next log: no LOD decoded twice before its upload)."
+}

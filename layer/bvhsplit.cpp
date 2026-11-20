@@ -1223,34 +1223,56 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
     d = {};
   }
   const hair_groom::Loaded* src = hair_groom::find(id, a.indices);
+  auto up = [](VkDeviceSize v) { return (v + 15) / 16 * 16; };
+  // The LOD's pool layout from its point and segment counts (known from the index before any decode).
+  auto layout = [&](GroomAsset::Lod& n, uint32_t points, uint32_t segments) {
+    VkDeviceSize total = 0;
+    n.tri = total; total += up(VkDeviceSize(points) * 4);
+    n.bary = total; total += up(VkDeviceSize(points) * 8);
+    n.radius = total; total += up(VkDeviceSize(points) * 4);
+    n.seg = total; total += up(VkDeviceSize(segments) * 4);
+    n.segtri = total; total += up(VkDeviceSize(segments) * 4);
+    return total;
+  };
   std::vector<uint8_t> bytes;
   hair_groom::Lod l;   // round 3 M6: only this LOD's bytes are read and validated
   // rt_hair_groom_async (default 0, live): the file read and LZMS decode run on a worker thread instead of inside
   // this build (median 47 ms, max 203 ms per LOD in the user's log of 2026-11-14); the draw keeps its cards (or its
   // built LOD, rt_hair_groom_lod_keep) until a later build finds the bytes ready.
+  // Synchronous read: the pool range is taken BEFORE the decode, from the index's counts. User log 2026-11-20
+  // 16:47:19-20: with the pool's growth refused by the VRAM guard, two LODs were decoded 9 times each (63 + 31 ms
+  // per build, 1.07 s in all) and thrown away after a failed pool_alloc, under five 100 ms Streamline hitches.
+  const bool async = src && cfg_int("rt_hair_groom_async", 0) != 0;
+  GroomAsset::Lod n;
+  VkDeviceSize total = 0, base = 0;
+  bool have_range = false;
+  if (src && !async && uint32_t(lod) < src->asset.lod_count) {
+    total = layout(n, src->asset.lod_points[lod], src->asset.lod_segments[lod]);
+    if (!groom_make_room(total, now)) return nullptr;
+    if (!pool_alloc(cmd, total, &base)) return nullptr;
+    have_range = true;
+  }
   bool read = false;
-  if (src && cfg_int("rt_hair_groom_async", 0) != 0) {
+  if (async) {
     const hair_groom::LodDecode state = hair_groom::read_lod_async(*src, uint32_t(lod), bytes, l, now);
     if (state == hair_groom::LodDecode::Pending) return nullptr;
     read = state == hair_groom::LodDecode::Ready;
   } else read = src && hair_groom::read_lod(*src, uint32_t(lod), bytes, l);
+  // The decoded counts must be the index's (read_lod validates the header against the indexed file).
+  if (read && have_range && (l.points != src->asset.lod_points[lod] || l.segments != src->asset.lod_segments[lod]))
+    read = false;
   if (!read) {
+    if (have_range) g_pending_free.push_back({now + kGroomFreeLag, -1, base, total});
     log("[hair groom] %016llx: file unreadable or changed since startup, groom off for it", (unsigned long long)id);
     a.failed = true;
     return nullptr;
   }
-  auto up = [](VkDeviceSize v) { return (v + 15) / 16 * 16; };
-  GroomAsset::Lod n;
   n.points = l.points; n.segments = l.segments; n.keep = l.keep;
-  VkDeviceSize total = 0;
-  n.tri = total; total += up(VkDeviceSize(l.points) * 4);
-  n.bary = total; total += up(VkDeviceSize(l.points) * 8);
-  n.radius = total; total += up(VkDeviceSize(l.points) * 4);
-  n.seg = total; total += up(VkDeviceSize(l.segments) * 4);
-  n.segtri = total; total += up(VkDeviceSize(l.segments) * 4);
-  if (!groom_make_room(total, now)) return nullptr;
-  VkDeviceSize base = 0;
-  if (!pool_alloc(cmd, total, &base)) return nullptr;
+  if (!have_range) {
+    total = layout(n, l.points, l.segments);
+    if (!groom_make_room(total, now)) return nullptr;
+    if (!pool_alloc(cmd, total, &base)) return nullptr;
+  }
   GroomUpload u{};
   if (!make_buf(u.staging, total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, "hair groom upload")) {
     g_pending_free.push_back({now + kGroomFreeLag, -1, base, total});
@@ -2310,12 +2332,16 @@ void bvh_vram(BvhVram* out) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   const uint64_t now = frame_index();
+  const VkDeviceSize base = VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20;
   for (const AsChunk& c : g_chunks) {
     if (!c.buf.b) continue;
     out->as_reserved += c.buf.size;
     out->as_live += c.ra.live;
     out->as_pending += c.ra.used - (std::min)(c.ra.used, c.ra.live);
     out->as_empty += c.ra.reclaimable() ? c.buf.size : 0;
+    if (c.ra.used) out->as_holes += c.ra.cap - c.ra.used;
+    out->as_arena[(std::min)(c.ra.arena, 2u)] += c.buf.size;
+    out->as_oversize += c.buf.size > base;
     ++out->chunks;
   }
   for (const auto& [k, m] : g_meshes)
@@ -2666,8 +2692,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const uint32_t hold_frames = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 4), 0, 120));
   const bool moving = rt_camera_moving();
   const uint32_t hold_max_prims = uint32_t((std::max)(cfg_int("rt_dyn_hold_max_prims", 8192), 0));
+  const bool hold_pack_base = cfg_int("rt_hold_pack_base", 0) != 0;
   const bool compact_holds_requested = dyn_hold_compact_requested(geo_native_hair_enabled(),
-      cfg_int("rt_hair_pool_trim", 1) != 0, cfg_int("rt_scene_compact_holds", 1) != 0, hold_frames, moving);
+      cfg_int("rt_hair_pool_trim", 1) != 0, cfg_int("rt_scene_compact_holds", 1) != 0, hold_frames, moving, hold_pack_base);
   const bool compact_holds = compact_holds_requested && ensure_hold_pack_pipeline();
   if (compact_holds_requested && !compact_holds) ++g_st.hold_pack_unavailable;
   if (moving || !hold_frames) {
@@ -2863,7 +2890,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // 2 stride, 3 not submitted / newer record, 4 epoch, 5 alpha record not restorable, 6 held.
       int why = 6;
       if (!s.hold_size) why = 1;
-      else if (s.hold_stride != (s.stride ? s.stride : cap_stride) && !(geo_native_hair_enabled() && s.hold_stride == 24u)) why = 2;
+      else if (!dyn_hold_stride_ok(s.hold_stride, s.stride ? s.stride : cap_stride, geo_native_hair_enabled(), hold_pack_base)) why = 2;
       else if (!(now > s.last_used && now - s.last_used <= hold_frames)) why = 0;
       else if (!(rec_submitted(s.hold_rec) && s.hold_rec == s.rec)) why = 3;
       else if (s.hold_epoch != g_hold_epoch) why = 4;
@@ -3505,7 +3532,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if (!g_pool_copy.target.b && hold_frames && !moving && fd.prims <= hold_max_prims) {
       s.hold_has_alpha = fd.cap_alpha && fd.rec != kNone;
       const bool material_ok = !s.hold_has_alpha || alpha_snapshot(fd.rec, &s.hold_alpha);
-      const uint32_t snapshot_stride = dyn_hold_stride(stride, compact_holds, s.hold_has_alpha, s.hold_alpha.rec.kind);
+      const uint32_t snapshot_stride = dyn_hold_stride(stride, compact_holds, s.hold_has_alpha, s.hold_alpha.rec.kind,
+                                                     hold_pack_base);
       const VkDeviceSize bytes = VkDeviceSize(fd.prims) * 3u * snapshot_stride;
       if (s.hold_size && (s.hold_size != bytes || s.hold_stride != snapshot_stride)) {
         g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});

@@ -1400,7 +1400,7 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   // rt_cascade_alpha=2: only draws whose FS is a texture cutout (in the alpha table) are
   // skipped; the other discarding FS test no texture alpha (LOD dither, camera fade: 856 of the
   // 1263 depth-only discarding FS in the dump) and their geometry goes in solid.
-  const int cc_alpha=cfg_int("rt_cascade_alpha",0);
+  const int cc_alpha=cfg_hot(CfgHot::rt_cascade_alpha);
   AlphaFs alpha_fs{};
   const bool cutout=pi.discard && cc_alpha!=1 && alpha_lookup(s->fs,&alpha_fs);
   const cascade::DrawId id=cascade_draw_id(cmd,s,args,pi);
@@ -1414,7 +1414,7 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     draw_duplicate=draw_duplicate || offset_duplicate;
   }
   const auto legacy=cascade::legacy_caster(pi.discard,cc_alpha,cutout,
-    cfg_int("rt_cascade_alpha_dedupe",1)!=0,mesh_duplicate,draw_duplicate);
+    cfg_hot(CfgHot::rt_cascade_alpha_dedupe)!=0,mesh_duplicate,draw_duplicate);
   if(legacy==cascade::LegacyCaster::duplicate && offset_duplicate) ++c->c_mesh_dup;
   const bool static_candidate=cascade_static_candidate(s,pi);
   const bool legacy_keep=legacy==cascade::LegacyCaster::keep;

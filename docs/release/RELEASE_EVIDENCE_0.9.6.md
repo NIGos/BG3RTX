@@ -36,7 +36,7 @@ Baseline: the published 0.9.5-beta package is commit cb2d03f2 (2026-11-09 15:08,
 
 | Claim | Source |
 |---|---|
-| Off in every preset; Lighting > RTX Hair; Home card; Ctrl+Shift+F7 | `common/settings.h` 415-456; HANDOFF "RTX Hair strands"; `nexus/changelog_0.9.5.txt` |
+| Off in every preset; Lighting > RTX Hair (Beta badge); Ctrl+Shift+F7. Home has only the conversion progress (Preparation), no switch | `common/settings.h` 415-456; `common/hotkeys.h` 9; `tools/launcher/ui/app.js` (`layout.Lighting`, `hairJob`) |
 | On did nothing in 0.9.5-beta; fixed | A11 209-217 (`test_release_rtx_hair`) |
 | 0 switches to cards in every test window (fast zoom and orbit, S8) | HAIR 44-45 (hx1 202905); PROGRESS 90 |
 | 97 to 99% of hair drawn as strands | HAIR 45-46 (hx1 194658: 97.4 to 99.1%) |
@@ -48,7 +48,7 @@ Baseline: the published 0.9.5-beta package is commit cb2d03f2 (2026-11-09 15:08,
 | Strand pass 0.13 to 0.35 ms | HAIR 46 |
 | A player session reported a large frame-rate loss, unexplained | A14 152-155 (perf_ab staged, not run) |
 | Strand edges can dither in motion | `nexus/changelog_0.9.5.txt` "Known" (carried over; no newer result) |
-| "Softer at distance" | NOT SOURCED in the docs. Listed as a known limit on the coordinator's request; the nearest record is the user report at HAIR 1707 (trails / blurs at isometric distance, before motion stability). Confirm or drop before publishing. |
+| "Softer at distance" | Pixel-LOD study, HAIR 5v (1545-1548) and its fragment `git show eca698b9:docs/progress/claude-hair-pixel-lod-study.md` (tool `tools/hair_groom/pixel_lod.py`): at heads of 40-150 render px a strand is 0.06-0.12 px wide, so the image converges to the smooth average of sub-pixel strands (RMS 0.08-0.12 against the truth, no energy shift); its high-frequency detail is 0.04-0.07 (truth) against 0.09-0.15 for the game's cards. The softness is the correct average, not an error. Offline, one groom (a beard), no motion, no RR model. |
 
 ## Launcher
 

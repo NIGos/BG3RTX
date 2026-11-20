@@ -1621,7 +1621,7 @@ fails under about 60 px; secondary rays must stay at keep >= 0.25; LOD steps pop
   passes, at 35-60 px (HF +15 to +32%); 1/8 fails everywhere, a coverage-conserving radius only at some sizes. Rule:
   heads of 35-60 px run the k pick with the ladder stopped at keep 1/4 of the groom (`pixel_lod_level` small_keep,
   dev knob rt_hair_pixel_lod_small_keep 0.25, 0 = before); under 35 px level 0. Numbers:
-  docs/progress/claude-hair-pixel-lod-small.md. Live staged: tools/live_batches_staged/hair_pixel_lod (pl1).
+  docs/progress/claude-hair-pixel-lod-small.md. Live staged then as hair_pixel_lod (pl1; removed 2026-11-20, in git history).
 - Not built: (c) the cross-fade between two adjacent levels (spec constant 1048); without it a level change pops.
 - User check: launcher Lighting, "RTX Hair detail at distance" (`hair_distant_detail`, 2026-11-10): Off / 1/4 (Standard,
   small_keep 0.25) / 1/8 (Sharper, 0.125), live after Save; Off in every preset and in data/release.ini until the final

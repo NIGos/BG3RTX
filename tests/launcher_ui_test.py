@@ -56,6 +56,8 @@ def main():
     assert 'if(h.closed){if(controller)controller->Close();return S_OK;}' in host
     assert 'if(!created){h.closed=true;h.failed=true;}' in host
     assert 'if(h.failed||profile.empty())' in host
+    # A page that never loads opens the native launcher for the player (failed -> -1), not an empty exit.
+    assert 'else if(w==3){h->result=2;h->failed=h->shot.empty();' in host
     for label in ('Lighting', 'Surfaces', 'Performance', 'Help & support'):
         assert 'L"' + label + '"' in native
     assert 'g.tab=g_tab_ids[' in native and 'BS_AUTORADIOBUTTON|BS_PUSHLIKE' in native
