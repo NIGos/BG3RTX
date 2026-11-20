@@ -748,6 +748,19 @@ static void log_vram_ours(uint64_t used, uint64_t budget, const BvhVram& b, uint
               cfg_int("rt_as_chunk_fit", 0) != 0, cfg_int("rt_capture_demand_size", 0) != 0,
               cfg_int("rt_capture_split_mb", 0) != 0, cfg_int("rt_mesh_pool_trim", 0) != 0,
               cfg_int("rt_capture_peak_reserve", 0) != 0);
+    // Descriptor bookkeeping (common/descriptor_epoch.h): flat across a long session when freed sets are forgotten.
+    size_t sets = 0, entries = 0, layouts = 0, pools = 0, pool_list = 0, set_layouts = 0;
+    {
+      std::shared_lock<std::shared_mutex> lock(tracker().mu);
+      sets = tracker().sets.size();
+      for (const auto& [s, e] : tracker().sets) entries += e.size();
+      layouts = tracker().layout_dynamic.size();
+      set_layouts = tracker().set_layouts.size();
+      pools = tracker().pool_sets.size();
+      for (const auto& [p, l] : tracker().pool_sets) pool_list += l.size();
+    }
+    log_stats("[tracker] descriptor sets %zu (%zu entries), set layouts %zu, layouts %zu, pools %zu (%zu listed)", sets,
+              entries, set_layouts, layouts, pools, pool_list);
   }
   const uint64_t ours = b.as_reserved + b.pool + b.pool_pending + rtcap + cascade + recycled + em + water;
   log("[mem] ours (%s): BLAS chunks %.0f MB reserved in %u chunks (%.0f live, %.0f empty), mesh pool %.0f MB "

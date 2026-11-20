@@ -180,6 +180,11 @@ struct Tracker {
   // consumed in this order.
   std::unordered_map<VkDescriptorSetLayout, std::vector<std::pair<uint32_t, uint32_t>>> layout_dynamic;
   std::unordered_map<VkDescriptorSet, VkDescriptorSetLayout> set_layouts;
+  // The pool of every live set and the sets of every pool (common/descriptor_epoch.h): freed, reset and destroyed
+  // pools' sets leave the maps above.
+  std::unordered_map<VkDescriptorSet, VkDescriptorPool> set_pools;
+  std::unordered_map<VkDescriptorPool, std::vector<VkDescriptorSet>> pool_sets;
+  std::unordered_map<VkDescriptorPool, size_t> pool_stale;
   std::unordered_map<VkDescriptorUpdateTemplate, std::vector<VkDescriptorUpdateTemplateEntry>> templates;
   // Host-visible memory, so uniform buffer contents can be read on the CPU.
   std::unordered_map<VkBuffer, std::pair<VkDeviceMemory, VkDeviceSize>> buffer_mem;
