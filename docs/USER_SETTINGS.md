@@ -3,7 +3,8 @@
 Use `bin\BG3RTX.exe` to select the game folder and choose Low, Medium, High or Ultra.
 **A setting applies the moment you click it**: there is no Save button. Each change is written to
 `bg3rtx_user.ini` at once and the running game picks it up. The strip at the bottom of the window names the
-change, anything that changed with it, and offers **Undo**. Custom means you changed something from a preset;
+change, anything that changed with it (a preset change names three and counts the rest; hover for the full list),
+and offers **Undo**. Custom means you changed something from a preset;
 "Reset to" next to the preset brings the preset back. In the game's Graphics options,
 select DLSS as the upscaler for Ray Reconstruction. Before Play, when Ray Reconstruction is On,
 the launcher restores DLSS in `graphicSettings.lsx` and backs up that file as `.lsx.bg3rtx-bak`.

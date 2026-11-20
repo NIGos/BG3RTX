@@ -10,7 +10,7 @@ const root=path.resolve(__dirname,'../..'),index='file:///'+path.join(root,'tool
 const views={
  'home':'section=Home','home-missing':'view=missing','home-granny':'section=Home&view=granny','home-hair-stopped':'section=Home&view=hairerror',
  'lighting':'section=Lighting','lighting-hair':'section=Lighting&select=exp_hair_groom_primary','lighting-hair-detail':'section=Lighting&select=hair_distant_detail',
- 'lighting-notice':'view=notice','lighting-restart':'section=Lighting&view=restart',
+ 'lighting-notice':'view=notice','lighting-preset-notice':'section=Lighting&view=preset','lighting-restart':'section=Lighting&view=restart',
  'surfaces':'section=Surfaces&select=exp_water','performance':'section=Performance&select=scene_handout','performance-pipeline':'section=Performance&select=exp_gi_rt_pipeline_reorder',
  'dlss5':'section=DLSS%205','experimental-off':'section=Experimental','experimental-on':'section=Experimental&experimental=1&select=exp_hair_strand_aa',
  'hotkeys':'section=Hotkeys','support':'section=Support','support-probe':'view=probe','write-error':'section=Lighting&view=error','report':'section=Support&report=1'};

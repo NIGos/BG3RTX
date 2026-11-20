@@ -1,7 +1,9 @@
 # Real ZIP candidate verification. Run from any directory with Windows PowerShell 5.1:
 # powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1
 # No game, launcher, upload, Git mutation, shortcut or existing installation runs.
-# Setup is compiled and executed only against the isolated throwaway tree.
+# Setup is compiled and executed only against the isolated throwaway tree, and only when no BG3RTX is installed for
+# this user: with an install present the Setup row is SKIPPED (named, not a pass). Exit 0 all PASS, 2 PASS with
+# skipped rows, 1 any FAIL.
 param([ValidateRange(1,100000)][int]$ExpectedFiles = 230, [switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
@@ -25,7 +27,12 @@ function Pass([string]$name, [string]$detail) {
   $results[$name].Status = 'PASS'; $results[$name].Detail = $detail
   Write-Host "[$(Get-Date -Format HH:mm:ss)] PASS ${name}: $detail"
 }
+function Skip([string]$name, [string]$detail) {
+  $results[$name].Status = 'SKIPPED'; $results[$name].Detail = $detail
+  Write-Host "[$(Get-Date -Format HH:mm:ss)] SKIPPED ${name}: $detail"
+}
 function Require([bool]$ok, [string]$message) { if (-not $ok) { throw $message } }
+. (Join-Path $PSScriptRoot 'setup_presence.ps1')
 function Hash([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
 . (Join-Path $PSScriptRoot '..\linked-path.ps1')
 function NoLinks([string]$path) {
@@ -285,8 +292,12 @@ try {
   Pass 'Uninstall' "$($original.Count)/$($original.Count) original files restored byte-for-byte; fake game unchanged; no owned payload/metadata remains."
 
   $stage = 'Setup'
-  Run 'verify compiled Setup' ('& ' + (Quote (Join-Path $PSScriptRoot 'verify_setup.ps1')) + ' -PayloadDir ' + (Quote $payload) + ' -OutDir ' + (Quote (Join-Path $run 'setup')) + ' -TestRoot ' + (Quote $scratch) + ' -ExpectedFiles ' + $ExpectedFiles)
-  Pass 'Setup' "Inno 6.7.3 compiled; $ExpectedFiles ZIP payload hashes match after install/update; settings retained by default and removed on opt-in; shader cache removed; 0 owned files or HKCU Apps entries remain. Shortcuts disabled in qualification; no launcher execution."
+  $setupSkip = Get-SetupSkipReason (Get-BG3RTXAppsEntries)
+  if ($setupSkip) { Skip 'Setup' $setupSkip }
+  else {
+    Run 'verify compiled Setup' ('& ' + (Quote (Join-Path $PSScriptRoot 'verify_setup.ps1')) + ' -PayloadDir ' + (Quote $payload) + ' -OutDir ' + (Quote (Join-Path $run 'setup')) + ' -TestRoot ' + (Quote $scratch) + ' -ExpectedFiles ' + $ExpectedFiles)
+    Pass 'Setup' "Inno 6.7.3 compiled; $ExpectedFiles ZIP payload hashes match after install/update; settings retained by default and removed on opt-in; shader cache removed; 0 owned files or HKCU Apps entries remain. Shortcuts disabled in qualification; no launcher execution."
+  }
 
 } catch {
   $results[$stage].Status = 'FAIL'
@@ -302,10 +313,11 @@ try {
     }
     catch { $results['Cleanup'].Detail = $_.Exception.Message; Write-Host "FAIL Cleanup: $_" }
   }
-  $allPass = @($results.Values | Where-Object Status -ne 'PASS').Count -eq 0
+  $verdict = Get-RcResult @($results.Values | ForEach-Object { $_.Status })
+  $allPass = $verdict -eq 'PASS'
   $lines = @('# Release candidate check', '', "Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'). Commit: $commit.",
     "Source state at start: $trackedState (untracked files excluded).",
-    "Result: $(if ($allPass) { 'PASS' } else { 'FAIL' }). Candidate version: $version.", '',
+    "Result: $verdict. Candidate version: $version.", '',
     'Rerun: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1`.', '',
     '| Item | Result | Evidence |', '|---|---|---|')
   foreach ($name in $results.Keys) { $lines += "| $name | $($results[$name].Status) | $($results[$name].Detail.Replace('|','/')) |" }
@@ -323,4 +335,4 @@ try {
   $lines | Set-Content -LiteralPath $report -Encoding UTF8
   Write-Host "Report: $report"
 }
-if ($allPass) { exit 0 } else { exit 1 }
+if ($allPass) { exit 0 } elseif ($verdict -ne 'FAIL') { exit 2 } else { exit 1 }

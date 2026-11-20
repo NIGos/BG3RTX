@@ -73,5 +73,35 @@ class SmartAppControlHint(unittest.TestCase):
             self.assertIn("Get-SmartAppControlHint", text, rel)
 
 
+class SetupRowWithAnInstall(unittest.TestCase):
+    """verify_rc.ps1: where a BG3RTX Setup is installed for this user (its HKCU Apps entry exists), the compiled Setup
+    route is not run and its row is SKIPPED with the install named, never FAIL (RC 2026-11-15 failed only for this) and
+    never PASS. The entries are fakes: the registry is not read or written."""
+    def ps(self, body):
+        r = run("-Command", ". '%s'; %s" % (ROOT / "scripts/release/setup_presence.ps1", body))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip()
+
+    def test_an_install_skips_the_row_and_names_it(self):
+        fake = "[pscustomobject]@{Location='C:\\Users\\x\\AppData\\Local\\Programs\\BG3RTX';Version='0.9.6-hairtest18'}"
+        reason = self.ps("Get-SetupSkipReason @(%s)" % fake)
+        self.assertTrue(reason.startswith("skipped: another BG3RTX install present"), reason)
+        self.assertIn("0.9.6-hairtest18", reason)
+        self.assertIn("Programs\\BG3RTX", reason)
+        self.assertEqual(self.ps("Get-SetupSkipReason @()"), "")
+        self.assertEqual(self.ps("Get-SetupSkipReason $null"), "")
+
+    def test_result_and_exit_code(self):
+        self.assertEqual(self.ps("Get-RcResult @('PASS','PASS')"), "PASS")
+        self.assertEqual(self.ps("Get-RcResult @('PASS','SKIPPED','PASS')"), "PASS with 1 skipped row")
+        self.assertEqual(self.ps("Get-RcResult @('PASS','SKIPPED','FAIL')"), "FAIL")
+        rc = (ROOT / "scripts/release/verify_rc.ps1").read_text(encoding="utf-8")
+        # The check comes before the Setup route runs, and a skip is its own status (exit 2), not a pass.
+        self.assertLess(rc.index("Get-SetupSkipReason (Get-BG3RTXAppsEntries)"), rc.index("Run 'verify compiled Setup'"))
+        self.assertIn("elseif ($verdict -ne 'FAIL') { exit 2 }", rc)
+        setup = (ROOT / "scripts/release/verify_setup.ps1").read_text(encoding="utf-8")
+        self.assertIn("refusing to modify an existing installation", setup)   # the route itself still refuses
+
+
 if __name__ == "__main__":
     unittest.main()
