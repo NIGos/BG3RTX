@@ -91,6 +91,21 @@ class SetupRowWithAnInstall(unittest.TestCase):
         self.assertEqual(self.ps("Get-SetupSkipReason @()"), "")
         self.assertEqual(self.ps("Get-SetupSkipReason $null"), "")
 
+    def test_installed_version_txt_wins_over_a_stale_apps_entry(self):
+        # RC 2026-11-20: the Apps entry said 0.9.6-hairtest10 (written by an old Setup), VERSION.txt hairtest18.
+        with tempfile.TemporaryDirectory() as tmp:
+            (pathlib.Path(tmp) / "VERSION.txt").write_text("BG3RTX 0.9.6-hairtest18\ncommit 1c09e039\nlayer lean\n",
+                                                           encoding="utf-8")
+            self.assertEqual(self.ps("Get-InstalledVersion '%s'" % tmp), "0.9.6-hairtest18")
+            fake = "[pscustomobject]@{Location='%s';Version='0.9.6-hairtest10';Installed=(Get-InstalledVersion '%s')}" % (tmp, tmp)
+            reason = self.ps("Get-SetupSkipReason @(%s)" % fake)
+            self.assertIn("0.9.6-hairtest18 from VERSION.txt; Apps entry says 0.9.6-hairtest10", reason)
+            same = "[pscustomobject]@{Location='%s';Version='0.9.6-hairtest18';Installed='0.9.6-hairtest18'}" % tmp
+            self.assertIn("(%s, 0.9.6-hairtest18)" % tmp, self.ps("Get-SetupSkipReason @(%s)" % same))
+        # No folder or no VERSION.txt: the Apps entry's version, as before.
+        self.assertEqual(self.ps("Get-InstalledVersion ''"), "")
+        self.assertEqual(self.ps(r"Get-InstalledVersion 'C:\no\such\folder'"), "")
+
     def test_result_and_exit_code(self):
         self.assertEqual(self.ps("Get-RcResult @('PASS','PASS')"), "PASS")
         self.assertEqual(self.ps("Get-RcResult @('PASS','SKIPPED','PASS')"), "PASS with 1 skipped row")

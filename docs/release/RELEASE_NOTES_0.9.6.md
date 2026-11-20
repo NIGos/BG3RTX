@@ -37,6 +37,9 @@ another card or scene. Sources for every number: [RELEASE_EVIDENCE_0.9.6.md](REL
 - **A hair style that does not fit in memory no longer stops ray tracing.** Before, one such style could stop
   the whole ray-traced scene from being rebuilt. Now only that style is left out for that frame.
 - **Frame Generation.** A stale record of a destroyed Frame Generation input is now removed.
+- **Fewer pauses when RTX Hair loads a hair style.** When memory for hair was short, a style could be read and
+  unpacked up to 9 times (about 1 second in one player log, with pauses over 100 ms). It is now unpacked once.
+  This is fixed offline; it is not yet confirmed in play.
 
 ## RTX Hair (beta, off by default)
 
@@ -104,6 +107,9 @@ Known limits of RTX Hair:
 - Video memory after a fast zoom out in a large interior: ray-tracing structures held 2.3 to 2.7 GB for 0.65 to
   0.8 GB in use at the inn. It falls back to about 0.9 to 1.0 GB after the camera rests for about 15 seconds.
 - There are still no tested video memory recommendations for any card. Start with Low and raise step by step.
+- A game start can spend 15 to 50 seconds longer creating shaders, also with RTX Hair off: BG3RTX makes hair shader
+  variants that the driver could not reuse from the last start in 18 of 25 test starts (17 and 20 seconds in two
+  player logs). A fix is built but off by default and not yet tested.
 - The new launcher window is new in this version. If it misbehaves, please report it.
 - Act 2 and most of Act 3 are not systematically tested. Sessions of several hours are not tested.
 - Everything listed under "Known limits of RTX Hair".

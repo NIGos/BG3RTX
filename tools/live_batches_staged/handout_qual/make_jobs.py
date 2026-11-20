@@ -62,9 +62,7 @@ def group(name, kind, hair=0, extra=""):
 
 def energy(state, n=3):
     """Static, exposure held, n float traces (gi_1ray_qual's shot phase): the energy check of AGENTS.md."""
-    p = pab.phase(f"energy-{state}", 14.2 + 5 * (n - 3), keys(2 if state == "on" else 0, hold=1), frames=60)
-    p.update(trace_at=[1 + 5 * i for i in range(n)], motion_start=17 + 5 * (n - 3), motion_end=17 + 5 * (n - 3))
-    return p
+    return pab.energy_phase(f"energy-{state}", keys(2 if state == "on" else 0, hold=1), n)
 
 
 def every(*a, **kw):
@@ -294,10 +292,7 @@ def main():
     made = [ultra("s8", S8, check=False), ultra("inn", INN, check=False), high("s8", S8), high("inn", INN), smoke(), energy_repeat(), check_only(), modes(), inn_fix()]
     if sys.argv[1:]:   # job names: regenerate only these (the others keep the files of their own runs)
         made = [m for m in made if m[1]["name"] in sys.argv[1:]]
-    for plan, j in made:
-        for folder, value in (("plans", plan), ("jobs", j)):
-            (HERE / folder).mkdir(exist_ok=True)
-            (HERE / folder / f"{j['name']}.json").write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8", newline="\n")
+    pab.write_made(HERE, made)
     added = pab.retime([j["name"] for _, j in made], here=HERE, measured=measured)
     for _, j in made:   # a handout toggle rebuilds every gi/ and water pipeline with constant 1051: generous warm waits
         path = HERE / "plans" / f"{j['name']}.json"

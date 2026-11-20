@@ -379,7 +379,7 @@ key off runs the unchanged SPIR-V (all 368 existing gi_trace_rt* requests byte-i
 - Counters 372-382 (per thread over its rays, wave sum, one atomic per 8x8 group into the host-visible rt_stats
   buffer; rt_stats windows only). A device-local buffer would need a new hit-GI binding (shared contract).
 
-Offline (S8 pack 071930, frame_replay `--define RT_GI_FAR=1 --define GI_FAR_M=m`, the gi_hit_direct variant: no
+Offline (S8 pack 071930, frame_replay `--define RT_GI_FAR=1 --define GI_FAR_M=m` (that define is removed since 2026-11-20: today `--push radius=m`), the gi_hit_direct variant: no
 sun set, 0 qualified hits since the pack has no VT cache, so only the screen tier is exercised):
 
 | R | bounce luminance | giRaw.a | GPU ms, 2.73 Mpx (rt_stats 0) | at 4K Performance |
@@ -428,7 +428,7 @@ the replay still needs the asset-DB roof volumes: `PT_ROOFS=1` for the PT, and f
   1/15 of the game's radiance at visible hits (S8 is lit by the native ambient). Native vs PT far + env:
   E x AO / (k x PT far + env) **1.44** (tiles p10 0.90, median 1.75, p90 3.01); E / ref 1.76; k = 1: 1.91.
   The preliminary 0.70 (no roofs) flips: sun through the cut roofs made the old reference too bright.
-- Emulation: the gi_hit_sun pass with `RT_GI_FAR=1 GI_FAR_M=6` on the pack reproduces the live `GI far` line
+- Emulation: the gi_hit_sun pass with `RT_GI_FAR=1 GI_FAR_M=6` (today `--push radius=6`) on the pack reproduces the live `GI far` line
   (ambient visibility 0.8326 vs live 0.8343, old rule 0.8790 vs 0.8803; bounce 0.0146 vs 0.0147, old 0.0090 vs
   0.0092; screen hits beyond 1 m 5.1% of rays vs 5.0%). Qualified sun-lit far hits 0.10% (live 0.28%: the volume
   rule is stricter than the casters).

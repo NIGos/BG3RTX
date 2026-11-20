@@ -320,11 +320,12 @@ frame_replay --pt-self-test <dir>                                               
   vertex with the fallback material and the triangle's normal. The near rule lets paths leaving a wall within
   0.5 m of a roof pass it (-0.6% in the test box). The parameters line says `PT_CASTERS=1 (the pack's cascade
   casters: <n> triangles)`.
-- gi_far offline: `--define RT_GI_FAR=1 --define GI_FAR_M=6` runs the pass with the far rule (the pack's push holds
-  the base pass's radius; GI_FAR_M stands in for gi_far_m). The live path instead: `--define RT_GI_FAR=1 --push radius=6`.
+- gi_far offline: `--define RT_GI_FAR=1 --push radius=6` runs the pass with the far rule (the pack's push holds
+  the base pass's radius; `radius` stands in for gi_far_m, as the core sets it live). The `GI_FAR_M` define was
+  removed on 2026-11-20 (claude/final-core); the release requests take the far rule as constant 1007 (`--spec 1007=1`).
 - `--push FIELD=VALUE` (repeatable) overwrites one field of the pack's push before the dispatch: `radius`,
   `rays`, `gi_rt_radius`, `rt_stats`. S8 pack 142819-1, hit_sun + RT_GI_FAR, push radius 6: giRaw.a 0.8320 with rt_stats 0
-  and 1 (key off 0.8790), the same as the GI_FAR_M define (2026-11-02).
+  and 1 (key off 0.8790), the same as the former GI_FAR_M define (2026-11-02).
 - gi_hit_sun / gi_far with the sun tier: `--hlsl shaders/gi/gi_trace_rt_hit_sun.hlsl --sun-trust <file>`. The sun
   variant also reads the D-LS sun set's b8 (trust header + roof volumes, core/sun_trust.h), which the pack lacks:
   `py -3 tools/pt_roofs.py --pack <dir> --level <name> --trust <file>` writes it (padded as core/sun_trust.cpp:

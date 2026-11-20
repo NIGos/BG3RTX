@@ -8,7 +8,6 @@ fl-header-early: two launches (repeat 2) with rt_hair_header_early=1 from the st
 strand variants' pipeline time of each launch are read from the logs. predicted.json precedes the jobs. Helpers are
 perf_ab's and vram_rightsize's (one copy). Nothing here writes a watched queue inbox.
 """
-import json
 from pathlib import Path
 import sys
 
@@ -31,10 +30,7 @@ def keys(on, hold=0):
 
 def energy(state, on):
     """Static, exposure held, TRACES float traces (vram_rightsize's energy phase)."""
-    p = pab.phase(f"energy-{state}", 14.2 + 5 * (TRACES - 3), keys(on, hold=1), frames=60)
-    p.update(trace_at=[1 + 5 * i for i in range(TRACES)], motion_start=17 + 5 * (TRACES - 3),
-             motion_end=17 + 5 * (TRACES - 3))
-    return p
+    return pab.energy_phase(f"energy-{state}", keys(on, hold=1), TRACES)
 
 
 def holdpack_job():
@@ -87,11 +83,7 @@ def measured(p):
 def main():
     assert (HERE / "predicted.json").exists(), "predicted.json precedes the jobs"
     made = [holdpack_job(), header_job()]
-    for plan, j in made:
-        for folder, value in (("plans", plan), ("jobs", j)):
-            (HERE / folder).mkdir(exist_ok=True)
-            (HERE / folder / f"{j['name']}.json").write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8",
-                                                             newline="\n")
+    pab.write_made(HERE, made)
     added = pab.retime([j["name"] for _, j in made], here=HERE, measured=measured)
     print("Generated", ", ".join(j["name"] for _, j in made), f"- no queue staging; {added} new entries appended to "
           "lint_corpus_snapshot.json")

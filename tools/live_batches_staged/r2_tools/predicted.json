@@ -1,0 +1,21 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-20, branch claude/r2-tools. STAGED, not queued, not authorized.",
+  "question": "With gi_far_roof_emission=1 (specialization 1054), is the emission of hidden hits beyond the base radius seen through a cut-away roof dropped, so the inn's GI gets equal or less energy and moves closer to the PT reference, at no cost?",
+  "evidence": "docs/progress/claude-final-core.md: the screen branch already drops far rays through a padded roof volume (shaders/gi/gi_trace_rt.hlsl, gi_far_roof_clear); the hidden-hit emission branch kept them (HANDOFF 2026-11-15 'kept in one branch and dropped in the other'). Off: identity proven (6 hit_sun_em requests, 1054 frozen to 0, equal after the spirv_equivalence normalizer).",
+  "noise_rule": "Every threshold is the OFF repeat of the same run (off-b against off-a); materiality floors of tools/live_batches/sane_gates.py (cost max(0.1 ms, 1%), energy 0.5%).",
+  "predicted": {
+    "gi_ms": "GI GPU ms (gi: GPU cost, trace pass) of static-on within the OFF pair's range plus max(0.1 ms, 1%): the roof loop runs only for an emitter beyond R0 (1 m) with radiance > 0.",
+    "energy": "Mean of the pre-post scene colour (dumps.json float traces) of energy-on equal to or below the OFF pair's range, never above it by more than 0.5%. A fall beyond 0.5% is expected only if outside emitters (street lamps, windows) reach the GI through the cut roof at this camera; it is then judged by the PT reference, not by itself.",
+    "pack": "One '[replay] pack 1 written: ... pass gi_hit_direct' line in diag-pack, at most 2048 MB, with the casters directive (rt_cascade_casters=1 in Ultra).",
+    "faults": "0: no VK_ERROR, no crash, no core fault, no replay failure."
+  },
+  "offline": {
+    "steps": [
+      "py -3 tools/pt_roofs.py --pack <pack> --trust <scratch>/trust.bin (level from the pack's camera)",
+      "bin/frame_replay --pack <pack> --hlsl shaders/gi/gi_trace_rt_hit_sun.hlsl --sun-trust <scratch>/trust.bin --push radius=6 --ab-spec 1054=0,1 --out <scratch>/ab",
+      "bin/frame_replay --pack <pack> --pt-reference <scratch>/pt (the PT reference of the same frame)"
+    ],
+    "predicted": "giRaw of 1054=1 equal to 1054=0 except at pixels whose hidden-hit emitter lies beyond R0 behind a roof volume; there 1054=1 is lower and its mean absolute difference to the PT reference is lower than 1054=0's. If no pixel changes, the inn camera sees no such emitter: say so, and the key stays off (no evidence for a default)."
+  },
+  "decision": "gi_far_roof_emission becomes a default candidate (Ultra, where gi_far is on) if the PT distance falls, energy does not rise and GI ms stay within noise plus floor. Higher energy with 1, or a PT distance that rises: the hypothesis is wrong; write it down and keep 0."
+}

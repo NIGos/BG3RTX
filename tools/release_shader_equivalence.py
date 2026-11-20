@@ -11,8 +11,16 @@ every address without choosing artificial numeric values. This domain contract
 is pinned to the reviewed bundle35 settings policy and fails closed if it changes.
 By default each entry first attempts universal symbolic equality over retained
 constants. If it succeeds, explicit all-zero/all-one specializations additionally
-exercise every retained Boolean value. Otherwise all combinations are checked.
+exercise every retained Boolean value. Otherwise all combinations are checked, up to
+the first difference, which decides the request (the rest count as failed).
 --exhaustive always checks every combination even after symbolic equality.
+--current REV compares a commit instead of this worktree (e.g. one change against its parent).
+
+A failing spirv-opt (a crash prints nothing: the exit code is named) never stops the run: the pair is retried once
+with the "single" optimizer schedule on both sides (sound: equality after the same semantics-preserving passes);
+equal there is recorded as a fallback with its reason, otherwise the entry is ERROR, naming the request, entry,
+assignment, side and stage, the input module is kept under <cache>/release_equivalence/failed/, and the next
+request continues. ERROR rows (also a worker process that died) count as failures: exit 1.
 """
 import argparse
 import concurrent.futures
@@ -34,7 +42,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.shader_identity import (Cache, Progress, SourceTree, Toolchain, compile_many,
                                    default_jobs, lower_priority, split_request, unchanged_since)
-from tools.spirv_equivalence import canonical, first_difference, specialize
+from tools.spirv_equivalence import OptError, canonical, first_difference, specialize
 
 # Reviewed release-policy contract through opt-tools2 (main f3d3c41a). Unknown removals fail closed.
 # Explicit zero overrides: guards, IP grass and generated pool rows. The others
@@ -111,20 +119,23 @@ class Normalizer:
         disassembler = tool.dxc.with_name("spirv-dis.exe").read_bytes()
         self.schema = hashlib.sha256(helper + optimizer + disassembler).hexdigest()
 
-    def get(self, blob, assign, temp, name, full=False):
+    def get(self, blob, assign, temp, name, full=False, schedule="full"):
         # Absent constants cannot affect the module, but are still assigned on
         # both sides when present. Their removal from the cache key is exact.
         ids = live_ids(blob)
         effective = {i: v for i, v in assign.items() if i in ids}
         preserve = sorted(ids - set(assign))
-        key = hashlib.sha256(blob + json.dumps([self.schema, sorted(effective.items()), preserve]).encode()).hexdigest()
+        # The default schedule keeps its historical key, so existing receipts stay valid.
+        key = hashlib.sha256(blob + json.dumps([self.schema, sorted(effective.items()), preserve] +
+                                               ([schedule] if schedule != "full" else [])).encode()).hexdigest()
         receipt = self.directory / (key + ".txt")
         if receipt.exists() and not full:
             return receipt.read_text().strip()
         src, dst = temp / (name + ".spv"), temp / (name + "-opt.spv")
         src.write_bytes(blob)
         try:
-            result = canonical(self.tool, specialize(self.tool, src, dst, effective, preserve=preserve))
+            result = canonical(self.tool, specialize(self.tool, src, dst, effective, preserve=preserve,
+                                                     schedule=schedule))
             digest = hashlib.sha256(json.dumps(result, separators=(",", ":")).encode()).hexdigest()
             pending = receipt.with_name(f"{key}.{os.getpid()}.{threading.get_ident()}.tmp")
             pending.write_text(digest)
@@ -152,6 +163,39 @@ def certificate_values(values, universal, exhaustive=False):
     return [values[0], values[-1]]
 
 
+def keep_failed(directory, blob):
+    """The input module of a failed spirv-opt run, content addressed, for a by-hand repro."""
+    path = directory / "failed" / (hashlib.sha256(blob).hexdigest()[:16] + ".spv")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_bytes(blob)
+    return path
+
+
+def normalized_pair(normalizer, a, b, assign, temp, full=False):
+    """(old, new, fallback): both sides under the default schedule; when spirv-opt fails on either side, both
+    again under the "single" schedule (the same passes on both sides, so equality stays a proof). Raises
+    OptError (with .side and .module) when the fallback fails too; fallback names the first failure."""
+    def both(schedule):
+        out = []
+        for side, blob, name in (("baseline", a, "old"), ("current", b, "new")):
+            try:
+                out.append(normalizer.get(blob, assign, temp, name, full=full, schedule=schedule))
+            except OptError as e:
+                e.side, e.module = side, keep_failed(normalizer.directory, blob)
+                raise
+        return out
+    try:
+        return (*both("full"), None)
+    except OptError as e:
+        reason = f"{e.side} {e} (module {e.module})"
+    try:
+        return (*both("single"), reason)
+    except OptError as e:
+        e.first = reason
+        raise
+
+
 def check_request(item):
     """One process per active request avoids the Python canonicalizer's GIL.
 
@@ -162,49 +206,75 @@ def check_request(item):
     exhaustive = item[4] if len(item) > 4 else False
     normalizer = _WORKER_NORMALIZER
     first = ""
+    error = ""
     certificates = []
+    fallbacks = []
     actual_checks = 0
     actual_frozen_checks = 0
+    reported = 0
     with tempfile.TemporaryDirectory(prefix="b3eq-") as tmp:
         temp = Path(tmp)
         for entry, a, b, values in entries:
             if not values:
                 continue
-            # Leave retained constants symbolic. Canonical equality is then
-            # universal, not evidence inferred from a few sampled assignments.
-            universal_assign = ((item[5] if len(item) > 5 else {}) |
-                                {i: 0 for i in REMOVED_KEYS} | {1008: 0})
-            universal = (normalizer.get(a, universal_assign, temp, "old") ==
-                         normalizer.get(b, universal_assign, temp, "new"))
-            actual_checks += 1
-            selected = certificate_values(values, universal, exhaustive)
-            certificates.append({"entry": entry, "universal_certificate": universal,
-                                 "cartesian_assignments": len(values), "explicit_checks": len(selected),
-                                 "checked_values": {i: sorted({a[i] for a in selected}) for i in values[0]}})
-            entry_bad = False
-            for assign in selected:
-                da = normalizer.get(a, assign, temp, "old")
-                db = normalizer.get(b, assign, temp, "new")
+            assign = ((item[5] if len(item) > 5 else {}) | {i: 0 for i in REMOVED_KEYS} | {1008: 0})
+            try:
+                # Leave retained constants symbolic. Canonical equality is then
+                # universal, not evidence inferred from a few sampled assignments.
+                da, db, fallback = normalized_pair(normalizer, a, b, assign, temp)
+                if fallback:
+                    fallbacks.append({"entry": entry, "assignment": "symbolic", "reason": fallback})
+                universal = da == db
                 actual_checks += 1
-                actual_frozen_checks += 1
-                bad = da != db
-                entry_bad |= bad
-                if bad and not first:
-                    ca = normalizer.get(a, assign, temp, "old", full=True)
-                    cb = normalizer.get(b, assign, temp, "new", full=True)
-                    first = f"{entry} {assign}: {first_difference(ca, cb)}"
-                    print(f"DIFFERENT: {r}: {first}", flush=True)
-                _WORKER_PROGRESS.put(bad)
-            # These states are proven by symbolic equality; the row records
-            # their coverage separately from the actual normalization checks.
-            if universal and len(selected) < len(values):
-                for _ in range(len(values) - len(selected)):
-                    _WORKER_PROGRESS.put(entry_bad)
-    return r, {"state": "DIFFERENT" if first else "equivalent", "assignments": count,
+                selected = certificate_values(values, universal, exhaustive)
+                certificates.append({"entry": entry, "universal_certificate": universal,
+                                     "cartesian_assignments": len(values), "explicit_checks": len(selected),
+                                     "checked_values": {i: sorted({a[i] for a in selected}) for i in values[0]}})
+                entry_bad = False
+                for assign in selected:
+                    da, db, fallback = normalized_pair(normalizer, a, b, assign, temp)
+                    if fallback:
+                        fallbacks.append({"entry": entry, "assignment": assign, "reason": fallback})
+                        print(f"FALLBACK: {r}: {entry} {assign}: one optimizer round on both sides after {fallback}",
+                              flush=True)
+                    actual_checks += 1
+                    actual_frozen_checks += 1
+                    bad = da != db
+                    entry_bad |= bad
+                    if bad and not first:
+                        ca, cb, _ = normalized_pair(normalizer, a, b, assign, temp, full=True)
+                        first = f"{entry} {assign}: {first_difference(ca, cb)}"
+                        print(f"DIFFERENT: {r}: {first}", flush=True)
+                    _WORKER_PROGRESS.put(bad)
+                    reported += 1
+                    # The first difference decides the request. Without --exhaustive the rest of a failed
+                    # universal check's Cartesian cross (2^13 = 8192 assignments per hit_sun_em entry, about 4
+                    # spirv-opt runs each: an ETA of 13 h on 2026-11-20) is counted as failed, not ground through.
+                    if first and not exhaustive:
+                        break
+                if first and not exhaustive:
+                    break
+                # These states are proven by symbolic equality; the row records
+                # their coverage separately from the actual normalization checks.
+                if universal and len(selected) < len(values):
+                    for _ in range(len(values) - len(selected)):
+                        _WORKER_PROGRESS.put(entry_bad)
+                        reported += 1
+            except OptError as e:
+                # Not provable: name it, keep the module, and let the other requests run.
+                error = (f"{entry} {assign}: {e.side} module {e.module}: {e}"
+                         + (f"; first try: {e.first}" if getattr(e, "first", "") else ""))
+                print(f"ERROR: {r}: {error}", flush=True)
+                break
+    for _ in range(count - reported):   # the rest of this request is unproven: count it as failed
+        _WORKER_PROGRESS.put(True)
+    state = "ERROR" if error else "DIFFERENT" if first else "equivalent"
+    return r, {"state": state, "assignments": count,
                "symbolic_constants": symbolic,
                "normalized_pair_checks": actual_checks, "certificates": certificates,
                "actual_frozen_checks": actual_frozen_checks,
-               **({"detail": first} if first else {})}
+               **({"fallbacks": fallbacks} if fallbacks else {}),
+               **({"detail": error or first} if error or first else {})}
 
 
 def drain_progress(queue, progress):
@@ -215,6 +285,7 @@ def drain_progress(queue, progress):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--baseline", required=True)
+    ap.add_argument("--current", metavar="REV", help="compare this commit instead of the worktree")
     ap.add_argument("--jobs", type=int, default=default_jobs())
     ap.add_argument("--filter")
     ap.add_argument("--json")
@@ -227,7 +298,7 @@ def main(argv=None):
     start = time.monotonic()
     tool, cache = Toolchain(), Cache()
     base = SourceTree.commit(args.baseline).with_sharc(tool.sharc)
-    new = SourceTree.worktree(ROOT).with_sharc(tool.sharc)
+    new = (SourceTree.commit(args.current) if args.current else SourceTree.worktree(ROOT)).with_sharc(tool.sharc)
     try:
         removed = (registry_ids(base) - registry_ids(new)) | (shader_ids(base) - shader_ids(new))
         if not removed <= set(REMOVED_KEYS):
@@ -283,9 +354,14 @@ def main(argv=None):
             try:
                 with concurrent.futures.ProcessPoolExecutor(args.jobs, mp_context=context,
                         initializer=initialize_worker, initargs=(normalizer, queue)) as pool:
-                    futures = [pool.submit(check_request, item) for item in comparisons]
+                    futures = {pool.submit(check_request, item): item for item in comparisons}
                     for future in concurrent.futures.as_completed(futures):
-                        r, row = future.result()
+                        try:
+                            r, row = future.result()
+                        except Exception as e:   # a worker died (BrokenProcessPool) or raised: name the request
+                            r = futures[future][0]
+                            row = {"state": "ERROR", "assignments": futures[future][2],
+                                   "detail": f"worker failed: {type(e).__name__}: {e}"}
                         rows[r] = row
                         print(f"{row['state']}: {r}" + ("\n" + row["detail"] if "detail" in row else ""), flush=True)
             finally:
@@ -303,8 +379,10 @@ def main(argv=None):
             assign = {i: 0 for i in live_ids(control) if i in registry_ids(base)}
             control_ok = (normalizer.get(control, assign, Path(tmp), "off") !=
                           normalizer.get(control, assign | {1000: 1}, Path(tmp), "on"))
-        unchanged_since(new)
-        counts = {s: sum(row["state"] == s for row in rows.values()) for s in ("identical", "equivalent", "DIFFERENT")}
+        if not args.current:
+            unchanged_since(new)
+        counts = {s: sum(row["state"] == s for row in rows.values())
+                  for s in ("identical", "equivalent", "DIFFERENT", "ERROR")}
         for r in reqs:
             if rows[r]["state"] == "identical" or "assignments" not in rows[r]:
                 print(f"{rows[r]['state']}: {r}" + ("\n" + rows[r]["detail"] if "detail" in rows[r] else ""), flush=True)
@@ -324,7 +402,7 @@ def main(argv=None):
                                                   "normalized_pair_checks": actual, "universal_certificates": universal_count,
                                                   "actual_frozen_checks": frozen, "symbolic_checks": symbolic_checks,
                                                   "assignments": total, "requests": rows}, indent=2))
-        return int(bool(counts["DIFFERENT"] or not control_ok))
+        return int(bool(counts["DIFFERENT"] or counts["ERROR"] or not control_ok))
     finally:
         base.cleanup()
         new.cleanup()

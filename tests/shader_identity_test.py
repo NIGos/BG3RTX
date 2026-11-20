@@ -526,7 +526,7 @@ check(se.differ((["A", "A", "B"], []), (["A", "B", "B"], [])) > 0,
 check("<absent>" in se.first_difference(([], ["OpReturn"]), ([], [])), "first difference reports removed instruction")
 with tempfile.TemporaryDirectory() as td:
     target = Path(td) / "optimized.spv"
-    with patch.object(se, "opt", side_effect=lambda tool, src, dst, *passes: dst) as optimize:
+    with patch.object(se, "opt", side_effect=lambda tool, src, dst, *passes, **stage: dst) as optimize:
         check(se.specialize(None, Path(td) / "input.spv", target, {1025: 0, 1000: 1}) == target,
               "shared specializer returns optimized destination")
         calls = optimize.call_args_list
@@ -593,7 +593,7 @@ with tempfile.TemporaryDirectory() as td:
           "selective freeze converts all other numeric and Boolean scalars")
     check(((6 << 16) | 52, 3, 15, 128, 10, 11) in decoded,
           "derived specialization operation remains for dependency-aware folding")
-    with patch.object(se, "opt", side_effect=lambda tool, src, dst, *passes: dst) as optimize:
+    with patch.object(se, "opt", side_effect=lambda tool, src, dst, *passes, **stage: dst) as optimize:
         se.specialize(None, source, Path(td) / "out.spv", {}, preserve={1100, 1101})
         check(all("--freeze-spec-const" not in c.args for c in optimize.call_args_list),
               "symbolic normalization never invokes blanket freeze pass")
@@ -627,7 +627,7 @@ check(rse.certificate_values(accelerator_values, True, exhaustive=True) == accel
       "exhaustive mode retains every Cartesian assignment despite universal equality")
 for universal in (True, False):
     normalization_calls = []
-    def accelerator_get(blob, assign, temp, name, full=False):
+    def accelerator_get(blob, assign, temp, name, full=False, schedule="full"):
         normalization_calls.append((blob, dict(assign), full))
         if 1003 not in assign and not universal:
             return blob
@@ -647,7 +647,7 @@ for universal in (True, False):
         events.append(progress_queue.get_nowait())
     check(events == [False] * 4, "worker reports exact Cartesian coverage without false failures")
 # A failed symbolic proof must expose an interior Cartesian difference, not only endpoints.
-def interior_difference_get(blob, assign, temp, name, full=False):
+def interior_difference_get(blob, assign, temp, name, full=False, schedule="full"):
     if 1003 not in assign:
         return blob
     different = assign[1003] == 1 and assign[1004] == 0
@@ -657,6 +657,7 @@ def interior_difference_get(blob, assign, temp, name, full=False):
 with patch.object(rse, "_WORKER_NORMALIZER", SimpleNamespace(get=interior_difference_get)), \
      patch.object(rse, "_WORKER_PROGRESS", SimpleQueue()):
     _, row = rse.check_request(("test", [("main", b"old", b"new", accelerator_values)], 4, []))
-check(row["state"] == "DIFFERENT" and "OpStore changed" in row["detail"] and row["actual_frozen_checks"] == 4,
+# The first difference decides the request (claude/r2-tools): the interior (1003=1, 1004=0) is the third of four.
+check(row["state"] == "DIFFERENT" and "OpStore changed" in row["detail"] and row["actual_frozen_checks"] == 3,
       "failed symbolic proof detects an interior differing assignment with instruction detail")
 print(f"shader_identity_test: {checks} checks passed")

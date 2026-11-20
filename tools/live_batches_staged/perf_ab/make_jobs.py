@@ -88,6 +88,25 @@ def phase(label, seconds, settings, frames=None):
     return p
 
 
+def energy_phase(label, settings, traces=3):
+    """Static energy window (AGENTS.md energy check, gi_1ray_qual's shot phase): exposure held by the caller's settings
+    (qa_exposure_hold=1), `traces` float traces 5 s apart, 60 frames. handout_qual, vram_rightsize, final_layer and
+    r2_tools share it."""
+    p = phase(label, 14.2 + 5 * (traces - 3), settings, frames=60)
+    p.update(trace_at=[1 + 5 * i for i in range(traces)], motion_start=17 + 5 * (traces - 3),
+             motion_end=17 + 5 * (traces - 3))
+    return p
+
+
+def write_made(here, made):
+    """Write each generated (plan, job) to <here>/plans and <here>/jobs as LF JSON (every staged generator)."""
+    for plan, job in made:
+        for folder, value in (("plans", plan), ("jobs", job)):
+            (here / folder).mkdir(exist_ok=True)
+            (here / folder / f"{job['name']}.json").write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8",
+                                                               newline="\n")
+
+
 def every(name, select, match, windows, **kw):
     return {"name": name, "select": select, "match": match, "windows": windows, "period_frames": PERIOD,
             "sample_frames": PERIOD, "min": 2, **kw}
@@ -235,11 +254,7 @@ def wide_split_job(value):
 def main():
     assert (HERE / "predicted.json").exists(), "predicted.json precedes the jobs"
     made = [hair_job("s8", S8), hair_job("inn", INN), wide_split_job(0), wide_split_job(1), dlss5_job()]
-    for plan, job in made:
-        for folder, value in (("plans", plan), ("jobs", job)):
-            (HERE / folder).mkdir(exist_ok=True)
-            (HERE / folder / f"{job['name']}.json").write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8",
-                                                               newline="\n")
+    write_made(HERE, made)
     # The focused jobs take live_flow's timing (readiness waits, frame-window seconds); the wide-split jobs keep
     # opt_profile's own timing, which their source already carries.
     added = retime([job["name"] for _, job in made if "wide-split" not in job["name"]])

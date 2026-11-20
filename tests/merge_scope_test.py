@@ -61,6 +61,13 @@ class MergeScopeTests(unittest.TestCase):
         self.assertFalse(any('build.ps1' in ' '.join(c) or 'compile_shaders.py' in ' '.join(c)
                              for c in commands))
         self.assertTrue(all(c.kwargs['check'] for c in run.call_args_list))
+        # The Python tests get CTest's environment (CMakeLists.txt py_test: PYTHONPATH is the source root), so a test's
+        # `from tools...` import resolves the same here and under CTest (stream A, claude/final-layer 2026-11-20).
+        py = [c for c in run.call_args_list if c.args[0][0] == sys.executable]
+        self.assertEqual(len(py), len(TOOL_TESTS))
+        for c in py:
+            self.assertEqual(c.kwargs['env']['PYTHONPATH'], str(ROOT))
+            self.assertEqual(c.kwargs['cwd'], ROOT)
 
     def test_safety_and_scope_wiring(self):
         source = (ROOT / 'scripts/merge-green.ps1').read_text()
