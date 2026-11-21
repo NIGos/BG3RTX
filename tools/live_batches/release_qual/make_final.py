@@ -1,5 +1,6 @@
 """Prepare the final release receipts. Never enqueue or launch anything."""
 import argparse
+import math
 from copy import deepcopy
 from pathlib import Path
 import sys
@@ -74,8 +75,16 @@ def energy_phase():
                 set='qa_exposure_hold=1,rt_stats=0,rt_primary_check=0,rt_debug=0')
 
 
+def watchdog(job, plan):
+    """Five minutes including the 120 s load, raised only when the preflight's own estimate (plan + readiness
+    allowance, live_flow.duration_budget) needs more: the preflight refuses a timeout below it (2026-11-21)."""
+    budget = flow.duration_budget(job, plan)
+    job['timeout'] = max(300, math.ceil(budget['seconds'] + budget['readiness_timeout_seconds'] + 120))
+    job['max_minutes'] = math.ceil(job['timeout'] / 60)
+
+
 def retime_final(job, plan):
-    """Shared five-minute watchdog policy for final and profiling receipts."""
+    """Shared watchdog policy for final and profiling receipts."""
     flow.retime(job, plan)
     for i, (phase, state) in enumerate(zip(plan, flow.phase_states(job, plan))):
         if phase.get('frames'):
@@ -84,7 +93,7 @@ def retime_final(job, plan):
             phase['motion_start'] = min(phase.get('motion_start', 0), phase['seconds'])
         if phase.get('wait_log'):
             phase['wait_log_timeout'] = 60 if i == 0 else 10
-    job.update(timeout=300, max_minutes=5)
+    watchdog(job, plan)
 
 
 def qualify(job, plan):
@@ -178,7 +187,7 @@ def main():
         for i, p in enumerate(phases):
             if p.get('wait_log'):
                 p['wait_log_timeout'] = 60 if i == 0 else 10
-        j['timeout'] = 300
+        watchdog(j, phases)
         flow.write(path, j)
         flow.write(pp, phases)
     sources = []
