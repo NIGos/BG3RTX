@@ -24,6 +24,29 @@ def gate(name, select, match, windows, **kw):
     return dict(name=name, select=select, match=match, windows=windows, min=1, **kw)
 
 
+# The keys whose feature prints a gate's line (core/water.cpp water_rf_wanted/compose_wanted, the cascade
+# casters pass). A window whose state has one of them off never logs the line: its stats wait would hang.
+PRODUCERS = [(r'\[water\] reflections', ('rt_water_reflections',)),
+             (r'\[water\] compose stability', ('rt_water_reflections', 'rt_water_compose')),
+             (r'\[cascade\] casters', ('rt_cascade_casters',))]
+
+
+def drop_unproduced(job, plan):
+    """Keep each gate only in the windows whose exported state produces its line; drop it when none does."""
+    states = {p['label']: s for p, s in zip(plan, flow.phase_states(job, plan))}
+    kept, dropped = [], []
+    for g in job['expect_every']:
+        keys = next((k for prefix, k in PRODUCERS if g['select'].startswith(prefix)), ())
+        if keys and 'windows' in g:
+            g['windows'] = [w for w in g['windows'] if all(states[w].get(k, '0') != '0' for k in keys)]
+            if not g['windows']:
+                dropped.append(g['name'])
+                continue
+        kept.append(g)
+    job['expect_every'] = kept
+    return dropped
+
+
 def profile(exe, preset):
     return settings(subprocess.check_output([exe, preset], cwd=ROOT, text=True).replace('\n', ','))
 
