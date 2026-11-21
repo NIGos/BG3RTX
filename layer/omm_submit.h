@@ -12,6 +12,8 @@ bool tracked_recording(VkCommandBuffer);
 bool command_queue_family(VkCommandBuffer,uint32_t& family);
 bool mark_content_dispatch(VkCommandBuffer);
 bool register_ticket_use(VkCommandBuffer,uint64_t ticket);
+// As register_ticket_use, but a recording that is not (or no longer) tracked is a plain refusal, not a provenance loss.
+bool try_register_ticket_use(VkCommandBuffer,uint64_t ticket);
 bool register_record_ticket(VkCommandBuffer,uint64_t ticket); // Backend pre-record path, no callback.
 bool recorded_reference(uint64_t ticket);
 void pool_created(VkCommandPool,uint32_t family);

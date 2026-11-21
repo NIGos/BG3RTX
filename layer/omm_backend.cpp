@@ -184,6 +184,22 @@ bool register_ticket_use(VkCommandBuffer cmd,uint64_t ticket) {
   }
   return true;
 }
+// rt_scene_handout (claude/omm-diag, pure fix): the handout registers the tickets on recordings of the game that bound
+// the handed-out set earlier, and those may have ended recording (or never be tracked) by the commit. That is an
+// expected refusal: the caller downgrades the slot's traversal to the reference scene, so that recording never traces
+// the micro-maps. register_ticket_use latched `retained` for it, which turned OMM off for the whole session
+// (final-s8-ultra-high 043643: rejected at 04:37:07.397, then "OMM accelerated commits 0" in all 92 handout lines and
+// the High OMM check "compared 0"). A missing or retiring ticket still retains, as before.
+bool try_register_ticket_use(VkCommandBuffer cmd,uint64_t ticket) {
+  std::lock_guard lock(mutex);auto i=resources.find(ticket);
+  if(i!=resources.end() && i->second.life.owner_released)return false;
+  if(device_of(cmd)==device && i!=resources.end() && !i->second.life.retiring) {
+    if(register_record_ticket(cmd,ticket))return true;
+    if(!tracked_recording(cmd))return false;   // ended or untracked recording: declined, nothing referenced
+  }
+  if(!retained)log("[omm] rejected ticket use without live ticket/tracked command recording; retaining until idle");
+  retained=true;return false;
+}
 
 Ticket record(VkCommandBuffer cmd,const Input& input) {
   std::lock_guard lock(mutex);
