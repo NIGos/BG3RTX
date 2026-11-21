@@ -16,3 +16,10 @@
   window. Predicted: ON outward p99 at the inward level (37-50 ms, at most 60), scene wait max under 40 ms, no
   Streamline "Frame rate over 100 ms" lines in ON dollies, energy equal within 0.5%, GPU ms equal.
 - Open: the pool keeps evicting LODs the dolly brings back (re-decodes); a budget question, not this fix.
+- Live r4-inn.1.030500 (2026-11-21): outward dolly p99 ON 39.7-40.6 ms vs OFF 98-111, scene wait max ON 6-7 ms vs
+  OFF 163-167, every ON decode on the worker. Energy ON -1.12% (-2.5 SE), all 4 ON traces inside the OFF trace range
+  (analyzer: ok). Not the key: in the energy windows every groom LOD is resident (same LODs, 0 kept, 0 dropped, strand
+  coverage 19672 px ON between 18371 and 19343 OFF, 0.5% of the pixels), and `groom_lod` returns for a ready LOD
+  before it reads `rt_hair_groom_async`. The traces follow the firelight: luminance correlates 0.82 with the dump's
+  peak (111-776 per trace), the loss is red (R -1.6%, B -0.3%), the clipped PNG previews are equal (-0.06%). The
+  predicted rule (OFF pair widened by 0.5%) was too tight for a scene with flames: use the OFF trace range.
