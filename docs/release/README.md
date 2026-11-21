@@ -23,9 +23,15 @@ This is a beta. Expect bugs. Please report them (see "Reporting a bug").
   game version 4.1.1.7631656 (Patch 8, Hotfix 10). A new game patch can break BG3RTX until it is updated.
   GOG copies should work through **Choose game folder…** in the launcher but are untested.
 - Disk space for the extracted archive plus a growing shader cache in `%LOCALAPPDATA%\BG3RTX`.
-  Final package size and long-session cache growth are not yet qualified.
+  Long-session cache growth is not yet qualified.
 
 ## Install
+
+BG3RTX 0.9.6-beta comes as a Windows installer (`BG3RTX-0.9.6-beta-Setup.exe`) and as this ZIP; both hold the same
+files. **Installer:** close the game and run the Setup. It installs for your Windows user only, without
+administrator rights, to `%LOCALAPPDATA%\Programs\BG3RTX` and adds a Start menu entry. It is not signed, so
+Windows SmartScreen may warn. Update by running the new Setup; uninstall in Windows Settings > Apps > BG3RTX.
+Then continue at step 3. **ZIP:**
 
 1. Unzip the archive anywhere (not inside the game folder).
 2. Close the game and the BG3RTX settings window. Double-click **Install.cmd**.
@@ -112,7 +118,8 @@ It needs your own x64 `nvngx_dlssnr.dll` version 310.8 or 310.9; no DLSS 5 runti
 Before Play with Ray Reconstruction On, the launcher restores the game's DLSS upscaler,
 backs up `graphicSettings.lsx` as `.lsx.bg3rtx-bak`, and keeps an existing DLSS quality mode.
 Set `game_dlss_guard=0` in `bg3rtx_user.ini` to disable this repair.
-Change the in-game keys on the launcher's **Hotkeys** page. **Clear** disables a key and **Reset to** restores
+Change the hotkeys on the launcher's **Hotkeys** page (defaults: Ctrl+Shift+F9 all ray tracing, Ctrl+Shift+F7
+RTX Hair, Ctrl+Shift+F8 DLSS 5). **Clear** disables a key and **Reset to** restores
 its default; a key change applies at once.
 
 ## Known limits (beta)
@@ -122,8 +129,12 @@ its default; a key change applies at once.
 - Long sessions (several hours) are not tested yet. The log is capped (two files of at most 64 MB).
 - Frame generation Off/on, geometry and first capture activation need a restart (see settings guide).
 - First enabling stock hair/scalp capture compiles shaders. Expect a pause or stutter while compilation finishes.
+- The first game start after installing can spend 15 to 50 seconds longer creating hair shader variants, also with
+  RTX Hair off. Later starts reuse them from the driver's cache.
 - RTX Hair (beta): a hair style that is not converted yet stays as the game's hair; hair on distant characters
-  can look softer; a head that comes into view shows the game's hair for a few frames (about 3) first.
+  can look softer; a head that comes into view shows the game's hair for a few frames (about 3) first, or about
+  0.6 seconds when its style is loaded for the first time. Its cost is not measured across scenes yet.
+  "Convert all styles" is optional and needs a `granny2.dll` that you provide: BG3RTX never ships or downloads it.
 - VRAM pressure is a particular risk on 12-16 GB cards. Long sessions and level changes can retain memory,
   even on larger cards. See VRAM guidance above.
 - The water flicker seen at the port is also present in the game's own water. BG3RTX does not fix it.

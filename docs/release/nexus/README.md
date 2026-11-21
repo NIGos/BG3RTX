@@ -76,8 +76,9 @@ images on the Images tab.
 
 ## Before publishing
 
-- Replace `BG3RTX-0.9.0-beta-Setup.exe` in the installation section with the real file name.
+- The installation section names `BG3RTX-0.9.6-beta-Setup.exe`; change it if the uploaded file name differs.
 - Check that the launcher labels quoted in the texts still match the current launcher
-  ("Create a report…", "Preview files", "Save report…", "Choose folder…",
-  "Show experimental options", "Water surface reflections", "Strand hair edge resolve").
+  ("Create a report…", "Preview files", "Save report…", "Choose folder…", "Hotkeys", "Restart to apply",
+  "Show experimental options", "Water surface reflections", "Strand hair edge resolve"). Checked for 0.9.6-beta
+  against main 9ae2ede3 (after the launcher UX pass).
 - Check the Bugs tab is enabled on the mod page; both texts send reports there.

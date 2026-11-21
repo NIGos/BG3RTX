@@ -5,11 +5,16 @@ Faster, less memory
 - New option Low-latency scene (Performance; on in High and Ultra): the lighting no longer waits for the ray-traced scene of the same frame. Measured: the wait fell from 3.5 to 0.3 ms at Water Queen's House and from 8.5 to 2.9 ms at the inn; about 0.5 ms per frame saved on High, nothing on Ultra where the graphics card is the limit. Same image. Turning it on needs a game restart.
 - A growing ray-tracing buffer grows in bigger steps: in a recorded sequence ten large reallocations became three.
 - BG3RTX checks its shader files every 5 seconds instead of four times per second.
+- Faster game start from the second launch: the 519 hair shader variants are now reused from the driver's cache (15.4 s became 0.27 s in the test). The first start after installing still takes the full time.
+- Less work when the ray-traced scene is rebuilt: 91 MB became 36 MB copied per rebuild and the rebuild took 0.81 instead of 1.04 ms at Water Queen's House, same image.
+- Better use of ray-tracing memory near its limit: in a recorded sequence refused allocations fell from 53 to 2, and objects keep their ray-traced sun shadows when an allocation is refused. The test PC never reached the limit.
 
 Stability
 - Video memory guard: after Windows lowered the game's video memory budget once, BG3RTX could stay in its low-memory mode for the rest of the session (objects left out of ray tracing, stutter). It now recovers when the budget comes back. Not yet confirmed in a long play session.
 - A hair style that does not fit in memory no longer stops the ray-traced scene from being rebuilt; only that style is left out for that frame.
 - When memory for hair was short, RTX Hair could unpack one hair style up to 9 times (pauses over 100 ms). It is now unpacked once. Fixed offline, not yet confirmed in play.
+- Opacity micromaps (High and Ultra) work again with Low-latency scene: in the 0.9.6 test builds they were silently off. 0.9.5-beta was not affected.
+- Fixed a one-frame flicker of water reflections and shadows with Low-latency scene on.
 
 RTX Hair (beta, off by default)
 - Fixed: in 0.9.5-beta the option could be turned on but drew no strands.
@@ -18,11 +23,13 @@ RTX Hair (beta, off by default)
 - New: RTX Hair detail at distance (Full, 1/4, 1/8; off by default; applies while you play). Fewer, wider strands on small distant heads; saved about 0.08 to 0.10 ms in one scene.
 - New: RTX Hair motion stability (on in High and Ultra; restart to turn on). Hair no longer smears or trails behind moving heads.
 - Strands appear sooner after a level load: after about 70 frames instead of about 310.
-- Limits: a style that is not converted yet stays as the game's hair; hair on distant characters can look softer; a head that comes into view shows the game's hair for a few frames (about 3) first.
+- Smoother in crowded rooms: hair styles are unpacked in the background. At the inn the slowest frames while the camera pulled back fell from about 100 ms to 40 ms.
+- Limits: a style that is not converted yet stays as the game's hair; hair on distant characters can look softer; a head that comes into view shows the game's hair for a few frames (about 3) first, about 0.6 seconds when its style is loaded for the first time.
 
 Launcher
 - New window: pages in a sidebar, settings in groups, a detail panel with what a setting does and costs.
-- A setting applies when you click it. There is no Save button; a strip at the bottom offers Undo. Settings that need a game restart carry a Restart badge. Without Microsoft WebView2 the basic window opens instead and keeps its Save button.
+- A setting applies when you click it. There is no Save button; a strip at the bottom offers Undo. Settings that need a game restart carry an amber badge ("Restart to apply", "Restart to turn on", "Restart for some choices"). Without Microsoft WebView2 the basic window opens instead and keeps its Save button.
+- Clearer pages: long choices sit under their text, the detail panel lists each preset on its own line, and the in-game keys are called Hotkeys everywhere.
 - Rendered frame limit starts at 58 fps when turned on (was 30). All pages are reachable in a narrow window.
 - The window shows the version of the installed package.
 - Create a diagnostic report is on Home; the report can include your latest save if you tick it (off by default).
@@ -32,5 +39,5 @@ Known
 - Tested only on an RTX 5090 with driver 621.01.
 - RTX Hair cost is not measured across scenes yet. Strand edges can still show light dithering in motion.
 - After a fast zoom out in a large interior, ray-tracing memory stays high for about 15 seconds.
-- A game start can spend 15 to 50 seconds longer creating shaders (hair shader variants the driver could not reuse from the last start), also with RTX Hair off. A fix is built but not yet tested.
+- The first game start after installing can spend 15 to 50 seconds longer creating hair shader variants, also with RTX Hair off. Later starts reuse them.
 - The DLSS 5 runtime is not included; you provide it.
