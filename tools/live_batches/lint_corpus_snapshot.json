@@ -111857,6 +111857,21 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, emission variant",
+        "\\[em\\] last \\d+ builds, .*; emissive (?:[1-9]\\d*\\.\\d|0\\.[1-9])"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -114711,6 +114726,14 @@
       null
     ],
     "hit emission: first hit-GI dispatch with the emissive scene \\(sun 1, sharc 0\\)": [
+      0,
+      null
+    ],
+    "\\[em\\] last \\d+ builds, .*; emissive (?:[1-9]\\d*\\.\\d|0\\.[1-9])": [
+      0,
+      null
+    ],
+    "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, emission variant": [
       0,
       null
     ]

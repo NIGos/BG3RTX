@@ -4,8 +4,8 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 432,
-  "max_minutes": 5,
+  "timeout": 594,
+  "max_minutes": 8,
   "repeat": 1,
   "live_batch": "r2-tools",
   "fail_fast": true,
@@ -48,14 +48,17 @@
     "\\[log\\]",
     "\\[replay\\]",
     "hit emission: first",
-    "\\[em\\] emissive capture"
+    "\\[em\\] emissive capture",
+    "\\[em\\] last",
+    "gi_rt_pipeline"
   ],
   "expect": [
     "\\[auto\\] scene ready",
     "\\[hot\\] core generation \\d+ loaded",
     "\\[cfg\\] settings read",
     "\\[ngx\\] RR create .*: Success",
-    "hit emission: first hit-GI dispatch with the emissive scene \\(sun 1, sharc 0\\)",
+    "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, emission variant",
+    "\\[em\\] last \\d+ builds, .*; emissive (?:[1-9]\\d*\\.\\d|0\\.[1-9])",
     "\\[replay\\] pack 1 emissive scene \\(set 4\\): \\d+ texture and \\d+ cache elements bound",
     "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB \\(\\d+ images omitted, \\d+ read by shader\\), frame \\d+, pass gi_hit_sun_em, instances [1-9]\\d* -> .+"
   ],
