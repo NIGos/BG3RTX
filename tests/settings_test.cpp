@@ -1576,7 +1576,7 @@ static void test_release_rtx_hair() {
       CHECK_EQ(get(fresh, "rt_hair_pixel_lod"), "0");
       CHECK_EQ(get(fresh, "rt_hair_mv_card"), p == kLow || p == kMedium ? "0" : "2");   // motion stability: High, Ultra (and the packaged default)
       for (const char* diag : {"rt_hair_dense_sample", "rt_hair_card_fill", "rt_hair_groom_async", "rt_as_chunk_fit",
-                                "rt_hold_pack_base", "rt_hair_header_early", "gi_far_roof_emission"})
+                                "rt_hold_pack_base", "rt_hair_header_early", "gi_far_roof_emission", "rt_mesh_pool_trim_move"})
         CHECK_EQ(std::string(diag) + "=" + get(fresh, diag), std::string(diag) + "=0");
       if (p < 0) continue;
       for (const char* opt : {"0", "1"}) {

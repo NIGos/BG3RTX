@@ -34,6 +34,35 @@ class FinalReleaseTests(unittest.TestCase):
                             # A frozen-model 3.8 s regression must remain refused.
                             self.assertGreater(schedules[phase['label']][-1], 3.8)
 
+    def test_gates_without_a_producer_in_the_profile_are_dropped(self):
+        from tools.live_batches.release_qual import make_jobs as release
+        job = dict(set='rt_water_reflections=1,rt_water_compose=0,rt_cascade_casters=1', expect_every=[
+            release.gate('water traced', r'\[water\] reflections \(\d+ frames, ', 'x', ['a', 'b']),
+            release.gate('compose', r'\[water\] compose stability \(\d+ frames\)', 'x', ['a', 'b']),
+            release.gate('cascade', r'\[cascade\] casters: cascade \d+', 'x', ['a', 'b']),
+            release.gate('scene wait', r'\[rt\] scene wait: \d+ frames', 'x', ['a', 'b'])])
+        plan = [dict(label='a'), dict(label='b', set='rt_cascade_casters=0')]
+        self.assertEqual(release.drop_unproduced(job, plan), ['compose'])
+        self.assertEqual({g['name']: g['windows'] for g in job['expect_every']},
+                         {'water traced': ['a', 'b'], 'cascade': ['a'], 'scene wait': ['a', 'b']})
+
+    def test_staged_final_gates_only_windows_that_produce_their_line(self):
+        # 2026-11-21: the High half kept the Ultra water/cascade gates; its stats wait never ended.
+        from tools.live_batches.release_qual import make_jobs as release
+        path = ROOT / 'tools/live_batches_staged/release_final/final/jobs/final-s8-ultra-high.json'
+        job, plan, _ = flow.load_job(path)
+        states = {p['label']: s for p, s in zip(plan, flow.phase_states(job, plan))}
+        for g in job['expect_every']:
+            keys = next((k for prefix, k in release.PRODUCERS if g['select'].startswith(prefix)), ())
+            for w in g.get('windows', []) if keys else []:
+                with self.subTest(gate=g['name'], window=w):
+                    self.assertTrue(all(states[w].get(k, '0') != '0' for k in keys))
+        for phase in plan:
+            for rx in phase.get('wait_stats', []):
+                keys = next((k for prefix, k in release.PRODUCERS if rx.startswith(prefix)), ())
+                with self.subTest(window=phase['label'], wait=rx):
+                    self.assertTrue(all(states[phase['label']].get(k, '0') != '0' for k in keys))
+
     def test_preset_reset_uses_resolved_values_and_target_pipelines(self):
         job, plan, _ = flow.load_job(HERE/'final/jobs/final-s8-ultra-high.json')
         reset = next(p for p in plan if p['label'].endswith('settings-reset'))
