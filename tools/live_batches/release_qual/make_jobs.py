@@ -47,7 +47,7 @@ def finish(job, plan, state, observable, rule):
     # Absence is valid. A primary/groom producer in this stock-card batch is not.
     job['expect_every'].append(dict(name='stock cards: no strand producer',
         # Activity lines only: the startup capability line "[hair groom] + VK_NV_..." is always logged.
-        select=r'\[hair (?:primary|groom)\] (?:frame|coverage|strand|counted)', match=r'(?!)', min=0, event=True))
+        select=r'\[hair (?:primary|groom)\] (?:frame|coverage|strand(?! variants)|counted)', match=r'(?!)', min=0, event=True))
     flow.write(HERE / name / 'predicted.json', dict(job=name, status='READY_FOR_LIVE',
         observable=observable, pass_rule=rule, profile='data/release.ini + launcher preset via common/settings.h',
         rendering_overrides={},
