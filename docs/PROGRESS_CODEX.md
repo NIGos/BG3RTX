@@ -1,14 +1,12 @@
-# BG3RTX progress - 2026-11-21 (main 41a5e7f8)
+# BG3RTX progress - 2026-11-21 (main e4a041c6: launcher UX pass merged)
 
 ## Questions for the user (conservative options taken)
 OMM works again in High and Ultra (it was off since 2026-11-14 by a bug). Measured in one run: Ultra cheaper (GI
 -0.33 ms), High dearer (RT +0.14..+0.20 ms, GI +0.13..+0.22 ms), image equal. Keep OMM in High (release profile of
 2026-11-04), or turn it off in High (`rt_omm=0` in the High preset, needs a restart A/B not yet run)?
 
-`gi_far_roof_emission`: its PT A/B became testable overnight (emission packs), but the first replay of the inn pack lost
-the GPU device (cause found and fixed: the replay used the live TLAS address from the handout stamp). By the GPU crash rule it
-was not rerun. Rerun it with the fix (pack kept: .claude/worktrees/test-main/captures/replay-20261121-071523-1, 1.6 GB),
-or delete the pack and leave the key off? Taken: off, pack kept.
+`gi_far_roof_emission`: PT verdict CLOSER (0.406 -> 0.039 on the 0.04% of pixels it changes), but it costs 0.7-1 ms of
+GI/RT in Dialogue1 (A/B in one run). Turn it on anyway (`claude/roof-em-on` is ready)? Taken: off.
 
 Live tests: allowed overnight by the user's /goal of 2026-11-21 only; a new session must ask again.
 State and next steps: [HANDOFF_SESSION](HANDOFF_SESSION.md). Release check: [RC_CHECK](release/RC_CHECK.md).
@@ -16,6 +14,52 @@ Full text of the 2026-11-21 entries (every branch fragment of the night) and of 
 [archive 2026-11-21](archive/PROGRESS_CODEX_2026-11-21.md); older: [2026-11-20](archive/PROGRESS_CODEX_2026-11-20.md),
 [2026-11-15](archive/PROGRESS_CODEX_2026-11-15.md), [2026-11-14](archive/PROGRESS_CODEX_2026-11-14.md).
 Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
+
+## gi_far_roof_emission: PT verdict CLOSER, cost A/B FAIL, kept off (coordinator, 2026-11-21)
+
+- PT A/B on the inn emission pack (rerun approved by the user): 1128 of 2.73 M GI pixels change, none brighter; on them
+  mean |emission - PT| 0.406 -> 0.039, all 55 tiles closer. Replay fidelity to live: 94.4% of components bit-equal.
+- Release smoke with the key on (claude/roof-em-on): S8 29/29, Dialogue1 15/15.
+- Cost A/B in one run, Test Dialogue1 Ultra static (r2-d1-roof-em 080726): GI trace OFF 7.85 / 8.40, ON 8.85 ms
+  (+0.73, noise 0.56: FAIL); RT passes OFF 9.64 / 10.31, ON 11.05 ms (+1.08: FAIL); energy -0.39% (ok).
+  The inn A/B had equal GI ms. Kept off: a physically correct change on about 0.04% of pixels for 0.7-1 ms in an
+  outdoor scene. `claude/roof-em-on` (default 1, smoke regenerated) is ready if the user wants it.
+- Driver event 153 (nvlddmkm, "Error occurred on GPUID: 100") seen during one S8 run and outside any game (67 in 7 days
+  on this PC): INFO, no Vulkan error in the game logs.
+
+## Launcher UX polish pass (branch claude/launcher-ux, ready to merge, 2026-11-21)
+
+- Review of every launcher page and state at 1180 x 760 and 736 x 620: `docs/LAUNCHER_UX_REVIEW.md` (13 findings,
+  ranked; before/after shots in `.scratch/ui_review/`, not committed). UI only: no setting, default, preset,
+  release policy, bridge, layer or core change.
+- Rows with wide choices (Water lighting, Sun shadows, Indirect lighting) put the control under the text: the
+  description no longer squeezes to two words per line.
+- Restart badge: "Restart to apply", "Restart for X", "Restart for some choices"; "turn on/off" only for Off/On.
+- Detail panel: paragraphs, Presets as four labelled lines with the current preset bold, no repeated "Off in
+  every preset." in the details, dimmed cost source, "The game may pause briefly." where the apply text says so.
+- One name: Hotkeys (Home card, Hotkeys page group, row line, detail heading).
+- No Experimental badge on each row of the Experimental page; clearer switch copy; one primary button in the
+  report dialog; header no longer jumps on preset apply; DLSS 5 placeholder in body text; sidebar 184 px below 860 px.
+- Tests: launcher_ui_test.js updated for the new badge text and switch copy, plus checks for the new logic
+  (badge variants, stacked rows, preset lines, details prefix). `ui_shots.js` audit: 42 pages, 0 layout problems.
+- Check: open BG3RTX.exe, Surfaces > Water lighting (control under the text), any row's detail panel (Presets).
+
+## gi_far_roof_emission against the PT with emission: CLOSER (branch claude/em-pack-result-2, 2026-11-21)
+
+- Pack replay-20261121-071523-1 (inn, Ultra, OMM off, 1579 MB, frame 2077), test-main a4b740f8 binaries; the scene
+  handout stamp now holds the replay's TLAS (no device loss). Emissive scene: 24 records, 98647 triangles.
+- Fidelity, 1054=0 replay vs live giRaw: bit-equal 94.43% of components, mean |diff| 0.0105 (live runs the raygen pass,
+  the replay compute).
+- 1054=1 changes 1128 of 2731520 GI pixels; 0 raised, giRaw.a unchanged. On them giRaw luminance 0.4425 (off) -> 0.0042
+  (on), no-emission 0.0020; emission term 0.4405 -> 0.0022 against the PT's 0.0379 (hidden first-hit emission x fade,
+  casters as roofs).
+- Mean |E - PT| on the changed pixels: 0.4061 (off) -> 0.0386 (on); 55 of 55 tiles closer. PT at 64 iterations: 0.4059
+  -> 0.0385, same verdict.
+- Whole frame (offline, one frame, no denoiser): mean giRaw luminance -2.98% (0.006083 -> 0.005902): the dropped
+  emission is a few very bright hidden hits seen through the cut roof. Live r2-inn-roof-em: energy +0.25% (within noise),
+  GI GPU ms equal.
+- Verdict per predicted.json: CLOSER. Default change prepared on claude/roof-em-on (not merged). Summary:
+  claude-em-pack-result-2.json; the pack and the replay outputs are deleted.
 
 ## Emission replay packs and PT emission for gi_far_roof_emission (branch claude/em-pack, READY_FOR_LIVE, 2026-11-21)
 
