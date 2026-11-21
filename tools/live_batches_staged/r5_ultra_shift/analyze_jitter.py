@@ -28,6 +28,8 @@ def load(d):
             v = np.stack([(u >> (10 * i)) & 1023 for i in range(3)], -1) / 1023.0
         elif s["format"] == 97:   # RGBA16F
             v = raw.view(np.float16).reshape(h, w, 4).astype(np.float32)
+        elif s["format"] == 109:   # RGBA32F (the temporal history, rr_post_temporal=1)
+            v = raw.view(np.float32).reshape(h, w, 4)
         else:
             continue
         frames.setdefault(s["record_frame"], {})[s["name"]] = v
