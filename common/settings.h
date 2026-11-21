@@ -1052,7 +1052,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt_pipeline", "1"},
     {"gi_rt_pipeline_reorder", "1"},
     {"gi_far_roof_early", "1"},
-    {"gi_far_roof_emission", "0"},
+    {"gi_far_roof_emission", "1"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},

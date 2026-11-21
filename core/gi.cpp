@@ -1354,7 +1354,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     // register allocation: a runtime shader guard alone can still change its cost.
     specs.add(sv::kSpecIdGiFarRoofEarly,
               host->cfg_int("rt_stats", 0) == 0 && host->cfg_int("gi_far_roof_early", 1) != 0 ? 1u : 0u);
-    // gi_far_roof_emission (experimental, default 0, live): only when on, so key-off pipelines keep their specialization.
+    // gi_far_roof_emission (default 1 since 2026-11-21 after the PT A/B, live): only when on, so key-off pipelines keep their specialization.
     if (far_on && refresh_cfg("gi_far_roof_emission", 0) != 0) specs.add(sv::kSpecIdGiFarRoofEmission, 1u);
   }
   // gi_rt_pipeline_reorder (default 1, hit kind): 0 when the driver reports no reordering (common/rt_pipeline.h).

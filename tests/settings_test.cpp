@@ -1576,10 +1576,12 @@ static void test_release_rtx_hair() {
       CHECK_EQ(get(fresh, "rt_hair_pixel_lod"), "0");
       CHECK_EQ(get(fresh, "rt_hair_mv_card"), p == kLow || p == kMedium ? "0" : "2");   // motion stability: High, Ultra (and the packaged default)
       for (const char* diag : {"rt_hair_dense_sample", "rt_hair_card_fill", "rt_hair_groom_async", "rt_as_chunk_fit",
-                                "gi_far_roof_emission", "rt_mesh_pool_trim_move"})
+                                "rt_mesh_pool_trim_move"})
         CHECK_EQ(std::string(diag) + "=" + get(fresh, diag), std::string(diag) + "=0");
       // applied overnight 2026-11-21, confirm or revert: these four qualified keys ship on in every preset.
-      for (const char* on_key : {"rt_hold_pack_base", "rt_hair_header_early", "rt_as_size_class", "rt_cascade_keep_refused"})
+      // gi_far_roof_emission: applied 2026-11-21 after the PT A/B (docs/progress/claude-em-pack-result-2.md), confirm or revert.
+      for (const char* on_key : {"rt_hold_pack_base", "rt_hair_header_early", "rt_as_size_class", "rt_cascade_keep_refused",
+                                 "gi_far_roof_emission"})
         CHECK_EQ(std::string(on_key) + "=" + get(fresh, on_key), std::string(on_key) + "=1");
       if (p < 0) continue;
       for (const char* opt : {"0", "1"}) {
