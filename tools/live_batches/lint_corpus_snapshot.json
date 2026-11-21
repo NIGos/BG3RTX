@@ -96896,6 +96896,267 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "cpu_timing",
+          "1"
+        ],
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dev",
+          "1"
+        ],
+        [
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_preview_f32",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "3"
+        ],
+        [
+          "fg_state_every",
+          "120"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "rr_hair_guides",
+          "1"
+        ],
+        [
+          "rr_hair_strand_aa",
+          "2"
+        ],
+        [
+          "rt_capture_wide_split",
+          "1"
+        ],
+        [
+          "rt_hair",
+          "1"
+        ],
+        [
+          "rt_hair_capture",
+          "1"
+        ],
+        [
+          "rt_hair_coverage_confirm",
+          "1"
+        ],
+        [
+          "rt_hair_coverage_keep",
+          "1"
+        ],
+        [
+          "rt_hair_coverage_union",
+          "1"
+        ],
+        [
+          "rt_hair_fibre",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_gi",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_mapped",
+          "1"
+        ],
+        [
+          "rt_hair_fibre_spec",
+          "1"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_ao_t",
+          "1"
+        ],
+        [
+          "rt_hair_groom_async",
+          "0"
+        ],
+        [
+          "rt_hair_groom_cascade_drop",
+          "1"
+        ],
+        [
+          "rt_hair_groom_lod_keep",
+          "1"
+        ],
+        [
+          "rt_hair_groom_nearest",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_current",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
+          "rt_hair_groom_shadow_t",
+          "1"
+        ],
+        [
+          "rt_hair_header_cam_gpu",
+          "1"
+        ],
+        [
+          "rt_hair_header_scene_pass",
+          "1"
+        ],
+        [
+          "rt_hair_live_warmup",
+          "1"
+        ],
+        [
+          "rt_hair_mv_card",
+          "2"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_pixel_lod",
+          "0"
+        ],
+        [
+          "rt_hair_pixel_lod_k",
+          "1.0"
+        ],
+        [
+          "rt_hair_pixel_lod_small_keep",
+          "0.25"
+        ],
+        [
+          "rt_hair_primary_frame_tag",
+          "1"
+        ],
+        [
+          "rt_hair_primary_hold",
+          "1"
+        ],
+        [
+          "rt_hair_slot_stable",
+          "1"
+        ],
+        [
+          "rt_hair_tangent_world",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation "
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "rt_hair_groom_async",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation "
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "rt_hair_groom_async",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {

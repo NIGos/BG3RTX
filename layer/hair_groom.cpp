@@ -122,6 +122,13 @@ uint32_t rescan() {
   return scan(false);
 }
 
+namespace {
+// rt_hair_groom_async: set on the decode worker. The decode line says where it ran ("worker"); a decode without it ran
+// inside the scene build (r4-hitch, queue log r2-inn.1.020820: all 36 frames of 90 ms to 1 s in the inn's dollies
+// followed a synchronous decode within 33 ms).
+thread_local bool t_decode_worker = false;
+}  // namespace
+
 bool read_lod(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod& lod) {
   bytes.clear();
   if (index >= l.asset.lod_count || index >= 8 || !l.size) return false;
@@ -145,8 +152,8 @@ bool read_lod(const Loaded& l, uint32_t index, std::vector<uint8_t>& bytes, Lod&
     ok = ok && decode_v3_lod(file.data(), file.size(), index, lzms_inflate, bytes);
     uint64_t at = 0;
     ok = ok && parse_lod(bytes.data(), bytes.size(), at, l.asset.indices / 3, lod) && at == bytes.size();
-    if (ok) log("[hair groom] %016llx LOD %u decoded (v3): %u points in %llu ms", (unsigned long long)l.asset.index_id, index,
-                lod.points, (unsigned long long)(GetTickCount64() - t0));
+    if (ok) log("[hair groom] %016llx LOD %u decoded (v3%s): %u points in %llu ms", (unsigned long long)l.asset.index_id, index,
+                t_decode_worker ? ", worker" : "", lod.points, (unsigned long long)(GetTickCount64() - t0));
     else log("[hair groom] %s: v3 LOD %u malformed, the cards stay", l.path.c_str(), index);
     if (!ok) bytes.clear();
     return ok;
@@ -198,6 +205,7 @@ LodDecode read_lod_async(const Loaded& l, uint32_t index, std::vector<uint8_t>& 
     g_decode_queue = new AsyncCaptureQueue<DecodeJob>(8, [](DecodeJob&& job) {
       static thread_local bool low = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL) != 0;
       (void)low;
+      t_decode_worker = true;
       Decoded out;
       const bool ok = read_lod(*job.l, job.index, out.bytes, out.lod);
       std::lock_guard done(g_decode_mu);
