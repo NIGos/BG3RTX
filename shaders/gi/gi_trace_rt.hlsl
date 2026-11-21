@@ -66,7 +66,10 @@
 // a screen hit adds it too: prevRadiance is the lit diffuse + specular before compose adds the effects
 // target (gi_composite.hlsl), so the screen value has no emission either. SHaRC hits are not touched
 // (the injection already adds the effects target, sharc_inject.hlsl).
+// tools/frame_replay compiles a gi_hit_sun_em pack with EM_SET=4 (common/replay_pack.h kEmPackSet); no game request sets it.
+#ifndef EM_SET
 #define EM_SET 2
+#endif
 #include "../rt/em_common.hlsli"
 #include "../rt/native_hit_emission.hlsli"
 #endif

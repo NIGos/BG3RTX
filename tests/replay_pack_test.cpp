@@ -440,6 +440,32 @@ int main() {
               dropped.empty() && rp::contract_defines("RT_CASCADE_MASKS=1") == "RT_CASCADE_MASKS=1" && rp::contract_defines("RT_OMM_SCENE=1").empty(),
           "contract_defines: RT_CASCADE_MASKS kept, bindings the contract lacks dropped and named");
   }
+  {
+    // gi_hit_sun_em (replay_pack_pass=2): the contract, the emissive TLAS geometry list, the reference shaders' defines.
+    const auto* em = rp::find_pass("gi_hit_sun_em");
+    bool contract = em && em->set_count == 5 && std::string(em->shader) == "gi/gi_trace_rt_hit_sun_em.hlsl";
+    for (const auto& s : rp::kGiHitDirect) contract = contract && em && rp::find_slot(*em, s.set, s.binding) != nullptr;
+    const auto* tlas = em ? rp::find_slot(*em, rp::kEmPackSet, 0) : nullptr;
+    const auto* tex = em ? rp::find_slot(*em, rp::kEmPackSet, 6) : nullptr;
+    const auto* trust = em ? rp::find_slot(*em, 3, 8) : nullptr;
+    contract = contract && tlas && tlas->kind == rp::kTlas && tex && tex->count == 256 && trust && trust->kind == rp::kStorage &&
+               trust->storage_format == 98 && rp::find_slot(*em, rp::kEmPackSet, 11) && rp::find_slot(*em, rp::kEmPackSet, 11)->count == 16;
+    check(contract, "gi_hit_sun_em: kGiHitDirect + sun trust s3b8 + the emissive scene at set 4");
+    check(rp::texture_priority(rp::kEmPackSet, 6) == rp::kPriorityLighting && rp::texture_priority(rp::kEmPackSet, 11) == rp::kPriorityHit,
+          "texture_priority: emissive masks first, emissive VT caches as the hit cache");
+    // Entries: a good one, one past the soup, one with stride 8, one without triangles; only 3 records written.
+    const uint32_t info[20] = {0, 64 | (1u << 11), 0, 2,   384, 64 | (1u << 11), 1, 4,   0, 8, 2, 1,   64, 64, 3, 0,   0, 64, 4, 1};
+    uint32_t dropped = 0;
+    const auto g = rp::em_geometries(info, 20, 4, 512, &dropped);
+    check(g.size() == 4 && g[0].tris == 2 && g[0].stride == 64 && g[0].offset == 0 && g[1].tris == 0 && g[2].tris == 0 && g[3].tris == 0 &&
+              dropped == 2, "em_geometries: one geometry per record, entries the soup lacks keep their index with 0 triangles");
+    check(rp::em_geometries(info, 20, 9, 1 << 20).size() == 5 && rp::em_geometries(info, 7, 9, 1 << 20).size() == 1,
+          "em_geometries: bounded by the captured emInfo words");
+    check(rp::reference_defines("gi_hit_sun_em", "RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1") == "RT_CASCADE_MASKS=1" &&
+              rp::reference_defines("gi_hit_sun_em", "RT_SPEC_GI_FAR=1").empty() &&
+              rp::reference_defines("gi_hit_direct", "RT_OMM_SCENE=1;RT_CASCADE_MASKS=1") == "RT_CASCADE_MASKS=1",
+          "reference_defines: the pass's spec defines stay with the pass; the GI ray mask carries over");
+  }
 
   std::printf("%s: %d failure(s)\n", g_fail ? "FAIL" : "PASS", g_fail);
   return g_fail ? 1 : 0;

@@ -1,0 +1,69 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 20.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 20.0,
+    "motion_end": 20.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "replay_pack=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[auto\\] scene ready"
+    ],
+    "wait_log_timeout": 120
+  },
+  {
+    "label": "producer-sanity-warmup",
+    "kind": "static",
+    "seconds": 1.1,
+    "capture_at": 0,
+    "serial": 0,
+    "set": "replay_pack=0",
+    "wait_log": [
+      "hit emission: first hit-GI dispatch with the emissive scene \\(sun 1, sharc 0\\)"
+    ],
+    "wait_log_timeout": 40
+  },
+  {
+    "label": "diag-pack",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 1.1,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "replay_pack=1",
+    "wait_log": [
+      "\\[replay\\] pack 1 (?:written|failed|over budget)"
+    ],
+    "wait_log_timeout": 90
+  },
+  {
+    "label": "restore",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 1.1,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "replay_pack=0"
+  }
+]

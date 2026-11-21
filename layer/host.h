@@ -414,12 +414,15 @@ extern thread_local bool t_game_descriptor_update;
 void replay_device_created(DeviceData* dd);   // wraps a few dd->vk entries (object and material-set records)
 void replay_device_destroyed(DeviceData* dd);
 void replay_note_alpha_layout(VkDescriptorSetLayout layout, VkSampler wrap, VkSampler clamp);   // alphatest.cpp
+// emissive.cpp: its D-EM scene sets (immutable sampler b7), recorded for gi_hit_sun_em packs (replay_pack_pass=2).
+void replay_note_em_sets(const VkDescriptorSet* sets, uint32_t count, VkDescriptorPool pool, VkSampler sampler);
 int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* dispatch);   // Bg3HostApi::replay_pack (ABI 25)
 void replay_on_present();
 #else
 inline void replay_device_created(DeviceData*) {}
 inline void replay_device_destroyed(DeviceData*) {}
 inline void replay_note_alpha_layout(VkDescriptorSetLayout, VkSampler, VkSampler) {}
+inline void replay_note_em_sets(const VkDescriptorSet*, uint32_t, VkDescriptorPool, VkSampler) {}
 inline void replay_on_present() {}
 #endif
 bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,

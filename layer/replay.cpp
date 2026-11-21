@@ -1009,6 +1009,16 @@ void replay_note_alpha_layout(VkDescriptorSetLayout layout, VkSampler wrap, VkSa
   g_alpha_layout = layout;
 }
 
+// The D-EM scene sets (layer/emissive.cpp, allocated once): their writes go through dd->vk.UpdateDescriptorSets,
+// recorded as the material sets' are. Only a gi_hit_sun_em pack reads them (Bg3ReplayDispatch::game_set).
+static VkSampler g_em_sampler = VK_NULL_HANDLE;
+void replay_note_em_sets(const VkDescriptorSet* sets, uint32_t count, VkDescriptorPool pool, VkSampler sampler) {
+  std::lock_guard<std::mutex> lock(g_set_mu);
+  for (uint32_t i = 0; i < count; ++i) if (sets[i]) g_sets[sets[i]] = SetRec{pool, {}};
+  g_em_sampler = sampler;
+  g_any_set = true;
+}
+
 void replay_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   std::lock_guard<std::mutex> lock(g_job_mu);
@@ -1094,7 +1104,9 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   m.pass = pass->name;
   {
     std::string dropped;
-    m.defines = d->phase==1 ? (d->defines ? d->defines : "") : rp::contract_defines(d->defines ? d->defines : "", &dropped);
+    // gi_hit_sun_em keeps the whole live request (its spec defines with the captured specs: what ran).
+    const bool em_pass = std::strcmp(pass->name, "gi_hit_sun_em") == 0;
+    m.defines = d->phase==1 || em_pass ? (d->defines ? d->defines : "") : rp::contract_defines(d->defines ? d->defines : "", &dropped);
     if (!dropped.empty()) m.notes.push_back(" live variant defines not in the pack contract (the replay compiles without them): " + dropped);
   }
   for(uint32_t i=0;i<d->spec_count;++i)m.specs.push_back({d->specs[i].id,d->specs[i].value});
@@ -1186,6 +1198,53 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   LightingStats lighting;
   if (d->phase!=1 && pass->set_count > 2) lighting = add_lighting(p, cmd, *pass);
   if (!p.why.empty()) return fail(p.why);
+  // ---- gi_hit_sun_em: the sun trust image (set 3 b8, the core's extra write) and the D-EM scene set
+  // (Bg3ReplayDispatch::game_set, recorded by replay_note_em_sets) as set 4 (rp::kEmPackSet); its TLAS is rebuilt offline ----
+  std::string em_note;
+  if (d->phase!=1 && std::strcmp(pass->name, "gi_hit_sun_em") == 0) {
+    for (uint32_t i = 0; i < d->extra_count; ++i) {
+      const Bg3ReplayWrite& x = d->extra_writes[i];
+      const rp::Slot* slot = rp::find_slot(*pass, x.set, x.write.dstBinding);
+      if (!slot || slot->kind != rp::kStorage || !x.write.pImageInfo) continue;
+      if (!add_image(p, x.set, x.write.dstBinding, 0, x.write.pImageInfo[0].imageView, x.write.pImageInfo[0].imageLayout, *slot, false, true))
+        return fail(p.why);
+    }
+    std::unordered_map<uint64_t, Desc> em;
+    {
+      std::lock_guard<std::mutex> lock(g_set_mu);
+      auto it = g_sets.find(d->game_set);
+      if (it == g_sets.end()) return fail("the emissive scene set (set 2 of the pass) is not a recorded D-EM set");
+      em = it->second.d;
+    }
+    const uint32_t es = rp::kEmPackSet;
+    uint32_t textures = 0, caches = 0;
+    for (uint32_t s = 0; s < pass->slot_count; ++s) {
+      const rp::Slot& slot = pass->slots[s];
+      if (slot.set != es || slot.kind == rp::kTlas) continue;
+      if (slot.kind == rp::kSsbo) {
+        auto e = em.find(desc_key(slot.binding, 0));
+        if (e == em.end() || !e->second.buffer) {
+          if (slot.binding == 1 || slot.binding == 3 || slot.binding == 4 || slot.binding == 9) return fail(std::string("emissive ") + slot.name + " not recorded");
+          continue;
+        }
+        if (!add_buffer(p, es, slot.binding, {e->second.buffer, e->second.offset, e->second.range}, false, slot.name)) return fail(p.why);
+      } else if (slot.kind == rp::kSampler) {
+        if (!add_sampler(p, es, slot.binding, 0, g_em_sampler) && p.why.empty()) p.why = "emissive sampler (immutable) not recorded";
+        if (!p.why.empty()) return fail(p.why);
+      } else {
+        for (uint32_t el = 0; el < slot.count; ++el) {
+          auto e = em.find(desc_key(slot.binding, el));
+          if (e == em.end() || !e->second.view) continue;
+          if (!add_image(p, es, slot.binding, el, e->second.view, e->second.layout, slot, false, true)) return fail(p.why);
+          (slot.binding == 6 ? textures : caches) += 1;
+        }
+      }
+    }
+    em_note = " emissive scene (set " + std::to_string(es) + "): " + std::to_string(textures) + " texture and " + std::to_string(caches) +
+              " cache elements bound; TLAS rebuilt offline from emInfo + emSoup (rp::em_geometries)";
+    m.notes.push_back(em_note);
+    log("[replay] pack %s%s", label.c_str(), em_note.c_str());
+  }
   if(d->phase==1) {
     auto capture=[&](uint32_t set,const VkWriteDescriptorSet& w)->bool {
       const rp::Slot* slot=rp::find_slot(*pass,set,w.dstBinding);if(!slot)return true;
