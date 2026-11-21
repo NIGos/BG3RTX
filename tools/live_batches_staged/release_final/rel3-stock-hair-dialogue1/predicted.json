@@ -6,9 +6,9 @@
   "profile": "data/release.ini + launcher preset via common/settings.h",
   "rendering_overrides": {},
   "input_sha256": {
-    "common/settings.h": "a3b44afdf30f1b76f2803c558431973ce89c75856b3b0134eac19f34ad2ed334",
+    "common/settings.h": "cb6af6e3226926f9a46621ed00f4d5a2402cd5ab72ef4681f65939b98aa60ccb",
     "data/release.ini": "cb63a0b9368544d94d676bd3fd0fb4fd6b3f6f4edd852ff9f4736328d2d37df8",
-    "bg3rtx.ini": "d50aea4d34614c4936322938310c6380cccc2f3a092d5c67dc506648b7622a5d"
+    "bg3rtx.ini": "42b96aeb2e4bf36fbfd0d8ef091a98805b32eb5c4041581ac84ef648d9998c94"
   },
   "visual_acceptance": "Inspect the single static PNG for visible cards and face/neck shadows."
 }
