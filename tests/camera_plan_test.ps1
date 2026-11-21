@@ -406,4 +406,13 @@ $traceWrites=7;. $finishBlock
 Check $completed 'all requested actual exports release phase'
 Check ($runner.Contains('if (($step.frames -or $null -ne $step.trace_at) -and (Test-Path -LiteralPath $log))')) 'seconds-only trace phase consumes export log reader'
 Check ($runner.Contains('if ($phaseTraceIndex -eq 0) { $phaseTraceWritesStart=$traceWrites }')) 'first request excludes already consumed warmup exports'
+$miss=@(Get-CameraPlanStatsMissing $short 'gpu complete')
+Check ($miss.Count -eq 1 -and $miss[0] -eq $short.wait_stats[1]) 'stats wait names only the missing line'
+Check (-not (Test-CameraPlanStatsTimedOut @{wait_log_timeout=10} $null 100)) 'no finished frame target, no stats timeout'
+Check (-not (Test-CameraPlanStatsTimedOut @{wait_log_timeout=10} 50 59.9)) 'stats wait inside its timeout'
+Check (Test-CameraPlanStatsTimedOut @{wait_log_timeout=10} 50 60) 'stats wait ends at its timeout, not at the job cap'
+Check (Test-CameraPlanStatsTimedOut @{} 50 60) 'stats wait without a timeout uses the 10 s floor'
+Check ($runner.Contains('$result="stats wait timed out: ')) 'runner ends a stats wait at the timeout with a result'
+Check ($runner.Contains('[stats-wait] timed out phase=')) 'runner line names the timed-out stats window'
+Check (([regex]::Matches($runner,'\$phaseStatsComplete=\$false; \$phaseStatsWaitAt=\$null')).Count -eq 3) 'stats wait clock resets with every phase'
 Write-Host "$count camera-input and permission checks passed"
