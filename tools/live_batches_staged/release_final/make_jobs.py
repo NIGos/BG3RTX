@@ -107,10 +107,10 @@ def main():
     release.HERE = final.HERE = HERE
     final.FINAL = HERE / 'final'
     final.predictions = lambda: None   # release_qual's reference table; this batch has predicted.json
-    # Windows are sized with the checked-in snapshot's models (79 VALID logs; reproducible in any worktree, as
-    # hair_stable does): the live corpus kept 4 logs of one save after the cleanup of 2026-11-14. A readiness query
-    # the snapshot lacks (today's profile changes the startup key set) is estimated without samples, exactly as
-    # lint_snapshot.extend_readiness records it; --extend-snapshot appends those queries (append only).
+    # Windows are sized with the live VALID corpus, the model the runner preflight lints with (2026-11-21: the
+    # snapshot's p10 fps, 10.0 in Dialogue1 against 7.1 live, sized energy-static 0.06 s short and the preflight
+    # refused it). A readiness query neither corpus has is estimated without samples, exactly as
+    # lint_snapshot.extend_readiness records it; --extend-snapshot appends those queries (append only) for --frozen.
     tighten, load, finish = flow.tighten_files, lint_snapshot.load, release.finish
     def finish_with_stall(job, *args):
         meta = job.setdefault('live_flow', {})
@@ -122,7 +122,7 @@ def main():
         flow.readiness_budget.FROZEN = False
         return data
     lint_snapshot.load = unfrozen
-    flow.tighten_files = lambda directory, **kw: tighten(directory, frozen=True)
+    flow.tighten_files = lambda directory, **kw: tighten(directory)
     try:
         _run_final(a.profile_exe)
     finally:
@@ -143,7 +143,7 @@ def main():
     schedule = {}
     for name in QUEUE:
         job, plan, _ = flow.load_job(HERE / 'final/jobs' / (name + '.json'))
-        assert job['window_mode'] == 'visible_unfocused_fg' and job['timeout'] == 300 and job['max_minutes'] == 5
+        assert job['window_mode'] == 'visible_unfocused_fg' and job['timeout'] >= 300 and job['max_minutes'] * 60 >= job['timeout']
         assert job['hold'] >= 90 and job['patterns'] and job['expect'] and job['expect_every'] and job['fail_fast']
         assert job['post'].startswith('py -3 ') and BATCH in job['post'] and BATCH in job['args'][-1]
         budget = flow.duration_budget(job, plan)

@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 706,
+  "timeout": 732,
   "max_minutes": 7,
   "repeat": 1,
   "live_batch": "r3-core",
@@ -185,20 +185,21 @@
           0,
           0
         ],
-        "fps": 20.107238605897106,
-        "windows": 57,
+        "fps": 8.262186725419282,
+        "windows": 20,
         "logs": [
-          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1-s8-hair-stable.1.001645.log",
-          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1-s8-hair-stable.1.194658.log",
-          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vr-s8.1.000745.log"
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.1.020458.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.2.020642.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-s8-holdpack.1.015440.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r3-s8-sun-overlap.1.030240.log"
         ]
       }
     ],
     "trace_export": {
-      "seconds": 0.3709999999999809,
+      "seconds": 0.21200000000044383,
       "quantile": 0.95,
-      "samples": 17,
-      "maximum": 0.3709999999999809
+      "samples": 34,
+      "maximum": 0.28800000000046566
     }
   },
   "estimated_phase_seconds": 77.734,

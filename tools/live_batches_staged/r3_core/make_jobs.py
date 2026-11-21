@@ -16,6 +16,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT))
+from tools.live_batches import live_flow as flow
 from tools.live_batches_staged.perf_ab import make_jobs as pab
 
 BATCH = "tools/live_batches_staged/r3_core"
@@ -70,7 +71,7 @@ def d3_jitter_job():
     j["expect"] += ["\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
                     "\\[rrpost\\] jitter align 1: A/C/B sampled at uv \\+ jitter"]
     j["expect_runner"] += [r"\[window-mode\].*visible_unfocused"] + traces
-    j["forbid"] = j["forbid"] + ["nonfinite"]
+    j["forbid"] = j["forbid"] + [flow.NONFINITE_EVENT]
     j["patterns"] = j["patterns"] + ["\\[pan\\]", "\\[trace\\]", "\\[rrpost\\]", "\\[sl\\] present capture"]
     j["live_flow"].update(expected_fps=30, trace_stall_s=1)
     j.pop("post", None)
