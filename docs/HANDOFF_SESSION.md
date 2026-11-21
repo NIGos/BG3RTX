@@ -3,15 +3,15 @@
 Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) first (top: the user's decisions of 2026-11-21).
 Release check: [RC_CHECK](release/RC_CHECK.md). Design and history: [RTX_HAIR_PRIMARY](RTX_HAIR_PRIMARY.md) 6g-6k,
 [SCENE_HANDOUT_DESIGN](SCENE_HANDOUT_DESIGN.md) section 8. ABI 31 (unchanged overnight).
-Main is 8f4f43da plus the docs commit that follows it.
+Main is b7532c90 plus the docs commit that follows it.
 
 ## State
 
-- Release candidate 0.9.6-beta, rebuilt from main 8f4f43da (lean layer, 230 files; updated player docs; the smoke-tested release code plus the diagnostic emission pack writer, off, and the launcher UX pass):
-  - `dist/BG3RTX-0.9.6-beta.zip`: SHA-256 1f0a3e4d02de76c8988d481c6a305cd87206e46020338858035f77688a560ae1
+- Release candidate 0.9.6-beta, rebuilt from main b7532c90 (lean layer, 230 files; updated player docs; the smoke-tested release code plus the diagnostic emission pack writer, off, and the launcher UX pass):
+  - `dist/BG3RTX-0.9.6-beta.zip`: SHA-256 a8556bc33ec18c837c2f3fc36e3be68417589d96a8f37251411c3228728f7f3f
   - `dist/BG3RTX-0.9.6-beta-symbols.zip` (private): 0b12b3bb63dc54b6d8ac31ced5810430e072d3cd8ca5d30bb97ce041eb9b684b
-  - `.scratch/setup-0.9.6-beta/BG3RTX-0.9.6-beta-Setup.exe` (unsigned): dbf89ccd7420df5855f40ae24490bea81889b100758051863924aa4dead48fc9
-  - `VERSION.txt` says commit 8f4f43da. Release folder ready to publish: `.scratch/release-0.9.6-beta/` (see its PUBLISH.md). `.scratch/setup-0.9.6-beta/SHA256SUMS.txt` lists these three hashes.
+  - `.scratch/setup-0.9.6-beta/BG3RTX-0.9.6-beta-Setup.exe` (unsigned): 84d8706c39b778dea4c450ba2143aac22add7c1799d23465cb002bacf9628b58
+  - `VERSION.txt` says commit b7532c90. Release folder ready to publish: `.scratch/release/v0.9.6-beta/` (see its PUBLISH.md). `.scratch/setup-0.9.6-beta/SHA256SUMS.txt` lists these three hashes.
   - verify_rc: 11 PASS, Setup SKIPPED (the user's own install is present). The user installed the 9ae2ede3 Setup.exe
     over hairtest18 on 2026-11-21 and found everything fine: Setup install tested by the user.
   - Previous candidates in `.scratch/old_rc_122493b1/`, `.scratch/old_rc_3ed4ec08/` and `.scratch/old_rc_08cb1e99/`; older in `.scratch/old_rc_745a1fff/`.
@@ -78,7 +78,7 @@ Kept off: `gi_far_roof_emission` (PT CLOSER, but +0.7-1 ms GI/RT in Dialogue1; u
 
 ## Next work
 
-1. User action: publish (`.scratch/release-0.9.6-beta/PUBLISH.md`). Setup tested and docs repackaged on 2026-11-21.
+1. User action: publish (`.scratch/release/v0.9.6-beta/PUBLISH.md`). Setup tested and docs repackaged on 2026-11-21.
 2. Read the next user log: OMM accelerated commits, `[mem] ours`, BLAS refusals, groom "decoded ..., worker" lines.
 3. `rt_mesh_pool_trim_move` (READY_FOR_LIVE, hx1 hair job with the key on).
 4. The known items above, cheapest first; emission replay packs would make `gi_far_roof_emission` testable.
@@ -113,7 +113,7 @@ Kept off: `gi_far_roof_emission` (PT CLOSER, but +0.7-1 ms GI/RT in Dialogue1; u
 ## Open for the user
 
 1. Answered 2026-11-21: overnight changes confirmed, OMM on in High, `gi_far_roof_emission` off, final test OK.
-2. Done: claude/docs-096 merged and repackaged (8f4f43da). claude/docs-nexus adds the source link to the shipped
+2. Done: claude/docs-096 merged and repackaged (b7532c90). claude/docs-nexus adds the source link to the shipped
    README and release notes: repackage and rerun verify_rc once more after it merges.
 3. Setup.exe: done (the user installed and tested it on 2026-11-21).
 4. Publish 0.9.6-beta (user action): upload to Nexus Mods only (Files tab). No GitHub release; the repository
