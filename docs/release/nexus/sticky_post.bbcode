@@ -1,47 +1,41 @@
 [center][img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793822810-583035451.png[/img]
 [size=3][color=#f2c078][b]Version 0.9.6 - public beta[/b][/color][/size][/center]
-Thanks for trying BG3RTX. This is a [b]public beta[/b]. It has been tested in a limited set of places and on one card only, an [b]RTX 5090[/b]. Your reports decide what gets fixed first.
+Thanks for trying BG3RTX. This is a [b]public beta[/b], tested in a limited set of places and on one card only, an [b]RTX 5090[/b]. Your reports decide what gets fixed first.
 [img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793822874-8567818.png[/img]
 [list]
-[*]The game must use the [b]Vulkan[/b] renderer and [b]DLSS[/b] in its Graphics options. DirectX 11 is not supported, and Ray Reconstruction does not run with FSR, XeSS or TAA.
+[*]The game must use the [b]Vulkan[/b] renderer and [b]DLSS[/b]. DirectX 11 is not supported; Ray Reconstruction does not run with FSR, XeSS or TAA.
 [*][b]NVIDIA RTX only.[/b] Frame generation 2x needs RTX 40 or newer; 3x and 4x need RTX 50.
-[*]Start with [b]Low[/b] and raise settings step by step. There are no tested VRAM recommendations yet, for any card.
-[*]The [b]first start[/b] compiles shaders: expect a slower load and some stutter the first time. It is quicker afterwards.
-[*]Press [b]Ctrl+Shift+F9[/b] in game to switch all ray tracing off and on. Use it to check whether a problem comes from BG3RTX. You can change the shortcut in the launcher (Hotkeys).
-[*][b]New in 0.9.6:[/b] about 0.8 to 1.0 GB less video memory in the test scenes, a new and clearer launcher window where a setting applies when you click it, [b]RTX Hair[/b] (beta, off by default) that now works, keeps its strands while the camera moves and no longer freezes the frame in crowded rooms, a faster game start from the second launch, opacity micromaps working again in High and Ultra, and a fixed one-frame water reflection flicker. See the Changelog.
-[*]BG3RTX changes nothing in the game folder, the registry or your saves. Starting the game without the launcher runs the plain game.
-[*]Downloads are on the [b]Files[/b] tab: the installer ([i]Setup.zip[/i]) or the portable version ([i]Portable.zip[/i]). The source code is public under GPL-3.0-or-later: [url=https://github.com/NIGos/BG3RTX]github.com/NIGos/BG3RTX[/url].
+[*]Start with [b]Low[/b] and raise settings step by step. There are no tested VRAM recommendations yet.
+[*]The [b]first start[/b] compiles shaders: expect a slower load and some stutter once.
+[*][b]Ctrl+Shift+F9[/b] switches all ray tracing off and on in game, to check whether a problem comes from BG3RTX (change it in the launcher, Hotkeys).
+[*][b]New in 0.9.6:[/b] less video memory, a clearer launcher, [b]RTX Hair[/b] (beta, off by default) that now works, a faster start from the second launch, opacity micromaps back in High and Ultra, a water flicker fixed. See the Changelog.
+[*]BG3RTX changes nothing in the game folder, the registry or your saves.
+[*]Downloads: [b]Files[/b] tab ([i]Setup.zip[/i] installer or [i]Portable.zip[/i]). Source code (GPL-3.0-or-later): [url=https://github.com/NIGos/BG3RTX]github.com/NIGos/BG3RTX[/url].
 [/list]
 [img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793823026-850583066.png[/img]
 [list]
-[*][b]Crash at start, or frame generation does nothing:[/b] turn off other overlays (Steam, Discord, GOG Galaxy) for one launch, then restart the game.
-[*][b]Stalls, missing geometry or crashes after a while:[/b] usually video memory. Lower the preset or resolution and restart the game.
-[*][b]An option did not change anything:[/b] some options need a game restart; the launcher marks them [i]Restart to apply[/i].
-[*]Questions go in this comment thread. Bugs go on the [b]Bugs[/b] tab, one report per problem.
+[*][b]Crash at start, or frame generation does nothing:[/b] turn off other overlays (Steam, Discord, GOG Galaxy) for one launch.
+[*][b]Stalls, missing geometry or crashes after a while:[/b] usually video memory. Lower the preset or resolution and restart.
+[*][b]An option changed nothing:[/b] options marked [i]Restart to apply[/i] need a game restart.
+[*]Questions go here. Bugs go on the [b]Bugs[/b] tab, one report per problem.
 [/list]
 [img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793823079-1370877169.png[/img]
-A good report gets fixed much faster. Please:
 [list=1]
-[*][b]Turn on Detailed logging[/b] in the launcher (Help & support), restart the game and reproduce the problem.
-[*][b]Save the report.[/b] Right after the problem, open the launcher: [i]Create a report…[/i] (Home, or Help & support), [i]Preview files[/i], then [i]Save report…[/i] Attach that file. Nothing is uploaded for you; check what it contains before you share it.
-[*][b]Add your system:[/b] GPU and VRAM, NVIDIA driver version, game version, and any other graphics mods (ReShade and so on).
-[*][b]Add your settings:[/b] the preset, and any options you changed.
-[*][b]Say what happened:[/b] act and place, time of day, what you expected and what you saw. A screenshot with Ctrl+Shift+F9 off and on helps a lot.
+[*]Turn on [b]Detailed logging[/b] (launcher, Help & support), restart the game and reproduce the problem.
+[*]In the launcher: [i]Create a report…[/i], [i]Preview files[/i], [i]Save report…[/i], and attach the file. Nothing is uploaded for you.
+[*]Add your GPU and VRAM, driver and game version, other graphics mods, and your preset and changed options.
+[*]Say where and what happened. A screenshot with Ctrl+Shift+F9 off and on helps a lot.
 [/list]
-Turn Detailed logging off again afterwards: it writes extra data you do not need for normal play.
-[color=#f2c078]Please do not post a save file unless you are asked for one.[/color] If it is needed, you will be told how to include it.
+Turn Detailed logging off afterwards. [color=#f2c078]Please do not post a save file unless asked.[/color]
 [img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793823121-1599587881.png[/img]
 [list]
-[*]Act 2 and most of Act 3 are not systematically tested yet. Reports from there are very welcome.
-[*]Sessions of several hours are not tested yet. Long sessions and level changes can hold on to video memory.
-[*]Reflections trace the real scene, but a reflected surface that is hidden or off screen keeps the game's own reflection for now.
-[*]The first time hair shadows are turned on, shaders compile: a short pause or stutter is expected.
-[*]The first game start after installing can take 15 to 50 seconds longer while hair shaders are created, also with RTX Hair off. Later starts reuse them.
-[*]The water flicker at the port is also in the game's own water.
-[*]ReShade works, frame generation included. ReShade effects that redo ambient occlusion or global illumination duplicate BG3RTX's work. Other graphics mods and HDR have not been tested.
-[*]DLSS 5 Neural Rendering is experimental: it changes the look of the image and costs about 6.7 ms per frame on an RTX 5090 at 3840x1600.
+[*]Act 2, most of Act 3 and sessions of several hours are not systematically tested yet. Reports are very welcome.
+[*]A reflected surface that is hidden or off screen keeps the game's own reflection for now.
+[*]The first start after installing can take 15 to 50 s longer while hair shaders are created. Later starts reuse them.
+[*]ReShade works, frame generation included; its AO or GI effects duplicate BG3RTX's work. HDR is not tested.
+[*]DLSS 5 Neural Rendering is experimental and costs about 6.7 ms per frame on an RTX 5090.
 [*]A new game patch can break BG3RTX until it is updated.
-[*]Visible hair is the game's own hair unless you turn on [b]RTX Hair[/b] (beta, off by default). A style that is not converted yet stays as the game's hair, hair on distant characters can look softer, and a head seen for the first time shows the game's hair for about half a second while its style loads.
+[*][b]RTX Hair[/b]: styles not converted yet stay as the game's hair, and a head seen for the first time shows the game's hair for about half a second.
 [/list]
 [center][img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793822830-820569208.png[/img]
 [size=2][color=#beb5a4]Enjoy the light. See you in the Bugs tab.[/color][/size][/center]
