@@ -57,6 +57,9 @@ for key in ("gi_rt_pipeline", "gi_rt_pipeline_reorder"):
 # rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md): specialization 1051 of every gi/ and water pipeline (core/gi.cpp
 # refresh, core/water.cpp) at 1 and 2; both values stay cached, so a toggle needs a quiet driver, not a build line.
 TABLE["rt_scene_handout"] = [QUIET]
+# r3-core: rr_post_jitter_align 1/2 runs the rr_post_temporal.hlsl temporal_final entry (layer/rrpost.cpp rrpost_final;
+# built in the background on first use, the plain final meanwhile).
+TABLE["rr_post_jitter_align"] = [r"\[rrpost\] rr_post\.hlsl:temporal_final pipeline built"]
 WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"
 for key in ("rt_water_compose_shift",
             "rt_water_shadows", "rt_water_ls_shadows",
@@ -174,7 +177,9 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_hair_groom_async "
     # Scene handout: the hit-material passes take the committed pair (core/gi.cpp handout_hit_settle) and the layer
     # skips the commit-time query (layer/rtscene.cpp). The same pipelines (constant 1051 follows rt_scene_handout).
-    "rt_scene_handout_hit_wait".split())
+    "rt_scene_handout_hit_wait "
+    # r3-core: rt_sun_overlap only reorders the existing rt_shadow / rt_sun_resolve dispatches (core/gi.cpp run_pre).
+    "rt_sun_overlap".split())
 for key in NO_PIPELINE:
     TABLE[key] = []
 

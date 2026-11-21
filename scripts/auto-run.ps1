@@ -673,7 +673,7 @@ function Send-UiKey([int]$vk, [int]$scan) {
 }
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
 $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue; $shiftHeld = $false; $shiftNext = [datetime]::MinValue
-$phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=0L; $phaseStatsText=""; $phaseStatsComplete=$false
+$phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=0L; $phaseStatsText=""; $phaseStatsComplete=$false; $phaseStatsWaitAt=$null
 . (Join-Path $PSScriptRoot 'queue-reload.ps1')
 $hairReload = $null
 $wheelSent = 0; $wheelNext = [datetime]::MinValue   # step.wheel: mouse-wheel notches posted at the phase start
@@ -730,7 +730,7 @@ while ((Get-Date) -lt $deadline) {
       Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-plan] skipped slice=$($failure.slice) next_phase=$guardNextPhase"
       if($panIndex -ge 0 -and $guardNextPhase -gt $panIndex){
         $panIndex=$guardNextPhase; $panAt=Get-Date; $phaseStartMs=$planClock.Elapsed.TotalMilliseconds
-        $panCaptureSent=$false; $rotateSegment=-1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=$traceWrites; $phaseStatsText=""; $phaseStatsComplete=$false
+        $panCaptureSent=$false; $rotateSegment=-1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=$traceWrites; $phaseStatsText=""; $phaseStatsComplete=$false; $phaseStatsWaitAt=$null
         $wheelSent=0; $wheelNext=[datetime]::MinValue; $hairReload=$null
       }
     }
@@ -795,6 +795,16 @@ while ((Get-Date) -lt $deadline) {
       $phaseFinished=if ($step.frames) {
         Test-CameraPlanFrameComplete $step $phaseFrameStart $statsFrame
       } else { $elapsed -ge $step.seconds }
+      # Frames complete but a judged stats line missing: fail the window at its timeout, not at the job cap.
+      if ($step.frames -and $phaseFinished -and -not $phaseStatsComplete) {
+        if ($null -eq $phaseStatsWaitAt) { $phaseStatsWaitAt=$planClock.Elapsed.TotalSeconds }
+        elseif (Test-CameraPlanStatsTimedOut $step $phaseStatsWaitAt $planClock.Elapsed.TotalSeconds) {
+          $missing=@(Get-CameraPlanStatsMissing $step $phaseStatsText) -join '; '
+          $line="$(Get-Date -Format 'HH:mm:ss.fff') [stats-wait] timed out phase=$panIndex label=$($step.label) frames=$($step.frames); missing: $missing"
+          Write-Host $line; Add-Content -LiteralPath $guardRunner $line
+          $result="stats wait timed out: $($step.label); missing: $missing"; break
+        }
+      }
 
       # A slow guard/log poll must not skip a phase's settings or trace requests.
       # Keep serialized requests in this phase until the existing request clears.
@@ -819,7 +829,7 @@ while ((Get-Date) -lt $deadline) {
           $result = if($failFastFailures.Count){'done with failed slices'}else{'done'}; break
         }
         $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
-        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=$traceWrites; $phaseStatsText=""; $phaseStatsComplete=$false
+        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=$traceWrites; $phaseStatsText=""; $phaseStatsComplete=$false; $phaseStatsWaitAt=$null
         $wheelSent = 0; $wheelNext = [datetime]::MinValue
         $hairReload = $null
       }

@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <mutex>
 #include "../common/native_hair_origin.h"
 #include "../common/hair_cost_epoch.h"
@@ -3034,6 +3035,9 @@ uint32_t rt_sbt_slot(VkPipeline pipeline) {
 // Qualified hidden-hit GI uses native local-light inputs, material set1 and
 // optional SHaRC set4. gi_hit_sun adds the D-LS sun set as set 3 (this frame's write_sun_set);
 // without it (ring full, layout failure) the direct-only variant runs, as gi_hit_sun=0.
+// rt_sun_overlap (run_pre): the sun trace recorded right after the GI trace command, before any barrier that waits for
+// the GI (the ray tracing path's RT->ALL barrier does not wait for a compute dispatch recorded before it). Idempotent.
+const std::function<void(VkCommandBuffer)>* g_beside_gi_trace = nullptr;
 bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& pc){
  if(!bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))))return false;
  VkDescriptorSetLayout alpha_layout{};VkDescriptorSet unused{};
@@ -3114,6 +3118,7 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
  if(!rp){
   vk.CmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof hp,&hp);
   vk.CmdDispatch(cmd,(g_hw+7)/8,(g_hh+7)/8,1);
+  if(g_beside_gi_trace)(*g_beside_gi_trace)(cmd);
  }else{
   vk.CmdPushConstants(cmd,rt_layout,VK_SHADER_STAGE_RAYGEN_BIT_KHR,0,sizeof hp,&hp);
   // The compute work before (origins, SHaRC resolve, emission prepare) and after (temporal) sees the raygen stage.
@@ -3122,6 +3127,7 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
   const VkStridedDeviceAddressRegionKHR raygen{bg3::rt_pipeline::sbt_slot_address(g_rt_sbt.address,g_rt_sbt.layout,rt_slot,info.base_alignment),
                                                g_rt_sbt.layout.stride,g_rt_sbt.layout.stride},none{};
   vk.CmdTraceRaysKHR(cmd,&raygen,&none,&none,&none,(g_hw+7)/8*8,(g_hh+7)/8*8,1);   // the compute pass's 8x8-group grid
+  if(g_beside_gi_trace)(*g_beside_gi_trace)(cmd);   // a compute dispatch: outside this barrier's RT source scope
   memory_barrier(cmd,VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,kAll);
  }
  if(!g_hit_em_logged && host->cfg_int("rt_hit_emission",0)>0){
@@ -3630,6 +3636,29 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     sharc_timestamp(cmd, 1);
     memory_barrier(cmd, kCS, kCS);
   }
+  // rt_sun_overlap (default 0, live; docs/progress/claude-r3-core.md): the sun trace beside the GI trace. The GI passes
+  // read neither the sun mask (binding 16) nor rtVis, and the sun pass reads nothing the GI writes; both read the TLAS
+  // and the origins (barrier above). Of the sun-trust image the GI reads the header and roof volumes (texels 0-7 and
+  // 48+, staged by sunt_begin behind its own barrier), the sun passes write only texels 8-47 (scene top, camera, query
+  // radius, counters). So the sun trace is recorded right after the GI trace command with no barrier between them
+  // (g_beside_gi_trace), the barrier after the GI trace orders both, and the sun resolve runs beside the GI temporal pass.
+  // The images are the same; with stats on, the GI trace's own timestamps then include the sun trace, and the sun trace
+  // has no per-pass line of its own (judge the "rt passes: GPU cost" total).
+  s.rt_sun = false;
+  bool shadow_general = false, sun_traced = false, sun_resolved = false;
+  const bool sun_resolve_on = g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8;
+  const std::function<void(VkCommandBuffer)> sun_beside = [&](VkCommandBuffer c) {
+    if (sun_traced) return;
+    sun_traced = true;
+    // No per-pass timestamps here: an ALL_COMMANDS timestamp between the two traces would wait for the GI trace.
+    s.rt_sun = dispatch(c, g_rt_shadow, b, pc, g_w, g_h, true);
+  };
+  const bool sun_overlap = rt_shadows && s.gi && gi_rt && host->cfg_int("rt_sun_overlap", 0) != 0;
+  if (sun_overlap) {
+    image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
+    shadow_general = true;
+    g_beside_gi_trace = &sun_beside;
+  }
   if (s.gi) {
     // The MVs are sampled in SHADER_READ_ONLY by the traces (bounce
     // reprojection) and the temporal pass; their pass may leave them elsewhere.
@@ -3647,8 +3676,16 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     } else {
       dispatch(cmd, g_trace, b, pc, g_hw, g_hh);
     }
+    // rt_sun_overlap: the paths without the hit-GI hook (SHaRC, plain RT trace, fallbacks) trace the sun here.
+    if (g_beside_gi_trace) { sun_beside(cmd); g_beside_gi_trace = nullptr; }
     trace_timestamp(cmd, 1, s.rt_gi_applied);
     memory_barrier(cmd, kCS, kCS);
+    if (sun_traced && s.rt_sun && sun_resolve_on && refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
+      pass_timestamp(cmd, kSunResolve, 0);   // beside the GI temporal pass: the barrier above orders the sun trace
+      s.rt_sun = dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);
+      pass_timestamp(cmd, kSunResolve, 1, s.rt_sun);
+      sun_resolved = true;
+    }
     pass_timestamp(cmd, kTemporal, 0);
     const bool temporal_applied = dispatch(cmd, g_temporal, b, pc, g_hw, g_hh);
     pass_timestamp(cmd, kTemporal, 1, temporal_applied);
@@ -3667,14 +3704,17 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // screen-space contact shadows; both fold into the game's sun shadow mask.
   s.tlas = tlas;   // the post pass's debug views
   s.alpha = alpha;
-  s.rt_sun = false;
+  g_beside_gi_trace = nullptr;
   if (rt_shadows) {
     rt_begin();
-    image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
-    pass_timestamp(cmd, kSunTrace, 0);
-    s.rt_sun=dispatch(cmd,g_rt_shadow,b,pc,g_w,g_h,true);
-    pass_timestamp(cmd, kSunTrace, 1, s.rt_sun);
-    if (s.rt_sun && g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
+    if (!shadow_general) image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
+    if (!sun_traced) {   // the ordinary order (and rt_sun_overlap when no GI trace was recorded)
+      sun_traced = true;
+      pass_timestamp(cmd, kSunTrace, 0);
+      s.rt_sun=dispatch(cmd,g_rt_shadow,b,pc,g_w,g_h,true);
+      pass_timestamp(cmd, kSunTrace, 1, s.rt_sun);
+    }
+    if (!sun_resolved && s.rt_sun && sun_resolve_on &&
         refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
       memory_barrier(cmd, kCS, kCS);
       pass_timestamp(cmd, kSunResolve, 0);
