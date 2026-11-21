@@ -6,15 +6,24 @@ Thanks for trying BG3RTX. This is a [b]public beta[/b], tested in a limited set 
 [*]The game must use the [b]Vulkan[/b] renderer and [b]DLSS[/b]. DirectX 11 is not supported; Ray Reconstruction does not run with FSR, XeSS or TAA.
 [*][b]NVIDIA RTX only.[/b] Frame generation 2x needs RTX 40 or newer; 3x and 4x need RTX 50.
 [*]Start with [b]Low[/b] and raise settings step by step. There are no tested VRAM recommendations yet.
-[*]The [b]first start[/b] compiles shaders: expect a slower load and some stutter once.
+[*]The [b]first start[/b] compiles shaders: a slower load and some stutter once, quicker afterwards.
 [*][b]Ctrl+Shift+F9[/b] switches all ray tracing off and on in game, to check whether a problem comes from BG3RTX (change it in the launcher, Hotkeys).
-[*][b]New in 0.9.6:[/b] less video memory, a clearer launcher, [b]RTX Hair[/b] (beta, off by default) that now works, a faster start from the second launch, opacity micromaps back in High and Ultra, a water flicker fixed. See the Changelog.
-[*]BG3RTX changes nothing in the game folder, the registry or your saves.
+[*]BG3RTX changes nothing in the game folder, the registry or your saves. Starting the game without the launcher runs the plain game.
 [*]Downloads: [b]Files[/b] tab ([i]Setup.zip[/i] installer or [i]Portable.zip[/i]). Source code (GPL-3.0-or-later): [url=https://github.com/NIGos/BG3RTX]github.com/NIGos/BG3RTX[/url].
 [/list]
+[size=3][color=#f2c078][b]New in 0.9.6[/b][/color][/size]
+[list]
+[*][b]Less video memory:[/b] about 0.8 to 1.0 GB less in the test scenes, same image.
+[*][b]New launcher:[/b] a setting applies when you click it, no Save button; clearer pages and restart badges.
+[*][b]Low-latency scene[/b] (on in High and Ultra): the lighting no longer waits for the ray-traced scene.
+[*][b]RTX Hair[/b] (beta, off by default) now works, keeps its strands while the camera moves and no longer freezes the frame in crowded rooms.
+[*][b]Faster game start[/b] from the second launch (hair shaders come from the driver cache).
+[*]Opacity micromaps work again in High and Ultra; a one-frame water reflection flicker is fixed.
+[/list]
+Full list in the Changelog.
 [img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793823026-850583066.png[/img]
 [list]
-[*][b]Crash at start, or frame generation does nothing:[/b] turn off other overlays (Steam, Discord, GOG Galaxy) for one launch.
+[*][b]Crash at start, or frame generation does nothing:[/b] turn off other overlays (Steam, Discord, GOG Galaxy) for one launch, then restart the game.
 [*][b]Stalls, missing geometry or crashes after a while:[/b] usually video memory. Lower the preset or resolution and restart.
 [*][b]An option changed nothing:[/b] options marked [i]Restart to apply[/i] need a game restart.
 [*]Questions go here. Bugs go on the [b]Bugs[/b] tab, one report per problem.
@@ -22,20 +31,22 @@ Thanks for trying BG3RTX. This is a [b]public beta[/b], tested in a limited set 
 [img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793823079-1370877169.png[/img]
 [list=1]
 [*]Turn on [b]Detailed logging[/b] (launcher, Help & support), restart the game and reproduce the problem.
-[*]In the launcher: [i]Create a report…[/i], [i]Preview files[/i], [i]Save report…[/i], and attach the file. Nothing is uploaded for you.
-[*]Add your GPU and VRAM, driver and game version, other graphics mods, and your preset and changed options.
+[*]In the launcher: [i]Create a report…[/i], [i]Preview files[/i], [i]Save report…[/i], and attach the file. Nothing is uploaded for you; check it before you share it.
+[*]Add your GPU and VRAM, driver and game version, other graphics mods, your preset and changed options.
 [*]Say where and what happened. A screenshot with Ctrl+Shift+F9 off and on helps a lot.
 [/list]
 Turn Detailed logging off afterwards. [color=#f2c078]Please do not post a save file unless asked.[/color]
 [img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793823121-1599587881.png[/img]
 [list]
-[*]Act 2, most of Act 3 and sessions of several hours are not systematically tested yet. Reports are very welcome.
+[*]Act 2, most of Act 3 and sessions of several hours are not systematically tested yet. Long sessions can hold on to video memory.
 [*]A reflected surface that is hidden or off screen keeps the game's own reflection for now.
-[*]The first start after installing can take 15 to 50 s longer while hair shaders are created. Later starts reuse them.
-[*]ReShade works, frame generation included; its AO or GI effects duplicate BG3RTX's work. HDR is not tested.
-[*]DLSS 5 Neural Rendering is experimental and costs about 6.7 ms per frame on an RTX 5090.
+[*]The first start after installing can take 15 to 50 s longer while hair shaders are created, also with RTX Hair off.
+[*]Turning hair shadows on the first time compiles shaders: a short pause is expected.
+[*]The water flicker at the port is also in the game's own water.
+[*]ReShade works, frame generation included; its AO or GI effects duplicate BG3RTX's work. Other mods and HDR are not tested.
+[*]DLSS 5 Neural Rendering is experimental: it changes the look and costs about 6.7 ms per frame (RTX 5090, 3840x1600).
 [*]A new game patch can break BG3RTX until it is updated.
-[*][b]RTX Hair[/b]: styles not converted yet stay as the game's hair, and a head seen for the first time shows the game's hair for about half a second.
+[*][b]RTX Hair[/b]: styles not converted yet stay as the game's hair, distant hair can look softer, and a head seen for the first time shows the game's hair for about half a second.
 [/list]
 [center][img]https://staticdelivery.nexusmods.com/mods/3474/images/26453/26453-1793822830-820569208.png[/img]
 [size=2][color=#beb5a4]Enjoy the light. See you in the Bugs tab.[/color][/size][/center]
