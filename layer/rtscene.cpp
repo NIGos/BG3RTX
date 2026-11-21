@@ -203,7 +203,8 @@ uint64_t g_ho_omm_accelerated = 0, g_ho_omm_downgraded = 0;
 // the micro-map data alive until its GPU work is done). false: it ended or was reset, or a ticket was refused.
 bool handout_tickets(VkCommandBuffer cmd, uint64_t user, const std::vector<uint64_t>& tickets) {
   if (!cmd || cmd_recording(cmd) != user) return false;
-  for (const uint64_t t : tickets) if (!omm::register_ticket_use(cmd, t)) return false;
+  // An ended or untracked user recording declines (the caller downgrades its traversal), never retains OMM off.
+  for (const uint64_t t : tickets) if (!omm::try_register_ticket_use(cmd, t)) return false;
   return true;
 }   // a handout waits for its resolution at a submit (fast path for every submit)
 bool slot_pinned(uint32_t i) { std::lock_guard<std::mutex> l(g_handout_mu); return g_ho.pinned(int(i)); }
