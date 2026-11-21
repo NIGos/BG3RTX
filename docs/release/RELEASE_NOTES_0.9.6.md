@@ -162,3 +162,8 @@ Known limits of RTX Hair:
    the game version and any other graphics mods. Say where it happened and what you saw.
 
 Press **Ctrl+Shift+F9** in game to switch all ray tracing off and on. It shows whether a problem comes from BG3RTX.
+
+## Licence and source
+
+BG3RTX is free software under GPL-3.0-or-later with an additional permission for the NVIDIA SDK libraries it ships.
+Source code: https://github.com/NIGos/BG3RTX. Downloads are on the Files tab of the BG3RTX page on Nexus Mods only.

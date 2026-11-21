@@ -16,8 +16,8 @@ Main is 8f4f43da plus the docs commit that follows it.
     over hairtest18 on 2026-11-21 and found everything fine: Setup install tested by the user.
   - Previous candidates in `.scratch/old_rc_122493b1/`, `.scratch/old_rc_3ed4ec08/` and `.scratch/old_rc_08cb1e99/`; older in `.scratch/old_rc_745a1fff/`.
   - The user tested this candidate on 2026-11-21: everything OK.
-  - Player docs changed after it was built (claude/docs-096: README, USER_SETTINGS, release notes, Nexus texts):
-    repackage and rerun verify_rc before publishing so the archive carries them.
+  - claude/docs-nexus changes the shipped `README.md` (source link, Nexus-only downloads) after this build:
+    repackage and rerun verify_rc before publishing so the archive carries it.
   - Nothing is published, tagged or uploaded. Publishing is the user's action.
 - Installed app: 0.9.6-hairtest18 (commit 1c09e039), unchanged; it lacks the 2026-11-20 and 2026-11-21 changes.
 - Lives: allowed overnight by the user's /goal only. A new session must ask again; after a go, tell the user and wait
@@ -113,8 +113,10 @@ Kept off: `gi_far_roof_emission` (PT CLOSER, but +0.7-1 ms GI/RT in Dialogue1; u
 ## Open for the user
 
 1. Answered 2026-11-21: overnight changes confirmed, OMM on in High, `gi_far_roof_emission` off, final test OK.
-2. Merge claude/docs-096 (player docs for 0.9.6-beta), then repackage and rerun verify_rc.
+2. Done: claude/docs-096 merged and repackaged (8f4f43da). claude/docs-nexus adds the source link to the shipped
+   README and release notes: repackage and rerun verify_rc once more after it merges.
 3. Setup.exe: done (the user installed and tested it on 2026-11-21).
-4. Publish 0.9.6-beta (user action).
+4. Publish 0.9.6-beta (user action): upload to Nexus Mods only (Files tab). No GitHub release; the repository
+   https://github.com/NIGos/BG3RTX is public as the source (user decision 2026-11-21).
 5. Decide whether RTX Hair goes On in a preset. Unconverted styles: convert them or accept cards.
 6. The worktrees, folders and remote branches under review: keep, merge or remove.

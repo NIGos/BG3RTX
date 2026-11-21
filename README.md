@@ -37,7 +37,8 @@ control is in [the settings guide](docs/USER_SETTINGS.md).
 
 ### Install
 
-Two downloads hold the same files. Close the game first.
+Download BG3RTX from the **Files** tab of the BG3RTX page on Nexus Mods. There are no downloads on GitHub: this
+repository is the source code. Two downloads hold the same files. Close the game first.
 
 - **Setup.exe** (`BG3RTX-0.9.6-beta-Setup.exe`): installs for your Windows user only, without administrator rights,
   to `%LOCALAPPDATA%\Programs\BG3RTX`, and adds a Start menu entry. It is not signed, so Windows SmartScreen may warn.
@@ -94,14 +95,14 @@ Change them on the launcher's **Hotkeys** page.
   lower the preset or resolution and restart the game.
 - The first game start after installing can spend 15 to 50 seconds longer creating shaders. Later starts reuse them.
 - RTX Hair limits, and the full list: [release notes](docs/release/RELEASE_NOTES_0.9.6.md#known-issues).
-- To report a bug: **Create a report…** in the launcher (Home, or Help & support), then attach the ZIP on the Nexus
-  Mods page's Bugs tab. Nothing is uploaded automatically.
+- To report a bug: **Create a report…** in the launcher (Home, or Help & support), then attach the ZIP on the Bugs
+  tab of the BG3RTX page on Nexus Mods. Nothing is uploaded automatically.
 
 ### Licence
 
 BG3RTX is free software under **GPL-3.0-or-later** with an additional permission for the NVIDIA SDK libraries it
 ships: [LICENSE](LICENSE), [LICENSE-EXCEPTION.md](LICENSE-EXCEPTION.md). Third-party components and their licences
-are in [THIRD_PARTY.md](THIRD_PARTY.md). `granny2.dll` is never shipped or downloaded: the optional "Convert all
+are in [THIRD_PARTY.md](THIRD_PARTY.md). This repository (https://github.com/NIGos/BG3RTX) is the complete source code. `granny2.dll` is never shipped or downloaded: the optional "Convert all
 styles" for RTX Hair needs a copy you provide. NVIDIA, GeForce RTX and DLSS are trademarks of NVIDIA Corporation.
 BG3RTX is not made, endorsed or supported by NVIDIA or Larian Studios.
 

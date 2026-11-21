@@ -83,5 +83,7 @@ reports and previous-version lifecycle backups remain. Direct lifecycle calls ke
   in [offline status](RELEASE_OFFLINE_STATUS.md). Notices do not grant game-data redistribution.
 - [ ] Approve explicit deferral of the unqualified backlog and define supported hardware/content.
 - [ ] Review the final archive, README, known issues and deciding evidence before distribution.
+- [x] Distribution channel (user decision 2026-11-21): publishing is an upload to Nexus Mods only (Files tab).
+  No GitHub release. The GitHub repository https://github.com/NIGos/BG3RTX is public and is the GPL source offer.
 
 No live batch, installation outside scratch or publication is authorized by this checklist.
