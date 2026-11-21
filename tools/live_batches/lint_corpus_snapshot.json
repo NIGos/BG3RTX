@@ -111701,6 +111701,162 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "cpu_timing",
+          "1"
+        ],
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dev",
+          "1"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_preview_f32",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "3"
+        ],
+        [
+          "fg_state_every",
+          "120"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "gi_far_roof_emission",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "replay_pack_cap_mb",
+          "2048"
+        ],
+        [
+          "rt_alpha_fine_lod",
+          "0"
+        ],
+        [
+          "rt_capture_wide_split",
+          "1"
+        ],
+        [
+          "rt_omm",
+          "0"
+        ],
+        [
+          "rt_omm_dyn",
+          "0"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ],
+        [
+          "sharc",
+          "0"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "hit emission: first hit-GI dispatch with the emissive scene \\(sun 1, sharc 0\\)"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[replay\\] pack 1 (?:written|failed|over budget)"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "The Blushing Mermaid - 96h 39m",
+      "patterns": [
+        "\\[replay\\] pack 1 (?:written|failed|over budget)"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "replay_pack",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -114543,6 +114699,18 @@
       null
     ],
     "\\[hair primary\\] header pass \\(last .*second scene passes of an interval with their own header and tag \\d+": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack 1 emissive scene \\(set 4\\): \\d+ texture and \\d+ cache elements bound": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB \\(\\d+ images omitted, \\d+ read by shader\\), frame \\d+, pass gi_hit_sun_em, instances [1-9]\\d* -> .+": [
+      0,
+      null
+    ],
+    "hit emission: first hit-GI dispatch with the emissive scene \\(sun 1, sharc 0\\)": [
       0,
       null
     ]

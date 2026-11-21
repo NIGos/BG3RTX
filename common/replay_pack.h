@@ -225,8 +225,54 @@ inline constexpr auto kReflections = [] {
   if(n!=v.size())throw "reflection replay contract size";
   return v;
 }();
+// gi_hit_sun_em (replay_pack_pass=2; shaders/gi/gi_trace_rt_hit_sun_em.hlsl, core/gi.cpp hit_gi_dispatch's
+// rt_hit_emission + gi_hit_sun variant, no SHaRC): kGiHitDirect (sets 0-3: set 3 is the sun set, whose b0-6 the
+// lighting inputs already carry) + the sun trust image (set 3 b8, core/sun_trust.h) + the host's D-EM emissive scene
+// (shaders/rt/em_common.hlsli, common/hit_emission_bindings.h) at set 4. Live binds it as set 2; the replay compiles
+// the pass with EM_SET=4 (kEmPackSet) so the lighting inputs keep set 2. The emissive TLAS (s4 b0) is not captured:
+// the replay rebuilds it from s4 b1 (emInfo) and b3 (emSoup) as layer/emissive.cpp em_as_build does (em_geometries).
+inline constexpr uint32_t kEmPackSet = 4;
+inline constexpr auto kGiHitSunEm = [] {
+  std::array<Slot, std::size(kGiHitDirect) + 13> slots{};
+  size_t n = 0;
+  for (const auto& s : kGiHitDirect) slots[n++] = s;
+  const Slot extra[] = {
+      {3, 8, kStorage, 1, 98 /* VK_FORMAT_R32_UINT */, "sunTrust"},
+      {4, 0, kTlas, 1, 0, "emTlas"},     {4, 1, kSsbo, 1, 0, "emInfo"},   {4, 2, kSsbo, 1, 0, "emPool"},
+      {4, 3, kSsbo, 1, 0, "emSoup"},     {4, 4, kSsbo, 1, 0, "emRecs"},   {4, 5, kSsbo, 1, 0, "emLights"},
+      {4, 6, kSampled2D, 256, 0, "emTex"}, {4, 7, kSampler, 1, 0, "emSampler"}, {4, 8, kSsbo, 1, 0, "emStats"},
+      {4, 9, kSsbo, 1, 0, "emHeader"},   {4, 10, kSsbo, 1, 0, "emGlobal"}, {4, 11, kSampled2DArray, 16, 0, "emCache"}};
+  for (const auto& s : extra) slots[n++] = s;
+  if (n != slots.size()) throw "gi_hit_sun_em replay contract size";
+  return slots;
+}();
+// The emissive scene's single BLAS (layer/emissive.cpp build + em_as_build): one opaque triangle geometry per emInfo
+// entry (16 B: soup offset, stride | flags, record, triangles), entry i = geometry i, vertices non-indexed in the soup
+// (camera-relative world, position first). `records` (emHeader word 3) is the number of entries the build wrote.
+// An entry the soup does not hold (offset + 3 x stride x tris past `soup_bytes`, stride < 12) or without triangles
+// keeps its index as a zero-triangle geometry, so CommittedGeometryIndex stays the emInfo entry.
+struct EmGeometry { uint64_t offset; uint32_t stride, tris; };
+inline std::vector<EmGeometry> em_geometries(const uint32_t* info, uint64_t info_words, uint32_t records, uint64_t soup_bytes,
+                                             uint32_t* dropped = nullptr) {
+  std::vector<EmGeometry> out;
+  if (dropped) *dropped = 0;
+  for (uint64_t i = 0; i < records && (i + 1) * 4 <= info_words; ++i) {
+    const uint32_t* v = info + i * 4;
+    EmGeometry g{v[0], v[1] & 255u, v[3]};
+    const bool ok = g.tris && g.stride >= 12 && g.stride % 4 == 0 && g.offset + uint64_t(g.tris) * 3 * g.stride <= soup_bytes;
+    if (!ok) { if (g.tris && dropped) ++*dropped; g.tris = 0; }
+    out.push_back(g);
+  }
+  return out;
+}
+// The defines a non-pass shader of a pack (tools/pt_reference.hlsl, native_ambient.hlsl) takes from the pack's
+// `defines`: contract_defines (RT_CASCADE_MASKS) of a gi_hit_direct pack. A gi_hit_sun_em pack keeps the live
+// request's defines (the pass must compile what ran); its RT_SPEC_CASCADE=1 is the same mask rule as
+// RT_CASCADE_MASKS=1 (tools/spec_cascade_check.py), the other spec defines belong to the pass alone.
+inline std::string reference_defines(const std::string& pass, const std::string& defines);
 inline constexpr Pass kPasses[] = {
     {"reflections", "gi/rt_reflections.hlsl", kReflections.data(), uint32_t(kReflections.size()), 3, 256},
+    {"gi_hit_sun_em", "gi/gi_trace_rt_hit_sun_em.hlsl", kGiHitSunEm.data(), uint32_t(kGiHitSunEm.size()), 5, 256},
     {"local_shadows", "gi/rt_local_shadows_box_k.hlsl", kLocalShadows.data(), uint32_t(kLocalShadows.size()), 5, 256},
     {"gi_hit_direct", "gi/gi_trace_rt_hit_direct.hlsl", kGiHitDirect, uint32_t(std::size(kGiHitDirect)), 4, 256},
     {"water_compose_fixture", "rt/water_compose_fixture.hlsl", kWaterComposeFixture.data(), uint32_t(kWaterComposeFixture.size()), 4, 256},
@@ -464,6 +510,18 @@ inline std::string contract_defines(const std::string& live, std::string* droppe
   }
   return out;
 }
+inline std::string reference_defines(const std::string& pass, const std::string& defines) {
+  if (pass != "gi_hit_sun_em") return contract_defines(defines);
+  std::string out;
+  for (size_t a = 0; a < defines.size();) {
+    size_t e = defines.find(';', a);
+    if (e == std::string::npos) e = defines.size();
+    const std::string d = defines.substr(a, e - a);
+    if (d == "RT_CASCADE_MASKS=1" || d == "RT_SPEC_CASCADE=1") { out = "RT_CASCADE_MASKS=1"; }
+    a = e + 1;
+  }
+  return out;
+}
 
 // ---- rt_cascade_casters in the pack (the "casters" directive) ----
 // The caster instance's bytes: TRIS x 3 vertices of STRIDE (layer/bvhsplit.cpp builds its BLAS from them).
@@ -694,6 +752,8 @@ inline constexpr uint32_t kPriorityAlphaCache = 1, kPriorityProbes = 2, kPriorit
 inline uint32_t texture_priority(uint32_t set, uint32_t binding) {
   if (set == 2) return binding == 45 ? kPriorityProbes : kPriorityLighting;
   if (set == 3) return kPriorityLighting;
+  // gi_hit_sun_em's emissive scene (kEmPackSet): the masks and base maps are small, the VT caches are the hit cache's.
+  if (set == kEmPackSet) return binding == 11 ? kPriorityHit : kPriorityLighting;
   if (set != 1) return 0;
   return binding == 14 || binding == 2 ? kPriorityHit : binding == 3 ? kPriorityAlphaCache : 0u;
 }

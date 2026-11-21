@@ -1,0 +1,26 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-21, branch claude/em-pack. STAGED, not queued, not authorized.",
+  "question": "With gi_far_roof_emission=1 (specialization 1054), does the hidden-hit GI drop only emission found beyond R0 behind a roof volume, and does that move the GI's emission term closer to the PT reference there? (r2_tools/predicted.json 'offline'; the r2-inn-roof-em pack could not answer it: wrong pass, no emission scene, no PT emission.)",
+  "evidence": ".scratch/coord/roof_em_pt.md: the GI writer refused the emission variant, frame_replay bound no emissive scene in a pack replay, the PT had no emission. claude/em-pack adds replay_pack_pass=2 (pass gi_hit_sun_em: the live request and specs, the sun trust image s3b8, the D-EM scene as set 4), the emissive TLAS rebuilt offline, PT_EM (mode 8). pt_reference_test 12-16 on the synthetic emissive box: PT mode 8 equals the pass's hidden-hit emission term within 2% (0.6927 vs 0.6918), 1054=1 lowers only, giRaw.a bit-equal.",
+  "live": {
+    "job": "r2-inn-em-pack: one launch at The Blushing Mermaid, Ultra with OMM off (startup: the pack contract is non-OMM), FG 3x, visible_unfocused_fg, static camera, gi_far_roof_emission=0; warmup, then replay_pack_pass=2 + replay_pack=1 and the runner waits for the writer's line before restoring.",
+    "predicted": {
+      "pack": "One '[replay] pack 1 written: <MB> MB (...), frame <f>, pass gi_hit_sun_em, instances <n> -> <dir>' line, at most 2048 MB, after '[replay] pack 1 emissive scene (set 4): <t> texture and <c> cache elements bound'. The casters line as in Ultra (rt_cascade_casters=1).",
+      "first_hit_gi": "'hit emission: first hit-GI dispatch with the emissive scene (sun 1, sharc 0)'.",
+      "faults": "0: no VK_ERROR, no crash, no core fault, no '[replay] pack 1 failed' or 'over budget'.",
+      "cost": "Capture only: one frame of copies; the writer thread off the render thread. Not a cost window (no gate)."
+    }
+  },
+  "offline": {
+    "steps": [
+      "bin/frame_replay --pack <pack> --spec 1054=0 --out <scratch>/off   (the pass as live; its 'vs live' line is the replay's fidelity)",
+      "bin/frame_replay --pack <pack> --spec 1054=1 --out <scratch>/on",
+      "bin/frame_replay --pack <pack> --hlsl shaders/gi/gi_trace_rt_hit_sun.hlsl --out <scratch>/none   (no emission: the term's baseline)",
+      "bin/frame_replay --pack <pack> --pt-reference --pt-skip-cost --out <scratch>/pt   (PT_CASTERS from the pack's casters, PT_EM from its pass: mode 8)",
+      "py -3 tools/em_roof_ab.py --off <scratch>/off --on <scratch>/on --none <scratch>/none --pt <scratch>/pt --out <scratch>/em_roof_ab.txt"
+    ],
+    "predicted": "1054=1: 0 raised pixels, giRaw.a bit-equal (else INVALID); changed pixels only where a hidden emitter lies beyond R0 = gi_rt_radius through a padded roof volume of the live trust image; there mean |E_on - PT| < mean |E_off - PT| and most tiles closer. No changed pixel: the inn camera sees no such emitter; say so, the key stays off (no evidence for a default).",
+    "noise": "The PT's own noise at 32 iterations x 4 spp: rerun the PT with another --pt-iters and require the verdict to hold; the GI side is paired (same rays in A and B)."
+  },
+  "decision": "gi_far_roof_emission becomes a default candidate (Ultra) only if the offline verdict is CLOSER, no raised pixel, and the r2-inn-roof-em live energy and GI ms stay within noise plus floor. FARTHER: the hypothesis is wrong; write it down and keep 0."
+}

@@ -39,6 +39,8 @@
 //   6 L x w, near hits not visible       hidden-on-screen fraction    the local lights' part
 //     (what fallback0 leaves at 0)
 //   7 (PT_ENV) environment at misses      first-vertex miss fraction   environment at first-vertex misses
+//   8 (PT_EM) first-vertex emission x the lum of first-vertex       lum of the path emission
+//     GI ray fade, hidden first hits      emission (no fade, all)      (throughput-carried, game units)
 // PT_FURNACE_LE > 0 (CTest): every vertex also emits PT_FURNACE_LE; PT_LAMBERT=1 scatters with a
 // Lambertian of albedo PT_ALBEDO (common/transport_bsdf.h tb_sample) for the closed-form furnace.
 // PT_CASTERS=1 (frame_replay sets it for a pack with the "casters" directive, common/replay_pack.h): the
@@ -86,6 +88,20 @@
 #define NATIVE_HIT_SLOTS_BINDING 46
 #include "rt/native_hit_direct.hlsli"
 #include "../common/native_hit_bounce.h"
+// PT_EM=1 (frame_replay sets it for a gi_hit_sun_em pack, common/replay_pack.h kGiHitSunEm): the host's D-EM emissive
+// scene at EM_SET (the pack's set 4). At every path vertex on the main TLAS (not a cascade caster) the hit's emission
+// is the live lookup's (rt/native_hit_emission.hlsli: em_lookup over [t - eps, t + eps], the record policy, push
+// rt_ao_radius = rt_em_tol), in game units (pre-exposed, as the GI adds it). Mode 8 only: modes 0-7 stay as they were.
+#ifndef PT_EM
+#define PT_EM 0
+#endif
+#if PT_EM
+#ifndef EM_SET
+#define EM_SET 4
+#endif
+#include "rt/em_common.hlsli"
+#include "rt/native_hit_emission.hlsli"
+#endif
 // PT_ROOFS=1: the roofs the camera cut away (absent from the TLAS of a pack captured with
 // rt_cascade_casters=0), from the asset database's roof volumes (tools/pt_roofs.py writes
 // captures/pt_roofs.hlsli for the pack). Two declared rules:
@@ -248,6 +264,8 @@ struct PtPath {
   float3 screen;     // prev_bounce_at at a visible first hit
   bool qualified;
   float vertices, nolist, sununknown, fallback;
+  float3 emw;        // PT_EM: first-vertex emission x the GI ray fade 1 - (t/R)^2 (R = max(radius, gi_rt_radius)), hidden first hits
+  float em1, emp;    // PT_EM: luminance of the first-vertex emission (no fade, every first hit), of the throughput-carried path emission
 };
 
 PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, float3x3 inv, inout uint seed) {
@@ -261,8 +279,9 @@ PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, 
   [loop] for (uint b = 1; b <= PT_BOUNCES; ++b) {
     RtHit hh = rt_closest_hit(o, dir, PT_TMAX, cone);
     if (hh.aborted) { if (b == 1) r.cls = 4; break; }
+    bool on_caster = false;
 #if PT_CASTERS
-    { const RtHit hc = pt_caster_hit(o, dir, hh.t >= 0.0 ? hh.t : PT_TMAX); if (hc.t >= 0.0) hh = hc; }   // a cut-away roof first
+    { const RtHit hc = pt_caster_hit(o, dir, hh.t >= 0.0 ? hh.t : PT_TMAX); if (hc.t >= 0.0) { hh = hc; on_caster = true; } }   // a cut-away roof first
 #endif
 #if PT_ROOFS
     if (pt_roof_plane(o, dir, hh.t >= 0.0 ? hh.t : PT_TMAX) >= 0.0) { if (b == 1) r.cls = 4; break; }   // the cut-away roof
@@ -296,6 +315,19 @@ PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, 
         }
       }
     }
+#if PT_EM
+    if (!on_caster) {   // a cascade caster (cut-away roof) is no emitter
+      const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, foot, cam2.c[13].xyz, HIT_EM_TOL);
+      if (all(isfinite(he.radiance))) {
+        r.emp += pt_lum(thr * he.radiance);
+        if (b == 1) {
+          const float R = max(pc.radius, pc.gi_rt_radius), kf = saturate(t / max(R, 1e-4));
+          r.em1 = pt_lum(he.radiance);
+          r.emw = r.cls != 1u ? he.radiance * (1.0 - kf * kf) : 0.0.xxx;
+        }
+      }
+    }
+#endif
     const float3 p = native_hit_position(hh, o + dir * t);
     float3 ng = rt_hit_normal(hh);
     if (!(dot(ng, ng) > 0.0) || !all(isfinite(ng))) break;
@@ -401,6 +433,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     else if (mode == 4u) { acc += float4(near ? r.screen * r.w : 0.0.xxx, r.cls == 4u ? 1.0 : 0.0); aux += r.cls == 3u ? lt : 0.0; }
     else if (mode == 5u) { const float v = max(r.vertices, 1.0); acc += float4(r.nolist / v, r.sununknown / v, r.fallback / v, r.vertices); aux += pt_lum(r.sun); }
     else if (mode == 6u) { acc += float4(near && r.cls != 1u ? r.total * r.w : 0.0.xxx, r.cls == 2u ? 1.0 : 0.0); aux += pt_lum(r.local); }
+    else if (mode == 8u) { acc += float4(r.emw, r.em1); aux += r.emp; }
     else { acc += float4(r.env, r.cls == 0u ? 1.0 : 0.0); aux += pt_lum(r.env1); }
   }
   giRaw[id] = acc / float(PT_SPP);

@@ -1002,6 +1002,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     if (e == std::string::npos) break;
     a = e + 1;
   }
+  // gi_hit_sun_em: the pass declares the emissive scene at EM_SET (live 2); the pack holds it at set 4 (rp::kEmPackSet),
+  // set 2 keeps the lighting inputs. The same program otherwise (shaders/gi/gi_trace_rt.hlsl EM_SET).
+  if (m.pass == "gi_hit_sun_em") defines.push_back("EM_SET=" + std::to_string(rp::kEmPackSet));
   std::vector<uint32_t> spirv = spirv_in ? *spirv_in
       : compile(hlsl_override.empty() ? fs::path(source_root()) / "shaders" / pass.shader : hlsl_override, defines, out / "pass.spv");
   auto file = [&](const std::string& name) { return read_file(pack / name); };
@@ -1300,6 +1303,88 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     std::fflush(stdout);
   }
 
+  // ---- gi_hit_sun_em: the emissive scene's TLAS (s4 b0), rebuilt as layer/emissive.cpp em_as_build builds it: one BLAS of
+  // one opaque geometry per emInfo entry (rp::em_geometries; the geometry index is the entry), one identity instance,
+  // every mask, facing cull off. Its vertices are the captured soup (s4 b3); the record count is emHeader word 3. ----
+  VkAccelerationStructureKHR em_tlas = VK_NULL_HANDLE;
+  if (const rp::Slot* es_slot = rp::find_slot(pass, rp::kEmPackSet, 0); es_slot && es_slot->kind == rp::kTlas) {
+    const uint32_t es = rp::kEmPackSet;
+    auto bi = buffers.find(key(es, 1)), bs = buffers.find(key(es, 3)), bh = buffers.find(key(es, 9));
+    std::vector<rp::EmGeometry> geos;
+    uint32_t dropped = 0, records = 0;
+    if (bi != buffers.end() && bs != buffers.end() && bh != buffers.end()) {
+      const auto info_raw = download(bi->second, bi->second.size), head = download(bh->second, std::min<VkDeviceSize>(bh->second.size, 64));
+      if (head.size() >= 16) std::memcpy(&records, head.data() + 12, 4);
+      geos = rp::em_geometries(reinterpret_cast<const uint32_t*>(info_raw.data()), info_raw.size() / 4, records, bs->second.size, &dropped);
+    }
+    std::vector<VkAccelerationStructureGeometryKHR> eg;
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR> er;
+    std::vector<uint32_t> ec;
+    uint64_t etris = 0;
+    for (const auto& gm : geos) {
+      VkAccelerationStructureGeometryKHR gg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+      gg.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR; gg.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+      auto& t = gg.geometry.triangles;
+      t.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR; t.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+      t.vertexData.deviceAddress = bs->second.address + (gm.tris ? gm.offset : 0); t.vertexStride = gm.tris ? gm.stride : 16;
+      t.maxVertex = gm.tris ? gm.tris * 3 - 1 : 0; t.indexType = VK_INDEX_TYPE_NONE_KHR;
+      eg.push_back(gg); er.push_back({gm.tris, 0, 0, 0}); ec.push_back(gm.tris); etris += gm.tris;
+    }
+    VkDeviceAddress eblas_address = 0;
+    if (!eg.empty()) {
+      VkAccelerationStructureBuildGeometryInfoKHR bb{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+      bb.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR; bb.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+      bb.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR; bb.geometryCount = uint32_t(eg.size()); bb.pGeometries = eg.data();
+      VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+      g.sizesAS(g.dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bb, ec.data(), &sz);
+      Buf store = make_buffer(sz.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false);
+      VkAccelerationStructureCreateInfoKHR ac{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+      ac.buffer = store.b; ac.size = sz.accelerationStructureSize; ac.type = bb.type;
+      VkAccelerationStructureKHR eblas; vkcheck(g.createAS(g.dev, &ac, nullptr, &eblas), "emissive BLAS");
+      if (scratch.size < sz.buildScratchSize + align) scratch = make_buffer(sz.buildScratchSize + align, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
+      bb.dstAccelerationStructure = eblas; bb.scratchData.deviceAddress = (scratch.address + align - 1) / align * align;
+      const VkAccelerationStructureBuildRangeInfoKHR* rptr = er.data();
+      submit([&](VkCommandBuffer c) {
+        barrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+                VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+        g.buildAS(c, 1, &bb, &rptr);
+      });
+      VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR}; ai.accelerationStructure = eblas;
+      eblas_address = g.addressAS(g.dev, &ai);
+    }
+    VkAccelerationStructureInstanceKHR ei{};
+    ei.transform.matrix[0][0] = ei.transform.matrix[1][1] = ei.transform.matrix[2][2] = 1.0f;
+    ei.mask = eblas_address ? 0xFF : 0x00;
+    ei.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+    ei.accelerationStructureReference = eblas_address ? eblas_address : empty.address;
+    Buf einst = make_buffer(sizeof ei, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, false);
+    upload(einst, 0, &ei, sizeof ei);
+    VkAccelerationStructureGeometryKHR etop{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+    etop.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    etop.geometry.instances = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR, nullptr, VK_FALSE, {einst.address}};
+    VkAccelerationStructureBuildGeometryInfoKHR etb{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+    etb.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR; etb.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    etb.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR; etb.geometryCount = 1; etb.pGeometries = &etop;
+    const uint32_t one = 1;
+    VkAccelerationStructureBuildSizesInfoKHR ets{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+    g.sizesAS(g.dev, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &etb, &one, &ets);
+    Buf etstore = make_buffer(ets.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false);
+    VkAccelerationStructureCreateInfoKHR etc_{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+    etc_.buffer = etstore.b; etc_.size = ets.accelerationStructureSize; etc_.type = etb.type;
+    vkcheck(g.createAS(g.dev, &etc_, nullptr, &em_tlas), "emissive TLAS");
+    if (scratch.size < ets.buildScratchSize + align) scratch = make_buffer(ets.buildScratchSize + align, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
+    etb.dstAccelerationStructure = em_tlas; etb.scratchData.deviceAddress = (scratch.address + align - 1) / align * align;
+    { VkAccelerationStructureBuildRangeInfoKHR range{1, 0, 0, 0}; const auto* rptr = &range;
+      submit([&](VkCommandBuffer c) {
+        barrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+                VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+        g.buildAS(c, 1, &etb, &rptr);
+      }); }
+    result.warnings.push_back("emissive scene (set " + std::to_string(es) + "): " + std::to_string(records) + " records, " +
+                              std::to_string(geos.size()) + " geometries, " + std::to_string(etris) + " triangles in its rebuilt TLAS" +
+                              (dropped ? ", " + std::to_string(dropped) + " entries outside the captured soup (no triangles)" : std::string()));
+  }
+
   if (g_handout) {
     check(!g_ab_blas, "--handout with --ab-blas: the two sides trace different TLASes");
     check(rp::find_slot(pass, 1, 9) != nullptr, "--handout: the pass has no scene stamp (set 1 binding 9)");
@@ -1385,13 +1470,13 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
       if (slot.set == 0 && slot.binding == 20) bi = {stats.b, 0, VK_WHOLE_SIZE};
       else if (it != buffers.end()) bi = {it->second.b, 0, it->second.size};
       else {
-        (slot.set < 2 ? missing : missing_lighting).push_back(slot.name);
+        (slot.set < 2 || slot.set >= rp::kEmPackSet ? missing : missing_lighting).push_back(slot.name);
         dummies.push_back(make_buffer(256, slot.kind == rp::kUbo ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false));
         bi = {dummies.back().b, 0, 256};
       }
       w.pBufferInfo = &bi;
     } else if (slot.kind == rp::kTlas) {
-      aw.accelerationStructureCount = 1; aw.pAccelerationStructures = &tlas; w.pNext = &aw;
+      aw.accelerationStructureCount = 1; aw.pAccelerationStructures = slot.set == rp::kEmPackSet && em_tlas ? &em_tlas : &tlas; w.pNext = &aw;
     } else if (slot.kind == rp::kSampler) {
       auto it = samplers.find(k);
       for (uint32_t e = 0; e < slot.count; ++e) {
@@ -1417,7 +1502,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                                                                                                    : (isNan ? nan2d : zero2d);
         ii.push_back({VK_NULL_HANDLE, d.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
       }
-      if (!any && slot.count == 1) (slot.set < 2 ? missing : missing_lighting).push_back(slot.name);
+      if (!any && slot.count == 1) (slot.set < 2 || slot.set >= rp::kEmPackSet ? missing : missing_lighting).push_back(slot.name);
       w.pImageInfo = ii.data();
     }
     vkUpdateDescriptorSets(g.dev, 1, &w, 0, nullptr);
@@ -2016,7 +2101,7 @@ constexpr SynthAmbient kSynthAmbient{};
 // instance 1 as the live writer packs it (InstInfo {0, stride, 0, 0}, mask 0x02, instanceCustomIndex 0xFFFFFF, not
 // opaque, the "casters" directive), stored 1 m higher and moved down by the instance's translation; the
 // variant defines say RT_CASCADE_MASKS=1 (GI rays trace 0x01).
-void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting = false, bool casters = false) {
+void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting = false, bool casters = false, bool emissive = false) {
   fs::create_directories(dir);
   const uint32_t W = g_synth_size, H = g_synth_size;   // --synth-size (default 128, the CTest's)
   constexpr uint32_t frame = 3, stamp = 7;
@@ -2150,6 +2235,7 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
   pc.sun_radius = 0.00459f; pc.res_shift = 1;
   pc.ls_source_radius = 0.05f; pc.ls_clear = 0.2f; pc.ls_min_radius = 0; pc.ls_flags = 1u << 24;   // hit_ls_policy
   pc.ao_direct = 1; pc.rt_origin = 0;
+  if (emissive) pc.radius = 6;   // gi_far's ray length (core/gi.cpp hit_gi_dispatch: gi_far_m in Push::radius)
   // Tile caches (1 x 1 x 1 RGBA32F): albedo, normal (wzy = (0.5, 0.5, 0): frame normal (0, 0, 1)), params.
   const float albedo[4] = {0.8f, 0.6f, 0.4f, 1}, nrm[4] = {0, 0, 0.5f, 0.5f}, params[4] = {0, 0.5f, 0, 0}, page[4] = {0, 0, 0, 0};
   auto vec = [](const float* f, size_t n) { return std::vector<float>(f, f + n); };
@@ -2227,6 +2313,24 @@ void synthesize(const fs::path& dir, bool dark, bool box = false, bool lighting 
     m.samplers.push_back({2, 16, 0, 1, 1, 1, 2, 2, 2, 0, 1000}); m.samplers.push_back({2, 32, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
     m.samplers.push_back({3, 6, 0, 1, 1, 1, 2, 2, 2, 0, 1000});
     m.notes.push_back(" synthetic lighting inputs (sets 2-3): kSynthAmbient");
+  }
+  if (emissive) {
+    // gi_hit_sun_em (with box): the box's 12 triangles are also the emissive scene (set 4, layer/emissive.cpp's layout):
+    // one emInfo entry {soup 0, stride | kEmInfoEmissive, record 0, 12 triangles}, one record of constant radiance 1
+    // (mode 0, flags 0: the record policy uses it), the header's record count 1 and build camera (0, 0, 0) = cam2 c[13].
+    // The pass: the far variant (RT_SPEC_GI_FAR, constant 1007 = 1, rays of Push::radius 6 m), as Ultra runs it.
+    check(box, "--synth-emissive needs the box");
+    const uint32_t em_info[4] = {0, stride | (1u << 11), 0, 12};
+    std::vector<uint32_t> rec(64, 0); { const float one = 1; for (int k = 0; k < 3; ++k) std::memcpy(&rec[k], &one, 4); } rec[61] = 0xFFFFFFFFu;
+    std::vector<uint32_t> head(64, 0); head[3] = 1;
+    write_file(dir / "em_info.bin", em_info, sizeof em_info); write_vec(dir / "em_soup.bin", soup);
+    write_vec(dir / "em_rec.bin", rec); write_vec(dir / "em_head.bin", head);
+    const uint32_t es = rp::kEmPackSet;
+    buf(es, 1, 16, "em_info.bin"); buf(es, 2, 256, nullptr); buf(es, 3, soup.size(), "em_soup.bin"); buf(es, 4, 256, "em_rec.bin");
+    buf(es, 5, 256, nullptr); buf(es, 8, 256, nullptr); buf(es, 9, 256, "em_head.bin"); buf(es, 10, 16, nullptr);
+    m.samplers.push_back({es, 7, 0, 1, 1, 1, 0, 0, 0, 0, 16});
+    m.pass = "gi_hit_sun_em"; m.defines = "RT_SPEC_GI_FAR=1"; m.specs.push_back({1007, 1});
+    m.notes.push_back(" synthetic emissive scene (set 4): the box, radiance 1");
   }
   const std::string mf = rp::serialize(m);
   { rp::Manifest back; std::string error; check(rp::parse(mf, back, error), "synthetic manifest does not parse: " + error); }
@@ -2407,17 +2511,17 @@ int load_test() {
 // hit-material epoch), every mode of one iteration the same seed, so all modes see the same paths;
 // Push::debug = mode, rt_stats 0. Sums each mode's giRaw (rgba) and giRawDepth (aux) in double; the
 // mean is sum / iters (the shader averages its PT_SPP).
-constexpr uint32_t kPtModes = 7, kPtModesEnv = 8;   // 8: + mode 7, the environment at misses (PT_ENV)
+constexpr uint32_t kPtModes = 7, kPtModesEnv = 8, kPtModesEm = 9;   // 8: + mode 7, the environment at misses (PT_ENV); 9: + mode 8, emission (PT_EM)
 struct PtAccum {
   uint32_t w = 0, h = 0, iters = 0, modes = 0;
-  std::vector<double> rgba[kPtModesEnv], aux[kPtModesEnv];
+  std::vector<double> rgba[kPtModesEm], aux[kPtModesEm];
   std::vector<double> gpu_ms;
   double mean(uint32_t mode, uint32_t c, size_t i) const { return (c < 4 ? rgba[mode][i * 4 + c] : aux[mode][i]) / std::max(iters, 1u); }
 };
 // `shader` (in tools/): pt_reference.hlsl, or native_ambient.hlsl (--native-ambient, same mode protocol).
 PtAccum pt_run(const fs::path& pack, std::vector<std::string> defines, uint32_t iters, uint32_t modes, const fs::path& out, bool quiet = true,
                const std::string& shader = "pt_reference.hlsl") {
-  check(modes <= kPtModesEnv, "at most 8 modes");
+  check(modes <= kPtModesEm, "at most 9 modes");
   PtAccum acc; acc.iters = iters; acc.modes = modes;
   ReplayHooks hooks;
   hooks.patch = [&](uint32_t run, std::vector<uint8_t>& push) {
@@ -2450,7 +2554,11 @@ PtAccum pt_run(const fs::path& pack, std::vector<std::string> defines, uint32_t 
   rp::Manifest m; std::string error;
   { auto text = read_file(pack / "manifest.txt"); check(rp::parse(std::string(text.begin(), text.end()), m, error), error); }
   std::vector<std::string> all = defines;
-  for (size_t a = 0; a < m.defines.size();) { size_t e = m.defines.find(';', a); all.push_back(m.defines.substr(a, e - a)); if (e == std::string::npos) break; a = e + 1; }
+  // Only the pack defines a reference shader shares with the pass (rp::reference_defines: the GI ray mask); a
+  // gi_hit_sun_em pack also gives its emissive scene's set (PT_EM reads it, tools/pt_reference.hlsl).
+  const std::string pack_defines = rp::reference_defines(m.pass, m.defines);
+  for (size_t a = 0; a < pack_defines.size();) { size_t e = pack_defines.find(';', a); all.push_back(pack_defines.substr(a, e - a)); if (e == std::string::npos) break; a = e + 1; }
+  if (m.pass == "gi_hit_sun_em") all.push_back("EM_SET=" + std::to_string(rp::kEmPackSet));
   std::string key = shader + "|"; for (auto& d : all) key += d + ";";
   auto it = cache.find(key);
   if (it == cache.end()) {
@@ -2516,7 +2624,7 @@ void pt_report(const fs::path& pack, const PtAccum& a, const fs::path& out, cons
   auto L = [&](uint32_t mode, size_t i) { return lum(a.mean(mode, 0, i), a.mean(mode, 1, i), a.mean(mode, 2, i)); };
   // Image means over the shaded pixels.
   double cnt = 0, s_live = 0, s_live_a = 0;
-  double s[kPtModes][5] = {};   // per mode: lum rgb, a, aux, (unused)
+  double s[kPtModesEm][5] = {};   // per mode: lum rgb, a, aux, (unused)
   for (size_t i = 0; i < n; ++i) {
     if (!(ld[i] > 0) || !std::isfinite(lv[i * 4])) continue;
     cnt += 1; s_live += lum(lv[i * 4], lv[i * 4 + 1], lv[i * 4 + 2]); s_live_a += lv[i * 4 + 3];
@@ -2557,6 +2665,10 @@ void pt_report(const fs::path& pack, const PtAccum& a, const fs::path& out, cons
         M(3, 0) > 0 ? live / M(3, 0) : 0.0, M(3, 0) * k > 0 ? live / (M(3, 0) * k) : 0.0, M(4, 0) > 0 ? live / M(4, 0) : 0.0, live - M(4, 0),
         E > 0 ? live / E : 0.0, E * k > 0 ? live / (E * k) : 0.0);
   }
+  if (a.modes > 8)   // PT_EM (tools/pt_reference.hlsl mode 8): game units, no k
+    add("PT emission (mode 8, game units, no k): first-vertex emission x the GI ray fade at hidden first hits %.6g (the hidden-hit emission "
+        "term of giRaw.rgb, pt_emission.pfm); first-vertex emission, all first hits, no fade %.6g; along the paths (throughput-carried) %.6g",
+        M(8, 0), M(8, 1), M(8, 2));
   // Per region: 16 x 9 tiles, mean luminance live vs PT (live domain and total).
   constexpr int TX = 16, TY = 9;
   struct Tile { double n = 0, live = 0, dom = 0, total = 0, scr = 0; };
@@ -2592,6 +2704,7 @@ void pt_report(const fs::path& pack, const PtAccum& a, const fs::path& out, cons
   // Images: PFM (linear) and one BMP strip live | PT live domain | PT total at one exposure.
   write_pfm_rgb(out / "pt_total.pfm", a.w, a.h, [&](size_t i, int k) { return float(a.mean(0, k, i)); });
   if (a.modes > 3) write_pfm_rgb(out / "pt_live_domain.pfm", a.w, a.h, [&](size_t i, int k) { return float(a.mean(3, k, i)); });
+  if (a.modes > 8) write_pfm_rgb(out / "pt_emission.pfm", a.w, a.h, [&](size_t i, int k) { return float(a.mean(8, k, i)); });
   write_pfm_rgb(out / "live_giRaw.pfm", a.w, a.h, [&](size_t i, int k) { return lv[i * 4 + k]; });
   const uint32_t sw = std::max(1u, a.w / 640), W = a.w / sw, H = a.h / sw;
   std::vector<uint8_t> strip(size_t(W) * 3 * H * 3);
@@ -2844,6 +2957,58 @@ int pt_self_test(const fs::path& dir) {
     line("9 casters: paths continue off the caster face (B=3, near rule off: 1.75)", std::abs(s3.lo - 1.75) < 2e-3 && std::abs(s3.hi - 1.75) < 2e-3, fmt(s3, 1.75));
     const Stat s0 = stat(pt_run(dir / "casters", d, 1, 1, dir / "casters-out"), 0);
     line("10 casters: mask 0x01 without PT_CASTERS (the live GI rays): floor open", s0.miss > 0.05 && s0.mean < 1 - s0.miss + 1e-3, fmt(s0, 1 - s0.miss));
+  }
+  {
+    // gi_hit_sun_em (replay_pack_pass=2 packs): the box is also the emissive scene (radiance 1, synthesize emissive).
+    // PT_EM's mode 8 through the rebuilt emissive TLAS and the live lookup: every first hit is emissive (a = 1), the
+    // path emission is 1 (B=1) and 1 + rho + rho^2 = 1.75 (B=3, Lambert rho 0.5); modes 0-7 untouched (total 0).
+    synthesize(dir / "em", true, true, false, false, true);
+    std::vector<std::string> d = {"PT_EM=1", "PT_LAMBERT=1", "PT_LIGHTS=0", "PT_SUN=0", "PT_SPP=4", "PT_ALBEDO=0.5", "PT_RR_START=99"};
+    auto em_stat = [&](const PtAccum& a, uint32_t c) {
+      Stat s; const size_t n = size_t(a.w) * a.h;
+      for (size_t i = 0; i < n; ++i) { const double v = a.mean(8, c, i); s.mean += v; s.lo = std::min(s.lo, v); s.hi = std::max(s.hi, v); s.miss += a.mean(0, 0, i); }
+      s.mean /= double(n); s.miss /= double(n);   // miss: here the mean of mode 0 (the traced total, 0)
+      return s;
+    };
+    auto d1 = d; d1.push_back("PT_BOUNCES=1");
+    const PtAccum e1 = pt_run(dir / "em", d1, 1, kPtModesEm, dir / "em-out");
+    const Stat f1 = em_stat(e1, 3), p1 = em_stat(e1, 4), w1 = em_stat(e1, 0);
+    line("12 PT_EM B=1: every first hit emits 1 (rebuilt emissive TLAS)", std::abs(f1.lo - 1) < 1e-3 && std::abs(f1.hi - 1) < 1e-3 &&
+         std::abs(p1.lo - 1) < 1e-3 && std::abs(p1.hi - 1) < 1e-3 && f1.miss == 0, fmt(f1, 1) + "; path " + fmt(p1, 1));
+    line("13 PT_EM fade term: 0 < hidden first-hit emission x fade < 1", w1.mean > 0 && w1.hi <= 1 + 1e-3 && w1.lo >= 0, fmt(w1, w1.mean));
+    auto d3 = d; d3.push_back("PT_BOUNCES=3");
+    const Stat p3 = em_stat(pt_run(dir / "em", d3, 1, kPtModesEm, dir / "em-out"), 4);
+    line("14 PT_EM B=3 rho 0.5: path emission 1.75 per pixel", std::abs(p3.lo - 1.75) < 2e-3 && std::abs(p3.hi - 1.75) < 2e-3, fmt(p3, 1.75));
+    // The pass itself (gi_trace_rt_hit_sun_em.hlsl, EM_SET=4) on the same pack: emission adds radiance at hidden hits, the
+    // occlusion (giRaw.a) equals the sun variant's; gi_far_roof_emission (1054 = 1) without roof data (Push::ls_flags bit
+    // 25 clear: no volume is proven clear) drops the emission beyond the base radius: lower or equal at every pixel.
+    const auto saved = g_specs;
+    auto gi = [&](const char* hlsl, uint32_t roof) {
+      g_specs = saved; g_specs[1054] = roof;
+      const Replay r = replay(dir / "em", nullptr, hlsl ? fs::path(source_root()) / "shaders" / hlsl : fs::path(), {}, dir / "em-gi", 1, true);
+      g_specs = saved;
+      for (const auto& o : r.runs.back().outputs) if (o.name == "giRaw") return o.raw;
+      return std::vector<uint8_t>{};
+    };
+    const auto em0 = gi(nullptr, 0), em1 = gi(nullptr, 1), sun = gi("gi/gi_trace_rt_hit_sun.hlsl", 0);
+    bool alpha_eq = !em0.empty() && em0.size() == sun.size() && em1.size() == sun.size(), lower = alpha_eq;
+    double s_em0 = 0, s_em1 = 0, s_sun = 0;
+    for (size_t i = 0; alpha_eq && i + 3 < em0.size() / 2; i += 4) {
+      const auto* a = reinterpret_cast<const uint16_t*>(em0.data()); const auto* b = reinterpret_cast<const uint16_t*>(em1.data());
+      const auto* c = reinterpret_cast<const uint16_t*>(sun.data());
+      alpha_eq &= a[i + 3] == c[i + 3] && b[i + 3] == c[i + 3];
+      for (int k = 0; k < 3; ++k) {
+        const float x0 = half_to_float(a[i + k]), x1 = half_to_float(b[i + k]), xs = half_to_float(c[i + k]);
+        s_em0 += x0; s_em1 += x1; s_sun += xs;
+        lower &= x1 <= x0 && x1 + 1e-3f * std::max(1.0f, xs) >= xs;
+      }
+    }
+    // The PT's mode 8 rgb is the same quantity as the pass's hidden-hit emission term (white: rgb mean = luminance).
+    const double px = double(em0.size() / 8), gi_em = px > 0 ? (s_em0 - s_sun) / (3 * px) : 0;
+    char t[260]; std::snprintf(t, sizeof t, "sum rgb: sun variant %.4g, emission %.4g, emission with 1054 = 1 %.4g; per pixel GI emission %.5f vs PT mode 8 %.5f",
+                               s_sun, s_em0, s_em1, gi_em, w1.mean);
+    line("15 GI emission pass: adds at hidden hits = PT mode 8 (2%), giRaw.a equal", alpha_eq && s_em0 > s_sun + 1 && std::abs(gi_em - w1.mean) < 0.02 * w1.mean, t);
+    line("16 GI 1054 = 1 without roof data: lower or equal per pixel", lower && s_em1 < s_em0, t);
   }
   line("11 no validation errors", g_validation_errors.load() == 0, std::to_string(g_validation_errors.load()) + " errors");
   std::printf("%s: %d failure(s)\n", failures ? "FAIL" : "PASS", failures);
@@ -3459,9 +3624,13 @@ int main(int argc, char** argv) {
       defines.push_back(d); params += std::string(d) + " (estimated) ";
     }
     casters_define(m, defines, params);
+    // A gi_hit_sun_em pack (the emissive scene at set 4): mode 8, the emission at the paths' hits (PT_EM).
+    const bool em = m.pass == "gi_hit_sun_em" && std::none_of(defines.begin(), defines.end(), [](const std::string& x) { return x.rfind("PT_EM=", 0) == 0; });
+    if (em) { defines.push_back("PT_EM=1"); params += "PT_EM=1 (the pack's emissive scene, mode 8) "; }
     if (!pt_skip_cost) pt_cost(pack, defines, out);
     if (!pt_cost_only) {
-      const PtAccum a = pt_run(pack, defines, pt_iters, kPtModes, out);
+      const bool modes9 = em || std::find(defines.begin(), defines.end(), std::string("PT_EM=1")) != defines.end();
+      const PtAccum a = pt_run(pack, defines, pt_iters, modes9 ? kPtModesEm : kPtModes, out);
       pt_report(pack, a, out, params.empty() ? "defaults" : params);
     }
     if (g_validation_errors.load()) { std::printf("FAIL %u validation errors\n", g_validation_errors.load()); return 1; }

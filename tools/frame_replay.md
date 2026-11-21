@@ -290,7 +290,7 @@ frame_replay --pt-self-test <dir>                                               
   (0.5), reflectance 0.5. So texture sampling is optional: a pack without the VT cache shades every hit
   with the fallback, a pack with it uses the native layers where the rows qualify.
 - Not in the pack, so not in the PT (each reported): sky/environment (a miss is 0; its share is the miss
-  fraction), emission, projector lights, cloud shadows, the atmosphere LUT (`PT_SUN_T`, estimated from the
+  fraction), emission (except a gi_hit_sun_em pack: PT_EM, mode 8, "Emission packs" below), projector lights, cloud shadows, the atmosphere LUT (`PT_SUN_T`, estimated from the
   sun elevation with Kasten-Young air mass + Rayleigh/aerosol depth unless given), roofs the camera cut away.
 - A pack with the lighting inputs: `--pt-reference` takes the sun from the game's transmittance LUT and
   its two cloud-shadow layers (`PT_SUN_LUT=1`, `bg3_sun_colour`, `bg3_cloud_shadow` at every vertex).
@@ -578,6 +578,42 @@ record elements, `lighting_inputs`); `frame_replay_test` writes its synthetic pa
 replays it, and runs the image read on every mapped format.
 Open: the exact VT cache sizes, formats, layers and mips at S8 (the next pack's `textures` line),
 then the choice between a larger cap for this one job and a hit-sampled tile capture.
+
+## Emission packs: `pass gi_hit_sun_em` (replay_pack_pass=2, 2026-11-21)
+
+The production rt_hit_emission + gi_hit_sun hit GI (`gi/gi_trace_rt_hit_sun_em.hlsl`, no SHaRC, no OMM), so
+`gi_far_roof_emission` (constant 1054) can be judged against the PT offline (r2_tools/em_pack/predicted.json).
+- Arm `replay_pack_pass=2,replay_pack=N` (N > 0). The core (`replay_after_hit_gi_em`) passes the variant's whole request
+  and specialization values (what ran), the sun trust image (set 3 b8) and the D-EM scene set (live set 2,
+  `Bg3ReplayDispatch::game_set`); another variant logs `[replay] pack N failed: replay_pack_pass=2 takes ...`. No ABI change.
+  The LS (`replay_pack_pass=0` on Ultra) and RF (1) writers do not take it.
+- Contract `kGiHitSunEm` (common/replay_pack.h): `kGiHitDirect` (sets 0-3 with the lighting inputs; set 3 b0-6 is
+  also the sun set) + `sunTrust` s3b8 + the emissive scene at set 4 (`kEmPackSet`, the em_common.hlsli layout:
+  emInfo, emSoup, records, light list, 256 textures, the immutable sampler, statistics, header, luminance scales, 16
+  VT caches). The layer records the D-EM sets' writes (`replay_note_em_sets`, layer/emissive.cpp) as it records the
+  material sets'; textures are droppable (priority: masks 4, VT caches 3). Log: `[replay] pack N emissive scene (set
+  4): <t> texture and <c> cache elements bound; ...`, then the usual `written ... pass gi_hit_sun_em`.
+- Replay: the pass compiles with `EM_SET=4` (shaders/gi/gi_trace_rt.hlsl keeps 2 for every game request: key-off
+  SPIR-V of all 34 gi_trace_rt requests byte-identical). The emissive TLAS is not captured: frame_replay rebuilds it
+  as layer/emissive.cpp em_as_build does (`rp::em_geometries`: one opaque geometry per emInfo entry of the header's
+  record count, one identity instance, facing cull off); note `emissive scene (set 4): <r> records, <g> geometries, <t>
+  triangles in its rebuilt TLAS`. `--spec 1054=0|1` and `--hlsl shaders/gi/gi_trace_rt_hit_sun.hlsl` (no emission) run
+  on the same pack.
+- PT: `--pt-reference` on such a pack sets `PT_EM=1` and runs 9 modes. Mode 8 (game units, no k): rgb the first-vertex
+  emission x the GI ray fade 1 - (t/R)^2 (R = max(radius, gi_rt_radius)) at hidden first hits: the quantity of the pass's
+  hidden-hit emission term; a its luminance without fade at every first hit; aux the throughput-carried path emission.
+  The emission is the live lookup (rt/native_hit_emission.hlsli, record policy, rt_em_tol from the push); a cascade
+  caster (cut-away roof, PT_CASTERS) hit is no emitter. Modes 0-7 are unchanged. Output `pt_emission.pfm` and the
+  report line `PT emission (mode 8, ...)`. The PT takes only `rp::reference_defines` of the pack (RT_SPEC_CASCADE=1 ->
+  RT_CASCADE_MASKS=1), never the pass's spec defines.
+- The question: `py -3 tools/em_roof_ab.py --off <1054=0> --on <1054=1> --none <no-emission replay> --pt <pt dir>`:
+  raised pixels and giRaw.a changes (must be 0), the changed pixels, the emission terms (replay minus the no-emission
+  replay) against PT mode 8, mean |E - PT| for 0 and 1, per 16 x 9 tile, a verdict (CLOSER / FARTHER / NO CHANGED PIXEL
+  / INVALID). CTest `em_roof_ab_test`.
+- CTest `pt_reference_test` 12-16 (the synthetic box is also the emissive scene, radiance 1): mode 8 a = 1 at every
+  pixel, path emission 1 (B=1) and 1.75 (B=3, Lambert 0.5); the pass's hidden-hit emission per pixel equals PT mode 8
+  within 2% (RTX 5090: 0.6918 vs 0.6927); giRaw.a equals the sun variant's; 1054 = 1 without roof data (ls_flags bit 25
+  clear) lowers or keeps every pixel. Not yet done: a live pack (staged `r2_tools/em_pack`, READY_FOR_LIVE).
 
 
 ## Production Ultra local shadows

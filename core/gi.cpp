@@ -2906,9 +2906,47 @@ std::string pipe_defines(const Pipe& p){
  }
  return {};
 }
+// replay_pack_pass=2 (tools/frame_replay.md "Emission packs"): one pack of the production rt_hit_emission + gi_hit_sun
+// dispatch (gi/gi_trace_rt_hit_sun_em.hlsl, no SHaRC) as pass gi_hit_sun_em: the whole request and its specialization
+// values (what ran), the sun trust image (set 3 b8) and the emissive scene set `em` (live set 2). Positive serials only.
+void replay_after_hit_gi_em(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,uint32_t n,VkDescriptorSet set1,
+                            VkAccelerationStructureKHR tlas,const Push& hp,const char* variant,VkDescriptorSet em,const Pipe& p){
+ const int key=host->cfg_int("replay_pack",0);
+ if(key<=0)return;
+ int* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.em.done",sizeof(int)));
+ if(*done==key)return;
+ const Pipe::Variant* selected=nullptr;
+ if(p.pipeline)for(const auto& [slot,v]:p.variants)if(v.pipeline==p.pipeline)selected=&v;
+ const bool em_sun=variant && std::strcmp(variant,"emission")==0 && em;
+ if(em_sun && !selected)return;   // the compute twin of a raygen dispatch still builds: the next frame
+ if(!em_sun || selected->request.rfind("gi/gi_trace_rt_hit_sun_em.hlsl",0)!=0 || selected->request.find("RT_OMM_SCENE")!=std::string::npos){
+  host->log("[replay] pack %d failed: replay_pack_pass=2 takes the rt_hit_emission + gi_hit_sun hit GI without SHaRC or OMM; this dispatch runs %s",
+            key,selected?selected->request.c_str():variant?variant:"the base variant");
+  *done=key;
+  return;
+ }
+ const size_t q=selected->request.find('?');
+ const std::string defines=q==std::string::npos?std::string():selected->request.substr(q+1);
+ std::vector<Bg3ReplaySpec> specs;
+ for(uint32_t i=0;i<selected->specs.count;++i)specs.push_back({selected->specs.entries[i].constantID,selected->specs.data[i]});
+ Bg3ReplayWrite trust{};
+ trust.set=3;trust.write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};trust.write.dstBinding=8;trust.write.descriptorCount=1;
+ trust.write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;trust.write.pImageInfo=&g_replay_sun.img[7];
+ static const uint32_t outputs[2]={8u,13u};   // giRaw, giRawDepth
+ Bg3ReplayDispatch d{};
+ d.serial=key;d.pass="gi_hit_sun_em";d.defines=defines.c_str();d.frame=hp.frame;
+ d.groups[0]=(g_hw+7)/8;d.groups[1]=(g_hh+7)/8;d.groups[2]=1;
+ d.push=&hp;d.push_bytes=sizeof hp;d.set0=writes;d.set0_count=n;d.outputs=outputs;d.output_count=2;
+ d.set1=set1;d.tlas=tlas;d.extra_writes=g_replay_sun.img[7].imageView?&trust:nullptr;d.extra_count=g_replay_sun.img[7].imageView?1u:0u;
+ d.game_set=em;d.specs=specs.data();d.spec_count=uint32_t(specs.size());
+ if(host->replay_pack(cmd,&d)!=0)*done=key;
+}
 void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,uint32_t n,VkDescriptorSet set1,
-                         VkAccelerationStructureKHR tlas,const Push& hp,const char* variant,const std::string& defines){
- if(!host->replay_pack || host->cfg_int("replay_pack_pass",0)!=0)return;
+                         VkAccelerationStructureKHR tlas,const Push& hp,const char* variant,const std::string& defines,
+                         VkDescriptorSet em,const Pipe& p){
+ if(!host->replay_pack)return;
+ if(host->cfg_int("replay_pack_pass",0)==2){replay_after_hit_gi_em(cmd,writes,n,set1,tlas,hp,variant,em,p);return;}
+ if(host->cfg_int("replay_pack_pass",0)!=0)return;
  const int key=host->cfg_int("replay_pack",0);
  if(key==0 || key<-1)return;
  // Production box-k LS owns the armed pack on Ultra, even when GI uses emission.
@@ -2916,7 +2954,7 @@ void replay_after_hit_gi(VkCommandBuffer cmd,const VkWriteDescriptorSet* writes,
  int* done=static_cast<int*>(host->persist("bg3rtx.replay_pack.done",sizeof(int)));
  if(key>0 && *done==key)return;
  if(variant){
-  if(key>0 && std::strcmp(variant,"emission")==0)host->log("[replay] pack %d failed: gi_hit_direct runs the rt_hit_emission variant (set 2): emission variant not supported by the pack contract",key);
+  if(key>0 && std::strncmp(variant,"emission",8)==0)host->log("[replay] pack %d failed: gi_hit_direct runs the rt_hit_emission variant (set 2): emission variant not supported by the pack contract",key);
   else if(key>0)host->log("[replay] pack %d failed: gi_hit_direct runs the %s variant; the pack contract is the base variant (gi_hit_sun=0, sharc=0)",key,variant);
   if(key>0)*done=key;
   return;
@@ -3135,9 +3173,10 @@ bool hit_gi_dispatch(VkCommandBuffer cmd,Bound& b,const Snapshot& s,const Push& 
   host->log("hit emission: first hit-GI dispatch %s the emissive scene (sun %d, sharc %d)",
             em?"with":"without (no fresh D-EM build: needs rt_emissive=1)",sun!=VK_NULL_HANDLE,s.sharc);
  }
- // The pack contract is the base variant: an emission dispatch (extra set 2) is refused, not packed.
- replay_after_hit_gi(cmd,writes,write_count,material_alpha,b.tlas,hp,em?"emission":sun?"gi_hit_sun":s.sharc?"SHaRC":nullptr,
-                     host->replay_pack && host->cfg_int("replay_pack",0)!=0?pipe_defines(p):std::string());
+ // The pack contract is the base variant (replay_pack_pass=0); replay_pack_pass=2 packs the emission + sun dispatch.
+ replay_after_hit_gi(cmd,writes,write_count,material_alpha,b.tlas,hp,
+                     em?(sun && !s.sharc?"emission":"emission (direct-only or SHaRC)"):sun?"gi_hit_sun":s.sharc?"SHaRC":nullptr,
+                     host->replay_pack && host->cfg_int("replay_pack",0)!=0?pipe_defines(p):std::string(),em,p);
  return true;
 }
 

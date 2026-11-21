@@ -1116,6 +1116,8 @@ void em_device_created(DeviceData* dd) {
   ai.descriptorSetCount = kRing;
   ai.pSetLayouts = layouts;
   ok = ok && vk.AllocateDescriptorSets(dd->device, &ai, g_sets) == VK_SUCCESS;
+  // replay_pack_pass=2 (gi_hit_sun_em packs): the replay records these sets' writes (layer/replay.cpp).
+  if (ok) replay_note_em_sets(g_sets, kRing, g_pool, g_sampler);
   const VkDeviceSize soup_mb = VkDeviceSize((std::max)(cfg_int("rt_em_xfb_mb", 32), 4));
   ok = ok && make_buf(g_soup, soup_mb << 20,
                       VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | rt_xfb_usage(),
