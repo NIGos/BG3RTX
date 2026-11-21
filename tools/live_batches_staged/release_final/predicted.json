@@ -9,9 +9,9 @@
   "scenes": 2,
   "profile": "data/release.ini + launcher preset through common/settings.h (release_qual/profile.cpp), dev=0; qualification-only overrides are log periods, detailed_logging and the one float export per static phase",
   "input_sha256": {
-    "common/settings.h": "be4339efb38b2502b4c10bdab635b0c09d5066f643720f767a82cef174ce20bd",
+    "common/settings.h": "590aece1334a4c104214361a35c0e85705031ea2fa329fbbe7ed0ce08e827b87",
     "data/release.ini": "cb63a0b9368544d94d676bd3fd0fb4fd6b3f6f4edd852ff9f4736328d2d37df8",
-    "bg3rtx.ini": "451ec399a6a57b3fe0da051bde0f557880c413d31c2918329ec9a636c330ddea"
+    "bg3rtx.ini": "d3bd1aecaac3c0c6d9ca38a26a4c033a4e03b54f92213ce0ad4e744aab2c73ee"
   },
   "release_profile_checked": {
     "dev": "0",
