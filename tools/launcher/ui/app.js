@@ -123,14 +123,16 @@ const plainLabel=(s,text)=>state.developer?text:text.replace(/\s*\((?:unqualifie
 const plainDescription=(s,text)=>state.developer?text:text.replace(/^\(?(?:Experimental|Beta)\)?:?\s*/i,'').replace(/^./,x=>x.toUpperCase());
 const settingName=s=>plainLabel(s,s.title||s.label||s.id);
 // The one apply badge: amber, only when a change from the current value waits for a game restart. It names the
-// direction when only some choices need one ("Restart to turn on", "Restart for Off"). No badge: applies while playing.
+// direction when only some choices need one ("Restart to turn on", "Restart for Off"); several such choices are "Restart
+// for some choices" (the tooltip and the detail panel name them), so the badge stays one short line. No badge: applies
+// while playing.
 function restartBadge(s) {
  const choices=s.choices||[],others=choices.filter(ch=>ch.value!==s.value),need=others.filter(ch=>/restart/i.test(ch.apply||''));
- if(!choices.length)return /restart/i.test(s.apply||'')?badge('Restart','restart',s.apply):null;
+ if(!choices.length)return /restart/i.test(s.apply||'')?badge('Restart to apply','restart',s.apply):null;
  if(!need.length)return null;
  const title=need.map(ch=>plainLabel(s,ch.label)+': '+ch.apply).join('\n');
- if(need.length===others.length)return badge(choices.length===2?'Restart to turn '+(s.value===choices[0].value?'on':'off'):'Restart','restart',title);
- return badge('Restart for '+need.map(ch=>plainLabel(s,ch.label)).join(', '),'restart',title);
+ if(need.length===others.length)return badge(choices.length===2&&choices[0].label==='Off'?'Restart to turn '+(s.value===choices[0].value?'on':'off'):'Restart to apply','restart',title);
+ return badge(need.length===1?'Restart for '+plainLabel(s,need[0].label):'Restart for some choices','restart',title);
 }
 // Measured costs written at the end of a description move to the cost chip.
 function splitCost(text) {const m=/^(.*?)\s*((?:About|Around) \d[\d.]*(?:[–-]\d[\d.]*)? ms\b.*)$/.exec(text||'');return m?[m[1],m[2]]:[text||'',''];}
@@ -182,26 +184,39 @@ function settingControl(s) {
  [...control.querySelectorAll('button,input')].forEach((e,index)=>{e.id='control-'+s.id+'-'+index;if(e.type==='checkbox')e.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();e.click();}};e.setAttribute('aria-describedby',needs.id);});
  return [needs,control];
 }
-// "In game Ctrl+Shift+F8 · Change" on a setting that has a hotkey; only when the bridge knows the binding.
+// "Hotkey Ctrl+Shift+F8 · Change" on a setting that has a hotkey; only when the bridge knows the binding.
 function hotkeyLine(knob,where) {
  const id=hotkeyFor[knob],value=state.shortcuts?.[id];if(!id||value===undefined)return null;
  const p=el('span','hotkey-line');p.id=where+'-hotkey-'+knob;
- p.append(el('span','',value==='None'?'No in-game key':'In game'),...(value==='None'?[]:[el('kbd','',value)]));
+ p.append(el('span','',value==='None'?'No hotkey':'Hotkey'),...(value==='None'?[]:[el('kbd','',value)]));
  const change=linkButton(where+'-hotkey-change-'+knob,'Change',()=>openSection('Hotkeys',id));change.setAttribute('aria-label','Change the '+hotkeyName(id)+' hotkey');change.setAttribute('aria-describedby',p.id);
  p.append(change);return p;
 }
-// Detail of one setting, always the same headings: What it does, GPU cost, Takes effect, Needs, presets, key.
+// Detail of one setting, always the same headings: What it does, GPU cost, Takes effect, Needs, Presets, Hotkey.
+// Each heading has one or more paragraphs; a source note (where a cost was measured) is dimmed under its numbers.
+const presetNames=['Low','Medium','High','Ultra'];
+// Release copy: the preset line that opens some details ("Off in every preset.", "Beta: off in every preset.") is
+// already under Presets, so the paragraph starts with what the setting does.
+const plainDetails=text=>state.developer?text:String(text||'').replace(/^(?:Beta:\s*)?off in every preset\.\s*/i,'').replace(/^./,x=>x.toUpperCase());
+function presetValues(text) {
+ const values=String(text||'').split(' · ');
+ if(values.length!==4)return el('p','detail-copy',text);
+ const list=el('dl','preset-values');values.forEach((v,i)=>{const r=el('div',i===state.preset?'current':'');r.append(el('dt','',presetNames[i]),el('dd','',v));list.append(r);});
+ return list;
+}
 function detailNodes(s) {
- const nodes=[],add=(heading,text)=>{if(text)nodes.push(el('p','detail-heading',heading),el('p','detail-copy',text));};
+ const nodes=[],add=(heading,...texts)=>{const parts=texts.filter(Boolean);if(!parts.length)return;nodes.push(el('p','detail-heading',heading));parts.forEach(x=>nodes.push(typeof x==='string'?el('p','detail-copy',x):x));};
+ const note=text=>text?el('p','detail-copy detail-note',text):null;
  const [description]=splitCost(plainDescription(s,s.description||s.summary||''));
- add('What it does',[description,s.details].filter(Boolean).join('\n'));
- add('GPU cost',measured(s.cost)||measured(s.vram)?[measured(s.cost)?s.cost:'',measured(s.vram)?'Video memory: '+s.vram:'',s.provenance].filter(Boolean).join('\n'):'Not measured yet.');
+ add('What it does',description,plainDetails(s.details));
+ const costs=[measured(s.cost)?s.cost:'',measured(s.vram)?'Video memory: '+s.vram:''].filter(Boolean).join('\n');
+ add('GPU cost',costs||'Not measured yet.',costs?note(s.provenance):null);
  const restart=(s.choices||[]).filter(ch=>ch.value!==s.value&&/restart/i.test(ch.apply||'')).map(ch=>plainLabel(s,ch.label));
- add('Takes effect',[restart.length?(restart.length===(s.choices||[]).length-1?'After a game restart.':'After a game restart: '+restart.join(', ')+'. The other choices apply while you play.'):/restart/i.test(s.apply||'')?'After a game restart.':'At once, also while the game runs.',s.applyNote].filter(Boolean).join('\n'));
+ add('Takes effect',restart.length?(restart.length===(s.choices||[]).length-1?'After a game restart.':'After a game restart: '+restart.join(', ')+'. The other choices apply while you play.'):/restart/i.test(s.apply||'')?'After a game restart.':'At once, also while the game runs.'+(/pause/i.test(s.apply||'')?' The game may pause briefly.':''),s.applyNote);
  add('Needs',requirementLines(s).join('\n')||(s.reason||''));
- if(s.presets)add('Low · Medium · High · Ultra',s.presets);
+ if(s.presets)add('Presets',presetValues(s.presets));
  const key=hotkeyFor[s.id],binding=state.shortcuts?.[key];
- if(binding!==undefined)add('In-game key',binding==='None'?'None. Set one on Hotkeys.':binding+' (change it on Hotkeys)');
+ if(binding!==undefined)add('Hotkey',binding==='None'?'None. Set one on Hotkeys.':binding+' (change it on Hotkeys)');
  return nodes;
 }
 function renderDetail() {
@@ -217,14 +232,18 @@ function selectRow(id) {
  selected[section]=id;const row=$('card-'+id);if(row)row.className+=' selected';
  renderDetail();
 }
+// A choice control too wide to share a line with the text (about 40 characters of labels: Water lighting, Sun
+// shadows) goes under the description, so the text column is never squeezed to a few words per line.
+const wideChoices=s=>(s.choices||[]).length>2&&s.choices.reduce((n,ch)=>n+plainLabel(s,ch.label).length,0)>40;
 // One setting row. Its id stays card-<id> (tests and deep links use it).
 function row(s,opts={}) {
  const full=settingName(s),short=opts.child&&opts.parentName&&full.startsWith(opts.parentName+' ')?full.slice(opts.parentName.length+1).replace(/^./,x=>x.toUpperCase()):full;
- const c=el('article','row selectable'+(opts.child?' child':'')+(opts.parentOff?' parent-off':'')+(selected[section]===s.id?' selected':''));c.id='card-'+s.id;
+ const c=el('article','row selectable'+(wideChoices(s)?' stack':'')+(opts.child?' child':'')+(opts.parentOff?' parent-off':'')+(selected[section]===s.id?' selected':''));c.id='card-'+s.id;
  c.onclick=()=>selectRow(s.id);c.addEventListener?.('focusin',()=>selectRow(s.id));
  const text=el('div','row-text'),head=el('div','row-head'),title=el('h3','row-title',short);if(short!==full)title.setAttribute('aria-label',full);head.append(title);
  if(betaIds.includes(s.id)&&!state.developer)head.append(badge('Beta','beta','Supported, off in every preset.'));
- if(!state.developer&&(onExperimentalPage(s)||s.id==='dlss5_nr'))head.append(badge('Experimental','exp','Not fully tested. Off in every preset.'));
+ // The Experimental page says it once, in its title and switch; elsewhere the badge marks the exception.
+ if(!state.developer&&((onExperimentalPage(s)&&section!=='Experimental')||s.id==='dlss5_nr'))head.append(badge('Experimental','exp','Not fully tested. Off in every preset.'));
  if(state.developer&&s.maturity==='experimental')head.append(pill('Experimental','exp'));
  if((state.restartNames||[]).includes(s.title))head.append(badge('Restart pending','pending','Saved. Takes effect after a game restart.'));
  text.append(head);
@@ -247,7 +266,7 @@ function row(s,opts={}) {
  return c;
 }
 function runtimeFile(s) {
- const runtime=el('div','row-wide runtime-file'),path=el('p','path',state.dlss5RuntimePath||'No file chosen: looking in the game folder');
+ const runtime=el('div','row-wide runtime-file'),path=el('p',state.dlss5RuntimePath?'path':'help-copy',state.dlss5RuntimePath||'No file chosen. BG3RTX looks for it in the game folder.');
  path.id='dlss5-runtime-path';runtime.append(el('p','detail-heading','DLSS 5 runtime file'),path,el('p','help-copy',state.dlss5RuntimeStatus||'Your runtime is prepared before Play; it is not included with BG3RTX.'));
  const actions=el('div','option-row'),browse=el('button','btn small','Browse…');browse.id='dlss5-runtime-browse';browse.setAttribute('aria-describedby','needs-'+s.id);browse.onclick=()=>send('browseDlss5Runtime');actions.append(browse);
  if(state.dlss5RuntimePath){const clear=el('button','btn small','Look in the game folder');clear.id='dlss5-runtime-clear';clear.setAttribute('aria-describedby','needs-'+s.id);clear.onclick=()=>send('clearDlss5Runtime');actions.append(clear);}
@@ -321,8 +340,8 @@ function hotkeyRow(id) {
 }
 function renderHotkeys(root) {
  const rows=Object.keys(state.shortcuts||{}).map(hotkeyRow);
- const g=group('In-game keys','',rows,{id:'hotkeys'});
- g.append(el('p','cost','Select a field and press a combination with Ctrl, Shift or Alt and F1-F12, A-Z or 0-9. Delete or Backspace clears it, Escape cancels.'));
+ const g=group('In-game hotkeys','',rows,{id:'hotkeys'});
+ g.append(el('p','cost hotkey-hint','Select a field and press a combination with Ctrl, Shift or Alt and F1-F12, A-Z or 0-9. Delete or Backspace clears it, Escape cancels.'));
  root.append(g);
 }
 // Preparation (docs/RTX_HAIR_ROADMAP.md 2b, 2f; tools/launcher/preparation.cpp): the host sends
@@ -429,13 +448,13 @@ function statusPanel() {
  if(!list.children.length)item('none','ok','Nothing needs attention.');
  return list;
 }
-// In-game keys at a glance; the Hotkeys page changes them.
+// Hotkeys at a glance; the Hotkeys page changes them.
 function keysPanel() {
  const ids=Object.keys(state.shortcuts||{});if(!ids.length)return null;
  const list=el('dl','key-list');
  ids.forEach(id=>{const r=el('div');const v=state.shortcuts[id];r.append(el('dt','',hotkeyName(id)),(()=>{const dd=el('dd');dd.append(v==='None'?el('span','help-copy','None'):el('kbd','',v));return dd;})());list.append(r);});
- const pad=el('div','pad');pad.append(list,linkButton('home-keys-change','Change keys',()=>openSection('Hotkeys')));
- const g=group('In-game keys','',[pad],{id:'home-keys'});return g;
+ const pad=el('div','pad');pad.append(list,linkButton('home-keys-change','Change hotkeys',()=>openSection('Hotkeys')));
+ const g=group('Hotkeys','',[pad],{id:'home-keys'});return g;
 }
 const gpuLine=()=>[state.compatibility?.gpu,measured(state.compatibility?.vram)?state.compatibility.vram:null,measured(state.compatibility?.driver)&&!/not detected/i.test(state.compatibility?.driver||'')?state.compatibility.driver:null].filter(Boolean).join(' · ')||'GPU not detected';
 function renderHome(root) {
@@ -449,7 +468,7 @@ function renderHome(root) {
  const report=el('p','help-copy home-report');report.id='home-report';report.append(el('span','','Problem? '),linkButton('home-report-open','Create a report…',()=>send('report')));
  attention.append(ah,statusPanel(),report);left.append(attention);
  const prep=state.preparation||{},jobs=[shaderJob(prep),hairJob(prep)].filter(Boolean);
- left.append(group('Preparation','Runs while this window is open, also minimised; it continues where it stopped. Never blocks Play.',jobs,{id:'home-preparation'}));
+ left.append(group('Preparation','Runs while this window is open, even minimised, and resumes where it stopped. You can play at any time.',jobs,{id:'home-preparation'}));
  const index=state.preset,pp=el('div','pad');pp.append(el('h3','row-title',['Low','Medium','High','Ultra'][index]||'Preset'),el('p','description',state.presetDescriptions?.[index]||''));
  if(state.custom)pp.append(el('p','cost','You changed some settings from this preset. "Reset to '+(['Low','Medium','High','Ultra'][index]||'preset')+'" at the top right brings it back.'));
  right.append(group('This preset','',[pp],{id:'home-preset'}));
@@ -489,7 +508,7 @@ function renderSupport(root) {
 function renderExperimental(root,items) {
  // Release opt-in: the switch sits on the page, above the options it reveals.
  const box=el('div','exp-switch'),text=el('div'),l=el('label','toggle'),i=el('input');
- text.append(el('h3','row-title','Show experimental options'),el('p','description','Not fully tested. Off in every preset. Turning this off hides them and sets them all back to Off.'));
+ text.append(el('h3','row-title','Show experimental options'),el('p','description','Experimental options are not fully tested and are off in every preset. Turning this switch off hides them and sets them back to Off.'));
  i.type='checkbox';i.setAttribute('role','switch');i.id='experimental-switch';i.checked=releaseOptIn();i.setAttribute('aria-label','Show experimental options');
  i.onchange=()=>send('experimental',{value:i.checked});i.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();i.click();}};
  l.append(i,el('span'));const ctl=el('div','control');ctl.append(l,el('span','toggle-state',i.checked?'On':'Off'));box.append(text,ctl);root.append(box);
@@ -574,7 +593,7 @@ function renderFooter() {
 function renderReport() {
  const r=state.report,d=$('report-dialog');if(!r?.visible){if(d.open)d.close();return;}$('logging-hint').textContent=r.loggingHint||'';$('logging-hint').hidden=!r.loggingHint;$('privacy').textContent=r.privacy||'Saves selected logs, settings and graphics details as a ZIP on your PC. Personal paths are partly removed; review every file before sharing. Nothing is uploaded. Screenshots and crash dumps are excluded; your latest save is added only if you tick it.';
  const root=$('report-preview'),notice=state.status&&/report|package/i.test(state.status)?state.status:'';
- const signature=JSON.stringify([r,notice]);if(signature===reportSignature){showDialog(d);return;}reportSignature=signature;rememberDisclosures(root);root.replaceChildren();if(r.message)root.append(el('p','help-copy',r.message));if(state.status&&/report|package/i.test(state.status))root.append(el('p','notice',state.status));const files=r.files||[];if(files.length){root.append(el('h3','','Preview · '+files.length+' files · '+(r.bytes||0).toLocaleString()+' bytes'));const ul=el('ul','report-list');files.forEach(f=>{const li=el('li');li.append(el('b','',f.name+' · '+f.size.toLocaleString()+' bytes'));if(f.note)li.append(el('p','',f.note));if(f.binary){ul.append(li);return;}const details=el('details'),summary=el('summary','','View file contents');details.id='report-file-'+encodeURIComponent(f.name);summary.id='report-summary-'+encodeURIComponent(f.name);restoreDisclosure(details);details.append(summary,el('pre','',f.text||''));li.append(details);ul.append(li);});root.append(ul);}$('export-report').hidden=!files.length;$('prepare-report').textContent=files.length?'Refresh preview':'Preview files';showDialog(d);
+ const signature=JSON.stringify([r,notice]);if(signature===reportSignature){showDialog(d);return;}reportSignature=signature;rememberDisclosures(root);root.replaceChildren();if(r.message)root.append(el('p','help-copy',r.message));if(state.status&&/report|package/i.test(state.status))root.append(el('p','notice',state.status));const files=r.files||[];if(files.length){root.append(el('h3','','Preview · '+files.length+' files · '+(r.bytes||0).toLocaleString()+' bytes'));const ul=el('ul','report-list');files.forEach(f=>{const li=el('li');li.append(el('b','',f.name+' · '+f.size.toLocaleString()+' bytes'));if(f.note)li.append(el('p','',f.note));if(f.binary){ul.append(li);return;}const details=el('details'),summary=el('summary','','View file contents');details.id='report-file-'+encodeURIComponent(f.name);summary.id='report-summary-'+encodeURIComponent(f.name);restoreDisclosure(details);details.append(summary,el('pre','',f.text||''));li.append(details);ul.append(li);});root.append(ul);}$('export-report').hidden=!files.length;$('prepare-report').textContent=files.length?'Refresh preview':'Preview files';$('prepare-report').className=files.length?'btn':'btn primary';showDialog(d);
 }
 $('undo').onclick=()=>send('undo');$('undo').title='Undo the last change (Ctrl+Z)';
 // Ctrl+Z undoes the last change while the bridge offers it (not inside a text field).
