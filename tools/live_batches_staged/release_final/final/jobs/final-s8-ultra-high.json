@@ -747,13 +747,14 @@
               0,
               0
             ],
-            "fps": 29.527559055129107,
-            "windows": 33,
+            "fps": 29.55665024632237,
+            "windows": 47,
             "logs": [
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.1.020458.log",
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.2.020642.log",
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-s8-holdpack.1.015440.log",
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.033523.log",
+              "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.040843.log",
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r3-s8-sun-overlap.1.030240.log"
             ]
           }
@@ -974,13 +975,14 @@
               0,
               0
             ],
-            "fps": 29.527559055129107,
-            "windows": 33,
+            "fps": 29.55665024632237,
+            "windows": 47,
             "logs": [
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.1.020458.log",
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.2.020642.log",
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-s8-holdpack.1.015440.log",
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.033523.log",
+              "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.040843.log",
               "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r3-s8-sun-overlap.1.030240.log"
             ]
           }
@@ -1002,7 +1004,7 @@
       }
     }
   ],
-  "estimated_phase_seconds": 103.584,
+  "estimated_phase_seconds": 103.56,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -1019,13 +1021,14 @@
           0,
           0
         ],
-        "fps": 29.527559055129107,
-        "windows": 33,
+        "fps": 29.55665024632237,
+        "windows": 47,
         "logs": [
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.1.020458.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.2.020642.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-s8-holdpack.1.015440.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.033523.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.040843.log",
           "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r3-s8-sun-overlap.1.030240.log"
         ]
       }
@@ -1065,13 +1068,14 @@
                 0,
                 0
               ],
-              "fps": 29.527559055129107,
-              "windows": 33,
+              "fps": 29.55665024632237,
+              "windows": 47,
               "logs": [
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.1.020458.log",
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.2.020642.log",
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-s8-holdpack.1.015440.log",
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.033523.log",
+                "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.040843.log",
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r3-s8-sun-overlap.1.030240.log"
               ]
             }
@@ -1112,13 +1116,14 @@
                 0,
                 0
               ],
-              "fps": 29.527559055129107,
-              "windows": 33,
+              "fps": 29.55665024632237,
+              "windows": 47,
               "logs": [
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.1.020458.log",
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.2.020642.log",
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-s8-holdpack.1.015440.log",
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.033523.log",
+                "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.040843.log",
                 "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r3-s8-sun-overlap.1.030240.log"
               ]
             }

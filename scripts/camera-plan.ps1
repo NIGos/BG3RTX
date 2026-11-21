@@ -169,6 +169,10 @@ function Get-CameraPlanWaitAnchor($state, $step, [string]$text, [double]$now, [d
   return $started
 }
 
+# Mirrored in tools/live_batches/readiness_budget.py (HIT_GI_RAYGEN_*).
+$script:HitGiRaygenSelected='gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline'
+$script:HitGiRaygenBuild='^gi/gi_trace_rt_hit_sun(?:_em)?\.hlsl\?\S*GI_TRACE_RAYGEN=1'
+
 function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
   $ack=$null
   $observationText=$freshText
@@ -236,6 +240,13 @@ function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
       elseif ($line -match '\[rrpost\] (rr_post[^ ]*\.hlsl:\w+) pipeline (built|building|creation failed)') {
         $id='rrpost '+$Matches[1];$completion='[rrpost] '+$Matches[1]+' pipeline built'
         $done=$Matches[2] -eq 'built'
+      }
+      # The hit-GI trace selected a ready raygen pipeline (core/gi.cpp, either variant): a raygen build of that
+      # pass still pending was superseded (sun -> emission at ab_off 1 -> 0) and logs no completion.
+      if ($line -match $script:HitGiRaygenSelected) {
+        foreach ($old in @($pending.Keys | Where-Object { $_ -match $script:HitGiRaygenBuild })) {
+          $pending.Remove($old);$historical.Remove($old)
+        }
       }
       if ($done) {
         $pending.Remove($id);$historical.Remove($id)
