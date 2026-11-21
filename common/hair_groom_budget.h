@@ -41,6 +41,16 @@ inline bool plan_evictions(std::vector<Resident> residents, uint64_t used, uint6
   return false;
 }
 
+// A groom BLAS's storage before this frame's build (claude/r3-layer, pure fix). After compaction the storage is the
+// compacted size; a full build (no refit: the previous build record dropped or unsubmitted, rt_dyn_refit=0) needs the
+// full accelerationStructureSize, else it writes past the AS into the neighbouring chunk ranges. A refit fits the
+// compacted copy. compact_copy: this frame records the compaction copy into the new storage.
+enum class GroomStorage { Keep, UndoCopy, Regrow };
+inline GroomStorage groom_storage(bool refit, uint64_t storage, uint64_t full, bool compact_copy) {
+  if (refit || storage >= full) return GroomStorage::Keep;
+  return compact_copy ? GroomStorage::UndoCopy : GroomStorage::Regrow;
+}
+
 // rt_hair_groom_lod_keep (docs/RTX_HAIR_PRIMARY.md 5i): the LOD a groom slot uses this frame. want: its screen-size
 // (or crowd) LOD; built: the LOD its BLAS holds (-1: none); want_ready / built_ready: their arrays resident in the pool.
 // Without the key a wanted LOD still uploading drops the slot (no groom that frame: its draws go back to cards and its

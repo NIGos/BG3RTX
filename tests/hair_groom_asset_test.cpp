@@ -51,6 +51,16 @@ static void test_compaction_submission() {
   CHECK(stale_size && readback_state(10, 50, false) == ReadbackState::Drop);
   CHECK(readback_state(50, 51, true) == ReadbackState::Wait);
   CHECK(readback_state(50, 52, true) == ReadbackState::Ready);
+  // claude/r3-layer: a full build never goes into compacted storage (it would write past the AS).
+  using bg3::hair_groom::groom_storage;
+  using bg3::hair_groom::GroomStorage;
+  const uint64_t full = 100u << 20, compacted = 31u << 20;
+  CHECK(groom_storage(true, compacted, full, false) == GroomStorage::Keep);      // a refit fits the compacted copy
+  CHECK(groom_storage(true, compacted, full, true) == GroomStorage::Keep);       // copy, then refit into it
+  CHECK(groom_storage(false, full, full, false) == GroomStorage::Keep);          // first build: full storage
+  CHECK(groom_storage(false, full + 256, full, false) == GroomStorage::Keep);    // aligned up
+  CHECK(groom_storage(false, compacted, full, false) == GroomStorage::Regrow);   // dropped record or rt_dyn_refit=0
+  CHECK(groom_storage(false, compacted, full, true) == GroomStorage::UndoCopy);  // copy frame with an unsubmitted build
 }
 static void test_uv_submission() {
   using namespace hair_primary;
