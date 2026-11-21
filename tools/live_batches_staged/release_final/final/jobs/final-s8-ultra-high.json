@@ -433,9 +433,9 @@
       "sample_frames": 120
     },
     {
-      "name": "handout: no hit-material fallback and no OMM downgrade",
+      "name": "handout: no hit-material query failure or fallback",
       "select": "\\[rt\\] scene handout: \\d+ frames, reserved",
-      "match": "downgraded 0; .*\\(fallbacks: query 0, camera 0\\)",
+      "match": "hit material queries at the commit \\d+, failed 0 \\(fallbacks: query 0, camera 0\\)",
       "windows": [
         "b1-rel1-smoke-ultra-s8--static-a",
         "b1-rel1-smoke-ultra-s8--pan-q",
@@ -760,18 +760,18 @@
           }
         ],
         "trace_export": {
-          "seconds": 0.28800000000046566,
+          "seconds": 0.21200000000044383,
           "quantile": 0.95,
-          "samples": 38,
+          "samples": 41,
           "maximum": 0.3280000000013388
         },
         "trace_capture_stall": {
           "seconds": 2.79161,
           "source": "fl-s8-holdpack.1.015440.log",
           "quantile": 0.95,
-          "samples": 38,
+          "samples": 41,
           "maximum": 2.9681100000000002,
-          "logs": 6
+          "logs": 7
         }
       }
     },
@@ -988,18 +988,18 @@
           }
         ],
         "trace_export": {
-          "seconds": 0.28800000000046566,
+          "seconds": 0.21200000000044383,
           "quantile": 0.95,
-          "samples": 38,
+          "samples": 41,
           "maximum": 0.3280000000013388
         },
         "trace_capture_stall": {
           "seconds": 2.79161,
           "source": "fl-s8-holdpack.1.015440.log",
           "quantile": 0.95,
-          "samples": 38,
+          "samples": 41,
           "maximum": 2.9681100000000002,
-          "logs": 6
+          "logs": 7
         }
       }
     }
@@ -1034,18 +1034,18 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.28800000000046566,
+      "seconds": 0.21200000000044383,
       "quantile": 0.95,
-      "samples": 38,
+      "samples": 41,
       "maximum": 0.3280000000013388
     },
     "trace_capture_stall": {
       "seconds": 2.79161,
       "source": "fl-s8-holdpack.1.015440.log",
       "quantile": 0.95,
-      "samples": 38,
+      "samples": 41,
       "maximum": 2.9681100000000002,
-      "logs": 6
+      "logs": 7
     },
     "segments": [
       {
@@ -1081,18 +1081,18 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.28800000000046566,
+            "seconds": 0.21200000000044383,
             "quantile": 0.95,
-            "samples": 38,
+            "samples": 41,
             "maximum": 0.3280000000013388
           },
           "trace_capture_stall": {
             "seconds": 2.79161,
             "source": "fl-s8-holdpack.1.015440.log",
             "quantile": 0.95,
-            "samples": 38,
+            "samples": 41,
             "maximum": 2.9681100000000002,
-            "logs": 6
+            "logs": 7
           }
         }
       },
@@ -1129,18 +1129,18 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.28800000000046566,
+            "seconds": 0.21200000000044383,
             "quantile": 0.95,
-            "samples": 38,
+            "samples": 41,
             "maximum": 0.3280000000013388
           },
           "trace_capture_stall": {
             "seconds": 2.79161,
             "source": "fl-s8-holdpack.1.015440.log",
             "quantile": 0.95,
-            "samples": 38,
+            "samples": 41,
             "maximum": 2.9681100000000002,
-            "logs": 6
+            "logs": 7
           }
         }
       }

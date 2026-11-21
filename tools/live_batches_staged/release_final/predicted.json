@@ -9,9 +9,9 @@
   "scenes": 2,
   "profile": "data/release.ini + launcher preset through common/settings.h (release_qual/profile.cpp), dev=0; qualification-only overrides are log periods, detailed_logging and the one float export per static phase",
   "input_sha256": {
-    "common/settings.h": "be4339efb38b2502b4c10bdab635b0c09d5066f643720f767a82cef174ce20bd",
+    "common/settings.h": "a3b44afdf30f1b76f2803c558431973ce89c75856b3b0134eac19f34ad2ed334",
     "data/release.ini": "cb63a0b9368544d94d676bd3fd0fb4fd6b3f6f4edd852ff9f4736328d2d37df8",
-    "bg3rtx.ini": "451ec399a6a57b3fe0da051bde0f557880c413d31c2918329ec9a636c330ddea"
+    "bg3rtx.ini": "d50aea4d34614c4936322938310c6380cccc2f3a092d5c67dc506648b7622a5d"
   },
   "release_profile_checked": {
     "dev": "0",
@@ -26,7 +26,7 @@
     "rt_hair_groom": "0"
   },
   "observable": "The release profile of 0.9.6 (Ultra and High at Water Queens House, Ultra in Dialogue1) runs every measured window without a fault after the changes of 2026-11-14/15: scene handout default, VRAM policies, hair fixes with RTX Hair Off.",
-  "pass_rule": "Every gate of the 2026-11-04 final qualification (water traced and composed, finite, driver-budget VRAM, 0 RT capture drops, 0 alpha region overflow, cascade buffer full 0, scene wait 0 timeouts, current TLAS, RR/post/GI cost lines, OMM same-ray check on High, native hair and scalp records in the dialogue, one master OFF/ON cycle) plus, in the five S8 cost windows of each preset: every first RT query handed out, handout fallbacks 0, pairing mismatches 0, OMM downgraded 0, hit-material fallbacks 0. No crash, device loss or strand producer. These are counts of real faults: 0, no tolerance.",
+  "pass_rule": "Every gate of the 2026-11-04 final qualification (water traced and composed, finite, driver-budget VRAM, 0 RT capture drops, 0 alpha region overflow, cascade buffer full 0, scene wait 0 timeouts, current TLAS, RR/post/GI cost lines, OMM same-ray check on High, native hair and scalp records in the dialogue, one master OFF/ON cycle) plus, in the five S8 cost windows of each preset: every first RT query handed out, handout fallbacks 0, pairing mismatches 0, hit-material query failures and fallbacks 0. No crash, device loss or strand producer. These are counts of real faults: 0, no tolerance. OMM downgrades are INFO with their count (the slot traces the reference scene: a correct image).",
   "predicted_today": {
     "scene wait S8 (High and Ultra, handout On)": "mean about 0.3 ms (0.28 in hq-s8-modes 205520; 3.5 without); 0 timeouts; reported, the gate is the fault counts (docs/SCENE_HANDOUT_DESIGN.md 8.7)",
     "handout": "0 fallbacks, 0 pairing mismatches in every cost window (8.5 to 8.8)",
