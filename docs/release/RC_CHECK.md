@@ -44,7 +44,7 @@ Notes: [RELEASE_NOTES_0.9.6.md](RELEASE_NOTES_0.9.6.md), sources in [RELEASE_EVI
 
 `VERSION.txt`: BG3RTX 0.9.6-beta, commit 9ae2ede3, layer lean, built 2026-11-21 08:3x (launcher UX pass included).
 `.scratch/setup-0.9.6-beta/SHA256SUMS.txt` lists these three hashes. Older candidates: `.scratch/old_rc_122493b1/`, `.scratch/old_rc_3ed4ec08/` (the smoke-tested code; 122493b1 adds only the diagnostic emission pack writer, off in release, and docs), `.scratch/old_rc_08cb1e99/`, `.scratch/old_rc_745a1fff/`.
-Since 08cb1e99 (overnight 2026-11-21, applied overnight, confirm or revert): `rt_hold_pack_base`, `rt_hair_header_early`,
+Since 08cb1e99 (overnight 2026-11-21, confirmed by the user 2026-11-21): `rt_hold_pack_base`, `rt_hair_header_early`,
 `rt_as_size_class`, `rt_cascade_keep_refused` are 1 in the packaged `bg3rtx.ini`; `rt_hair_groom_async` joins the RTX Hair
 On bundle; fixes: OMM working again in High and Ultra, water one-frame no-scene flips, groom BLAS overflow, groom decode
 scheduling. `gi_far_roof_emission` stays 0.
@@ -75,7 +75,8 @@ packaged `bg3rtx.ini`: `rt_hold_pack_base`, `rt_hair_header_early`, `gi_far_roof
 1. **Launcher in the real WebView2 window.** Seen by the user in the installed app (hairtest 12 to 18), as the user
    states on 2026-11-15; no agent-side run (headless Edge only); no defects reported so far. Not a blocker.
 2. **Qualification live in the release profile: done 2026-11-21** (final smoke above, with the overnight keys on).
-   Remaining: the user's confirmation of the overnight release-profile changes, and the OMM-in-High question.
+   The user confirmed the overnight changes, kept OMM on in High and tested the candidate (all OK), 2026-11-21.
+   The player docs changed after this candidate (claude/docs-096): repackage and rerun verify_rc before publishing.
 3. **Hitch frames with RTX Hair**: fixed live by `rt_hair_groom_async` (inn dolly p99 98-111 -> 40 ms, 2026-11-21). RTX Hair ships Off and Beta.
 4. **EXPLAIN: GI trace read 0.2 to 0.4 ms lower with the handout in one rerun.** Not a blocker: energy equal and 0
    fallbacks in the qualification; claude/final-core read it as benign (another specialization, constant 1051).
@@ -103,7 +104,8 @@ packaged `bg3rtx.ini`: `rt_hold_pack_base`, `rt_hair_header_early`, `gi_far_roof
     writes the suggested preset on first use. Not a blocker; never run live.
 13. **Strand-variant pipeline creation at start: 15 to 50 s** in 18 of 25 queue launches and 17.4 / 19.6 s in two
     user logs, also with RTX Hair off (`layer/tracker.cpp` makes the variants for every hair pipeline). A known issue
-    in the notes; the fix `rt_hair_header_early` is off and READY_FOR_LIVE. Not a blocker; the largest start cost left.
+    in the notes. `rt_hair_header_early` is on since 2026-11-21: 15.4 s -> 0.27 s from the second launch (fl-header-early);
+    the first start after installing still pays it. Not a blocker.
 14. **Groom decode fix** (a style decoded up to 9 times under a refused pool growth): offline only. Check in the next
     user log: no LOD id with several "decoded" lines before its "uploaded" line. Not a blocker (RTX Hair Off).
 15. **`gi_far_roof_emission` off is the old program.** claude/final-core showed the 6 `hit_sun_em` requests equal to

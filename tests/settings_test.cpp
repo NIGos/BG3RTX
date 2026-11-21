@@ -1578,7 +1578,7 @@ static void test_release_rtx_hair() {
       for (const char* diag : {"rt_hair_dense_sample", "rt_hair_card_fill", "rt_hair_groom_async", "rt_as_chunk_fit",
                                 "gi_far_roof_emission", "rt_mesh_pool_trim_move"})
         CHECK_EQ(std::string(diag) + "=" + get(fresh, diag), std::string(diag) + "=0");
-      // applied overnight 2026-11-21, confirm or revert: these four qualified keys ship on in every preset.
+      // confirmed by the user 2026-11-21: these four qualified keys ship on in every preset.
       for (const char* on_key : {"rt_hold_pack_base", "rt_hair_header_early", "rt_as_size_class", "rt_cascade_keep_refused"})
         CHECK_EQ(std::string(on_key) + "=" + get(fresh, on_key), std::string(on_key) + "=1");
       if (p < 0) continue;
@@ -1769,8 +1769,8 @@ static void test_strand_bundle() {
                           "rt_hair_header_scene_pass",
                           // 6k (live hx1 194658: "coverage stale" refusals 16-35 -> 0, entering head 10 -> 5 card frames)
                           "rt_hair_coverage_keep",
-                          // r4-hitch (live r4-inn 030500: outward dolly p99 98-111 -> 40 ms). Applied overnight
-                          // 2026-11-21, confirm or revert.
+                          // r4-hitch (live r4-inn 030500: outward dolly p99 98-111 -> 40 ms). Confirmed by the user
+                          // 2026-11-21.
                           "rt_hair_groom_async"}) {
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=1");
     CHECK_EQ(std::string(key) + "=" + code_default(key), std::string(key) + "=0");   // off by default

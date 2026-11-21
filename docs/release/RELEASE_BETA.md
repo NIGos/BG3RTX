@@ -6,10 +6,11 @@ Final controls: [contract](CONTROL_CONTRACT.md). Later qualification receipts su
 
 ## Release configuration and evidence
 
-- [x] Player README/settings guide describe the final 15 controls, stock visible hair and Ctrl+Shift+F9
-  master RT toggle. Ultra is a preset name, not an RTX-model or frame-rate guarantee.
-- [x] Document OMM/masks as automatic only with Ultra + Full geometry and available data/hardware.
-  Stock-hair pool trim follows capture; all trace resolutions remain Full. No promotion to High is implied.
+- [x] Player README/settings guide describe the 0.9.6 controls (23 visible plus 4 behind "Show experimental
+  options"), stock visible hair, RTX Hair as an opt-in Beta (Ctrl+Shift+F7) and the Ctrl+Shift+F9 master RT
+  toggle. Ultra is a preset name, not an RTX-model or frame-rate guarantee. Rechecked 2026-11-21 after the launcher UX pass.
+- [x] Document OMM/masks as automatic only with High or Ultra, Ray-tracing detail Include foliage and available
+  data/hardware (OMM kept on in High: user decision 2026-11-21). All trace resolutions remain Full.
 - [x] Record user-verdict Ultra promotion of temporal depth of field/bloom, 0.152-0.153 ms isolated,
   about 250 MiB reference memory. Preserve paired-test failures; this is not a statistical quality pass.
 - [x] Record wf9 08:59 qualification: VALID, 17 every-window gates, static ON equals OFF,
@@ -18,9 +19,10 @@ Final controls: [contract](CONTROL_CONTRACT.md). Later qualification receipts su
   OFF about 2%; 0.10-0.15 ms surface FS is absolute. Owner appearance decision remains open.
 - [ ] Independently verify the final merged defaults/schema/generated tables, stale-INI filtering,
   dependency writes and removed water keys against the contract. Stream A owns implementation.
-- [ ] Run the final integrated stock-hair Ultra smoke after the configuration/build is frozen.
-  Read every-window participation, overflow, OMM, water, driver-budget VRAM, GPU ms and master-toggle gates.
-- [ ] Accept stock-hair dialogue/startup behaviour, including first-enable shader compilation.
+- [x] Run the final integrated stock-hair smoke after the configuration is frozen: 2026-11-21,
+  final-s8-ultra-high.1.062059 (29/29 window gates) and final-stock-hair-dialogue1.1.062427 (15/15), release profile
+  confirmed by the user the same day (RELEASE_EVIDENCE_0.9.6.md).
+- [x] Accept stock-hair dialogue/startup behaviour: the user tested the candidate 9ae2ede3 on 2026-11-21 (all OK).
 - [ ] Complete VRAM/transition, Act 2/3, RTX 30/40 and multi-hour acceptance. Redesign the old
   43-minute single-launch protocol to respect the 15-minute launch cap before authorizing it.
 - [ ] Verify game/driver versions in the final logs. Recorded 621.01 is a reference, not a minimum;
@@ -48,7 +50,7 @@ TRACK/native-hair documents; no RESULT file for those historical costs is presen
   symbols separation after owner decisions. Approve upload separately; no upload was performed.
 - [x] Run disposable package, legacy release_install, diagnostics and lifecycle fixtures.
   They use synthetic files, child-only process mocks and test scratch; no game or payload EXE runs.
-- [x] Wire Inno to the same 229-file ZIP payload; external SHA256 metadata, combined licence
+- [x] Wire Inno to the same ZIP payload (230 files in 0.9.6-beta); external SHA256 metadata, combined licence
   page, original icon, per-user install, shortcuts and optional finish launch. Pin Inno 6.7.3
   and its distribution hash in `scripts/release/SETUP.md`.
 - [x] Add an actual silent setup/update/uninstall RC stage on a throwaway destination:

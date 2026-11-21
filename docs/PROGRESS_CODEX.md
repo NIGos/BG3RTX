@@ -1,12 +1,13 @@
-# BG3RTX progress - 2026-11-21 (main e4a041c6: launcher UX pass merged)
+# BG3RTX progress - 2026-11-21 (main 9ae2ede3: 0.9.6-beta candidate tested by the user)
 
-## Questions for the user (conservative options taken)
-OMM works again in High and Ultra (it was off since 2026-11-14 by a bug). Measured in one run: Ultra cheaper (GI
--0.33 ms), High dearer (RT +0.14..+0.20 ms, GI +0.13..+0.22 ms), image equal. Keep OMM in High (release profile of
-2026-11-04), or turn it off in High (`rt_omm=0` in the High preset, needs a restart A/B not yet run)?
-
-`gi_far_roof_emission`: PT verdict CLOSER (0.406 -> 0.039 on the 0.04% of pixels it changes), but it costs 0.7-1 ms of
-GI/RT in Dialogue1 (A/B in one run). Turn it on anyway (`claude/roof-em-on` is ready)? Taken: off.
+## User decisions of 2026-11-21 (final for 0.9.6-beta)
+- The user tested the candidate (main 9ae2ede3) and reported everything OK.
+- The release-profile changes applied overnight are confirmed: `rt_hold_pack_base`, `rt_hair_header_early`,
+  `rt_as_size_class`, `rt_cascade_keep_refused` on by default; `rt_hair_groom_async` in the RTX Hair On bundle.
+- OMM in High: kept on (Ultra GI -0.33 ms, High +0.3 to 0.4 ms, image equal).
+- `gi_far_roof_emission`: kept off (PT CLOSER, +0.7-1 ms GI/RT in Dialogue1). `claude/roof-em-on` stays unmerged.
+- Player docs updated for 0.9.6-beta (claude/docs-096). Remaining: repackage so the archive carries the new docs,
+  the Setup.exe install test (or ship the ZIP only), then publish (user action).
 
 Live tests: allowed overnight by the user's /goal of 2026-11-21 only; a new session must ask again.
 State and next steps: [HANDOFF_SESSION](HANDOFF_SESSION.md). Release check: [RC_CHECK](release/RC_CHECK.md).
@@ -106,7 +107,7 @@ Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
 - Core: replay_pack_pass=2 now waits while the dispatch has no emissive scene instead of refusing (it refused for good
   if armed before the first D-EM build). Tests: build.ps1 -Test 240/240.
 
-## Overnight run: release profile changes, applied overnight, confirm or revert (coordinator, merged, 2026-11-21)
+## Overnight run: release profile changes, confirmed by the user 2026-11-21 (coordinator, merged)
 
 - `rt_hold_pack_base=1` (fl-s8-holdpack, A/B in one run): copies per static build 91.0 -> 35.6 MB, scene build GPU
   1.044 -> 0.810 ms median, mesh pool used -53 MB, energy equal (ON 0.16323, OFF 0.16316-0.16333).
@@ -124,7 +125,7 @@ Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
 - OMM was off in High and Ultra since the scene handout default (2026-11-14): tickets registered on an ended game
   recording retained OMM until device destroy; every handout line said "OMM accelerated commits 0". Fixed
   (claude/omm-diag); live 66/66 lines accelerated. A/B (oa-s8, accelerated vs reference in one run): Ultra GI -0.33 ms,
-  RT -0.14..-0.33 ms (noise); High RT +0.14..+0.20 ms and GI +0.13..+0.22 ms; energy +0.07% / +0.02%. Question below.
+  RT -0.14..-0.33 ms (noise); High RT +0.14..+0.20 ms and GI +0.13..+0.22 ms; energy +0.07% / +0.02%. Kept on in High (user, 2026-11-21).
 - Water one-frame "no scene" flips under the handout (7-24% of 60-frame periods at S8): a later pass now takes the newer
   committed scene (claude/water-noscene). Live: 28/29 periods "no scene 0", the other a scene-wait timeout case.
 - Groom BLAS full build into compacted storage (memory overwrite with RTX Hair on), status ring UB (claude/r3-layer).
@@ -137,8 +138,8 @@ Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
 
 ## Overnight run: tested and kept off (coordinator, 2026-11-21)
 
-- `gi_far_roof_emission`: live energy +0.25% (noise). Emission packs and PT emission built (claude/em-pack); the
-  offline A/B replay lost the device and was not rerun (question above). Stays off.
+- `gi_far_roof_emission`: live energy +0.25% (noise). Emission packs and PT emission built (claude/em-pack); the PT
+  A/B then said CLOSER, the cost A/B FAIL (section at the top). Kept off by the user 2026-11-21.
 - `rt_sun_overlap`: RT interval 7.53 / 7.50 / 7.32 ms, no gain. `rr_post_jitter_align=1` on High: 2-4x more background
   flicker (premise wrong). Ultra temporal shift (=3): no defect shown.
 - High OMM downgrades (about 1 per 60 frames, reference scene, correct image): no pass waits for the commit in High;

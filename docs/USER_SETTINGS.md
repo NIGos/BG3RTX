@@ -17,9 +17,12 @@ and memory limits.
 ## How changes apply
 
 - **At once.** Most settings change the running game as you click. No badge is shown for these.
-- **After a game restart.** A setting with an amber "Restart" badge (or "Restart to turn on") is written at once
-  but takes effect at the next game start. While the game runs, a line under the header lists what is
-  waiting ("Restart the game to apply: Water lighting, Hair shadows") and those rows show "Restart pending".
+- **After a game restart.** A setting with an amber badge is written at once but takes effect at the next game
+  start. The badge says which change waits: "Restart to apply" (any other choice), "Restart to turn on" or
+  "Restart to turn off" (an Off/On setting), "Restart for" one named choice, or "Restart for some choices" (its
+  tooltip and Takes effect name them). While the game runs, a line under the header lists what is waiting
+  ("Restart the game to apply: Water lighting, Hair shadows") and those rows show "Restart pending".
+  "The game may pause briefly." in Takes effect marks a setting that applies at once but can pause the game.
 - **Dependencies.** Turning something on also turns on what it needs. Turning something off also lowers what
   needs it. Both happen at the click and are listed next to the control with Undo. A setting lowered this way
   comes back when you turn its prerequisite on again in the same launcher session. A sub-setting whose parent
@@ -30,7 +33,9 @@ and memory limits.
 
 ## Release controls
 
-Select a row to see what it does, its GPU cost, when it takes effect, what it needs and what each preset sets.
+Select a row to see what it does, its GPU cost, when it takes effect, what it needs and what each preset sets
+(Low, Medium, High and Ultra on their own lines, the current preset in bold). Rows with long choices (Water
+lighting, Sun shadows, Indirect lighting) show the choices under the description.
 
 | Page | Group | Setting | Choices | Takes effect |
 |---|---|---|---|---|
@@ -63,11 +68,12 @@ Select a row to see what it does, its GPU cost, when it takes effect, what it ne
 | Help & support | Problem reports | Detailed logging | Off / On | Restart |
 
 Tracing speed is collapsed by default: both options are on in every preset and do not change the image.
-The Experimental page has the switch **Show experimental options**; its options are off in every preset and
-hidden until you turn the switch on. Turning it off sets them all back to Off (Undo restores them).
+The Experimental page has the switch **Show experimental options**; its options are not fully tested, off in every
+preset and hidden until you turn the switch on. Turning the switch off hides them and sets them back to Off (Undo
+restores them).
 **Home** shows what needs attention, the preparation of shaders and RTX Hair styles, the preset and the
-in-game keys. **Hotkeys** changes the in-game keys. **Help & support** has the game folder, the graphics check,
-reports, tips and the version.
+hotkeys (**Change hotkeys** opens the Hotkeys page). **Hotkeys** changes the in-game hotkeys. **Help & support** has
+the game folder, the graphics check, reports, tips and the version.
 
 Visible hair is the game's stock hair. With Hair shadows On, the game's hair and scalp cast
 ray-traced shadows. The first start after turning it on compiles shaders and can pause or stutter.
@@ -75,7 +81,7 @@ No replacement hair files are included. **Lighting > RTX Hair** (beta, Off in ev
 while playing, also with Ctrl+Shift+F7) shows hair as ray-traced strands: a style gets strands after the game has
 shown it once and the launcher has converted it (Home > Preparation). A style that is not converted yet stays as the
 game's hair, hair on distant characters can look softer, and a head that comes into view shows the game's hair for
-a few frames (about 3) first.
+a few frames (about 3) first, or about 0.6 seconds when its style is loaded for the first time.
 
 Off-screen bounce light also carries light from glowing surfaces. Far extends sunlight bounce to 6 m.
 Interior light shadows respect the game's shadow flags, including lights whose shadows were
@@ -119,6 +125,7 @@ Changing activation or the runtime needs a restart.
 This switches the runtime bypass, without restarting or changing Ray Reconstruction.
 
 On **Hotkeys**, select a field and press Ctrl, Shift and/or Alt with F1-F12, A-Z or 0-9.
+The defaults are Ctrl+Shift+F9 (all ray tracing), Ctrl+Shift+F8 (DLSS 5) and Ctrl+Shift+F7 (RTX Hair).
 A single key is also accepted. **Clear** disables a key; **Reset to** restores its default.
 Duplicate keys and the reserved Ctrl+Shift+F10 are rejected. A key change applies at once.
 
