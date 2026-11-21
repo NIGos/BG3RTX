@@ -23,7 +23,7 @@ Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
   40 ms, scene wait max 163-167 -> 6-7 ms; hx1a 30/30 gates, 0 strands->cards, 0 grooms dropped. Cost: a head decoded
   for the first time shows cards for about 0.6 s (19-frame runs, cause: slot key churn of heads appearing together).
 - Release smoke with these keys on: Dialogue1 15/15 gates; S8 Ultra + High 29/29 window gates (final-s8-ultra-high
-  055556), post-analysis REVIEW_REQUIRED (visual, checked: correct), costs within 0.1 ms of 2026-11-04 or lower.
+  055556, crashed post-analysis; valid rerun 062059 + Dialogue1 062427 after the analyzer fix), images checked, costs within 0.1 ms of 2026-11-04 or lower.
 
 ## Overnight run: fixes found by the smoke and the rounds (coordinator, merged, 2026-11-21)
 

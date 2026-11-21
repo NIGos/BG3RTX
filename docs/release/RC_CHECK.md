@@ -68,7 +68,7 @@ packaged `bg3rtx.ini`: `rt_hold_pack_base`, `rt_hair_header_early`, `gi_far_roof
 | Licences | PASS | `LICENSE`, `LICENSE-EXCEPTION.md`, `THIRD_PARTY.md` and the `licences/` files byte-equal to the repository; verify_rc Licences row |
 | Exclusions | PASS | 0 `granny2*`, 0 PDB, 0 Python, no DLSS 5 runtime (only its MIT bridge notice and codec shader); verify_rc Exclusions row |
 | Shader identity of the 2026-11-20 core changes | PASS | claude/final-core: 225 / 225 requests byte-identical after the dead-code removal; NaN clamp: only the 28 hit-GI requests change, in the final select; `gi_far_roof_emission` off: "Not verified" 15 |
-| Final release smoke (release profile of 2026-11-21) | PASS | final-stock-hair-dialogue1.1.033806: 15/15 gates; final-s8-ultra-high.1.055556: 29/29 window gates, post-analysis REVIEW_REQUIRED by design (images checked), costs within 0.1 ms of 2026-11-04 or lower; OMM downgrades INFO (High about 1 per 60 frames, reference scene) |
+| Final release smoke (release profile of 2026-11-21) | PASS | final-s8-ultra-high.1.062059: 29/29 window gates and final-stock-hair-dialogue1.1.062427: 15/15, both valid runs with the post-analysis (REVIEW_REQUIRED by design; S8 images checked on 055556), costs within 0.1 ms of 2026-11-04 or lower; OMM downgrades INFO (High about 1 per 60 frames, reference scene) |
 
 ### Not verified
 

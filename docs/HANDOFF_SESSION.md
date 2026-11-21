@@ -23,7 +23,7 @@ Main is 3ed4ec08 plus the docs commit that follows it.
 ## Release blockers
 
 1. None left from tests: the final release smoke passes with the release profile of 2026-11-21 (Dialogue1 15/15,
-   S8 Ultra + High 29/29 window gates, final-s8-ultra-high 055556; post-analysis REVIEW_REQUIRED by design, checked).
+   S8 Ultra + High 29/29 window gates; valid runs final-s8-ultra-high 062059 and final-stock-hair-dialogue1 062427 with the post-analysis).
 2. The user's confirmation of the changes applied overnight (PROGRESS top) and the OMM-in-High question.
 3. The installer has never been executed on this PC: install it once over hairtest18, or ship the ZIP only.
 
