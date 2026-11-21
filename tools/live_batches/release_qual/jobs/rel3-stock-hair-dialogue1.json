@@ -235,7 +235,7 @@
     },
     {
       "name": "stock cards: no strand producer",
-      "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand|counted)",
+      "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand(?! variants)|counted)",
       "match": "(?!)",
       "min": 0,
       "event": true
