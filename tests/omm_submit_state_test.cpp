@@ -25,6 +25,10 @@ int main(){
   check(g.begin(1));check(g.execute(1,2));check(g.end(1,true));
   check(g.submitted(primary,out));check(out==std::set<Id>({300}));
   check(g.begin(3));check(!g.add(3,400,3));check(g.add(3,400,4));check(g.end(3,true));
+  // claude/omm-diag: a scene handout user recording that ended before the commit refuses the ticket and is not
+  // tracked: omm::try_register_ticket_use declines it (the slot downgrades) instead of retaining OMM off.
+  check(!g.add(3,401,4));check(!g.tracked_recording(3,4));
+  check(!g.tracked_recording(999,4));   // never tracked: declined the same way
   check(queue_allowed(true,true));check(queue_allowed(false,false));check(!queue_allowed(false,true));
   const Id unrelated[]={999};check(g.submitted(unrelated,out));check(out.empty());
   g.reset(2,true);check(!g.submitted(primary,out));check(out==std::set<Id>({300}));
