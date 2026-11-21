@@ -1385,6 +1385,19 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
                               (dropped ? ", " + std::to_string(dropped) + " entries outside the captured soup (no triangles)" : std::string()));
   }
 
+  // rt_scene_handout (constant 1051 != 0 in a pack's own specs, e.g. gi_hit_sun_em packs of the release profile): every
+  // scene trace takes the TLAS address in the stamp (s1 b9 bytes 16/24), which holds the LIVE process's TLAS. Tracing it
+  // here lost the device (r2-inn-em-pack pack 071523, 2026-11-21): stamp the replay's TLAS unless --handout chose.
+  const int handout_was = g_handout;
+  {
+    uint32_t h = 0;
+    for (const auto& s : m.specs) if (s.id == 1051u) h = s.value;
+    if (g_specs.count(1051u)) h = g_specs.at(1051u);
+    if (g_ab_specs.count(1051u)) h = g_ab_specs.at(1051u).first | g_ab_specs.at(1051u).second;
+    if (h && !g_handout) { g_handout = 1; result.warnings.push_back("scene handout (constant 1051) on: the stamp holds the replay's TLAS address, not the live one"); }
+  }
+  struct HandoutRestore { const int v; ~HandoutRestore() { g_handout = v; } } handout_restore{handout_was};
+
   if (g_handout) {
     check(!g_ab_blas, "--handout with --ab-blas: the two sides trace different TLASes");
     check(rp::find_slot(pass, 1, 9) != nullptr, "--handout: the pass has no scene stamp (set 1 binding 9)");

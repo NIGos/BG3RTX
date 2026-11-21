@@ -233,11 +233,11 @@ inline constexpr auto kReflections = [] {
 // the replay rebuilds it from s4 b1 (emInfo) and b3 (emSoup) as layer/emissive.cpp em_as_build does (em_geometries).
 inline constexpr uint32_t kEmPackSet = 4;
 inline constexpr auto kGiHitSunEm = [] {
-  std::array<Slot, std::size(kGiHitDirect) + 13> slots{};
+  std::array<Slot, std::size(kGiHitDirect) + 14> slots{};
   size_t n = 0;
   for (const auto& s : kGiHitDirect) slots[n++] = s;
   const Slot extra[] = {
-      {3, 8, kStorage, 1, 98 /* VK_FORMAT_R32_UINT */, "sunTrust"},
+      {3, 8, kStorage, 1, 98 /* VK_FORMAT_R32_UINT */, "sunTrust"}, {1, 19, kSampler, 16, 0, "gNativeTilesetSampler"},
       {4, 0, kTlas, 1, 0, "emTlas"},     {4, 1, kSsbo, 1, 0, "emInfo"},   {4, 2, kSsbo, 1, 0, "emPool"},
       {4, 3, kSsbo, 1, 0, "emSoup"},     {4, 4, kSsbo, 1, 0, "emRecs"},   {4, 5, kSsbo, 1, 0, "emLights"},
       {4, 6, kSampled2D, 256, 0, "emTex"}, {4, 7, kSampler, 1, 0, "emSampler"}, {4, 8, kSsbo, 1, 0, "emStats"},
