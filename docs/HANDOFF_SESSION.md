@@ -3,17 +3,17 @@
 Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) first (top: the question on OMM in High, the changes applied overnight).
 Release check: [RC_CHECK](release/RC_CHECK.md). Design and history: [RTX_HAIR_PRIMARY](RTX_HAIR_PRIMARY.md) 6g-6k,
 [SCENE_HANDOUT_DESIGN](SCENE_HANDOUT_DESIGN.md) section 8. ABI 31 (unchanged overnight).
-Main is 3ed4ec08 plus the docs commit that follows it.
+Main is 122493b1 plus the docs commit that follows it.
 
 ## State
 
-- Release candidate 0.9.6-beta, rebuilt from main 3ed4ec08 (lean layer, 230 files):
-  - `dist/BG3RTX-0.9.6-beta.zip`: SHA-256 e5c42ec0daa61a4845889efd12f9733b61b7ba63e572dd8d7adb14dded36f07d
-  - `dist/BG3RTX-0.9.6-beta-symbols.zip` (private): 89dbdee857bb832c5ca1f8a3c22a5e41ad66685a9c30a23654f1fed9a80c6381
-  - `.scratch/setup-0.9.6-beta/BG3RTX-0.9.6-beta-Setup.exe` (unsigned): af77e1f1adbbab4ab81e5aa6d21cf5371a066028cf0b699d6d9b6cb681a360da
-  - `VERSION.txt` says commit 3ed4ec08. `.scratch/setup-0.9.6-beta/SHA256SUMS.txt` lists these three hashes.
+- Release candidate 0.9.6-beta, rebuilt from main 122493b1 (lean layer, 230 files; same release code as the smoke-tested 3ed4ec08 plus the diagnostic emission pack writer, off):
+  - `dist/BG3RTX-0.9.6-beta.zip`: SHA-256 b69bccf5e2893f03239e308bf7577be175f4cf1f1ed0981bd478bdd5ef5b4540
+  - `dist/BG3RTX-0.9.6-beta-symbols.zip` (private): 5005bdcca5160d4dd95371e4eaba8d6f3017bee84cc9feede205cf61dc37e613
+  - `.scratch/setup-0.9.6-beta/BG3RTX-0.9.6-beta-Setup.exe` (unsigned): be2467145989d2c3d7c263dbece303f5cd2680a4344015d6b37c736391b58610
+  - `VERSION.txt` says commit 122493b1. `.scratch/setup-0.9.6-beta/SHA256SUMS.txt` lists these three hashes.
   - verify_rc: 11 PASS, Setup SKIPPED (another install present: 0.9.6-hairtest18).
-  - Previous candidate (08cb1e99) in `.scratch/old_rc_08cb1e99/`; older in `.scratch/old_rc_745a1fff/`.
+  - Previous candidates in `.scratch/old_rc_3ed4ec08/` and `.scratch/old_rc_08cb1e99/`; older in `.scratch/old_rc_745a1fff/`.
   - Nothing is published, tagged or uploaded. Publishing is the user's action.
 - Installed app: 0.9.6-hairtest18 (commit 1c09e039), unchanged; it lacks the 2026-11-20 and 2026-11-21 changes.
 - Lives: allowed overnight by the user's /goal only. A new session must ask again; after a go, tell the user and wait

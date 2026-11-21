@@ -1,49 +1,49 @@
 ﻿# Release candidate check
 
-Date: 2026-11-21 06:18:44 +01:00. Commit: 3ed4ec08972ff59c7b92163cf34bb43a2555b137.
+Date: 2026-11-21 07:29:42 +01:00. Commit: 122493b1cbea4e5c8ee2d733c98ada80827e9364.
 Source state at start: clean tracked files (untracked files excluded).
-Result: PASS with 1 skipped row. Candidate version: rc-20261121-3ed4ec08-86c1f349.
+Result: PASS with 1 skipped row. Candidate version: rc-20261121-122493b1-c13adb2d.
 
 Rerun: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1`.
 
 | Item | Result | Evidence |
 |---|---|---|
 | Build | PASS | Core, launcher and lean layer built from this tree; diagnostics OFF. No shader compile or game run. |
-| Archive | PASS | Real ZIP, 73.73 MiB; SHA256 c326835e51a4d3e50b8f9f2cb5bde26eb0c32e1fd37a54d0276eb9b03dc8f902; symbols kept in separate archive. |
+| Archive | PASS | Real ZIP, 73.73 MiB; SHA256 594f5ae1cfdc4b94459045b33e1e7ab157f9a61b2d51dd100a3d6dfbf21b0675; symbols kept in separate archive. |
 | Manifest | PASS | 230 files; expected 230 (delta 0); 0 differences across ZIP / extracted / files.txt / source plan. Runtime source dependencies covered. |
 | Hashes | PASS | 12 shipped DLLs and launcher match build/copy sources; 227 verbatim files checked; 9 Streamline DLLs match production SDK. |
 | Exclusions | PASS | 0 symbols, developer tools, SDK payloads, Aftermath DLLs, Python or unexpected binaries. Private symbols outside player ZIP. |
 | Licences | PASS | 16 required notices plus project licences and font OFL present, verbatim hashes checked; README licence lines 3-4 PASS. |
-| Version | PASS | rc-20261121-3ed4ec08-86c1f349; commit matches HEAD; layer lean. |
+| Version | PASS | rc-20261121-122493b1-c13adb2d; commit matches HEAD; layer lean. |
 | Install | PASS | 230 real payload files hash-match after install; fake game unchanged; 3 original collisions backed up. |
 | Update | PASS | 230 files hash-match after same-candidate update; corrupted installed DLL repaired; original backups, settings and unrelated file preserved. |
 | Uninstall | PASS | 5/5 original files restored byte-for-byte; fake game unchanged; no owned payload/metadata remains. |
 | Setup | SKIPPED | skipped: another BG3RTX install present (C:\Users\quali\AppData\Local\Programs\BG3RTX\, 0.9.6-hairtest18 from VERSION.txt; Apps entry says 0.9.6-hairtest10). The compiled Setup was not run, so it is not qualified here: run verify_rc on a PC without a BG3RTX install, or uninstall it first. |
 | Cleanup | PASS | Owned TEMP test tree deleted; no existing installation, cache, shortcuts or game files changed. Setup Apps cleanup is checked in the Setup row. |
 
-Archive: E:\Storage\Code Projects\BG3RTX\.scratch\rc\20261121-061650-86c1f349\BG3RTX-rc-20261121-3ed4ec08-86c1f349.zip
+Archive: E:\Storage\Code Projects\BG3RTX\.scratch\rc\20261121-072750-c13adb2d\BG3RTX-rc-20261121-122493b1-c13adb2d.zip
 
 Scope: real ZIP legacy install.ps1/uninstall.ps1 route, no shortcut, settings retained. Update reapplies this candidate, not a different release.
 Only synthetic installer child shells mock named-process discovery, as release_install_test.py does; build process guards remain real. No game or payload binary executes.
 Setup row covers compiled Inno setup/update/uninstall in TEMP, with shortcuts disabled and isolated LOCALAPPDATA; only PASS qualifies that route. No fresh-PC, signing, shortcut UI, locked-file, interruption, game/visual acceptance or release/upload approval is claimed.
 Git metadata is read-only. Generated archives, symbols and logs remain under .scratch/rc and must not be added to Git.
 
-## Release readiness: 0.9.6-beta (refreshed 2026-11-21 for main 3ed4ec08, after the overnight run)
+## Release readiness: 0.9.6-beta (refreshed 2026-11-21 for main 122493b1, after the overnight run)
 
 Hand-written; `verify_rc.ps1` keeps this section when it rewrites the table above. Not a release approval.
 User decision 2026-11-15: finalise for release, RTX Hair Off by default. Nothing is uploaded, tagged or installed by agents.
 Notes: [RELEASE_NOTES_0.9.6.md](RELEASE_NOTES_0.9.6.md), sources in [RELEASE_EVIDENCE_0.9.6.md](RELEASE_EVIDENCE_0.9.6.md).
 
-### Candidate (built offline from main 3ed4ec08, lean layer, not installed, not run)
+### Candidate (built offline from main 122493b1, lean layer, not installed, not run)
 
 | Artifact (main checkout) | Bytes | SHA-256 |
 |---|---|---|
-| `dist/BG3RTX-0.9.6-beta.zip` (230 files) | 77688095 | e5c42ec0daa61a4845889efd12f9733b61b7ba63e572dd8d7adb14dded36f07d |
-| `dist/BG3RTX-0.9.6-beta-symbols.zip` (private) | 81731980 | 89dbdee857bb832c5ca1f8a3c22a5e41ad66685a9c30a23654f1fed9a80c6381 |
-| `.scratch/setup-0.9.6-beta/BG3RTX-0.9.6-beta-Setup.exe` (Inno 6.7.3, unsigned) | 57700113 | af77e1f1adbbab4ab81e5aa6d21cf5371a066028cf0b699d6d9b6cb681a360da |
+| `dist/BG3RTX-0.9.6-beta.zip` (230 files) | 77689239 | b69bccf5e2893f03239e308bf7577be175f4cf1f1ed0981bd478bdd5ef5b4540 |
+| `dist/BG3RTX-0.9.6-beta-symbols.zip` (private) | 83019486 | 5005bdcca5160d4dd95371e4eaba8d6f3017bee84cc9feede205cf61dc37e613 |
+| `.scratch/setup-0.9.6-beta/BG3RTX-0.9.6-beta-Setup.exe` (Inno 6.7.3, unsigned) | 57689983 | be2467145989d2c3d7c263dbece303f5cd2680a4344015d6b37c736391b58610 |
 
-`VERSION.txt`: BG3RTX 0.9.6-beta, commit 3ed4ec08, layer lean, built 2026-11-21 06:16.
-`.scratch/setup-0.9.6-beta/SHA256SUMS.txt` lists these three hashes. Older candidates: `.scratch/old_rc_08cb1e99/`, `.scratch/old_rc_745a1fff/`.
+`VERSION.txt`: BG3RTX 0.9.6-beta, commit 122493b1, layer lean, built 2026-11-21 (after the overnight run).
+`.scratch/setup-0.9.6-beta/SHA256SUMS.txt` lists these three hashes. Older candidates: `.scratch/old_rc_3ed4ec08/` (the smoke-tested code; 122493b1 adds only the diagnostic emission pack writer, off in release, and docs), `.scratch/old_rc_08cb1e99/`, `.scratch/old_rc_745a1fff/`.
 Since 08cb1e99 (overnight 2026-11-21, applied overnight, confirm or revert): `rt_hold_pack_base`, `rt_hair_header_early`,
 `rt_as_size_class`, `rt_cascade_keep_refused` are 1 in the packaged `bg3rtx.ini`; `rt_hair_groom_async` joins the RTX Hair
 On bundle; fixes: OMM working again in High and Ultra, water one-frame no-scene flips, groom BLAS overflow, groom decode
@@ -58,7 +58,7 @@ packaged `bg3rtx.ini`: `rt_hold_pack_base`, `rt_hair_header_early`, `gi_far_roof
 | Gate | Result | Evidence |
 |---|---|---|
 | Build and all CTests | PASS | merge-green of 41a5e7f8 ("full gates passed"); every branch of the night 239 of 239 |
-| verify_rc (table above) | 11 PASS, 1 SKIPPED | rc-20261121-3ed4ec08-86c1f349. Setup row skipped: another install present (0.9.6-hairtest18 from its `VERSION.txt`; the Apps entry says hairtest10). See "Not verified" 6 |
+| verify_rc (table above) | 11 PASS, 1 SKIPPED | rc-20261121-122493b1-c13adb2d. Setup row skipped: another install present (0.9.6-hairtest18 from its `VERSION.txt`; the Apps entry says hairtest10). See "Not verified" 6 |
 | RTX Hair Off in Low, Medium, High, Ultra and without a user file | PASS | `tests/settings_test.cpp` `test_release_rtx_hair`; the packaged `bg3rtx.ini` reads `rt_hair_groom_primary=0`, `rt_hair_capture=0` |
 | RTX Hair On from the launcher survives the release policy | PASS | same test: all 27 bundle keys, 4 presets, experimental options 0 and 1; policy idempotent |
 | Release controls | PASS | 23 visible controls plus 4 behind "Show experimental options"; 32 developer knobs hidden (`settings_test`, `launcher_web_bridge_json_test`) |
