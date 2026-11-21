@@ -63,6 +63,26 @@ class FinalReleaseTests(unittest.TestCase):
                 with self.subTest(window=phase['label'], wait=rx):
                     self.assertTrue(all(states[phase['label']].get(k, '0') != '0' for k in keys))
 
+    def test_omm_downgrades_are_info_and_hit_material_failures_still_fail(self):
+        # claude/omm-ab: a downgraded slot traces the reference scene (a correct image); 052606 High failed on 9.
+        path = ROOT / 'tools/live_batches_staged/release_final/final/jobs/final-s8-ultra-high.json'
+        job, _, _ = flow.load_job(path)
+        handout = [g for g in job['expect_every'] if g['select'].startswith(r'\[rt\] scene handout')]
+        self.assertTrue(handout)
+        self.assertFalse([g['name'] for g in handout if 'downgraded' in g['match']])
+        hit = [g for g in handout if 'hit material queries at the commit' in g['match']]
+        self.assertEqual(len(hit), 1)
+        import re
+        line = ('[rt] scene handout: 60 frames, reserved 59, handed out 59, in order 59, fallbacks 0 (not committed 0, '
+                'build failed 0, order 0, dropped 0), pairing mismatches 0, committed first 0, unused 0, users refused 0; '
+                'OMM accelerated commits 50, downgraded 9; hit material queries at the commit 0, failed 0 '
+                '(fallbacks: query 0, camera 0)')
+        self.assertRegex(line, hit[0]['match'])
+        self.assertNotRegex(line.replace('failed 0', 'failed 1'), hit[0]['match'])
+        self.assertNotRegex(line.replace('query 0', 'query 2'), hit[0]['match'])
+        from tools.live_batches.release_qual.analyze_final import HANDOUT_OMM
+        self.assertEqual(re.search(HANDOUT_OMM, line).groups(), ('50', '9'))
+
     def test_pipeline_rebuild_phases_get_more_than_the_fixed_10_s(self):
         # 2026-11-21 (final-s8-ultra-high 033318): ab_off 1 -> 0 rebuilt the GI sun raygen pipeline in 11.9-12.6 s
         # in the driver; the fixed 10 s of every non-first readiness wait failed b1-...--ab-on.

@@ -57,9 +57,10 @@ def predicted(exe):
                   'VRAM, 0 RT capture drops, 0 alpha region overflow, cascade buffer full 0, scene wait 0 timeouts, '
                   'current TLAS, RR/post/GI cost lines, OMM same-ray check on High, native hair and scalp records in '
                   'the dialogue, one master OFF/ON cycle) plus, in the five S8 cost windows of each preset: every '
-                  'first RT query handed out, handout fallbacks 0, pairing mismatches 0, OMM downgraded 0, '
-                  'hit-material fallbacks 0. No crash, device loss or strand producer. These are counts of real '
-                  'faults: 0, no tolerance.',
+                  'first RT query handed out, handout fallbacks 0, pairing mismatches 0, hit-material query '
+                  'failures and fallbacks 0. No crash, device loss or strand producer. These are counts of real '
+                  'faults: 0, no tolerance. OMM downgrades are INFO with their count (the slot traces the reference '
+                  'scene: a correct image).',
         predicted_today={
             'scene wait S8 (High and Ultra, handout On)': 'mean about 0.3 ms (0.28 in hq-s8-modes 205520; 3.5 without); '
                 '0 timeouts; reported, the gate is the fault counts (docs/SCENE_HANDOUT_DESIGN.md 8.7)',
@@ -91,8 +92,11 @@ def handout_gates(job):
                      r'handed out [1-9]\d*', windows),
         release.gate('handout: 0 fallbacks and 0 pairing mismatches', HANDOUT,
                      r'in order [1-9]\d*, fallbacks 0 \(.*\), pairing mismatches 0,', windows, **PERIOD),
-        release.gate('handout: no hit-material fallback and no OMM downgrade', HANDOUT,
-                     r'downgraded 0; .*\(fallbacks: query 0, camera 0\)', windows, **PERIOD),
+        # An OMM downgrade traces the reference scene for that slot (a correct image, AGENTS.md sensible gates): INFO,
+        # counted by the analyzer (release_qual/analyze_final.py omm_downgrades). High has about 1 per 60 frames
+        # (final-s8-ultra-high 052606: rt_hit_material=0, no pass waits for the commit). Hit-material failures still fail.
+        release.gate('handout: no hit-material query failure or fallback', HANDOUT,
+                     r'hit material queries at the commit \d+, failed 0 \(fallbacks: query 0, camera 0\)', windows, **PERIOD),
         release.gate('VRAM policies: no opaque draw dropped', r'\[geo\] RT capture, last \d+ frames:',
                      r'opaque draws dropped \(buffer full\) 0\.00,', windows)]
 

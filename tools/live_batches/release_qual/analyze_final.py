@@ -59,6 +59,26 @@ def costs(log, runner, plan=None, extra_costs=None, skip_first=()):
     return out
 
 
+HANDOUT_OMM = r'\[rt\] scene handout: \d+ frames,.*OMM accelerated commits (\d+), downgraded (\d+);'
+
+
+def omm_downgrades(log, runner, plan):
+    """INFO (AGENTS.md sensible gates): {window: {accelerated, downgraded}} summed over the window's complete handout
+    periods. A downgraded slot traces the reference scene, a correct image; the release gate does not fail on it."""
+    lines = stamped_lines(Path(log).read_text(encoding='utf-8-sig', errors='replace'))
+    run = Path(runner).read_text(encoding='utf-8-sig', errors='replace')
+    out = {}
+    for w in windows(run, plan, lines):
+        if not w['ready'] or w['label'].rsplit('--', 1)[-1] not in ('static-a', 'pan-q', 'pan-e', 'rotate-r', 'rotate-l'):
+            continue
+        found = [m for _, s in complete_period_lines([(t, s) for t, s in lines if w['applied'] <= t < w['end']], w)
+                 if (m := re.search(HANDOUT_OMM, s))]
+        if found:
+            out[w['label']] = dict(accelerated=sum(int(m[1]) for m in found), downgraded=sum(int(m[2]) for m in found),
+                                   status='INFO')
+    return out
+
+
 def energy(capture):
     cap = Path(capture)
     frame, dumps = flow.read(cap/'frame.json'), flow.read(cap/'dumps.json')
@@ -110,6 +130,7 @@ def main():
             delta_ms=value['median_ms']-baseline[name]['median_ms'],
             outside_observed_range=not baseline[name]['min_ms'] <= value['median_ms'] <= baseline[name]['max_ms'])
             for name, value in passes.items() if name in baseline}
+    result['omm_downgrades'] = omm_downgrades(a.log, a.runner, plan)
     result['baseline_energy'] = [energy(p) for p in a.baseline_capture]
     if not a.baseline_capture:
         keys = ['rel3'] if 'dialogue' in job['name'] else ['rel1', 'rel2']
