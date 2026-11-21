@@ -2,19 +2,19 @@
   "final-s8-ultra-high": {
     "save": "Water Queens House",
     "load_allowance_seconds": 120,
-    "scheduled_seconds": 187.792,
-    "readiness_seconds": 18.524,
-    "expected_minutes": 5.44,
-    "hard_timeout_seconds": 438,
+    "scheduled_seconds": 103.712,
+    "readiness_seconds": 8.064,
+    "expected_minutes": 3.86,
+    "hard_timeout_seconds": 694,
     "captures": 2,
     "disk_estimate_mb": 130
   },
   "final-stock-hair-dialogue1": {
     "save": "Test Dialogue1",
     "load_allowance_seconds": 120,
-    "scheduled_seconds": 97.0,
-    "readiness_seconds": 0.009,
-    "expected_minutes": 3.62,
+    "scheduled_seconds": 94.89999999999999,
+    "readiness_seconds": 0.015,
+    "expected_minutes": 3.58,
     "hard_timeout_seconds": 300,
     "captures": 1,
     "disk_estimate_mb": 70
