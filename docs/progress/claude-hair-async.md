@@ -28,3 +28,13 @@
   (44 checks) replays the pre-in sequence: LOD 0, 2, 1 asked while the worker is busy -> only LOD 1 decodes, and before
   an older still-wanted request. Predicted for the hx1a rerun (predicted.json rerun_round3): pre-in card runs median
   12-18 frames (from 19), pre-in decodes 6-8 (from 8), bundle windows unchanged.
+- Live hx1a rerun 040843 (round 3, 30 every-window gates ok): KEEP round 3, card-run prediction disproved.
+  Bundle windows unchanged: 0 strands->cards, median 3 (max 3) in all six, groom dropped 0, kept 6 (in-on) and 4
+  (orbit-r). pre-in: 7 decodes, all on the worker and all uploaded (033523: 8, 16fa158ca4825f93 LOD 2 decoded and
+  never used); warmup 10 and 10. Card runs: pre-in 19/19/20, median 19 (predicted 12-18; 033523: 19); warmup 17/20/24,
+  median 20 (predicted 14-20).
+- Why the runs did not shorten: the pre-in heads appear at frame 2323 (04:10:21.77), at the window start, before the
+  wheel (23.29). The first LOD 0 is uploaded at 22.01 (about 8 frames later), all three by 22.34, yet every run lasts
+  19-20 frames. From 2323 to past 2338 the groom rows change key 2-9 times per frame ("keyed rows whose row index now
+  holds another key", 283d <-> 608a flipping): the run ends with that churn, not with the decode queue. Next lead (not
+  this stream): the slot keys of heads that appear together.
