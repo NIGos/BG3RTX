@@ -443,7 +443,7 @@ inline constexpr Knob kKnobs[] = {
     // "coverage stale" refusals 16-35 -> 0 per moving window, card run of a head entering the view 10 -> 5 frames,
     // 0 switches of any cause, no cost outside the spread.
     // r4-hitch (live r4-inn 030500): groom LOD read and decode on a worker (rt_hair_groom_async). Inn outward dollies:
-    // frame time p99 98-111 -> 40 ms, scene wait max 163-167 -> 6-7 ms. Applied overnight 2026-11-21, confirm or revert
+    // frame time p99 98-111 -> 40 ms, scene wait max 163-167 -> 6-7 ms. Confirmed by the user 2026-11-21
     // (hx1 card frames while a decode is pending: tools/live_batches_staged/hair_async).
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores,
      {{"rt_hair_groom_primary", "1"}, {"rt_hair_groom_primary_order", "1"}, {"rt_hair_groom_primary_current", "1"},
