@@ -1,0 +1,16 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-21, branch claude/omm-ab. STAGED, not queued, not authorized.",
+  "question": "With OMM working (claude/omm-diag), does the accelerated scene lower the RT passes GPU ms in the release smoke's camera motions at S8, in Ultra and in High, at an unchanged image?",
+  "toggle": "rt_omm_reference 1 / 0 / 1 (live, push constant bit 28: the OMM variants trace the reference scene; the guard and its cost stay). rt_omm itself is Apply::Restart (common/settings.h), so it cannot be toggled live.",
+  "evidence": "Descriptive, two different runs (not an A/B): Ultra RT passes GPU ms OMM working (final-s8-ultra-high 052606) against OMM dead (040347): static-a 9.28 vs 9.50, pans -0.1 to -0.3, rotate-r 12.21 vs 9.66, rotate-l 10.89 vs 10.01.",
+  "noise_rule": "Every threshold is the OFF repeat of the same run (off-b against off-a, plus half the range of the single OFF periods); floors of tools/live_batches/sane_gates.py: cost max(0.1 ms, 1%), energy 0.5%.",
+  "predicted": {
+    "rt_ms_static_and_pans": "ON lower than the OFF pair, by 0.1 to 0.3 ms in Ultra (the cross-run numbers above); High about the same or less (fewer alpha-tested rays: no hit materials). Rule 'lower': a drop is the design.",
+    "rt_ms_rotations": "Not derived. The cross-run +2.5 / +0.9 ms in rotations may be the camera path of two runs, not OMM. If ON is above the OFF pair beyond noise plus floor in a rotation group, OMM costs there: FAIL, recorded, the user decides with the numbers (AGENTS: never drop a correct effect for its ms).",
+    "gi_ms": "Not higher than the OFF pair beyond noise plus floor (the GI trace is one of the OMM variants: a drop is allowed).",
+    "energy": "Float pre-post mean of energy-on inside the OFF samples' range, or within 0.5%: the micro-maps hold only states the alpha test agrees with (known opaque / known transparent, unknown runs the any-hit).",
+    "omm_downgrades": "INFO, reported per window. High about 1 per 60 frames in every state (rt_hit_material=0, so no pass waits for the commit and the lighting command buffer sometimes ends before it; the counter does not depend on rt_omm_reference). Ultra 0.",
+    "faults": "0: no VK_ERROR, no crash, no core fault; handout fallbacks 0; scene wait timeouts not above the OFF windows."
+  },
+  "decision": "Report RT ms per motion kind and preset (OMM is On in both presets of the release profile: rt_omm=1 in every [cfg] line of 052606). A cost beyond noise plus floor in any motion kind goes to the user with the numbers."
+}

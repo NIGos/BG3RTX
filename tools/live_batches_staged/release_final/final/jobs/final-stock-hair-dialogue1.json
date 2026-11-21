@@ -26,18 +26,18 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.28800000000046566,
+      "seconds": 0.21200000000044383,
       "quantile": 0.95,
-      "samples": 38,
+      "samples": 41,
       "maximum": 0.3280000000013388
     },
     "trace_capture_stall": {
       "seconds": 2.79161,
       "source": "fl-s8-holdpack.1.015440.log",
       "quantile": 0.95,
-      "samples": 38,
+      "samples": 41,
       "maximum": 2.9681100000000002,
-      "logs": 6
+      "logs": 7
     }
   },
   "patterns": [

@@ -135,6 +135,8 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_hair_header_cam_gpu "
     # 5i shared draw key: the groom rows' key filter (bvhsplit). CPU only.
     "rt_hair_shared_key "
+    # OMM live A/B (core/gi.cpp make_push: bit 28 of Push::ls_flags, read by rt/omm_scene_guard.hlsli). No pipeline.
+    "rt_omm_reference "
     # Removed 2026-11-14 (docs/RTX_HAIR_PRIMARY.md 6k): no code reads these keys. They stay known here only so that
     # historical jobs that set them still lint.
     "rt_hair_watchdog_draw rt_hair_watchdog_one_key rt_hair_swap_latch rt_hair_coverage_min_pixels "
