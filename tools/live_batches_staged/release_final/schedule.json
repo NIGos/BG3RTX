@@ -2,8 +2,8 @@
   "final-s8-ultra-high": {
     "save": "Water Queens House",
     "load_allowance_seconds": 120,
-    "scheduled_seconds": 103.712,
-    "readiness_seconds": 8.064,
+    "scheduled_seconds": 103.68,
+    "readiness_seconds": 8.06,
     "expected_minutes": 3.86,
     "hard_timeout_seconds": 694,
     "captures": 2,

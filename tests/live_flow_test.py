@@ -991,6 +991,25 @@ class ReadinessBudgetTests(unittest.TestCase):
         result = estimate(['12:00:12.000 [watch] ready | pipelines 0 (0 ms in driver)'])
         self.assertEqual((result['samples'], result['seconds']), (1, 2))
 
+    def test_selected_hit_gi_raygen_resolves_superseded_raygen_build(self):
+        # final-s8-ultra-high.1.040347.log 6324-6328 (ab_off 1 -> 0): the sun raygen build is superseded by the
+        # resident emission raygen pipeline and never logs its completion.
+        rb = f.readiness_budget
+        sun = ('gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;'
+               'RT_SPEC_GI_FAR=1;GI_TRACE_RAYGEN=1')
+        other = 'gi/gi_trace_rt_hit_direct.hlsl?X=1'
+        pending, historical = {sun, other}, {sun: []}
+        rb.superseded('04:05:37.043  [core] gi: gi_rt_pipeline: the hit-GI trace runs as compute: the raygen '
+                      'pipeline is still building (reorder 1)', pending, historical)
+        self.assertEqual(pending, {sun, other})
+        rb.superseded('04:05:37.077  [core] gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, '
+                      'emission variant (reorder 1)', pending, historical)
+        self.assertEqual((pending, historical), ({other}, {}))
+        build = re.search(r'gi: (\S+) building in the background', f'04:05:37.043  [core] gi: {sun} building in the '
+                          'background (the pass waits)')[1]
+        self.assertRegex(build, rb.HIT_GI_RAYGEN_BUILD)
+        self.assertIsNone(re.search(rb.HIT_GI_RAYGEN_BUILD, sun.replace(';GI_TRACE_RAYGEN=1', '')))
+
     def tearDown(self):
         f.readiness_budget.configure([])
 
