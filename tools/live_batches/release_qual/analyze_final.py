@@ -71,7 +71,7 @@ def omm_downgrades(log, runner, plan):
     for w in windows(run, plan, lines):
         if not w['ready'] or w['label'].rsplit('--', 1)[-1] not in ('static-a', 'pan-q', 'pan-e', 'rotate-r', 'rotate-l'):
             continue
-        found = [m for _, s in complete_period_lines([(t, s) for t, s in lines if w['applied'] <= t < w['end']], w)
+        found = [m for s in complete_period_lines([(t, s) for t, s in lines if w['applied'] <= t < w['end']], w)
                  if (m := re.search(HANDOUT_OMM, s))]
         if found:
             out[w['label']] = dict(accelerated=sum(int(m[1]) for m in found), downgraded=sum(int(m[2]) for m in found),
