@@ -238,6 +238,21 @@ Check (-not (Test-CameraPlanReady $resident $crlfStart $crlfStart)) 'CRLF logs r
 
 Check (@(Get-CameraPlanMissing $resident $start $start)[0] -eq 'gi: gi/test.hlsl generation ') 'missing reason names outstanding completion'
 Check (Test-CameraPlanReady $resident "$start`ngi: gi/test.hlsl generation 2" $start) 'completion of actual build releases resident wait'
+# final-s8-ultra-high.1.040347.log 6323-6328: at ab_off 1 -> 0 the sun raygen build is superseded by the resident
+# emission raygen pipeline; its completion never comes, and the hit-GI trace's selection resolves it.
+$abOn=@{wait_log=@('\[shaders\].*(?: compiled(?: in| \()|read from the cache|cache: prefetched )','\[watch\].*\| pipelines 0 \(0 ms in driver\)');wait_log_fresh=@('\[watch\].*\| pipelines 0 \(0 ms in driver\)')}
+$sunRaygen='gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1;GI_TRACE_RAYGEN=1'
+$abLog=@("[cfg] settings read",
+  "04:05:37.043  [core] gi: gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1 generation 1 spec cascade=1, pipeline 8.0 ms",
+  "04:05:37.043  [core] gi: $sunRaygen building in the background (the pass waits)",
+  "04:05:37.043  [core] gi: gi_rt_pipeline: the hit-GI trace runs as compute: the raygen pipeline is still building (reorder 1)") -join "`n"
+$abSelected="$abLog`n04:05:37.077  [core] gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, emission variant (reorder 1)"
+Check (@(Get-CameraPlanMissing $abOn $abLog $abLog) -contains "gi: $sunRaygen generation ") 'raygen build pending while the trace runs as compute'
+Check (-not (@(Get-CameraPlanMissing $abOn $abSelected $abSelected) -match 'GI_TRACE_RAYGEN')) 'selected raygen pipeline resolves the superseded raygen build'
+$otherBuild="$abSelected`n[core] gi: gi/gi_trace_rt_hit_direct.hlsl?X=1 building in the background (the pass waits)"
+Check (@(Get-CameraPlanMissing $abOn $otherBuild $otherBuild) -contains 'gi: gi/gi_trace_rt_hit_direct.hlsl?X=1 generation ') 'the selection resolves only hit-GI raygen builds'
+$laterBuild="$abSelected`n[core] gi: $sunRaygen building in the background (the pass waits)"
+Check (@(Get-CameraPlanMissing $abOn $laterBuild $laterBuild) -contains "gi: $sunRaygen generation ") 'a raygen build started after the selection still needs its completion'
 $water="$ack`nrt/water_compose.hlsl water_compose: building in the background"
 Check (-not (Test-CameraPlanReady $resident $water $water)) 'outstanding water build blocks'
 Check (Test-CameraPlanReady $resident "$water`n[water] rt/water_compose.hlsl water_compose: built" $water) 'water completion resolves outstanding build'

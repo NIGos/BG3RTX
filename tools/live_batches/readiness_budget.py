@@ -8,6 +8,18 @@ from tools.live_batches.pipeline_readiness import QUIET, conditional, reconciled
 ENTRIES = []
 CACHE = {}
 FROZEN = False
+# The hit-GI trace selected a ready raygen pipeline (core/gi.cpp, either variant): a pending raygen build of that
+# pass was superseded (sun -> emission at ab_off 1 -> 0) and logs no completion. Mirrored in scripts/camera-plan.ps1.
+HIT_GI_RAYGEN_SELECTED = r'gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline'
+HIT_GI_RAYGEN_BUILD = r'^gi/gi_trace_rt_hit_sun(?:_em)?\.hlsl\?\S*GI_TRACE_RAYGEN=1'
+
+
+def superseded(line, pending, historical):
+    """Drop the hit-GI raygen builds that a selected raygen pipeline superseded."""
+    if re.search(HIT_GI_RAYGEN_SELECTED, line):
+        for old in [i for i in pending if isinstance(i, str) and re.search(HIT_GI_RAYGEN_BUILD, i)]:
+            pending.discard(old)
+            historical.pop(old, None)
 
 
 def configure(entries):
@@ -107,6 +119,7 @@ def estimate(job, phase, changed, first=False):
                             completed = rr_id
                         else:
                             ident = rr_id
+                    superseded(line, pending, historical)
                     if ident:
                         witness = ('gi: '+ident+' generation ') if isinstance(ident, str) else (
                             '[rrpost] '+ident[1]+' pipeline built' if ident[0] == 'rrpost' else
