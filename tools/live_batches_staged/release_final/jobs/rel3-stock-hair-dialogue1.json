@@ -17,26 +17,27 @@
           0,
           0
         ],
-        "fps": 7.098911500235677,
-        "windows": 7,
+        "fps": 7.3837066207234185,
+        "windows": 14,
         "logs": [
-          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\final-stock-hair-dialogue1.1.014458.log"
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\final-stock-hair-dialogue1.1.014458.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\final-stock-hair-dialogue1.1.033806.log"
         ]
       }
     ],
     "trace_export": {
-      "seconds": 0.21200000000044383,
+      "seconds": 0.28800000000046566,
       "quantile": 0.95,
-      "samples": 34,
-      "maximum": 0.28800000000046566
+      "samples": 38,
+      "maximum": 0.3280000000013388
     },
     "trace_capture_stall": {
       "seconds": 2.79161,
       "source": "fl-s8-holdpack.1.015440.log",
       "quantile": 0.95,
-      "samples": 34,
+      "samples": 38,
       "maximum": 2.9681100000000002,
-      "logs": 4
+      "logs": 6
     }
   },
   "patterns": [
@@ -264,7 +265,7 @@
   "fail_fast": true,
   "stop_on_dump": true,
   "purpose": "Dialogue1 release Ultra stock cards: startup is first enable; native hair/scalp participate; inspect face/neck shadows in the static PNG.",
-  "estimated_phase_seconds": 97.0,
+  "estimated_phase_seconds": 94.9,
   "args": [
     "-RealPresent",
     "-Move",

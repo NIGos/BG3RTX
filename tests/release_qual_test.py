@@ -63,6 +63,16 @@ class FinalReleaseTests(unittest.TestCase):
                 with self.subTest(window=phase['label'], wait=rx):
                     self.assertTrue(all(states[phase['label']].get(k, '0') != '0' for k in keys))
 
+    def test_pipeline_rebuild_phases_get_more_than_the_fixed_10_s(self):
+        # 2026-11-21 (final-s8-ultra-high 033318): ab_off 1 -> 0 rebuilt the GI sun raygen pipeline in 11.9-12.6 s
+        # in the driver; the fixed 10 s of every non-first readiness wait failed b1-...--ab-on.
+        job, plan, _ = flow.load_job(ROOT / 'tools/live_batches_staged/release_final/final/jobs/final-s8-ultra-high.json')
+        limits = {p['label'].rsplit('--', 1)[-1]: p['wait_log_timeout'] for p in plan if p.get('wait_log')}
+        self.assertGreater(limits['ab-on'], 12.6)
+        self.assertGreater(limits['settings-reset'], 12.6)
+        self.assertEqual(limits['ab-off'], 10)   # ab_off=1 records no RT pass: nothing to build
+        self.assertEqual(plan[0]['wait_log_timeout'], 60)   # startup
+
     def test_preset_reset_uses_resolved_values_and_target_pipelines(self):
         job, plan, _ = flow.load_job(HERE/'final/jobs/final-s8-ultra-high.json')
         reset = next(p for p in plan if p['label'].endswith('settings-reset'))

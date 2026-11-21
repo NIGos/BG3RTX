@@ -184,6 +184,11 @@ for key in NO_PIPELINE:
     TABLE[key] = []
 
 
+# The readiness allowance of a phase that may rebuild pipelines while no VALID median exists for it
+# (readiness_budget.timeouts tightens it to the learned median plus margin once one does).
+PIPELINE_TIMEOUT_S = 180
+
+
 def resolved(state):
     """Match common/settings.h resolve_derived before comparing target states."""
     state = dict(state)
@@ -229,7 +234,7 @@ def apply(job, plan):
             fresh.append(QUIET)
         phase["wait_log"] = list(dict.fromkeys(patterns))
         phase["wait_log_fresh"] = list(dict.fromkeys(fresh))
-        phase["wait_log_timeout"] = max(float(phase.get("wait_log_timeout", 0)), 180)
+        phase["wait_log_timeout"] = max(float(phase.get("wait_log_timeout", 0)), PIPELINE_TIMEOUT_S)
 
 
 def problems(job, plan):
