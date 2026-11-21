@@ -1,9 +1,14 @@
 # BG3RTX progress - 2026-11-21 (main 41a5e7f8)
 
-## Question for the user (taken: the conservative option, OMM stays as fixed)
+## Questions for the user (conservative options taken)
 OMM works again in High and Ultra (it was off since 2026-11-14 by a bug). Measured in one run: Ultra cheaper (GI
 -0.33 ms), High dearer (RT +0.14..+0.20 ms, GI +0.13..+0.22 ms), image equal. Keep OMM in High (release profile of
 2026-11-04), or turn it off in High (`rt_omm=0` in the High preset, needs a restart A/B not yet run)?
+
+`gi_far_roof_emission`: its PT A/B became testable overnight (emission packs), but the first replay of the inn pack lost
+the GPU device (cause found and fixed: the replay used the live TLAS address from the handout stamp). By the GPU crash rule it
+was not rerun. Rerun it with the fix (pack kept: .claude/worktrees/test-main/captures/replay-20261121-071523-1, 1.6 GB),
+or delete the pack and leave the key off? Taken: off, pack kept.
 
 Live tests: allowed overnight by the user's /goal of 2026-11-21 only; a new session must ask again.
 State and next steps: [HANDOFF_SESSION](HANDOFF_SESSION.md). Release check: [RC_CHECK](release/RC_CHECK.md).
@@ -11,6 +16,51 @@ Full text of the 2026-11-21 entries (every branch fragment of the night) and of 
 [archive 2026-11-21](archive/PROGRESS_CODEX_2026-11-21.md); older: [2026-11-20](archive/PROGRESS_CODEX_2026-11-20.md),
 [2026-11-15](archive/PROGRESS_CODEX_2026-11-15.md), [2026-11-14](archive/PROGRESS_CODEX_2026-11-14.md).
 Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
+
+## Emission replay packs and PT emission for gi_far_roof_emission (branch claude/em-pack, READY_FOR_LIVE, 2026-11-21)
+
+- Why: the 1054 A/B could not run offline (.scratch/coord/roof_em_pt.md): the GI pack writer refused the emission
+  variant, a pack replay bound no emissive scene, the PT had no emission.
+- `replay_pack_pass=2` (diagnostic, default 0): one pack of the rt_hit_emission + gi_hit_sun hit GI as pass
+  `gi_hit_sun_em` (no SHaRC, no OMM): the live request and specialization values, the sun trust image s3b8, the D-EM
+  scene set as pack set 4 (layer records its writes, `replay_note_em_sets`). No ABI change; layer and core rebuilt.
+- frame_replay: compiles the pass with `EM_SET=4` (game requests keep 2: the 34 gi_trace_rt requests byte-identical to
+  main), rebuilds the emissive TLAS from emInfo + emSoup (`rp::em_geometries`), binds it. `--pt-reference` on such a
+  pack sets `PT_EM=1`: mode 8 = first-vertex emission x the GI ray fade at hidden first hits (`pt_emission.pfm`).
+- `tools/em_roof_ab.py`: 1054=0 / 1 / no-emission replays against PT mode 8 on the changed pixels; verdict CLOSER /
+  FARTHER / NO CHANGED PIXEL / INVALID (raised pixels or giRaw.a changed).
+- Tests: replay_pack_test (contract, em_geometries, reference_defines), pt_reference_test 12-16 on the synthetic
+  emissive box: mode 8 a = 1, path emission 1 / 1.75, the pass's hidden-hit emission 0.6918 vs PT mode 8 0.6927 per
+  pixel, giRaw.a equal to the sun variant, 1054=1 lowers only; em_roof_ab_test; `build.ps1 -Test`.
+- Staged (not queued): `tools/live_batches_staged/r2_tools/em_pack` job r2-inn-em-pack: one launch at the inn, Ultra
+  with OMM off, ~25 s after load + up to 90 s for the writer, at most 2048 MB; live_flow 0 failing (with and without
+  --frozen). Offline steps after it: predicted.json "offline". Key `gi_far_roof_emission` stays 0 until then.
+
+## gi_far_roof_emission offline A/B on the inn emission pack: NOT RUN, the replay lost the device (branch claude/em-pack-result, 2026-11-21)
+
+- Pack: test-main captures/replay-20261121-071523-1 (1579 MB, pass gi_hit_sun_em, frame 2077, casters 1222447 tris,
+  emissive scene 256 texture / 16 cache elements). Kept: it is still the input of the A/B.
+- The first step (frame_replay --pack <pack> --spec 1054=0, test-main d4ee3e0a binaries) ended in `wait result=-4`
+  (VK_ERROR_DEVICE_LOST) before any output. Not rerun (the GPU crash rule). No verdict, no "vs live" line.
+- Cause: the pack's own specs carry 1051=1 (rt_scene_handout on in the release profile): every scene trace takes the
+  TLAS address in the stamp s1b9 bytes 16/24, which holds the live game's address (0x2073200000). The gi_hit_direct
+  packs never carried 1051, so this was new with the full-request contract. Validation also named s1 b19
+  (gNativeTilesetSampler, 16 samplers), missing from kGiHitSunEm.
+- Fix (this branch): frame_replay stamps the replay's TLAS whenever the effective 1051 is nonzero and --handout is not
+  given (note "scene handout (constant 1051) on ..."); kGiHitSunEm gains s1 b19 (new packs capture it, this pack binds
+  the default sampler). replay_pack_test, frame_replay_test, pt_reference_test, frame_replay_ls/rf_test pass.
+- Next: after the merge, the offline steps of r2_tools/em_pack/predicted.json on the same pack. The rerun is the
+  coordinator's / user's call (it is the command that lost the device, with its cause removed). Key stays 0.
+
+## r2-inn-em-pack readiness fix (branch claude/em-pack-2, READY_FOR_LIVE, 2026-11-21)
+
+- Run 065644 failed fast in producer-sanity-warmup: its check was the one-shot "hit emission: first hit-GI dispatch with
+  the emissive scene" line, logged at load before the first D-EM build (that run logged "without"). The emission variant
+  ran from 06:59:10 (raygen build ~80 s after load).
+- Job: new em-ready phase before the pack, waiting (180 s) for "the hit-GI trace runs as a ray tracing pipeline, emission
+  variant" and an "[em] last N builds ... emissive > 0" line; both in expect. live_flow 0 failing with and without --frozen.
+- Core: replay_pack_pass=2 now waits while the dispatch has no emissive scene instead of refusing (it refused for good
+  if armed before the first D-EM build). Tests: build.ps1 -Test 240/240.
 
 ## Overnight run: release profile changes, applied overnight, confirm or revert (coordinator, merged, 2026-11-21)
 
@@ -43,8 +93,8 @@ Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
 
 ## Overnight run: tested and kept off (coordinator, 2026-11-21)
 
-- `gi_far_roof_emission`: not testable offline (1054 lives only in the emission variant; pack writer, replay and PT
-  have no emission); live energy +0.25% (noise). Stays off until emission packs exist.
+- `gi_far_roof_emission`: live energy +0.25% (noise). Emission packs and PT emission built (claude/em-pack); the
+  offline A/B replay lost the device and was not rerun (question above). Stays off.
 - `rt_sun_overlap`: RT interval 7.53 / 7.50 / 7.32 ms, no gain. `rr_post_jitter_align=1` on High: 2-4x more background
   flicker (premise wrong). Ultra temporal shift (=3): no defect shown.
 - High OMM downgrades (about 1 per 60 frames, reference scene, correct image): no pass waits for the commit in High;

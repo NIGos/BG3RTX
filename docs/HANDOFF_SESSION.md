@@ -33,7 +33,7 @@ Release profile, applied overnight, confirm or revert: `rt_hold_pack_base`, `rt_
 `rt_cascade_keep_refused` on by default; `rt_hair_groom_async` in the RTX Hair On bundle (27 keys).
 Fixes: OMM back in High and Ultra (dead since 2026-11-14), water one-frame no-scene flips, groom BLAS overflow into
 compacted storage, groom decode scheduling, smoke tooling (derived gates, stats resets, readiness).
-Kept off: `gi_far_roof_emission` (needs emission packs to be testable), `rt_sun_overlap`, `rr_post_jitter_align`,
+Kept off: `gi_far_roof_emission` (emission packs built; its replay lost the device, not rerun), `rt_sun_overlap`, `rr_post_jitter_align`,
 `rt_mesh_pool_trim_move` (READY_FOR_LIVE, hair only).
 
 ## Known, not fixed
@@ -109,6 +109,8 @@ Kept off: `gi_far_roof_emission` (needs emission packs to be testable), `rt_sun_
 
 1. Confirm or revert the release-profile changes applied overnight (PROGRESS top, with the numbers).
 2. OMM in High: keep (2026-11-04 profile, about +0.4 ms) or turn off (needs a restart A/B first).
+2b. `gi_far_roof_emission`: rerun its offline PT A/B on the kept inn pack with the replay fix (the first replay lost
+   the device), or delete the pack (`.claude/worktrees/test-main/captures/replay-20261121-071523-1`, 1.6 GB).
 3. The Setup.exe: install it once over hairtest18, or ship the ZIP only.
 4. Publish 0.9.6-beta (user action).
 5. Decide whether RTX Hair goes On in a preset. Unconverted styles: convert them or accept cards.
