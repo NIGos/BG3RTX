@@ -948,6 +948,10 @@ def tighten_files(directory, cache=None, job_names=None, frozen=False):
     return reports
 
 
+# A non-finite count above 0; "non-finite terms 0" and the kCsNonFinite name in normal stats lines are not events.
+NONFINITE_EVENT = r"\bnon-?finite(?: terms)?\s*[:=]?\s+[1-9]\d*\b"
+
+
 def repair_known_forbids(job, plan):
     """Narrow known false positives without dropping the measured-window gate."""
     scoped = []
@@ -956,7 +960,7 @@ def repair_known_forbids(job, plan):
         if "mesh" in rx and "pool full" in rx:
             scoped.append(r"\[(?:rt|bvh)\] mesh.*pool full")
         elif rx == "nonfinite":
-            fixed.append(r"\bnon-?finite(?: terms)?\s*[:=]?\s+[1-9]\d*\b")
+            fixed.append(NONFINITE_EVENT)
         elif rx == r"\[crash\] exception":
             fixed.append(r"\[crash\] exception 0x[0-9a-f]+")
         else:

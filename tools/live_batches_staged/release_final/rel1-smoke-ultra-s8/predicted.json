@@ -6,9 +6,9 @@
   "profile": "data/release.ini + launcher preset via common/settings.h",
   "rendering_overrides": {},
   "input_sha256": {
-    "common/settings.h": "9d8de5fd547fd78280f4c7842a50e60667679f7b8f98be6acaa1884221a40f0a",
+    "common/settings.h": "be4339efb38b2502b4c10bdab635b0c09d5066f643720f767a82cef174ce20bd",
     "data/release.ini": "cb63a0b9368544d94d676bd3fd0fb4fd6b3f6f4edd852ff9f4736328d2d37df8",
-    "bg3rtx.ini": "ade61023c8f0a3617fd08c58095afa0c90d68090ebc085eb99924629a06a15f3"
+    "bg3rtx.ini": "451ec399a6a57b3fe0da051bde0f557880c413d31c2918329ec9a636c330ddea"
   },
   "visual_acceptance": "Log-only release smoke; no captures."
 }

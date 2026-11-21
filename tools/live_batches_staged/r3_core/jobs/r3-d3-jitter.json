@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 1116,
+  "timeout": 1097,
   "max_minutes": 8,
   "repeat": 1,
   "live_batch": "r3-core",
@@ -189,7 +189,7 @@
     "compile call failed",
     "RR creation failed",
     "\\[log\\] reached \\d+ MB",
-    "nonfinite"
+    "\\bnon-?finite(?: terms)?\\s*[:=]?\\s+[1-9]\\d*\\b"
   ],
   "expect_runner": [
     "\\[motion-plan\\] complete phases=16\\b",
@@ -205,21 +205,21 @@
     "trace_stall_s": 1,
     "fps_windows": [],
     "trace_export": {
-      "seconds": 0.3709999999999809,
+      "seconds": 0.21200000000044383,
       "quantile": 0.95,
-      "samples": 17,
-      "maximum": 0.3709999999999809
+      "samples": 34,
+      "maximum": 0.28800000000046566
     },
     "trace_capture_stall": {
-      "seconds": 5.17137,
-      "source": "hx1-s8-hair-stable.1.194658.log",
+      "seconds": 2.79161,
+      "source": "fl-s8-holdpack.1.015440.log",
       "quantile": 0.95,
-      "samples": 17,
-      "maximum": 5.17137,
-      "logs": 3
+      "samples": 34,
+      "maximum": 2.9681100000000002,
+      "logs": 4
     }
   },
-  "estimated_phase_seconds": 143.576,
+  "estimated_phase_seconds": 124.076,
   "post_gate": false,
   "purpose": "rr_post_jitter_align 0 / 1 / 0 in Test Dialogue3 on High (no temporal post), static camera: per state a rendered K8 burst of A/C/B with the logged shift, a presented K8 capture and a float energy trace. Decides whether the aligned lookup removes the DoF-edge shimmer, and with it the sign of the temporal path's jitter convention. STAGED, not authorized.",
   "window_mode": "visible_unfocused_fg"
