@@ -713,6 +713,33 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_hair_guides": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_guides": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_rr_post_jitter_align", "label": "Depth of field edge alignment",
+     "description": "Experimental: without depth of field and bloom smoothing, lines the blur and bloom layers up with the Ray Reconstruction image every frame, so depth of field edges stop shimmering. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: without depth of field and bloom smoothing, lines the blur and bloom layers up with the Ray Reconstruction image every frame, so depth of field edges stop shimmering. Unqualified.",
+     "details": "r3-core: the non-temporal output grade samples the jittered depth of field and bloom images at uv + jitter, as the temporal one does. Opposite sign is the sign check for both. Look at hair over a blurred background in Test Dialogue3 on High.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_post_jitter_align": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_jitter_align": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "sign_check", "label": "Opposite sign (check)", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_jitter_align": "2"}, "needs": {"rr": 1}, "migrate_from": [], "developer": true, "maturity": "developer"}
+     ]},
+    {"id": "exp_rt_sun_overlap", "label": "Sun shadows beside the GI trace",
+     "description": "Experimental: traces the ray-traced sun shadows at the same time as the indirect light instead of after it. Same image; may save a little GPU time. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Advanced", "summary": "Experimental: traces the ray-traced sun shadows at the same time as the indirect light instead of after it. Same image; may save a little GPU time. Unqualified.",
+     "details": "r3-core: the sun trace is recorded right before the GI trace with no barrier between them, its resolve beside the GI temporal pass. The image is unchanged; judge the total RT interval in GPU ms at a static camera.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_sun_overlap": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_sun_overlap": "1"}, "needs": {"sun_shadows": 1, "gi": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_strand_aa", "label": "Strand hair edge resolve",
      "description": "Experimental: blends thin strand edges by their exact pixel coverage instead of dithering.",
      "apply": "live", "apply_note": "live; needs RTX Hair and RR before post", "advanced": true, "experimental": true, "developer": true,

@@ -1,0 +1,208 @@
+{
+  "name": "r3-s8-sun-overlap",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "timeout": 706,
+  "max_minutes": 7,
+  "repeat": 1,
+  "live_batch": "r3-core",
+  "fail_fast": false,
+  "stop_on_dump": false,
+  "set": "preset=ultra,dev=1,fg=3,fps_cap=0,reflex=1,rt_capture_wide_split=1,headless=0,crash_dump=1,detailed_logging=1,cpu_timing=1,rt_stats_period_frames=120,rt_timing_frames=120,rt_scene_wait_log_frames=120,fg_state_every=120,dump_images=0,dump_raw=0,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,qa_exposure_hold=0,rt_sun_overlap=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches_staged/r3_core/plans/r3-s8-sun-overlap.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[stats\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[mem\\]",
+    "\\[vram\\]",
+    "\\[cpu\\]",
+    "\\[bvh\\] last",
+    "\\[rt\\] scene",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "gi: trace pass",
+    "ls: local-light shadow pass GPU median",
+    "rf: reflection pass GPU median",
+    "\\[ngx\\] gpu RR:",
+    "\\[rrpost\\] gpu",
+    "\\[sl\\] gpu FG input copy:",
+    "\\[sl\\] DLSS-G frame",
+    "\\[water\\] \\w+ GPU",
+    "\\[hair primary\\] (?:frame|live|strand G-buffer)",
+    "\\[hair groom\\] (?:frame|pixel LOD)",
+    "\\[hair fibre\\]",
+    "\\[dlss5\\]",
+    "\\[crash\\]",
+    "VK_ERROR",
+    "\\[log\\]"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[cfg\\] settings read",
+    "\\[ngx\\] RR create .*: Success"
+  ],
+  "expect_every": [
+    {
+      "name": "rt passes GPU ms in every window",
+      "select": "rt passes: GPU cost",
+      "match": "rt passes: GPU cost",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "GI GPU ms in every window",
+      "select": "gi: GPU cost",
+      "match": "gi: GPU cost",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene build GPU ms in every window",
+      "select": "\\[rt\\] scene build GPU",
+      "match": "\\[rt\\] scene build GPU",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene wait in every window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "\\[rt\\] scene wait: \\d+ frames",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "rendered frame time in every window",
+      "select": "\\[pace\\] rendered frame time over \\d+ frames",
+      "match": "\\[pace\\] rendered frame time over \\d+ frames",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "CPU submit in every window",
+      "select": "\\[watch\\] presents",
+      "match": "\\[watch\\] presents",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "VRAM used and budget in every window",
+      "select": "\\[mem\\] device-local VRAM",
+      "match": "\\[mem\\] device-local VRAM",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "RR GPU ms in every window",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "\\[ngx\\] gpu RR:",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "\\[log\\] reached \\d+ MB"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] complete phases=6\\b",
+    "^Run ended: done"
+  ],
+  "live_flow": {
+    "expected_fps": 60,
+    "settings_latency_s": 1,
+    "trace_stall_s": 0,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 20.107238605897106,
+        "windows": 57,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1-s8-hair-stable.1.001645.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1-s8-hair-stable.1.194658.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vr-s8.1.000745.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3709999999999809,
+      "quantile": 0.95,
+      "samples": 17,
+      "maximum": 0.3709999999999809
+    }
+  },
+  "estimated_phase_seconds": 77.734,
+  "post_gate": false,
+  "purpose": "rt_sun_overlap 0 / 1 / 0 at S8, Ultra, static camera: the total RT interval (rt passes: GPU cost) and the frame cost lines per 3-period window. STAGED, not authorized.",
+  "window_mode": "visible_unfocused_fg"
+}

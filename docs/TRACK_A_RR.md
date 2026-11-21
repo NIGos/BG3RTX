@@ -824,6 +824,11 @@ stable. Ultra enables it; Low/Medium/High keep it off. Lighting matches the RR c
 DLSS, RR and rr_post=1 remain required. Check fine white hair over DoF and sun-lit rims
 in Test Dialogue3. This is a visual decision, not a statistical quality pass.
 
+Without the temporal pass (Low-High) `final` read A/C/B at the unjittered uv: the post layers moved by the jitter
+against the RR image. `rr_post_jitter_align` (claude/r3-core, off, READY_FOR_LIVE) runs `temporal_final` on the plain
+A/C/B with this frame's jitter (1) or its negation (2, the sign check of both paths; the sign was never verified
+independently). Layer only, no shader edit, 0 ms. Live: `tools/live_batches_staged/r3_core` r3-d3-jitter.
+
 Dialogue3 drift repair (pt-d3-analysis, 2026-11-03): 12 counterbalanced adjacent OFF/ON pairs; freeze masks from all OFF windows and use a Bonferroni exact paired sign gate (12 observables, minimum 8 pairs). See post_temporal/predicted.json for the derived 338.9 s plan, 818.9 s load/readiness bound and offline fixtures.
 The earlier four-window receipt was insufficient (2 pairs). Later VALID 032335 had 10 pairs; all 12 primary sign tests missed significance, float energy +0.1492% failed, and background registration failed. S8 remains unqualified; the Ultra promotion follows the explicit visual verdict above.
 
