@@ -275,17 +275,31 @@ for(const id of ['box_lights','exp_hidden_surface','hair_distant_detail','hair_m
 {
  const badgeOf=id=>all(ids.get('card-'+id)).find(e=>e.className==='badge restart')?.textContent;
  const set=(id,v)=>render({...fixture,settings:fixture.settings.map(s=>s.id===id?{...s,value:v,choices:s.choices.map(c=>({...c}))}:s)});
- assert.strictEqual(badgeOf('rt_geometry'),'Restart');
+ assert.strictEqual(badgeOf('rt_geometry'),'Restart to apply');
  assert.strictEqual(badgeOf('rr'),undefined,'a live setting has no apply badge');
  assert.strictEqual(badgeOf('sun_shadows'),undefined);
  go('Performance');
  const fg=fixture.settings.find(s=>s.id==='frame_generation');
- assert.strictEqual(badgeOf('frame_generation'),fg.value===0?'Restart':'Restart for Off');
+ assert.strictEqual(badgeOf('frame_generation'),fg.value===0?'Restart to apply':'Restart for Off');
  go('Lighting');
  const custom={id:'test-toggle',title:'Toggle fixture',category:'Lighting',value:0,apply:'Applies at once',description:'x',choices:[{value:0,label:'Off',apply:'Applies at once',enabled:true},{value:1,label:'On',apply:'Restart the game to apply',enabled:true}]};
  render({...fixture,settings:[...fixture.settings,custom]});assert.strictEqual(badgeOf('test-toggle'),'Restart to turn on');
  assert(all(ids.get('card-test-toggle')).length&&page().some(e=>e.className==='group-title'&&e.textContent==='More'),'an unlisted setting gets a last group');
  render({...fixture,settings:[...fixture.settings,{...custom,value:1,choices:[custom.choices[0],{...custom.choices[1],apply:'Applies at once'}]}]});assert.strictEqual(badgeOf('test-toggle'),undefined);
+ // Two choices that are not Off/On, all needing a restart: no "turn on". Several restart choices: one short badge.
+ const pair={...custom,id:'test-pair',choices:[{value:0,label:'Standard',apply:'Restart the game to apply',enabled:true},{value:1,label:'Driver metering',apply:'Restart the game to apply',enabled:true}]};
+ const levels={...custom,id:'test-levels',value:3,choices:['Off','Reflections','Reflections and shadows','Include refraction'].map((label,value)=>({value,label,enabled:true,apply:value?'Restart the game to apply':'Applies at once'}))};
+ render({...fixture,settings:[...fixture.settings,pair,levels]});
+ assert.strictEqual(badgeOf('test-pair'),'Restart to apply');assert.strictEqual(badgeOf('test-levels'),'Restart for some choices');
+ // Wide choices go under the text; short ones stay beside it.
+ assert(/\bstack\b/.test(ids.get('card-test-levels').className)&&!/\bstack\b/.test(ids.get('card-test-pair').className));
+ // Detail: presets one per line with the current preset marked; the details drop a leading preset line.
+ const withPresets={...custom,id:'test-presets',presets:'Off · Off · On · On',details:'Off in every preset. Does one thing.'};
+ render({...fixture,settings:[...fixture.settings,withPresets]});
+ const detail=all(ids.get('card-test-presets'));
+ assert.deepStrictEqual(detail.filter(e=>e.tagName==='dt').map(e=>e.textContent),['Low','Medium','High','Ultra']);
+ assert(detail.some(e=>e.tagName==='div'&&e.className==='current'&&e.children[0].textContent===['Low','Medium','High','Ultra'][fixture.preset]));
+ assert(detail.some(e=>e.className==='detail-copy'&&e.textContent==='Does one thing.')&&!detail.some(e=>/Off in every preset\. Does/.test(e.textContent)));
  render(fixture);
 }
 // Performance: Tracing speed is collapsed by default and remembers being opened.
@@ -418,9 +432,9 @@ render(fixture);go('Experimental');
  const opt={...fixture.settings.find(s=>s.choices.length===2),id:'water_surface_fresnel',title:'Water interface Fresnel',category:'Experimental',description:'Experimental: adjusts reflections at the water surface.',experimental:true,developer:false};
  opt.choices=[{...opt.choices[0]},{...opt.choices[1],label:'On (unqualified)'}];
  render({...fixture,experimental:true,settings:[...fixture.settings,opt]});
- assert(page().some(e=>e.textContent==='Not fully tested. Off in every preset. Turning this off hides them and sets them all back to Off.'));
+ assert(page().some(e=>e.textContent==='Experimental options are not fully tested and are off in every preset. Turning this switch off hides them and sets them back to Off.'));
  assert(all(ids.get('card-water_surface_fresnel')).some(e=>e.textContent==='Adjusts reflections at the water surface.'));
- assert(all(ids.get('card-water_surface_fresnel')).some(e=>e.className==='badge exp'));
+ assert(!all(ids.get('card-water_surface_fresnel')).some(e=>e.className==='badge exp'),'the Experimental page says it once, not on every row');
  assert.strictEqual(ids.get('control-water_surface_fresnel-0').type,'checkbox','unqualified marker hidden; Off/On is a switch');
  // Low-latency scene is a qualified Performance control since 2026-11-14: not here, no pointer for it.
  assert(!onPage('card-scene_handout'),'Low-latency scene is not on Experimental');

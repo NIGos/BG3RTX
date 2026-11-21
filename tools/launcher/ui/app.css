@@ -84,7 +84,8 @@ header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; pad
 .preset-block { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 0; }
 .preset-group { display: flex; align-items: center; gap: 10px; }
 .label { color: var(--text-3); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-#preset-note { color: var(--text-2); font-size: 12px; }
+/* The note line keeps its height when empty, so the header does not jump when a preset is applied or reset. */
+#preset-note { min-height: 17px; color: var(--text-2); font-size: 12px; }
 
 /* Buttons */
 .btn { min-height: 32px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-hi); color: var(--text); white-space: nowrap; }
@@ -161,6 +162,13 @@ main { min-width: 0; padding: 20px 24px 28px; overflow-y: auto; }
 .detail-title { font-size: 16px; font-weight: 700; }
 .detail-heading { margin: 14px 0 3px; color: var(--text-3); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .detail-copy { color: var(--text-2); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.detail-copy + .detail-copy { margin-top: 6px; }
+.detail-note { color: var(--text-3); font-size: 12px; }
+/* Preset values, one line per preset: Low, Medium, High, Ultra. */
+.preset-values { display: grid; gap: 2px; color: var(--text-2); font-size: 13px; }
+.preset-values > div { display: grid; grid-template-columns: 64px minmax(0,1fr); gap: 8px; }
+.preset-values dt { color: var(--text-3); }
+.preset-values .current, .preset-values .current dt { color: var(--text); font-weight: 600; }
 .detail-empty { color: var(--text-3); font-size: 13px; }
 
 /* Groups: a small caps heading and one panel of rows. */
@@ -190,11 +198,14 @@ details.group[open] > summary::before { content: "\2013"; }
 .description.pre { white-space: pre-line; }
 .row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .row-meta:empty { display: none; }
-/* A long restart badge ("Restart for Reflections and shadows, Include refraction") wraps inside the text column
-   instead of running under the control. */
+/* A badge that is still too long for the text column wraps inside it instead of running under the control. */
 .row-meta .badge { flex: 0 1 auto; max-width: 100%; padding-top: 1px; padding-bottom: 1px; white-space: normal; }
 .row-control { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; max-width: 100%; }
 .row-wide { grid-column: 1 / -1; min-width: 0; }
+/* Wide choices (app.js wideChoices) sit under the text at every width; a wrapped second line of choices fills the row. */
+.row.stack { grid-template-columns: minmax(0,1fr); row-gap: 10px; }
+.row.stack .row-control { justify-content: flex-start; }
+.row-control .seg button { flex: 1 1 auto; }
 .row-detail { display: none; grid-column: 1 / -1; padding: 4px 12px 12px; border-radius: var(--radius-sm); background: var(--bg-2); }
 .needs { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; color: var(--warn); font-size: 13px; white-space: pre-line; }
 .needs .icon { width: 16px; height: 16px; margin-top: 1px; }
@@ -259,6 +270,8 @@ details.options > summary { width: fit-content; color: var(--teal); font-size: 1
 .hotkey-row input { width: 150px; max-width: 100%; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); font-weight: 600; text-align: center; cursor: pointer; }
 .hotkey-row input::placeholder { color: var(--text-3); opacity: 1; font-weight: 400; }
 .hotkey-row .help-copy { grid-column: 1 / -1; }
+.hotkey-hint { margin-top: 8px; }
+.runtime-file .option-row { margin-top: 8px; }
 
 /* Status strip at the bottom of the main column */
 footer { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 24px; background: var(--panel-hi); border-top: 1px solid var(--line-soft); }
@@ -295,6 +308,7 @@ textarea { width: 100%; min-height: 90px; padding: 10px; border: 1px solid var(-
 }
 /* Narrow rows: the control goes under the text. */
 @media (max-width: 860px) {
+  .window { grid-template-columns: 184px minmax(0,1fr); }
   .row, .hotkey-row { grid-template-columns: minmax(0,1fr); }
   .row-control, .control, .hotkey-actions { justify-content: flex-start; }
   #page-lead { display: none; }
