@@ -442,6 +442,9 @@ inline constexpr Knob kKnobs[] = {
     // 6k (2026-11-14, live hx1 194658): coverage evidence that does not expire by age (rt_hair_coverage_keep).
     // "coverage stale" refusals 16-35 -> 0 per moving window, card run of a head entering the view 10 -> 5 frames,
     // 0 switches of any cause, no cost outside the spread.
+    // r4-hitch (live r4-inn 030500): groom LOD read and decode on a worker (rt_hair_groom_async). Inn outward dollies:
+    // frame time p99 98-111 -> 40 ms, scene wait max 163-167 -> 6-7 ms. Applied overnight 2026-11-21, confirm or revert
+    // (hx1 card frames while a decode is pending: tools/live_batches_staged/hair_async).
     {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores,
      {{"rt_hair_groom_primary", "1"}, {"rt_hair_groom_primary_order", "1"}, {"rt_hair_groom_primary_current", "1"},
       {"rt_hair_primary_frame_tag", "1"}, {"rt_hair_groom_lod_keep", "1"}, {"rt_hair_primary_hold", "1"},
@@ -451,7 +454,8 @@ inline constexpr Knob kKnobs[] = {
       {"rr_hair_guides", "1"}, {"rt_hair_physical_origin", "1"}, {"rt_hair_capture", "1"},
       {"rt_hair_coverage_union", "1"}, {"rt_hair_coverage_confirm", "1"}, {"rt_hair_slot_stable", "1"},
       {"rt_hair_live_warmup", "1"}, {"rt_hair_groom_nearest", "1"}, {"rt_hair_header_cam_gpu", "1"},
-      {"rt_hair_header_scene_pass", "1"}, {"rt_hair_coverage_keep", "1"}},
+      {"rt_hair_header_scene_pass", "1"}, {"rt_hair_coverage_keep", "1"},
+      {"rt_hair_groom_async", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Beta: off in every preset. Replaces the game's flat hair cards with individual strands, on screen and in shadows, reflections and bounced light. A hair style gets strands after the game has shown it once and the launcher has converted it (Home, Preparation); until then it keeps the game's look. Turns on and off while you play, also with its in-game key. If the game was started with RTX Hair off, part of the strand lighting waits for the next game start. The cost depends on how much hair is on screen and is not measured across scenes yet."},
   // Distant RTX Hair detail (docs/RTX_HAIR_PRIMARY.md 5v, user request 2026-11-10): the release control of the pixel LOD.
@@ -857,12 +861,12 @@ inline constexpr KV kDefaults[] = {
     {"rt_mesh_pool_trim_move", "0"},
     {"rt_as_chunk_fit", "0"},
     {"rt_hair_groom_async", "0"},
-    {"rt_hold_pack_base", "0"},
-    {"rt_hair_header_early", "0"},
+    {"rt_hold_pack_base", "1"},
+    {"rt_hair_header_early", "1"},
     {"rt_as_chunk_reuse_frames", "120"},
     {"rt_as_cap_occupied", "0"},
-    {"rt_as_size_class", "0"},
-    {"rt_cascade_keep_refused", "0"},
+    {"rt_as_size_class", "1"},
+    {"rt_cascade_keep_refused", "1"},
     {"rt_shadows", "1"},
     {"rt_sun_overlap", "0"},
     {"contact_shadows", "1"},

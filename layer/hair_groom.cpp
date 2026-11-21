@@ -186,6 +186,7 @@ struct Decoded { std::vector<uint8_t> bytes; Lod lod; };   // `lod` views into `
 using DecodeKey = std::pair<uint64_t, uint32_t>;           // index id, LOD
 std::mutex g_decode_mu;
 DecodeSlots<DecodeKey, Decoded> g_decode_slots;
+std::map<DecodeKey, const Loaded*> g_decode_src;          // the indexed file of each request (never removed)
 AsyncCaptureQueue<DecodeJob>* g_decode_queue = nullptr;    // never destroyed: no join under the loader lock
 }  // namespace
 
@@ -202,16 +203,26 @@ LodDecode read_lod_async(const Loaded& l, uint32_t index, std::vector<uint8_t>& 
     HMODULE self = nullptr;   // keep the layer loaded while the worker exists
     GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                        reinterpret_cast<LPCSTR>(&read_lod_async), &self);
-    g_decode_queue = new AsyncCaptureQueue<DecodeJob>(8, [](DecodeJob&& job) {
+    // A queued job is a wake-up: the worker decodes what take() names (the newest request still wanted), not the job's
+    // own LOD, so a LOD the camera has already left is never decoded.
+    g_decode_queue = new AsyncCaptureQueue<DecodeJob>(8, [](DecodeJob&&) {
       static thread_local bool low = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL) != 0;
       (void)low;
       t_decode_worker = true;
+      DecodeKey k;
+      const Loaded* src = nullptr;
+      {
+        std::lock_guard take(g_decode_mu);
+        if (!g_decode_slots.take(&k)) return;
+        src = g_decode_src[k];
+      }
       Decoded out;
-      const bool ok = read_lod(*job.l, job.index, out.bytes, out.lod);
+      const bool ok = read_lod(*src, k.second, out.bytes, out.lod);
       std::lock_guard done(g_decode_mu);
-      g_decode_slots.finish({job.l->asset.index_id, job.index}, ok, std::move(out));
+      g_decode_slots.finish(k, ok, std::move(out));
     });
   }
+  g_decode_src[key] = &l;
   if (!g_decode_queue->submit({&l, index})) g_decode_slots.cancel(key);
   return LodDecode::Pending;
 }
