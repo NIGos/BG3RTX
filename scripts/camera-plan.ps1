@@ -317,3 +317,10 @@ function Test-CameraPlanStatsComplete($step, [string]$text) {
   }
   return $true
 }
+function Get-CameraPlanStatsMissing($step, [string]$text) {
+  return @(@($step.wait_stats) | Where-Object { $_ -and $text -notmatch $_ })
+}
+# A frame window whose stats lines never come ends at its own timeout (as readiness does), never at the job cap.
+function Test-CameraPlanStatsTimedOut($step, $finishedAt, [double]$now) {
+  return $null -ne $finishedAt -and $now-[double]$finishedAt -ge [Math]::Max(10,[double]$step.wait_log_timeout)
+}

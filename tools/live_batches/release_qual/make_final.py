@@ -148,6 +148,11 @@ def main():
     high['patterns'] += [r'\[omm', 'omm check', r'\[vt alpha\]']
     high['expect_every'] += [deepcopy(g) for g in source['expect_every'] if g['name'].startswith('OMM:')]
     for job, plan in ((ultra, up), (high, highp), (hair, hp)):
+        # High is a copy of the Ultra smoke: a gate on a line its exported profile never prints
+        # (water, cascade casters off) would stall its window's stats wait.
+        dropped = release.drop_unproduced(job, plan)
+        if dropped:
+            print(job['name'], 'drops gates without a producer in its profile:', '; '.join(dropped))
         qualify(job, plan)
         # Preserve every historical receipt's gates; High also requires real
         # mask residency, not merely a preset value or startup capability line.

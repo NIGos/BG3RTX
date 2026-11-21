@@ -1589,6 +1589,9 @@ void water_release() {
 void water_stats_reset() {
   std::lock_guard<std::mutex> lock(g_mu);
   g_win = Window{}; g_cwin = CWindow{};
+  // The stability line's frame counts start with the window, as every other count here; the
+  // continuity (previous frame composed) is kept, so a flip right after the reset is still counted.
+  g_ccont.reset_counts();
   std::fill_n(g_written, kRing, false); std::fill_n(g_cwritten, kRing, false);
   std::fill_n(g_cpasses, kRing, uint32_t(0));
 }
