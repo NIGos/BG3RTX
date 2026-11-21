@@ -126,6 +126,25 @@ class GpuLoggingGateTest(unittest.TestCase):
         self.assertLess(present.index('[sl] DLSS-G status'), cadence_gate)
         self.assertIn('if (!transition && type != sl::LogType::eError', body("layer/streamline.cpp", "sl_logcb"))
 
+    def test_scene_wait_and_handout_lines_start_at_the_stats_reset(self):
+        # claude/handout-stats: final-s8-ultra-high 050126, the first High handout line after the reset counted 60
+        # frames of warm-up. Both places that count a frame start the window, and the handout counters reset with it.
+        reset = body("layer/rtscene.cpp", "wait_stats_window")
+        self.assertIn("stats_window::reset(cfg_int, reset_token)", reset)
+        for required in ["g_wait = WaitStats{}", "g_wait_handed = 0", "g_ho.n = {}",
+                         "g_ho_omm_accelerated = g_ho_omm_downgraded = 0", "g_ho_query_built = g_ho_query_failed = 0",
+                         "g_handout_downgrades = 0"]:
+            self.assertIn(required, reset)
+        self.assertLess(reset.index("stats_window::reset"), reset.index("g_handout_mu"))   # lock order g_wait_mu -> g_handout_mu
+        wait = body("layer/rtscene.cpp", "wait_for_frame_scene")
+        self.assertLess(wait.index("wait_stats_window();"), wait.index("++g_wait.calls"))
+        handout = body("layer/rtscene.cpp", "rt_scene_handout")
+        self.assertLess(handout.index("wait_stats_window();"), handout.index("++g_wait.calls"))
+        self.assertEqual(source("layer/rtscene.cpp").count("++g_wait.calls"), 2)   # no third, unreset counting site
+        # A counted OMM downgrade needs an accelerated commit: pending micro-maps commit the reference, counted in neither.
+        commit = source("layer/rtscene.cpp")
+        self.assertIn("if (reserved && accelerated) {", commit)
+
     def test_lifetime_statistics_do_not_time_quiet_submissions(self):
         submit=body("layer/tracker.cpp", "life_on_submit")
         self.assertIn('if (sample_stats) QueryPerformanceCounter', submit)
