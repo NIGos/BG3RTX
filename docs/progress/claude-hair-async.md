@@ -22,3 +22,9 @@
   was wrong: the one worker decodes serially, also LODs the dolly no longer wants (16fa158ca4825f93 LOD 0, 2, 1 in
   0.4 s). Without the key that time is a frame freeze instead (r4-inn: 100-220 ms frames). No old pre-in numbers kept.
   Follow-up (not done): drop queued decodes nobody asks for any more, or decode the newest request first.
+- Round 3 (layer stream, no key: scheduling only): a queued decode is a wake-up; the worker decodes what
+  `DecodeSlots::take` names, the newest request still wanted (asked in the newest frame or the one before), and forgets
+  queued requests nobody asks for (common/hair_groom_decode.h, layer/hair_groom.cpp). CTest hair_groom_decode_test
+  (44 checks) replays the pre-in sequence: LOD 0, 2, 1 asked while the worker is busy -> only LOD 1 decodes, and before
+  an older still-wanted request. Predicted for the hx1a rerun (predicted.json rerun_round3): pre-in card runs median
+  12-18 frames (from 19), pre-in decodes 6-8 (from 8), bundle windows unchanged.
