@@ -153,6 +153,7 @@ bool g_hist_valid=false,g_temporal_active=false;
 uint32_t g_hist_index=0,g_hist_ow=0,g_hist_oh=0;
 uint64_t g_hist_frame=0;
 float g_hist_jitter[2]={},g_final_jitter[2]={};
+float g_align_jitter[2]={}; bool g_align_ok=false;   // rr_post_jitter_align (claude/r3-core)
 struct Binds { uint64_t in[3]={}; int in_l[3]={}; uint64_t temporal_in[4]={}; int depth_layout=0; uint64_t temporal_ac=0,temporal_eb=0,temporal_meta=0; };
 struct Push { uint32_t size[2]={},flags=0; float uvmap[2]={},uvscale[2]={}; };
 uint32_t calls=0,last_flags=99;

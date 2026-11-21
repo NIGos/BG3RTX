@@ -30,6 +30,7 @@
 #include "../common/pipeline_async.h"
 #include "../common/hair_primary.h"
 #include "../common/strand_snapshot.h"
+#include "../common/rr_post_temporal.h"
 
 #include <cmath>
 #include <cstring>
@@ -152,6 +153,10 @@ bool g_hist_valid = false, g_temporal_active = false;
 uint32_t g_hist_index = 0, g_hist_ow = 0, g_hist_oh = 0;
 uint64_t g_hist_frame = 0;
 float g_hist_jitter[2] = {}, g_final_jitter[2] = {};
+// rr_post_jitter_align: this frame's RR jitter, recorded even when rr_post_temporal is off.
+float g_align_jitter[2] = {};
+bool g_align_ok = false;
+int g_align_logged = -1;
 VkBuffer g_dummy_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_dummy_buf_mem = VK_NULL_HANDLE;
 void* g_dummy_buf_map = nullptr;
@@ -1448,6 +1453,9 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
                      const float jitter[2], const float scale[2], bool reset, uint32_t ow, uint32_t oh) {
   std::lock_guard<std::mutex> lock(g_mu);
   g_temporal_active = false;
+  // ngx.cpp clears the MV input when any of the jitter / MV-scale parameters is missing.
+  g_align_ok = mv.view && std::isfinite(jitter[0]) && std::isfinite(jitter[1]);
+  if (g_align_ok) memcpy(g_align_jitter, jitter, sizeof g_align_jitter);
   DeviceData* dd = device_of(cmd);
   if (!cfg_int("rr_post_temporal", 0)) { g_hist_valid = false; return; }
   const auto recording = cmd_recording(cmd);
@@ -1538,9 +1546,24 @@ bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint
   Push pc{};
   pc.size[0] = ow, pc.size[1] = oh;
   pc.src[0] = g_ch.w, pc.src[1] = g_ch.h;
+  // rr_post_jitter_align (default 0): without the temporal pass, A/C/B are this frame's jittered render-resolution
+  // images while RR's output is unjittered. temporal_final is final plus exactly the jitter shift of the lookup
+  // (rr_post_temporal.hlsl), so it runs on the plain A/C/B. 1: temporal_final's sign; 2: the opposite (sign check).
+  const int align_key = g_temporal_active ? 0 : cfg_int("rr_post_jitter_align", 0);
+  const float align_sign = float(bg3::post_temporal::jitter_align_sign(align_key));
+  const bool aligned = align_sign != 0.0f && g_align_ok && pipeline(dd, g_pipes[P_TEMPORAL_FINAL]) != VK_NULL_HANDLE;
+  const int align_state = aligned ? align_key : align_sign != 0.0f ? -2 : 0;
+  if (align_state != g_align_logged) {
+    g_align_logged = align_state;
+    log("[rrpost] jitter align %d: %s", align_key,
+        aligned ? (align_key == 1 ? "A/C/B sampled at uv + jitter" : "A/C/B sampled at uv - jitter (sign check)")
+                : align_sign != 0.0f ? "waiting (no jitter or pipeline yet): plain final" : "off (plain final)");
+  }
+  const float* used_jitter = g_temporal_active ? g_final_jitter : g_align_jitter;
+  const float shown = g_temporal_active ? 1.0f : aligned ? align_sign : 0.0f;
   if (cfg_int("pan_post", 0) && cmd_state(cmd) && cmd_state(cmd)->tracing)
-    log("[rrpost] energy jitter %g %g, render %ux%u, temporal %d", g_temporal_active ? g_final_jitter[0] : 0.0f,
-        g_temporal_active ? g_final_jitter[1] : 0.0f, g_ch.w, g_ch.h, int(g_temporal_active));
+    log("[rrpost] energy jitter %g %g, render %ux%u, temporal %d, align %d", shown * used_jitter[0],
+        shown * used_jitter[1], g_ch.w, g_ch.h, int(g_temporal_active), aligned ? align_key : 0);
   if (cfg_int("pan_post", 0) && cfg_int("pan_capture", 0) > 0) {
     const Img* images[] = {g_temporal_active ? &g_hist_ac[g_hist_index] : &g_ac,
                            g_temporal_active ? &g_hist_eb[g_hist_index] : &g_eb};
@@ -1553,8 +1576,9 @@ bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint
   }
   memcpy(pc.grade, g_ch.grade, sizeof pc.grade);
   pc.flags = cfg_int("rr_post_quantise", 1) ? 2u : 0u;
-  pc.uvmap[0] = g_final_jitter[0]; pc.uvmap[1] = g_final_jitter[1];
-  return run(dd, cmd, g_temporal_active ? P_TEMPORAL_FINAL : P_FINAL, b, pc, (ow + 7) / 8, (oh + 7) / 8);
+  if (aligned) { pc.uvmap[0] = align_sign * g_align_jitter[0]; pc.uvmap[1] = align_sign * g_align_jitter[1]; }
+  else { pc.uvmap[0] = g_final_jitter[0]; pc.uvmap[1] = g_final_jitter[1]; }
+  return run(dd, cmd, g_temporal_active || aligned ? P_TEMPORAL_FINAL : P_FINAL, b, pc, (ow + 7) / 8, (oh + 7) / 8);
 }
 
 // Images worth dumping in a trace, after the evaluate.
