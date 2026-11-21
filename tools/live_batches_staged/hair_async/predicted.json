@@ -13,5 +13,20 @@
     "decodes": "pre-in and pre-out hold most of them; 0-4 in each later bundle window (evictions).",
     "cost": "Strand G-buffer GPU ms within hx1 202905's spread (no shader change)."
   },
-  "decision": "Confirm rt_hair_groom_async in the RTX Hair On bundle (applied overnight 2026-11-21 on claude/hair-async) if every inherited gate holds, no groom is dropped and the card-run median stays at most 6; otherwise revert it from the bundle and keep the key READY_FOR_LIVE."
+  "decision": "Confirm rt_hair_groom_async in the RTX Hair On bundle (applied overnight 2026-11-21 on claude/hair-async) if every inherited gate holds, no groom is dropped and the card-run median stays at most 6; otherwise revert it from the bundle and keep the key READY_FOR_LIVE.",
+  "result_hx1a_033523": {
+    "run": "captures/queue/logs/hx1a-s8-hair-async.1.033523.log, done, 30 every-window gates ok. Confirmed (docs/progress/claude-hair-async.md).",
+    "bundle_windows": "0 strands->cards, 0 frames on cards, watchdog 0; card runs median 3, max 3 in all six; groom dropped 0; kept 3 (in-on) and 4 (orbit-r).",
+    "first_decode": "pre-in: 8 decodes on the worker, 3 card runs 18/19/21 frames (30 fps, about 0.6 s); warmup 5 runs 18/20/25. One worker in request order: 16fa158ca4825f93 LOD 0, 2, 1 decoded within 0.4 s, LOD 2 never uploaded."
+  },
+  "rerun_round3": {
+    "change": "claude/hair-async round 3 (common/hair_groom_decode.h take, layer/hair_groom.cpp): the worker decodes the newest request still wanted (asked in the newest frame or the one before) and forgets queued requests nobody asks for. No key: scheduling only, the image effect is strands sooner. CTest hair_groom_decode_test replays the pre-in sequence (LOD 0, 2, 1: only 1 decodes).",
+    "predicted": {
+      "pre_in_card_runs": "median 12-18 frames (from 19): the skipped decodes (16fa158ca4825f93 LOD 2, 79 ms, and any other unwanted LOD) and the newest-first order move each head's last wanted LOD forward by 1-4 frames. Not 3: the first wanted LOD's own decode (47-93 ms), the in-flight decode it waits behind, the upload, the BLAS build and the 3-frame handshake remain.",
+      "pre_in_decodes": "6-8 lines, all ', worker' (8 before); no decoded LOD left un-uploaded for a groom that no longer wants it.",
+      "warmup_card_runs": "median 14-20 (from 20).",
+      "bundle_windows": "unchanged: every hx1 gate, card-run median 3, groom dropped 0.",
+      "decision": "Keep round 3 if the bundle gates hold and the pre-in median does not rise; a median at or under 15 confirms the scheduling gain."
+    }
+  }
 }

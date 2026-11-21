@@ -12,3 +12,19 @@
   bundle copy gained the key (its check_bundle reads the schema). Lint with and without --frozen: 0 failing.
 - Decision rule (predicted.json): confirm if every hx1 gate holds, no groom is dropped and the card-run median of
   entering heads stays at most 6 frames (202905: 3); else revert the bundle line, the key stays READY_FOR_LIVE.
+- Live hx1a-s8-hair-async.1.033523 (S8, 2026-11-21, done, 30 every-window gates ok): CONFIRMED by the predicted rule.
+  Bundle windows (in-on, out-on, orbit-r, orbit-l, in-on2, out-on2): 0 strands->cards, 0 frames on cards, watchdog 0;
+  card runs of entering heads median 3 in all six (max 3; hx1 202905: medians 3/3/6/3/3/3, max 9). Groom dropped 0 in
+  every window; kept on the built LOD 3 (in-on) and 4 (orbit-r) groom-frames, 0 elsewhere. 20 decodes, all on the
+  worker (warmup 10, pre-in 8, orbit-r 2). Keep-off control 10/10/10 and 10/10/130 (202905: 1/9/10, 10/10/72).
+- Cost seen outside the gated windows: a head whose groom is decoded for the first time stays on cards 18-21 frames
+  (pre-in, 3 runs, 30 fps: about 0.6 s) and 18-25 at the load (warmup, 5 runs). Predicted "at most 3 frames more"
+  was wrong: the one worker decodes serially, also LODs the dolly no longer wants (16fa158ca4825f93 LOD 0, 2, 1 in
+  0.4 s). Without the key that time is a frame freeze instead (r4-inn: 100-220 ms frames). No old pre-in numbers kept.
+  Follow-up (not done): drop queued decodes nobody asks for any more, or decode the newest request first.
+- Round 3 (layer stream, no key: scheduling only): a queued decode is a wake-up; the worker decodes what
+  `DecodeSlots::take` names, the newest request still wanted (asked in the newest frame or the one before), and forgets
+  queued requests nobody asks for (common/hair_groom_decode.h, layer/hair_groom.cpp). CTest hair_groom_decode_test
+  (44 checks) replays the pre-in sequence: LOD 0, 2, 1 asked while the worker is busy -> only LOD 1 decodes, and before
+  an older still-wanted request. Predicted for the hx1a rerun (predicted.json rerun_round3): pre-in card runs median
+  12-18 frames (from 19), pre-in decodes 6-8 (from 8), bundle windows unchanged.
