@@ -75,6 +75,25 @@ def energy_phase():
                 set='qa_exposure_hold=1,rt_stats=0,rt_primary_check=0,rt_debug=0')
 
 
+def readiness_timeouts(job, plan):
+    """Startup 60 s; a phase that changes a pipeline key gets the preflight's readiness allowance (the learned
+    VALID median plus margin, else the unproven pipeline allowance); 10 s only where no pipeline key changes.
+    2026-11-21: ab_off 1 -> 0 rebuilds the GI sun raygen pipeline in 11.9-12.6 s; a fixed 10 s failed ab-on."""
+    states = flow.phase_states(job, plan)
+    rebuilds = []
+    for i, (phase, state) in enumerate(zip(plan, states)):
+        changed = {k for k, v in state.items() if i and states[i-1].get(k) != v} - pipeline_readiness.CONTROL
+        if state.get('ab_off') == '1':
+            changed.discard('ab_off')   # the master toggle off records no RT pass: nothing to build
+        rebuilds.append(bool(i and phase.get('wait_log') and changed & set(pipeline_readiness.TABLE)))
+        if phase.get('wait_log'):
+            phase['wait_log_timeout'] = 60 if i == 0 else pipeline_readiness.PIPELINE_TIMEOUT_S if rebuilds[-1] else 10
+    # Only rebuild phases take the learned allowance: the startup keeps its 60 s (a startup median is not a cold build).
+    for phase, rebuild, limit in zip(plan, rebuilds, flow.readiness_budget.timeouts(job, plan)):
+        if rebuild:
+            phase['wait_log_timeout'] = limit
+
+
 def watchdog(job, plan):
     """Five minutes including the 120 s load, raised only when the preflight's own estimate (plan + readiness
     allowance, live_flow.duration_budget) needs more: the preflight refuses a timeout below it (2026-11-21)."""
@@ -91,8 +110,7 @@ def retime_final(job, plan):
             phase['seconds'] = round(phase['frames']/flow.fps_windows.expected(job, state)['fps'] + .1, 3)
             phase['motion_end'] = phase['seconds']
             phase['motion_start'] = min(phase.get('motion_start', 0), phase['seconds'])
-        if phase.get('wait_log'):
-            phase['wait_log_timeout'] = 60 if i == 0 else 10
+    readiness_timeouts(job, plan)
     watchdog(job, plan)
 
 
@@ -184,9 +202,7 @@ def main():
         flow.retime(j, phases)
         # Hard launch watchdog includes loading. A missed readiness signal
         # invalidates this receipt instead of extending a final smoke.
-        for i, p in enumerate(phases):
-            if p.get('wait_log'):
-                p['wait_log_timeout'] = 60 if i == 0 else 10
+        readiness_timeouts(j, phases)
         watchdog(j, phases)
         flow.write(path, j)
         flow.write(pp, phases)
