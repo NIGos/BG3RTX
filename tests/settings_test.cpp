@@ -1563,11 +1563,11 @@ static void test_release_rtx_hair() {
   }
   CHECK_EQ(get(m, "rt_hair"), "1");   // the Ctrl+Shift+F7 master is a separate key (layer/util.cpp hair_gated)
   {   // Release 0.9.6 (user decision 2026-11-15: RTX Hair ships Off, opt-in). In every preset and without a user file
-      // the control is Off and no bundle key is on; turning it On from the launcher keeps all 26 keys of today's bundle
+      // the control is Off and no bundle key is on; turning it On from the launcher keeps all 27 keys of today's bundle
       // in every preset, with and without "Show experimental options" (0.9.5-beta: the release policy undid it).
     int bundle = 0;
     for (const KV& kv : hair.choices[1].kv) if (kv.key) ++bundle;
-    CHECK(bundle == 26);
+    CHECK(bundle == 27);
     for (const int p : {-1, int(kLow), int(kMedium), int(kHigh), int(kUltra)}) {
       Map user; if (p >= 0) user["preset"] = kPresetId[p];
       Map fresh = code_defaults(); apply_layer(fresh, release); if (p >= 0) apply_layer(fresh, user);
@@ -1765,7 +1765,10 @@ static void test_strand_bundle() {
                           // 6i (live hx1 190905: the decal pass took the header's label in 31-42 of 60 frames without it)
                           "rt_hair_header_scene_pass",
                           // 6k (live hx1 194658: "coverage stale" refusals 16-35 -> 0, entering head 10 -> 5 card frames)
-                          "rt_hair_coverage_keep"}) {
+                          "rt_hair_coverage_keep",
+                          // r4-hitch (live r4-inn 030500: outward dolly p99 98-111 -> 40 ms). Applied overnight
+                          // 2026-11-21, confirm or revert.
+                          "rt_hair_groom_async"}) {
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=1");
     CHECK_EQ(std::string(key) + "=" + code_default(key), std::string(key) + "=0");   // off by default
   }

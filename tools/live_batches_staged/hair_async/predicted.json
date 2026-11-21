@@ -1,0 +1,17 @@
+{
+  "_rule": "Prepared BEFORE the run (AGENTS.md), 2026-11-21, branch claude/hair-async. STAGED, not queued, not authorized. hx1-s8-hair-stable (tools/live_batches_staged/hair_stable) unchanged except rt_hair_groom_async=1 from the start, as the RTX Hair On bundle of this branch writes it.",
+  "question": "With groom LOD decodes on the worker, does the hair stay as stable as hx1 202905 (0 strands->cards, 0 frames on cards, watchdog 0), and how many frames do grooms wait on a pending decode?",
+  "evidence": "r4-inn.1.030500 (inn, key 0/1/0): ON outward dolly p99 39.7-40.6 ms vs OFF 98-111, scene wait max 6-7 vs 163-167 ms. Its '[hair groom] frame' lines: 'LOD switches waiting for upload N (kept) / M (groom dropped)': OFF dollies kept 0-24 per 120 frames, ON outward 54-59; dropped 0 in every window of both states. hx1 202905 (bundle without the key): 0 strands->cards, card runs of entering heads median 3 (max 9) with the bundle.",
+  "gated": {
+    "inherited": "Every hx1 gate as in hair_stable/predicted.json part1_bundle: 0 strands->cards of any cause, 0 frames on cards, watchdog 0, header at the scene G-buffer pass only, rebase origin 0.",
+    "worker": "Every '[hair groom] <id> LOD n decoded (v3...' line inside the moving windows says ', worker' (event gate, no decode in the build), and the run has at least one worker decode (pre-in uploads the near LODs: 6-8 decodes in hx1 180928 and 190905).",
+    "no_groom_dropped": "'(groom dropped)' 0 in the '[hair groom] frame' line of every bundle window: a pending LOD keeps the built one (rt_hair_groom_lod_keep), it never falls back to cards on a LOD switch."
+  },
+  "predicted_not_gated": {
+    "kept_frames": "'waiting for upload N (kept)' 0-80 groom-frames per 180-frame dolly window (r4-inn ON 54-59 per 120 frames with 10-11 decodes; S8 has fewer grooms near the camera), 0 in the orbits once their LODs are resident.",
+    "card_runs": "Entering heads: median 3 frames as in 202905, at most 3 frames more for a head whose first LOD is still decoding (a 47-156 ms decode at 30 fps). A median above 6 is the decode latency showing: report it, the user decides.",
+    "decodes": "pre-in and pre-out hold most of them; 0-4 in each later bundle window (evictions).",
+    "cost": "Strand G-buffer GPU ms within hx1 202905's spread (no shader change)."
+  },
+  "decision": "Confirm rt_hair_groom_async in the RTX Hair On bundle (applied overnight 2026-11-21 on claude/hair-async) if every inherited gate holds, no groom is dropped and the card-run median stays at most 6; otherwise revert it from the bundle and keep the key READY_FOR_LIVE."
+}
