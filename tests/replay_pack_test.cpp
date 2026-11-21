@@ -449,7 +449,8 @@ int main() {
     const auto* tex = em ? rp::find_slot(*em, rp::kEmPackSet, 6) : nullptr;
     const auto* trust = em ? rp::find_slot(*em, 3, 8) : nullptr;
     contract = contract && tlas && tlas->kind == rp::kTlas && tex && tex->count == 256 && trust && trust->kind == rp::kStorage &&
-               trust->storage_format == 98 && rp::find_slot(*em, rp::kEmPackSet, 11) && rp::find_slot(*em, rp::kEmPackSet, 11)->count == 16;
+               trust->storage_format == 98 && rp::find_slot(*em, rp::kEmPackSet, 11) && rp::find_slot(*em, rp::kEmPackSet, 11)->count == 16 &&
+               rp::find_slot(*em, 1, 19) && rp::find_slot(*em, 1, 19)->count == 16;   // the production request reads the tileset samplers
     check(contract, "gi_hit_sun_em: kGiHitDirect + sun trust s3b8 + the emissive scene at set 4");
     check(rp::texture_priority(rp::kEmPackSet, 6) == rp::kPriorityLighting && rp::texture_priority(rp::kEmPackSet, 11) == rp::kPriorityHit,
           "texture_priority: emissive masks first, emissive VT caches as the hit cache");
