@@ -653,7 +653,8 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live", true,
    {{"off", "Off", 0, {{"rr_post_jitter_align", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapDlss, {{"rr_post_jitter_align", "1"}}, {{"rr", 1}}, {}, false, false, false, Apply::Live},
-    {"sign_check", "Opposite sign (check)", kCapDlss, {{"rr_post_jitter_align", "2"}}, {{"rr", 1}}, {}, true, false, false, Apply::Live}},
+    {"sign_check", "Opposite sign (check)", kCapDlss, {{"rr_post_jitter_align", "2"}}, {{"rr", 1}}, {}, true, false, false, Apply::Live},
+    {"no_shift", "No jitter shift (check)", kCapDlss, {{"rr_post_jitter_align", "3"}}, {{"rr", 1}}, {}, true, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "r3-core: the non-temporal output grade samples the jittered depth of field and bloom images at uv + jitter, as the temporal one does. Opposite sign is the sign check for both. Look at hair over a blurred background in Test Dialogue3 on High."},
 
   {"exp_rt_sun_overlap", "Sun shadows beside the GI trace",

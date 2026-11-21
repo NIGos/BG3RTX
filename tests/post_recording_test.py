@@ -127,6 +127,7 @@ TEMPORAL_FIXTURE = r'''
 #include <cstring>
 #include <initializer_list>
 #include "HEADER"
+#include "TEMPORAL_H"
 using VkCommandBuffer=uint64_t;
 struct DeviceData {};
 DeviceData dd;
@@ -154,13 +155,14 @@ uint32_t g_hist_index=0,g_hist_ow=0,g_hist_oh=0;
 uint64_t g_hist_frame=0;
 float g_hist_jitter[2]={},g_final_jitter[2]={};
 float g_align_jitter[2]={}; bool g_align_ok=false;   // rr_post_jitter_align (claude/r3-core)
+int g_no_shift_logged=-1;   // rr_post_jitter_align=3 (claude/r5-ultra-shift)
 struct Binds { uint64_t in[3]={}; int in_l[3]={}; uint64_t temporal_in[4]={}; int depth_layout=0; uint64_t temporal_ac=0,temporal_eb=0,temporal_meta=0; };
 struct Push { uint32_t size[2]={},flags=0; float uvmap[2]={},uvscale[2]={}; };
 uint32_t calls=0,last_flags=99;
 bool run(DeviceData*,VkCommandBuffer,int,const Binds&,const Push& pc,uint32_t,uint32_t) { ++calls;last_flags=pc.flags;return true; }
 void submit(uint64_t id) { for(auto& h:g_history)h.producer.submit(id); }
 void discard(uint64_t id) { for(auto& h:g_history)h.producer.discard(id); }
-'''.replace("HEADER", (ROOT / "layer/recording_init.h").as_posix())
+'''.replace("HEADER", (ROOT / "layer/recording_init.h").as_posix()).replace("TEMPORAL_H", (ROOT / "common/rr_post_temporal.h").as_posix())
 
 TEMPORAL_MAIN = r'''
 int main() {

@@ -156,7 +156,7 @@ float g_hist_jitter[2] = {}, g_final_jitter[2] = {};
 // rr_post_jitter_align: this frame's RR jitter, recorded even when rr_post_temporal is off.
 float g_align_jitter[2] = {};
 bool g_align_ok = false;
-int g_align_logged = -1;
+int g_align_logged = -1, g_no_shift_logged = -1;
 VkBuffer g_dummy_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_dummy_buf_mem = VK_NULL_HANDLE;
 void* g_dummy_buf_map = nullptr;
@@ -1509,7 +1509,15 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
   b.temporal_meta = g_hist_meta[next].view;
   Push pc{}; pc.size[0] = w; pc.size[1] = h;
   pc.flags = g_hist_valid ? 1u : 0u;
-  pc.uvmap[0] = g_hist_jitter[0] - jitter[0]; pc.uvmap[1] = g_hist_jitter[1] - jitter[1];
+  // rr_post_jitter_align=3 (diagnostic, claude/r5-ultra-shift): no jitter term anywhere in the temporal path (history
+  // reprojected by the motion alone, output lookup at the plain uv). The real jitter is still recorded for the next frame.
+  const int shift_key = cfg_int("rr_post_jitter_align", 0);
+  const bool no_shift = bg3::post_temporal::temporal_shift_zero(shift_key);
+  if (int(no_shift) != g_no_shift_logged) {
+    g_no_shift_logged = int(no_shift);
+    log("[rrpost] temporal jitter shift %s", no_shift ? "off (rr_post_jitter_align=3: motion only, plain uv)" : "on");
+  }
+  for (int i = 0; i < 2; ++i) pc.uvmap[i] = bg3::post_temporal::history_offset(g_hist_jitter[i], jitter[i], shift_key);
   pc.uvscale[0] = scale[0]; pc.uvscale[1] = scale[1];
   if (!run(dd, cmd, P_TEMPORAL, b, pc, (w + 7) / 8, (h + 7) / 8)) {
     g_hist_valid = false; log("[rrpost] temporal REFUSED: dispatch"); return;
@@ -1521,7 +1529,7 @@ void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Bind
   g_hist_index = next; g_hist_valid = false; g_temporal_active = true; g_hist_frame = frame_index();
   g_hist_ow = ow; g_hist_oh = oh;
   memcpy(g_hist_jitter, jitter, sizeof g_hist_jitter);
-  memcpy(g_final_jitter, jitter, sizeof g_final_jitter);
+  for (int i = 0; i < 2; ++i) g_final_jitter[i] = bg3::post_temporal::output_offset(jitter[i], shift_key);
 }
 
 // After the RR evaluate: grade(A * RR + C) into the game's DLSS output image.

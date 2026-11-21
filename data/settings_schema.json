@@ -725,7 +725,8 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_post_jitter_align": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_jitter_align": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "sign_check", "label": "Opposite sign (check)", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_jitter_align": "2"}, "needs": {"rr": 1}, "migrate_from": [], "developer": true, "maturity": "developer"}
+       {"id": "sign_check", "label": "Opposite sign (check)", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_jitter_align": "2"}, "needs": {"rr": 1}, "migrate_from": [], "developer": true, "maturity": "developer"},
+       {"id": "no_shift", "label": "No jitter shift (check)", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_jitter_align": "3"}, "needs": {"rr": 1}, "migrate_from": [], "developer": true, "maturity": "developer"}
      ]},
     {"id": "exp_rt_sun_overlap", "label": "Sun shadows beside the GI trace",
      "description": "Experimental: traces the ray-traced sun shadows at the same time as the indirect light instead of after it. Same image; may save a little GPU time. Unqualified.",

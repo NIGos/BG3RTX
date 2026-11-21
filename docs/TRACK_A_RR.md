@@ -828,6 +828,8 @@ Without the temporal pass (Low-High) `final` read A/C/B at the unjittered uv: th
 against the RR image. `rr_post_jitter_align` (claude/r3-core, off, READY_FOR_LIVE) runs `temporal_final` on the plain
 A/C/B with this frame's jitter (1) or its negation (2, the sign check of both paths; the sign was never verified
 independently). Layer only, no shader edit, 0 ms. Live: `tools/live_batches_staged/r3_core` r3-d3-jitter.
+Live 2026-11-21: rejected (2-4x background flicker; the blurred layers do not carry the jitter). Value 3
+(claude/r5-ultra-shift) removes both jitter terms of the temporal path to test the same question on Ultra.
 
 Dialogue3 drift repair (pt-d3-analysis, 2026-11-03): 12 counterbalanced adjacent OFF/ON pairs; freeze masks from all OFF windows and use a Bonferroni exact paired sign gate (12 observables, minimum 8 pairs). See post_temporal/predicted.json for the derived 338.9 s plan, 818.9 s load/readiness bound and offline fixtures.
 The earlier four-window receipt was insufficient (2 pairs). Later VALID 032335 had 10 pairs; all 12 primary sign tests missed significance, float energy +0.1492% failed, and background registration failed. S8 remains unqualified; the Ultra promotion follows the explicit visual verdict above.
