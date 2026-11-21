@@ -369,6 +369,19 @@ static void scripted() {
     CHECK(water_handout_pick(false, true, true) == WaterPick::kCommitted);   // a later frame's pass never joins an old handout
     CHECK(water_handout_pick(false, false, false) == WaterPick::kNone);      // neither: no compose (never the dummy alone)
     CHECK(water_handout_pick(true, false, false) == WaterPick::kNone);
+    // claude/water-noscene: a later frame's pass on a handout stash whose frame resolved before, with this frame's build
+    // already committed, takes the newer pair (was "no scene": a one-frame on/off flip of the water).
+    CHECK(water_handout_pick(false, false, false, true) == WaterPick::kNewer);
+    CHECK(water_handout_pick(false, false, true, true) == WaterPick::kCommitted);   // the stash's own scene first
+    CHECK(water_handout_pick(true, false, false, true) == WaterPick::kNone);        // this frame's pass never: no newer build
+    CHECK(water_handout_pick(true, true, false, true) == WaterPick::kHandout);
+    // newer only when wait-free: committed b later than the stash (frame 100) and not older than this frame.
+    CHECK(water_handout_newer(true, 101, 100, 101));     // this frame's build committed
+    CHECK(water_handout_newer(true, 102, 100, 101));
+    CHECK(!water_handout_newer(true, 101, 100, 102));    // older than this frame: rt_scene_set would wait
+    CHECK(!water_handout_newer(true, 100, 100, 101));    // the stash's own frame: kCommitted, not newer
+    CHECK(!water_handout_newer(true, 99, 100, 101));     // the stash's build not committed yet: still refused
+    CHECK(!water_handout_newer(false, 101, 100, 101));
     // The machine side of a water pass: it joins only the open handout of its own frame and slot.
     Layer L = warm();
     L.capture_begin();

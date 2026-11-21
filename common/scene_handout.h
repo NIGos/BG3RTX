@@ -56,13 +56,22 @@ inline bool downgrade_on_refusal(bool traversal, bool fast, bool slot_accelerate
 }
 
 // Increment 5: the water compose pass of a frame whose lighting stash is a handout (dummy TLAS + set R).
-enum class WaterPick : uint32_t { kHandout = 0, kCommitted, kNone };
+enum class WaterPick : uint32_t { kHandout = 0, kCommitted, kNewer, kNone };
 // this_frame: the pass composes this frame's lighting; registered: the layer let its command buffer join the open
-// handout; committed: the current committed scene is the stash's own frame (the handout resolved, never a wait).
-inline WaterPick water_handout_pick(bool this_frame, bool registered, bool committed) {
+// handout; committed: the current committed scene is the stash's own frame (the handout resolved, never a wait);
+// newer: a later frame's build is already committed and is this frame's (built >= now), so the newer pair is taken as
+// pick_scene does for an ordinary stash (rt_scene_set does not wait then). Before, that case left the water
+// uncomposed for one frame ("no scene", final-s8-ultra-high 2026-11-21: 1-3 per 60 frames, an on/off flip each).
+inline WaterPick water_handout_pick(bool this_frame, bool registered, bool committed, bool newer = false) {
   if (this_frame && registered) return WaterPick::kHandout;
   if (committed) return WaterPick::kCommitted;
+  if (newer && !this_frame) return WaterPick::kNewer;
   return WaterPick::kNone;
+}
+// The newer-scene condition of water_handout_pick: the committed build b is later than the stash's frame and not older
+// than this frame (a scene of an older frame would make rt_scene_set wait on the game's recording thread).
+inline bool water_handout_newer(bool have_committed, uint64_t b, uint64_t stash_frame, uint64_t now) {
+  return have_committed && b > stash_frame && b >= now;
 }
 
 struct Machine {

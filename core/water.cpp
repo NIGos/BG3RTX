@@ -545,6 +545,9 @@ struct CWindow {
   // build older than this frame, the newer pair unavailable), and the stash's pair kept (pick_scene).
   uint64_t nl_cleared = 0, nl_old = 0, nl_ahead = 0;
   uint64_t cur_stale = 0, newer_old = 0, newer_failed = 0, stash_kept = 0, handout = 0;
+  // Handout stashes of an earlier frame: resolved to a newer committed scene; refused with the committed scene older
+  // than the stash's frame (its build not committed yet), or none / too old for a wait-free newer pair.
+  uint64_t handout_newer = 0, handout_older = 0, handout_other = 0;
   uint64_t camera_samples = 0, camera_missing = 0, tlas_age_sum = 0, tlas_age_max = 0, tlas_age_samples = 0;
   double camera_delta_sum = 0, camera_delta_max = 0;
 };
@@ -789,13 +792,15 @@ void maybe_log_compose() {
             "(on/off flips %llu); refused passes: no recent lighting (cleared %llu, older than %llu frames %llu, ahead "
             "%llu), no scene %llu; earlier lighting: current slot stale %llu, newer build before this frame %llu, newer "
             "pair unavailable %llu, lighting's pair kept %llu; non-finite terms %llu (the game's colour kept: "
-            "water_compose.h kCsNonFinite); scene handout %llu",
+            "water_compose.h kCsNonFinite); scene handout %llu; handout stash of an earlier frame: newer scene taken %llu, "
+            "refused: its build not committed yet %llu, other %llu",
             (unsigned long long)W.frames, (unsigned long long)g_ccont.frames, (unsigned long long)g_ccont.composed_frames,
             (unsigned long long)g_ccont.uncomposed, (unsigned long long)g_ccont.flips, (unsigned long long)W.nl_cleared,
             (unsigned long long)kLightingLagFrames, (unsigned long long)W.nl_old, (unsigned long long)W.nl_ahead,
             (unsigned long long)W.no_scene, (unsigned long long)W.cur_stale, (unsigned long long)W.newer_old,
             (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept,
-            (unsigned long long)w[kCsNonFinite], (unsigned long long)W.handout);
+            (unsigned long long)w[kCsNonFinite], (unsigned long long)W.handout, (unsigned long long)W.handout_newer,
+            (unsigned long long)W.handout_older, (unsigned long long)W.handout_other);
   log_stats("[water] surface partition: coverage-weighted owned %llu, invalid %llu; coverage zero %llu, partial %llu, full %llu, native/missing FS marker %llu, unmarked/layout %llu, FS spec off %llu, compose spec off %llu; marked owned %llu, foam texture source %llu, edge/flow mask source %llu; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
             (unsigned long long)w[kCsSurfaceClean], (unsigned long long)w[kCsSurfaceInvalid],
             (unsigned long long)w[kCsSurfaceFoamColour], (unsigned long long)w[kCsSurfaceFoamF0],
@@ -1120,21 +1125,31 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   };
   // Increment 5: a handout stash composes with the handout (this frame's pass joins it) or, once it resolved, with
   // the committed scene of the stash's frame (rt_scene: no wait, it keeps that slot live); never the dummy alone.
-  bool handout_pick = false;
+  bool handout_pick = false, handout_newer_pick = false;
   if (g_st.handout) {
     VkDescriptorSet set = g_st.alpha;
     VkAccelerationStructureKHR dummy = VK_NULL_HANDLE, committed = VK_NULL_HANDLE;
     uint64_t f = 0, b = 0;
     const bool registered = use == LightingUse::kThisFrame && host->rt_scene_handout &&
                             host->rt_scene_handout(cmd, &set, &dummy, &f) && dummy == g_st.tlas;
-    const bool same = !registered && host->rt_scene && host->rt_scene(&committed, &b) && committed && b == g_st.frame;
-    switch (bg3::scene_handout::water_handout_pick(use == LightingUse::kThisFrame, registered, same)) {
+    const bool have = !registered && host->rt_scene && host->rt_scene(&committed, &b) && committed;
+    const bool same = have && b == g_st.frame;
+    const bool newer = bg3::scene_handout::water_handout_newer(have, b, g_st.frame, now);
+    switch (bg3::scene_handout::water_handout_pick(use == LightingUse::kThisFrame, registered, same, newer)) {
       case bg3::scene_handout::WaterPick::kHandout: handout_pick = true; ++g_cwin.handout; break;
       case bg3::scene_handout::WaterPick::kCommitted: g_st.tlas = tlas = committed; g_st.handout = false; g_st.build_frame = b; break;
-      default: ++g_cwin.no_scene; g_ccont.note(now, false); return false;
+      case bg3::scene_handout::WaterPick::kNewer:
+        // The stash's frame resolved and a later build (this frame's) committed since: the newer pair, as pick_scene's
+        // kNewer for an ordinary stash. The stash keeps its handout state (its TLAS is the dummy): only this pass changes.
+        if (!take_newer()) { ++g_cwin.no_scene; g_ccont.note(now, false); return false; }
+        handout_newer_pick = true; ++g_cwin.handout_newer; break;
+      default:
+        ++(have && b < g_st.frame ? g_cwin.handout_older : g_cwin.handout_other);
+        ++g_cwin.no_scene; g_ccont.note(now, false); return false;
     }
   }
-  ScenePick pick = handout_pick ? ScenePick::kStash : pick_scene(use, cur_ok, cur == g_st.tlas, built, now, take_newer, keep_stash);
+  ScenePick pick = handout_pick ? ScenePick::kStash : handout_newer_pick ? ScenePick::kNewer
+                 : pick_scene(use, cur_ok, cur == g_st.tlas, built, now, take_newer, keep_stash);
   if (pick == ScenePick::kNone || !tlas || !alpha) {
     ++g_cwin.no_scene;
     g_ccont.note(now, false);

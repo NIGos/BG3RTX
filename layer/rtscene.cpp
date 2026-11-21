@@ -1694,13 +1694,28 @@ VkBuffer rt_scene_pose() {
 
 // Caller holds `lock` (g_mu). Waits (bounded) for this frame's scene commit; see g_scene_cv.
 void wait_log(int ms);
+// Caller holds g_wait_mu. The rt_stats_reset token starts a new window for the "[rt] scene wait" and "[rt] scene
+// handout" lines at both places that count a frame (the scene wait and the handout's first query): under
+// rt_scene_handout=2 the frames come from the handout, so its counters (reserved, handed out, OMM accelerated and
+// downgraded, hit-material queries, stamp downgrades) reset too. Stats only (final-s8-ultra-high 050126: the
+// 05:03:43.105 handout line held 60 frames, mostly warm-up before the 05:03:42.844 reset of static-a).
+void wait_stats_window() {
+  static int reset_token = 0;
+  if (!stats_window::reset(cfg_int, reset_token)) return;
+  g_wait = WaitStats{};
+  g_wait_handed = 0;
+  std::lock_guard<std::mutex> h(g_handout_mu);
+  g_ho.n = {};
+  g_ho_omm_accelerated = g_ho_omm_downgraded = 0;
+  g_ho_query_built = g_ho_query_failed = 0;
+  g_handout_downgrades = 0;
+}
 void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
   const int ms = cfg_int("rt_scene_wait_ms", 12);
   const uint64_t now = frame_index();
   auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
-  static int reset_token = 0;
   { std::lock_guard<std::mutex> w(g_wait_mu);
-    if (stats_window::reset(cfg_int, reset_token)) g_wait = WaitStats{}, g_wait_handed = 0;
+    wait_stats_window();
     ++g_wait.calls; }
   if (!current()) {
     // Captures that resumed (a scene built in the last 2 frames) end the pause at once:
@@ -1834,7 +1849,7 @@ bool rt_scene_handout(VkCommandBuffer cmd, VkDescriptorSet* set, VkAccelerationS
   if (frame) *frame = now;
   if (omm::available()) omm::mark_feedback_use(cmd);   // OMM variants may write the stamp's feedback word (144)
   if (first) {   // this frame's first RT query: counted with the scene wait line as a 0 ms wait that got its scene
-    { std::lock_guard<std::mutex> w(g_wait_mu); ++g_wait.calls; ++g_wait.waited; ++g_wait.got; ++g_wait_handed; }
+    { std::lock_guard<std::mutex> w(g_wait_mu); wait_stats_window(); ++g_wait.calls; ++g_wait.waited; ++g_wait.got; ++g_wait_handed; }
     wait_log(cfg_int("rt_scene_wait_ms", 12));
   }
   if (order_trace_active())
