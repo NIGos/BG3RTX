@@ -1,0 +1,19 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-21, branch claude/r4-hitch. STAGED, not queued, not authorized.",
+  "question": "With rt_hair_groom_async=1, do the outward inn dollies lose their 100-220 ms frames (frame time p99 and scene wait max back to the static and inward windows' level), with the same energy?",
+  "evidence": "Queue log r2-inn.1.020820 (2026-11-21 02:08-02:13, rt_hair_groom_async=0, the default): all 36 frame gaps of 90 ms to 1 s in the 12 dolly windows follow a synchronous '[hair groom] <id> LOD n decoded (v3)' line within 33 ms (the other 12 gaps are the energy windows' traces) (e.g. 02:10:15.416 84ef20d4a0aa148b LOD 0 decoded in 157 ms -> 02:10:15.446 frame 2914 gap 222 ms; 02:10:36.937 LOD 1 156 ms -> 36.952 gap 197 ms). 6-11 decodes per outward window (0.5-1.1 s of decode, plus the whole-file read), 0-1 per inward window. Outward windows: scene wait max 151-186 ms, frame time p99 110-118 ms, CPU capture hooks 12-18 ms/frame; static and inward: p99 about 37 ms, wait max 3-10 ms, hooks 5-8. The same LODs are decoded again in every outward window (84ef20d4a0aa148b LOD 0 five times): groom pool at 464-496 of 512 MB, evicted LODs come back through a new decode. The 2.2-2.6 s gaps are the energy windows' float traces.",
+  "design": "One launch at the inn (r2-inn's save and windows), Ultra, RTX Hair On, FG 3x, visible_unfocused_fg, detailed_logging=1, cpu_timing=1. States off-a / on / off-b of rt_hair_groom_async. Per state: static 3 periods, wheel dolly out and in (2 periods each) twice, then a static energy window (exposure held, 4 float traces). The decode line carries ', worker' when the worker ran it: gates require every decode of the ON outward windows on the worker and at least one in-build decode in every OFF outward window (the path is exercised).",
+  "noise_rule": "Every threshold is the OFF repeat of the same run: noise(metric) = |off-b - off-a| of the same window kind, plus the AGENTS.md floors (energy 0.5%, cost max(0.1 ms, 1%)). Frame time is the 30 fps cap when unfocused: judge p99 and max, not the median.",
+  "predicted": {
+    "decodes": "ON outward windows: 6-11 decode lines, all ', worker'; OFF: as many, none ', worker'. The decisive precondition.",
+    "frame_time_p99_outward": "ON at or below the ON inward windows' p99 plus noise (expected 37-50 ms; at most 60 ms). OFF 110-118 ms as in r2-inn.1.020820.",
+    "scene_wait_max_outward": "ON under 40 ms (expected 7-20 ms: the staging copy, the segment remap loop and the new LOD's BLAS build stay in the build). OFF 150-190 ms.",
+    "frame_gaps_over_90ms": "ON outward windows: 0 that follow a decode line within 30 ms. '[sl] warn ... Frame rate over 100' lines: 0 in the ON dollies (OFF: 4-6 per outward window).",
+    "cpu_capture_hooks": "ON outward ms/frame lower than OFF by about the decode time per frame (0.5-1.1 s per 240 frames: 2-5 ms/frame), within noise of the inward windows plus the upload copies.",
+    "gpu_ms": "rt passes, GI and scene build GPU ms equal within noise (no shader change).",
+    "energy": "Static, exposure held: ON mean inside the OFF pair's range widened by 0.5% (no decode in a static window).",
+    "faults": "0: no VK_ERROR_DEVICE_LOST, no crash, no 'file unreadable or changed' groom line."
+  },
+  "decision": "rt_hair_groom_async becomes a default candidate (Ultra and High with RTX Hair On) if the ON outward p99 and wait max fall to the inward level, energy is equal, and no fault appears. The visible cost is a few frames of cards (or the kept LOD, rt_hair_groom_lod_keep=1) while a LOD decodes: judged later in the hx1 hair gate, not here.",
+  "not_measured_here": "The card frames while a decode is pending; decode re-use across evictions (the pool keeps evicting LODs the dolly brings back: a separate budget question)."
+}

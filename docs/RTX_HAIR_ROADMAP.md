@@ -195,7 +195,9 @@ convert, compile before Play, cache deleted per style).** Branch claude/hair-gro
   equal to the Python reference on all 5 (triangle, root, segments exact; barycentrics and radius within 1e-7 /
   1e-6). 98-110 ms for 0.35-0.40 M-point styles, 194 ms for 0.8 M, 757 ms for 3.3 M; LZMS is 80% of it. The layer
   decodes one LOD per upload (`read_lod`, logged `LOD n decoded (v3): points in ms`): ~1/3 of those numbers, on the
-  upload path, once per groom LOD. Open: decode on a worker or keep the last decoded LOD 0 if a live shows hitches.
+  upload path, once per groom LOD. The live shows them: queue log r2-inn.1.020820 (inn dollies), every frame of
+  90 ms to 1 s follows a synchronous decode within 33 ms; `rt_hair_groom_async` moves it to a worker (staged live
+  `tools/live_batches_staged/r4_hitch`, branch claude/r4-hitch).
 - Seen list: the layer's miss paths (`index id has no groom file`, unmatched CountUnknown / UvMismatch hair draws,
   already deduplicated per index count) call `hair_groom::note_seen`; `flush_seen` merges them into
   `data/assetdb/hair_seen.txt` ("<index count> <index id>", id 0 = only the count known) at a level load and at device

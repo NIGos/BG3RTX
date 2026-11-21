@@ -1,0 +1,25 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-21, branch claude/r3-core. STAGED, not queued, not authorized.",
+  "questions": {
+    "r3-d3-jitter": "Without rr_post_temporal (Low-High), does sampling the jittered render-resolution A/C/B at uv + jitter (rr_post_jitter_align=1, the temporal_final convention) remove the DoF-edge shimmer of the output grade, at the same energy?",
+    "r3-s8-sun-overlap": "Does recording the RT sun trace beside the GI trace (rt_sun_overlap=1, no barrier between them) lower the total RT interval at an unchanged image?"
+  },
+  "evidence": ".scratch/coord/round1_core.md items 1-2; docs/progress/claude-r3-core.md. Jitter: shaders/rr_post.hlsl final samples at the unjittered uv, layer/rrpost.cpp stored the jitter only with the temporal pass. Sun: no data dependency between the GI passes and rt_shadow / rt_sun_resolve (read in the code); sun trace 0.68 ms at S8 Ultra (2026-11-11 split).",
+  "noise_rule": "Every threshold is the OFF repeat of the same run (off-b against off-a); materiality floors of tools/live_batches/sane_gates.py (cost max(0.1 ms, 1%), energy 0.5%).",
+  "predicted": {
+    "jitter_flicker": "Rendered K8 bursts (A/C/B) plus the logged shift, reconstructed at output resolution as analyze_d3.py does (uv + logged jitter / render size): the per-pixel temporal standard deviation of the graded value inside the DoF-transition mask (A in 0.05-0.95, frozen from the OFF windows) of 'on' is below the OFF pair's range. If it is ABOVE the OFF range instead, the jitter sign convention is wrong for both paths (temporal_final included): record it, and the next live tests rr_post_jitter_align=2.",
+    "jitter_energy": "Float pre-post mean (dumps.json) of energy-on within the OFF pair's range plus 0.5%: a bilinear shift of a field keeps its mean.",
+    "jitter_cost": "0 by construction (temporal_final is final plus one add); no cost window.",
+    "sun_rt_ms": "rt passes: GPU cost of 'on' at most the OFF pair's range; a drop of 0.05-0.2 ms is plausible but not derived (bounded by the 0.68 ms sun trace and the GI trace's drain tail). Below noise plus floor: INFO, the key stays off. Above: the overlap contends (two RT passes at once); record it, the key stays off.",
+    "sun_frame": "GI GPU ms of 'on' includes the sun trace (it runs inside the GI trace's timestamps): it rises by up to the sun trace's cost; that is expected, not a regression. Judge only the rt passes total.",
+    "faults": "0: no VK_ERROR, no crash, no core fault, no nonfinite."
+  },
+  "offline": {
+    "done": [
+      "tests/rr_post_temporal_test.cpp: the aligned lookup of a jittered ramp is stationary over 16 Halton phases, the unaligned one moves, the wrong sign twice as far, the mean is kept.",
+      "Key-off command stream unchanged in both files (read): rrpost_final runs P_FINAL with the same push; run_pre records the same barriers and dispatches in the same order. No shader edit: shader identity unchanged by construction, variants.txt delta 0."
+    ],
+    "missing": "A bit-for-bit replay of both sun orders: tools/frame_replay replays one dispatch of a pack (gi_hit_direct, reflections, local shadows), not rt_shadow / rt_sun_resolve and not a sequence of dispatches in one command buffer. Image identity of rt_sun_overlap rests on the dependency reading; the live's energy windows are not taken for it (S8 has none: cost only)."
+  },
+  "decision": "rr_post_jitter_align=1 becomes a High default candidate if the shimmer falls and the energy holds; the user decides with the numbers. rt_sun_overlap becomes a candidate only for a drop beyond noise plus floor."
+}

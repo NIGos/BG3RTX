@@ -38,6 +38,31 @@ int main() {
   check(!accepts(.5,.5,.5,{0,0},{2,0}),"motion mismatch rejected at one-pixel footprint");
   check(accepts(.5+1.0/16777215,.5,.5,{0,0},{0,0}),"D24 rounding accepted");
   check(!accepts(.5,.5,.5,{NAN,0},{0,0}),"nonfinite motion rejected");
+  {  // rr_post_jitter_align: a render-resolution step edge rendered with 16 Halton jitters (texel p holds the scene at
+     // p + 0.5 - j, temporal_final's convention), read bilinearly at output position x. Key 1 is stationary, key 0
+     // moves with the jitter, key 2 moves twice as far; the mean over the phases is the same for 0 and 1.
+    check(jitter_align_sign(0)==0 && jitter_align_sign(1)==1 && jitter_align_sign(2)==-1 && jitter_align_sign(7)==0,
+          "jitter align keys: 0 off, 1 plus, 2 minus, others off");
+    auto halton = [](int i, int b) { double f=1, r=0; for (; i>0; i/=b) { f/=b; r+=f*(i%b); } return r; };
+    auto scene = [](double s) { return std::clamp((s-8.0)/6.0, 0.0, 1.0); };   // linear over every tap read below
+    auto texel = [&](int p, double j) { return scene(p+0.5-j); };
+    auto read = [&](double u, double j) {   // bilinear at render-pixel position u (texel centres at p + 0.5)
+      const double t=u-0.5; const int p=int(std::floor(t)); const double f=t-p;
+      return texel(p,j)*(1-f)+texel(p+1,j)*f; };
+    double spread[3]={}, mean[3]={};
+    for (int key=0; key<3; ++key) {
+      double lo=1e9, hi=-1e9;
+      for (int i=0;i<16;++i) {
+        const double j=halton(i,2)+1.0/32-0.5;   // the 16 phases, centred: mean jitter 0
+        const double v=read(align_lookup(10.5,j,key),j);
+        lo=std::min(lo,v); hi=std::max(hi,v); mean[key]+=v/16;
+      }
+      spread[key]=hi-lo;
+    }
+    check(spread[1]<1e-12,"aligned lookup is stationary across the 16 jitter phases");
+    check(spread[0]>0.1 && spread[2]>1.9*spread[0],"unaligned lookup moves with the jitter, the wrong sign twice as far");
+    check(near(mean[0],mean[1]),"alignment keeps the mean over the jitter cycle");
+  }
   std::printf("post temporal CPU reference: %s; alternating mean 0.5, variance 1/3844, iid variance 1/124\n",failures?"FAIL":"PASS");
   return failures?1:0;
 }

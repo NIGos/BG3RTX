@@ -24,4 +24,10 @@ inline bool accepts(double old_depth, double lo_depth, double hi_depth,
         std::abs(mv[i]-old_mv[i]) > 1.0+(std::abs(mv[i])+std::abs(old_mv[i]))/1024.0) return false;
   return true;
 }
+// rr_post_jitter_align (layer/rrpost.cpp rrpost_final, without the temporal pass): the sign of the jitter shift
+// applied to the render-resolution A/C/B lookup at output resolution. 1 = temporal_final's convention
+// (uv + jitter / render size), 2 = the opposite sign (a sign check), anything else 0 (the plain `final`).
+inline double jitter_align_sign(int key) { return key == 1 ? 1.0 : key == 2 ? -1.0 : 0.0; }
+// The A/C/B lookup position in render pixels for output position x (render-pixel units), as the shader does it.
+inline double align_lookup(double x, double jitter, int key) { return x + jitter_align_sign(key) * jitter; }
 }
