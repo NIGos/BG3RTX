@@ -89,9 +89,11 @@ def readiness_timeouts(job, plan):
         if phase.get('wait_log'):
             phase['wait_log_timeout'] = 60 if i == 0 else pipeline_readiness.PIPELINE_TIMEOUT_S if rebuilds[-1] else 10
     # Only rebuild phases take the learned allowance: the startup keeps its 60 s (a startup median is not a cold build).
+    # A learned median (one VALID S8 run: the High reset was quiet in 0.023 s) never goes below the 10 s of a phase
+    # that changes no pipeline key.
     for phase, rebuild, limit in zip(plan, rebuilds, flow.readiness_budget.timeouts(job, plan)):
         if rebuild:
-            phase['wait_log_timeout'] = limit
+            phase['wait_log_timeout'] = max(10, limit)
 
 
 def watchdog(job, plan):

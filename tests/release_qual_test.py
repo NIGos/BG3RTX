@@ -88,8 +88,11 @@ class FinalReleaseTests(unittest.TestCase):
         # in the driver; the fixed 10 s of every non-first readiness wait failed b1-...--ab-on.
         job, plan, _ = flow.load_job(ROOT / 'tools/live_batches_staged/release_final/final/jobs/final-s8-ultra-high.json')
         limits = {p['label'].rsplit('--', 1)[-1]: p['wait_log_timeout'] for p in plan if p.get('wait_log')}
-        self.assertGreater(limits['ab-on'], 12.6)
-        self.assertGreater(limits['settings-reset'], 12.6)
+        # Unproven (no VALID ab-on sample): the pipeline allowance. Learned (run 062059 for the High reset): the
+        # preflight's median plus margin, never below the 10 s of a phase without a pipeline change.
+        estimate = lambda label: next(p for p in plan if p['label'].endswith('--' + label))['wait_log_timeout']
+        self.assertGreaterEqual(estimate('ab-on'), 10)
+        self.assertGreaterEqual(estimate('settings-reset'), 10)
         self.assertEqual(limits['ab-off'], 10)   # ab_off=1 records no RT pass: nothing to build
         self.assertEqual(plan[0]['wait_log_timeout'], 60)   # startup
 

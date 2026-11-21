@@ -2,10 +2,10 @@
   "final-s8-ultra-high": {
     "save": "Water Queens House",
     "load_allowance_seconds": 120,
-    "scheduled_seconds": 103.68,
-    "readiness_seconds": 8.06,
-    "expected_minutes": 3.86,
-    "hard_timeout_seconds": 694,
+    "scheduled_seconds": 92.852,
+    "readiness_seconds": 8.083,
+    "expected_minutes": 3.68,
+    "hard_timeout_seconds": 513,
     "captures": 2,
     "disk_estimate_mb": 130
   },
@@ -13,7 +13,7 @@
     "save": "Test Dialogue1",
     "load_allowance_seconds": 120,
     "scheduled_seconds": 94.89999999999999,
-    "readiness_seconds": 0.015,
+    "readiness_seconds": 0.014,
     "expected_minutes": 3.58,
     "hard_timeout_seconds": 300,
     "captures": 1,
