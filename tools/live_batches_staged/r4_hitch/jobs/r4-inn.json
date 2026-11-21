@@ -1,0 +1,349 @@
+{
+  "name": "r4-inn",
+  "save": "The Blushing Mermaid - 96h 39m",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "timeout": 974,
+  "max_minutes": 10,
+  "repeat": 1,
+  "live_batch": "r4-hitch",
+  "fail_fast": false,
+  "stop_on_dump": false,
+  "set": "preset=ultra,dev=1,fg=3,fps_cap=0,reflex=1,rt_capture_wide_split=1,headless=0,crash_dump=1,detailed_logging=1,cpu_timing=1,rt_stats_period_frames=120,rt_timing_frames=120,rt_scene_wait_log_frames=120,fg_state_every=120,dump_images=1,dump_png_width=1280,dump_raw=0,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,qa_exposure_hold=0,rt_hair=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=1,rt_hair_groom_primary_current=1,rt_hair_primary_frame_tag=1,rt_hair_groom_lod_keep=1,rt_hair_primary_hold=1,rt_hair_tangent_world=1,rt_hair_groom=1,rt_hair_groom_shadow_t=1,rt_hair_groom_ao_t=1,rt_hair_groom_cascade_drop=1,rt_hair_fibre=1,rt_hair_fibre_gi=1,rt_hair_fibre_spec=1,rt_hair_fibre_mapped=1,rr_hair_guides=1,rt_hair_physical_origin=1,rt_hair_capture=1,rt_hair_coverage_union=1,rt_hair_coverage_confirm=1,rt_hair_slot_stable=1,rt_hair_live_warmup=1,rt_hair_groom_nearest=1,rt_hair_header_cam_gpu=1,rt_hair_header_scene_pass=1,rt_hair_coverage_keep=1,rt_hair_mv_card=2,rt_hair_pixel_lod_k=1.0,rt_hair_pixel_lod=0,rt_hair_pixel_lod_small_keep=0.25,rr_hair_strand_aa=2,rt_hair_groom_async=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches_staged/r4_hitch/plans/r4-inn.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[stats\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[mem\\]",
+    "\\[vram\\]",
+    "\\[cpu\\]",
+    "\\[bvh\\] last",
+    "\\[rt\\] scene",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "gi: trace pass",
+    "ls: local-light shadow pass GPU median",
+    "rf: reflection pass GPU median",
+    "\\[ngx\\] gpu RR:",
+    "\\[rrpost\\] gpu",
+    "\\[sl\\] gpu FG input copy:",
+    "\\[sl\\] DLSS-G frame",
+    "\\[water\\] \\w+ GPU",
+    "\\[hair primary\\] (?:frame|live|strand G-buffer)",
+    "\\[hair groom\\] (?:frame|pixel LOD)",
+    "\\[hair fibre\\]",
+    "\\[dlss5\\]",
+    "\\[crash\\]",
+    "VK_ERROR",
+    "\\[log\\]",
+    "\\[geo\\] RT capture",
+    "\\[cascade\\] (?:capture|casters)",
+    "\\[bvh\\] mesh (?:cache|pool)",
+    "\\[trace\\]",
+    "\\[rrpost\\] exposure",
+    "\\[hair groom\\] [0-9a-f]{16} LOD \\d+ decoded \\(v3",
+    "\\[sl\\] warn .*Frame rate over"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[cfg\\] settings read",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[trace\\] frame \\d+ written",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
+  ],
+  "expect_every": [
+    {
+      "name": "rt passes GPU ms in every window",
+      "select": "rt passes: GPU cost",
+      "match": "rt passes: GPU cost",
+      "windows": [
+        "static-off-a",
+        "dolly-off-a-out1",
+        "dolly-off-a-in1",
+        "dolly-off-a-out2",
+        "dolly-off-a-in2",
+        "static-on",
+        "dolly-on-out1",
+        "dolly-on-in1",
+        "dolly-on-out2",
+        "dolly-on-in2",
+        "static-off-b",
+        "dolly-off-b-out1",
+        "dolly-off-b-in1",
+        "dolly-off-b-out2",
+        "dolly-off-b-in2"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "GI GPU ms in every window",
+      "select": "gi: GPU cost",
+      "match": "gi: GPU cost",
+      "windows": [
+        "static-off-a",
+        "dolly-off-a-out1",
+        "dolly-off-a-in1",
+        "dolly-off-a-out2",
+        "dolly-off-a-in2",
+        "static-on",
+        "dolly-on-out1",
+        "dolly-on-in1",
+        "dolly-on-out2",
+        "dolly-on-in2",
+        "static-off-b",
+        "dolly-off-b-out1",
+        "dolly-off-b-in1",
+        "dolly-off-b-out2",
+        "dolly-off-b-in2"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene build GPU ms in every window",
+      "select": "\\[rt\\] scene build GPU",
+      "match": "\\[rt\\] scene build GPU",
+      "windows": [
+        "static-off-a",
+        "dolly-off-a-out1",
+        "dolly-off-a-in1",
+        "dolly-off-a-out2",
+        "dolly-off-a-in2",
+        "static-on",
+        "dolly-on-out1",
+        "dolly-on-in1",
+        "dolly-on-out2",
+        "dolly-on-in2",
+        "static-off-b",
+        "dolly-off-b-out1",
+        "dolly-off-b-in1",
+        "dolly-off-b-out2",
+        "dolly-off-b-in2"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "scene wait in every window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "\\[rt\\] scene wait: \\d+ frames",
+      "windows": [
+        "static-off-a",
+        "dolly-off-a-out1",
+        "dolly-off-a-in1",
+        "dolly-off-a-out2",
+        "dolly-off-a-in2",
+        "static-on",
+        "dolly-on-out1",
+        "dolly-on-in1",
+        "dolly-on-out2",
+        "dolly-on-in2",
+        "static-off-b",
+        "dolly-off-b-out1",
+        "dolly-off-b-in1",
+        "dolly-off-b-out2",
+        "dolly-off-b-in2"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "rendered frame time in every window",
+      "select": "\\[pace\\] rendered frame time over \\d+ frames",
+      "match": "\\[pace\\] rendered frame time over \\d+ frames",
+      "windows": [
+        "static-off-a",
+        "dolly-off-a-out1",
+        "dolly-off-a-in1",
+        "dolly-off-a-out2",
+        "dolly-off-a-in2",
+        "static-on",
+        "dolly-on-out1",
+        "dolly-on-in1",
+        "dolly-on-out2",
+        "dolly-on-in2",
+        "static-off-b",
+        "dolly-off-b-out1",
+        "dolly-off-b-in1",
+        "dolly-off-b-out2",
+        "dolly-off-b-in2"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "CPU submit in every window",
+      "select": "\\[watch\\] presents",
+      "match": "\\[watch\\] presents",
+      "windows": [
+        "static-off-a",
+        "dolly-off-a-out1",
+        "dolly-off-a-in1",
+        "dolly-off-a-out2",
+        "dolly-off-a-in2",
+        "static-on",
+        "dolly-on-out1",
+        "dolly-on-in1",
+        "dolly-on-out2",
+        "dolly-on-in2",
+        "static-off-b",
+        "dolly-off-b-out1",
+        "dolly-off-b-in1",
+        "dolly-off-b-out2",
+        "dolly-off-b-in2"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "VRAM used and budget in every window",
+      "select": "\\[mem\\] device-local VRAM",
+      "match": "\\[mem\\] device-local VRAM",
+      "windows": [
+        "static-off-a",
+        "dolly-off-a-out1",
+        "dolly-off-a-in1",
+        "dolly-off-a-out2",
+        "dolly-off-a-in2",
+        "static-on",
+        "dolly-on-out1",
+        "dolly-on-in1",
+        "dolly-on-out2",
+        "dolly-on-in2",
+        "static-off-b",
+        "dolly-off-b-out1",
+        "dolly-off-b-in1",
+        "dolly-off-b-out2",
+        "dolly-off-b-in2"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "RR GPU ms in every window",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "\\[ngx\\] gpu RR:",
+      "windows": [
+        "static-off-a",
+        "dolly-off-a-out1",
+        "dolly-off-a-in1",
+        "dolly-off-a-out2",
+        "dolly-off-a-in2",
+        "static-on",
+        "dolly-on-out1",
+        "dolly-on-in1",
+        "dolly-on-out2",
+        "dolly-on-in2",
+        "static-off-b",
+        "dolly-off-b-out1",
+        "dolly-off-b-in1",
+        "dolly-off-b-out2",
+        "dolly-off-b-in2"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "groom decodes only on the worker in every ON outward dolly",
+      "select": "\\[hair groom\\] [0-9a-f]{16} LOD \\d+ decoded \\(v3",
+      "match": ", worker\\)",
+      "windows": [
+        "dolly-on-out1",
+        "dolly-on-out2"
+      ],
+      "event": true,
+      "min": 1,
+      "settle_s": 1
+    },
+    {
+      "name": "groom decodes in the build in every OFF outward dolly",
+      "select": "\\[hair groom\\] [0-9a-f]{16} LOD \\d+ decoded \\(v3",
+      "match": "decoded \\(v3\\)",
+      "windows": [
+        "dolly-off-a-out1",
+        "dolly-off-a-out2",
+        "dolly-off-b-out1",
+        "dolly-off-b-out2"
+      ],
+      "event": true,
+      "min": 1,
+      "settle_s": 1
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "\\[log\\] reached \\d+ MB"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] complete phases=22\\b",
+    "^Run ended: done"
+  ],
+  "live_flow": {
+    "expected_fps": 60,
+    "settings_latency_s": 1,
+    "trace_stall_s": 3,
+    "startup_only": [
+      "fg"
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 8.87836638058383,
+        "windows": 22,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r2-inn.1.020820.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.29100000000005366,
+      "quantile": 0.95,
+      "samples": 34,
+      "maximum": 0.3709999999999809
+    },
+    "trace_capture_stall": {
+      "seconds": 3.2509699999999997,
+      "source": "vr-s8.1.000745.log",
+      "quantile": 0.95,
+      "samples": 34,
+      "maximum": 3.2509699999999997,
+      "logs": 4
+    }
+  },
+  "estimated_phase_seconds": 506.792,
+  "post": "py -3 tools/live_batches_staged/r4_hitch/analyze.py --job tools/live_batches_staged/r4_hitch/jobs/r4-inn.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.perf.md\"",
+  "post_gate": true,
+  "purpose": "Groom LOD decodes on a worker at The Blushing Mermaid - 96h 39m, Ultra, RTX Hair On, FG 3x, unfocused: rt_hair_groom_async 0 / 1 / 0 live; per state a static window, two wheel dollies out and in, 4 float traces with the exposure held. Per window: rendered frame time p99 and max, scene wait max, groom decodes in the build and on the worker; energy ON against OFF. STAGED, not authorized.",
+  "window_mode": "visible_unfocused_fg"
+}

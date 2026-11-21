@@ -169,6 +169,9 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     # BLAS chunk size classes and the kept cascade BLAS on a refusal (claude/r2-layer, common/as_chunk_alloc.h same_class,
     # layer/bvhsplit.cpp as_create and the cascade build): host placement only, no pipeline.
     "rt_as_size_class rt_cascade_keep_refused "
+    # Groom LOD decode on a worker thread (layer/hair_groom.cpp read_lod_async, read per groom upload in
+    # layer/bvhsplit.cpp groom_lod): host scheduling only, no pipeline (claude/r4-hitch).
+    "rt_hair_groom_async "
     # Scene handout: the hit-material passes take the committed pair (core/gi.cpp handout_hit_settle) and the layer
     # skips the commit-time query (layer/rtscene.cpp). The same pipelines (constant 1051 follows rt_scene_handout).
     "rt_scene_handout_hit_wait".split())
