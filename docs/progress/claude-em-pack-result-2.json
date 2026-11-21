@@ -1,0 +1,38 @@
+{
+ "shaded": 2731520,
+ "raised_pixels": 0,
+ "alpha_changed": 0,
+ "changed": 1128,
+ "mean_off": 0.006082870934049685,
+ "mean_on": 0.005901887404205435,
+ "e_off": 0.44048337159478074,
+ "e_on": 0.002220843722296099,
+ "pt": 0.03792795391695323,
+ "mae_off": 0.40611157892804584,
+ "mae_on": 0.03856552115369799,
+ "dropped": 0.43826252787248465,
+ "tiles": 55,
+ "tiles_closer": 55,
+ "tiles_farther": 0,
+ "giraw_off_changed": 0.4424588645774422,
+ "giraw_on_changed": 0.00419633670495757,
+ "giraw_none_changed": 0.0019754929826614706,
+ "pt64": {
+  "pt": 0.037654,
+  "mae_off": 0.40589,
+  "mae_on": 0.0385301,
+  "tiles_closer": 55,
+  "tiles_farther": 0
+ },
+ "vs_live_giRaw": {
+  "bitequal_pct": 94.4282,
+  "mean_absdiff": 0.0104852,
+  "max": 159.875
+ },
+ "pack": "replay-20261121-071523-1 (1579 MB, frame 2077)",
+ "gpu_ms": {
+  "off": 9.821,
+  "on": 9.437,
+  "none": 6.06
+ }
+}
