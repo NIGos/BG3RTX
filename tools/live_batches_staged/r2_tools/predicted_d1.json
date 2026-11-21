@@ -1,0 +1,15 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-21, branch claude/roof-em-on. STAGED, not queued, not authorized.",
+  "job": "tools/live_batches_staged/r2_tools/jobs/r2-d1-roof-em.json",
+  "question": "Does gi_far_roof_emission=1 (specialization 1054, the far roof rule for hidden-hit emission) cost GI GPU time in Test Dialogue1 on release Ultra, as two different runs suggest?",
+  "toggle": "gi_far_roof_emission 0 / 1 / 0 live (Apply::Live; a specialization constant of the gi_far GI trace files: each toggle rebuilds them, the window waits for a fresh pipelines-quiet [watch] period after the settings acknowledgement; warm-on / warm-off build both variants before the windows).",
+  "evidence": "Descriptive, two different runs (not an A/B): final-stock-hair-dialogue1 062427 (key 0) gi trace median 8.49 ms, gi GPU 10.45-10.47, rt passes 13.44; 080029 (key 1) 9.49-9.68, 11.47-11.74, 14.23-14.48. The inn in-run A/B (r2-inn-roof-em) had equal GI ms.",
+  "noise_rule": "Every threshold is the OFF repeat of the same run (d-static-off-b against d-static-off-a, plus half the range of the single OFF periods); floors of tools/live_batches/sane_gates.py: cost max(0.1 ms, 1%), energy 0.5%.",
+  "predicted": {
+    "gi_ms": "Not derived. The roof loop runs only for a hidden-hit emitter beyond R0 (1 m) with radiance > 0, so its cost scales with such hits on screen; the inn had none that cost. If d-static-on GI GPU ms or the GI trace median exceed the OFF pair by more than noise plus floor, the key costs that much in Dialogue1: FAIL, recorded with the numbers for the user (AGENTS: never drop a correct effect only for its ms). Within noise plus floor: the cross-run +1 ms was the two runs, not the key.",
+    "rt_ms": "rt passes GPU ms of ON within noise plus floor of the OFF pair, or above it by the GI difference (the GI trace is inside the RT interval).",
+    "energy": "Float pre-post mean of d-energy-on within the OFF samples' range or within 0.5% (the PT A/B verdict: the rule removes leaked emission through cut roofs; Dialogue1 is an interior close-up, a small or no change).",
+    "faults": "0: no VK_ERROR, no crash, no core fault; scene wait timeouts not above the OFF windows."
+  },
+  "decision": "Within noise plus floor: the default stays 1. A cost beyond it goes to the user with the GI and RT ms per state; the decision (default 1 in Ultra or 0) is theirs."
+}

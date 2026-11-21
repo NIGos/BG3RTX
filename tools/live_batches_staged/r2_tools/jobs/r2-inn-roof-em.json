@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 1115,
+  "timeout": 1135,
   "max_minutes": 9,
   "repeat": 1,
   "live_batch": "r2-tools",
@@ -188,23 +188,40 @@
       "fg",
       "replay_pack_cap_mb"
     ],
-    "fps_windows": [],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 9.213759213760902,
+        "windows": 47,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r2-inn-em-pack.1.071358.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r2-inn.1.020820.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r4-inn.1.030500.log"
+        ]
+      }
+    ],
     "trace_export": {
-      "seconds": 0.3709999999999809,
+      "seconds": 0.34699999999793363,
       "quantile": 0.95,
-      "samples": 18,
-      "maximum": 0.3709999999999809
+      "samples": 47,
+      "maximum": 0.37299999999959255
     },
     "trace_capture_stall": {
-      "seconds": 5.17137,
-      "source": "hx1-s8-hair-stable.1.194658.log",
+      "seconds": 2.80802,
+      "source": "final-stock-hair-dialogue1.1.062427.log",
       "quantile": 0.95,
-      "samples": 18,
-      "maximum": 5.17137,
-      "logs": 3
+      "samples": 47,
+      "maximum": 3.15272,
+      "logs": 11
     }
   },
-  "estimated_phase_seconds": 190.672,
+  "estimated_phase_seconds": 183.172,
   "post_gate": false,
   "purpose": "Far roof rule for hidden-hit emission at The Blushing Mermaid, Ultra, FG 3x, unfocused, static camera: gi_far_roof_emission 0 / 1 / 0 live. Per window: GI GPU ms and the other cost lines; energy of the ON state against the OFF pair; then one GI replay pack (key 0) for the offline PT reference A/B of constant 1054. STAGED, not authorized.",
   "window_mode": "visible_unfocused_fg"

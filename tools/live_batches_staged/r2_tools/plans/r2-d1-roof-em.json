@@ -1,0 +1,252 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 35.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 35.0,
+    "motion_end": 35.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,gi_far_roof_emission=0,replay_pack=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[auto\\] scene ready"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 120
+  },
+  {
+    "label": "warm-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 6.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 6.0,
+    "motion_end": 6.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=1,qa_exposure_hold=0,replay_pack=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 40,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "warm-off",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 4.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 4.0,
+    "motion_end": 4.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=0,qa_exposure_hold=0,replay_pack=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 40,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "d-static-off-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 41.904,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 41.904,
+    "motion_end": 41.904,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=0,qa_exposure_hold=0,replay_pack=0,rt_stats_period_frames=120",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost"
+    ],
+    "wait_log_timeout": 30
+  },
+  {
+    "label": "d-energy-off-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 17.4,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 17,
+    "motion_end": 17,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=0,qa_exposure_hold=1,replay_pack=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30,
+    "trace_at": [
+      1,
+      6,
+      11
+    ]
+  },
+  {
+    "label": "d-static-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 41.904,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 41.904,
+    "motion_end": 41.904,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=1,qa_exposure_hold=0,replay_pack=0,rt_stats_period_frames=120",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost"
+    ],
+    "wait_log_timeout": 40,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "d-energy-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 17.4,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 17,
+    "motion_end": 17,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=1,qa_exposure_hold=1,replay_pack=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30,
+    "trace_at": [
+      1,
+      6,
+      11
+    ]
+  },
+  {
+    "label": "d-static-off-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 41.904,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 41.904,
+    "motion_end": 41.904,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=0,qa_exposure_hold=0,replay_pack=0,rt_stats_period_frames=120",
+    "frames": 420,
+    "settle_frames": 60,
+    "stats_reset": true,
+    "wait_stats": [
+      "rt passes: GPU cost",
+      "gi: GPU cost"
+    ],
+    "wait_log_timeout": 40,
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "d-energy-off-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 17.4,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 17,
+    "motion_end": 17,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=0,qa_exposure_hold=1,replay_pack=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30,
+    "trace_at": [
+      1,
+      6,
+      11
+    ]
+  },
+  {
+    "label": "restore",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 1.1,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_far_roof_emission=1,qa_exposure_hold=0,replay_pack=0",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 40
+  }
+]

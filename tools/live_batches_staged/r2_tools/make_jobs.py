@@ -7,7 +7,11 @@ visible_unfocused_fg, static camera; gi_far_roof_emission 0 / 1 / 0 live in one 
 of 3 periods and a static energy window (exposure held, float traces). Last, one GI replay pack (replay_pack=1, key 0)
 for the offline PT reference: frame_replay re-runs the pack's hit_sun pass with constant 1054 at 0 and 1 against
 `--pt-reference` (predicted.json "offline"). predicted.json precedes the jobs. Helpers are perf_ab's (one copy).
-Nothing here writes a watched queue inbox.
+r2-d1-roof-em: Test Dialogue1, the release Ultra state of release_final's final-stock-hair-dialogue1 (its exported
+profile, stock hair), visible_unfocused_fg, static camera; gi_far_roof_emission 0 / 1 / 0 live (specialization 1054:
+each toggle waits for a fresh pipelines-quiet period), a 3-period cost window and a 3-trace energy window per state.
+analyze.py judges GI GPU ms, the GI trace median and RT passes against the OFF pair with tools/live_batches/sane_gates.py,
+energy within 0.5% (predicted_d1.json). Nothing here writes a watched queue inbox.
 """
 from pathlib import Path
 import sys
@@ -63,17 +67,63 @@ def roof_em_job():
     return plan, j
 
 
+D1 = "Test Dialogue1"
+D1_FINAL = ROOT / "tools/live_batches_staged/release_final/final/jobs/final-stock-hair-dialogue1.json"
+
+
+def d1_roof_em_job():
+    """Cross-run Dialogue1 GI cost rose with the key (062427 key 0 against 080029 key 1): one in-run A/B."""
+    from tools.live_batches import live_flow as flow
+    from tools.live_batches_staged.omm_ab.make_jobs import override
+    final, fplan, _ = flow.load_job(D1_FINAL)
+    # dev=1 keeps the developer key toggled by the plan (the release policy resets it at dev=0); the exported profile is
+    # already resolved, so dev=1 changes no other value (omm_ab does the same).
+    start = override(final["set"], keys(0) + ",dev=1")
+    warmup = dict(fplan[0], label="warmup", set=override(fplan[0].get("set", "qa_exposure_hold=0"), keys(0)))
+    plan = [warmup, pab.phase("warm-on", 6, keys(1)), pab.phase("warm-off", 4, keys(0))]
+    for state, on in (("off-a", 0), ("on", 1), ("off-b", 0)):
+        plan += [pab.phase(f"d-static-{state}", 12, keys(on), frames=STATIC),
+                 pab.energy_phase(f"d-energy-{state}", keys(on, hold=1), TRACES)]
+    plan += [pab.phase("restore", 2, keys(1))]
+    name = "r2-d1-roof-em"
+    j = pab.focused_job(name, D1, start, plan, [], [r"\[ngx\] RR create .*: Success"],
+                        "gi_far_roof_emission 0 / 1 / 0 live in Test Dialogue1, release Ultra (stock hair), static camera, "
+                        "visible_unfocused_fg: GI GPU ms, the GI trace median and RT passes of ON against the OFF pair "
+                        "(cross-run 062427 / 080029 showed about +1 ms GI), energy per state from float traces.",
+                        batch=BATCH, live_batch="r2-tools")
+    timed = [p["label"] for p in plan if p.get("frames") and not p.get("trace_at")]
+    j.update(window_mode="visible_unfocused_fg", args=[a for a in j["args"] if a != "-Foreground"],
+             timeout=600, max_minutes=10, fail_fast=False,
+             patterns=list(dict.fromkeys(final["patterns"] + pab.PATTERNS + [r"\[trace\]", r"\[rrpost\] exposure held"])),
+             forbid=list(dict.fromkeys(final["forbid"] + pab.FORBID)),
+             expect_every=[pab.every(n + " in every window", s, s, timed, min=1) for n, s in pab.LINES[:2]])
+    j["expect"] += [r"\[trace\] frame \d+ written", r"\[rrpost\] exposure held \(qa_exposure_hold=1\) at EV [-0-9.]+"]
+    j["live_flow"] = dict({k: v for k, v in final["live_flow"].items() if k != "fps_windows"}, trace_stall_s=5.18)
+    j["post"] = (f"py -3 {BATCH}/analyze.py --job {BATCH}/jobs/{name}.json "
+                 '--log "{log}" --runner "{runner}" --out "{log}.perf.md"')
+    j["post_gate"] = True
+    return plan, j
+
+
 def measured(p):
     if p.get("trace_at"):
         return None
-    return STATIC if p["label"].startswith("static-") else 2 * PERIOD
+    return STATIC if p["label"].startswith(("static-", "d-static-")) else 2 * PERIOD
 
 
 def main():
-    assert (HERE / "predicted.json").exists(), "predicted.json precedes the jobs"
-    made = [roof_em_job()]
+    assert (HERE / "predicted.json").exists() and (HERE / "predicted_d1.json").exists(), "predicted*.json precede the jobs"
+    made = [roof_em_job(), d1_roof_em_job()]
     pab.write_made(HERE, made)
     added = pab.retime([j["name"] for _, j in made], here=HERE, measured=measured)
+    # The D1 cap from its final waits (release_qual's watchdog: plan + readiness allowance + 120 s load); the first
+    # tightening pass ran with the 180 s pipeline allowance before retime set the 40 s live-toggle waits.
+    from tools.live_batches import live_flow as flow
+    from tools.live_batches.release_qual.make_final import watchdog
+    path = HERE / "jobs" / "r2-d1-roof-em.json"
+    j, plan, _ = flow.load_job(path)
+    watchdog(j, plan)
+    flow.write(path, j)
     print("Generated", ", ".join(j["name"] for _, j in made), f"- no queue staging; {added} new entries appended to "
           "lint_corpus_snapshot.json")
 
