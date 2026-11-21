@@ -1,0 +1,15 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-21, branch claude/r5-ultra-shift. STAGED, not queued, not authorized.",
+  "question": "Does Ultra's temporal post (rr_post_temporal=1) add background motion through its jitter terms (history reprojected by previous - current jitter, output lookup at uv + jitter)? rr_post_jitter_align=3 removes both terms.",
+  "evidence": "docs/progress/claude-r3-core-live.md: on High the same +jitter lookup made the blurred background flicker 2-4x (output |diff| x 1000 0.48 -> 1.86 at x-gradient pixels): there the game's DoF layers do not carry the jitter. layer/rrpost.cpp rrpost_temporal / rrpost_final apply the same convention to the temporal history. The code alone cannot settle it: the shift is self-consistent only if A/C/B carry the jitter (tests/rr_post_temporal_test.cpp, 1D model: each convention is stationary for its own content and moves for the other).",
+  "noise_rule": "Every threshold is the OFF repeat of the same run (off-b against off-a). Flicker: a state differs only beyond the OFF pair's range plus 10% (the OFF repeat spread of r3-d3-jitter's background metrics was 3-17%). Energy: within the OFF range plus 0.5% (sane_gates floor).",
+  "predicted": {
+    "if_shift_wrong": "Key 3 lowers blurred_x / blurred_y and the low and middle bg_absdiff_by_C_grad bins below the OFF range (the 1/16 history damps the per-frame motion, so the drop is smaller than High's 2-4x rise). in_focus_control within the OFF range plus 10%.",
+    "if_shift_right": "Key 3 raises those metrics above the OFF range (the history then mixes misaligned frames) or leaves them inside it.",
+    "energy": "final_mean and the float trace means (dumps.json) of ON within the OFF range plus 0.5%: either convention is a shift of a field and keeps its mean.",
+    "cost": "0 ms: the same passes and push constants with two terms set to 0.",
+    "faults": "0: no VK_ERROR, no crash, no core fault, no nonfinite, no temporal REFUSED."
+  },
+  "analysis": "py -3 -I tools/live_batches_staged/r5_ultra_shift/analyze_jitter.py <pan off-a> <pan on> <pan off-b> <out.json>; float trace means from each trace's dumps.json (scene before post, RR output).",
+  "decision": "Shift wrong (first case): a follow-up branch makes the zero-shift convention the Ultra default candidate, with the user's visual check at Test Dialogue3 (DoF background). Otherwise the Ultra convention stays, and value 3 is removed again."
+}

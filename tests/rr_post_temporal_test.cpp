@@ -63,6 +63,30 @@ int main() {
     check(spread[0]>0.1 && spread[2]>1.9*spread[0],"unaligned lookup moves with the jitter, the wrong sign twice as far");
     check(near(mean[0],mean[1]),"alignment keeps the mean over the jitter cycle");
   }
+  {  // rr_post_jitter_align=3: no jitter term in the temporal path. Key-off float math unchanged.
+    const float pj=0.21875f, j=-0.03125f;
+    check(history_offset(pj,j,0)==pj-j && history_offset(pj,j,1)==pj-j && output_offset(j,0)==j,"default offsets: previous - current jitter, uv + jitter");
+    check(history_offset(pj,j,3)==0.0f && output_offset(j,3)==0.0f && jitter_align_sign(3)==0,"key 3: both temporal offsets 0, plain final without the temporal pass");
+    // A 1D model of temporal + temporal_final over 64 Halton phases: content texel p holds the scene at p + 0.5 - j
+    // (jittered) or at p + 0.5 (the game's blurred layers when they ignore the jitter). Output at x after warm-up.
+    auto halton = [](int i, int b) { double f=1, r=0; for (; i>0; i/=b) { f/=b; r+=f*(i%b); } return r; };
+    auto scene = [](double s) { return std::clamp((s-4.0)/184.0, 0.0, 1.0); };
+    auto spread = [&](bool jittered, int key) {
+      const int N=192; double hist[N];   /* wide: the clamped edges reach at most 64 px in 64 frames */ double pj=0, lo=1e9, hi=-1e9;
+      auto tex = [&](const double* a, double u) { const double t=u-0.5; int p=int(std::floor(t)); const double f=t-p;
+        p=std::clamp(p,0,N-2); return a[p]*(1-f)+a[p+1]*f; };
+      for (int n=0;n<64;++n) {
+        const double jn=halton(n%16,2)+1.0/32-0.5; double cur[N], next[N];
+        for (int p=0;p<N;++p) cur[p]=scene(p+0.5-(jittered?jn:0.0));
+        for (int p=0;p<N;++p) next[p]=n==0?cur[p]:tex(hist,p+0.5+history_offset(pj,jn,key))*(15.0/16)+cur[p]/16;
+        std::copy(next,next+N,hist); pj=jn;
+        if (n>=48) { const double v=tex(hist,96.0+output_offset(jn,key)); lo=std::min(lo,v); hi=std::max(hi,v); }
+      }
+      return hi-lo; };
+    check(spread(true,0)<1e-12,"jittered content: the default temporal shifts give a stationary output");
+    check(spread(false,3)<1e-12,"unjittered content: key 3 gives a stationary output");
+    check(spread(false,0)>1e-4 && spread(true,3)>1e-4,"the mismatched convention moves the output");
+  }
   std::printf("post temporal CPU reference: %s; alternating mean 0.5, variance 1/3844, iid variance 1/124\n",failures?"FAIL":"PASS");
   return failures?1:0;
 }

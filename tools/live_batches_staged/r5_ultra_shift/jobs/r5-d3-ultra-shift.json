@@ -1,0 +1,242 @@
+{
+  "name": "r5-d3-ultra-shift",
+  "save": "Test Dialogue3",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 1108,
+  "max_minutes": 8,
+  "repeat": 1,
+  "live_batch": "r5-ultra-shift",
+  "fail_fast": false,
+  "stop_on_dump": false,
+  "set": "preset=ultra,dev=1,fg=2,fps_cap=0,reflex=1,rt_capture_wide_split=1,headless=0,crash_dump=1,detailed_logging=1,cpu_timing=1,rt_stats_period_frames=120,rt_timing_frames=120,rt_scene_wait_log_frames=120,fg_state_every=120,dump_images=0,dump_raw=0,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,qa_exposure_hold=0,dump_png_width=384,fg_snap_any=1,fg_snap_delay_ms=0,fg_letterbox=1,rr_post_jitter_align=0,rr_post_temporal=1,pan_post=1,pan_edge=1,fg_snap=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches_staged/r5_ultra_shift/plans/r5-d3-ultra-shift.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[stats\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[mem\\]",
+    "\\[vram\\]",
+    "\\[cpu\\]",
+    "\\[bvh\\] last",
+    "\\[rt\\] scene",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "gi: trace pass",
+    "ls: local-light shadow pass GPU median",
+    "rf: reflection pass GPU median",
+    "\\[ngx\\] gpu RR:",
+    "\\[rrpost\\] gpu",
+    "\\[sl\\] gpu FG input copy:",
+    "\\[sl\\] DLSS-G frame",
+    "\\[water\\] \\w+ GPU",
+    "\\[hair primary\\] (?:frame|live|strand G-buffer)",
+    "\\[hair groom\\] (?:frame|pixel LOD)",
+    "\\[hair fibre\\]",
+    "\\[dlss5\\]",
+    "\\[crash\\]",
+    "VK_ERROR",
+    "\\[log\\]",
+    "\\[pan\\]",
+    "\\[trace\\]",
+    "\\[rrpost\\]",
+    "\\[sl\\] present capture"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[cfg\\] settings read",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+    "\\[rrpost\\] temporal jitter shift off \\(rr_post_jitter_align=3"
+  ],
+  "expect_every": [
+    {
+      "name": "AC/EB K8 off-a",
+      "select": "\\[pan\\] burst 98950 complete",
+      "match": "\\[pan\\] burst 98950 complete: 8 frames, \\d+ samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-off-a"
+      ]
+    },
+    {
+      "name": "shift logged off-a",
+      "select": "\\[rrpost\\] energy jitter",
+      "match": "\\[rrpost\\] energy jitter [-\\d.e+]+ [-\\d.e+]+, render \\d+x\\d+, temporal 1, align 0",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-off-a"
+      ]
+    },
+    {
+      "name": "presented K8 off-a",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-off-a"
+      ]
+    },
+    {
+      "name": "float energy off-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-off-a"
+      ]
+    },
+    {
+      "name": "AC/EB K8 on",
+      "select": "\\[pan\\] burst 98951 complete",
+      "match": "\\[pan\\] burst 98951 complete: 8 frames, \\d+ samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-on"
+      ]
+    },
+    {
+      "name": "shift logged on",
+      "select": "\\[rrpost\\] energy jitter",
+      "match": "\\[rrpost\\] energy jitter -?0 -?0, render \\d+x\\d+, temporal 1, align 0",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-on"
+      ]
+    },
+    {
+      "name": "presented K8 on",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-on"
+      ]
+    },
+    {
+      "name": "float energy on",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-on"
+      ]
+    },
+    {
+      "name": "AC/EB K8 off-b",
+      "select": "\\[pan\\] burst 98952 complete",
+      "match": "\\[pan\\] burst 98952 complete: 8 frames, \\d+ samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-off-b"
+      ]
+    },
+    {
+      "name": "shift logged off-b",
+      "select": "\\[rrpost\\] energy jitter",
+      "match": "\\[rrpost\\] energy jitter [-\\d.e+]+ [-\\d.e+]+, render \\d+x\\d+, temporal 1, align 0",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-off-b"
+      ]
+    },
+    {
+      "name": "presented K8 off-b",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-off-b"
+      ]
+    },
+    {
+      "name": "float energy off-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-off-b"
+      ]
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "\\[log\\] reached \\d+ MB",
+    "\\bnon-?finite(?: terms)?\\s*[:=]?\\s+[1-9]\\d*\\b",
+    "\\[rrpost\\] temporal REFUSED"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] complete phases=16\\b",
+    "^Run ended: done",
+    "\\[window-mode\\].*visible_unfocused",
+    "\\[motion-trace\\] phase=6 label=energy-off-a repeat=0",
+    "\\[motion-trace\\] phase=10 label=energy-on repeat=0",
+    "\\[motion-trace\\] phase=14 label=energy-off-b repeat=0"
+  ],
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 23.310023310018565,
+        "windows": 16,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r3-d3-jitter.1.034009.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.28800000000046566,
+      "quantile": 0.95,
+      "samples": 38,
+      "maximum": 0.3280000000013388
+    },
+    "trace_capture_stall": {
+      "seconds": 2.79161,
+      "source": "fl-s8-holdpack.1.015440.log",
+      "quantile": 0.95,
+      "samples": 38,
+      "maximum": 2.9681100000000002,
+      "logs": 6
+    }
+  },
+  "estimated_phase_seconds": 124.376,
+  "post_gate": false,
+  "purpose": "rr_post_jitter_align 0 / 3 / 0 in Test Dialogue3 on Ultra (temporal post on), static camera: per state a rendered K8 burst of the temporal A/C/B, a presented K8 capture and a float energy trace. Decides whether the temporal path's jitter terms add background motion. STAGED, not authorized.",
+  "window_mode": "visible_unfocused_fg"
+}
