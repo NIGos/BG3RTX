@@ -79,6 +79,52 @@ inline uint64_t pool_trim_target(uint64_t target,uint64_t tail,uint64_t reserved
  const uint64_t trimmed=(std::max)(target,(tail+q-1)/q*q);
  return pool_shrink_overlap(trimmed,reserved)?trimmed:0;
 }
+// rt_mesh_pool_trim_move (claude/r3-layer, 2026-11-21, default 0). With native hair a single range at the pool's end
+// blocks the trim (hx1-s8-hair-stable 001645 00:19:54: "the pool's end is in use", 1479 MB for 648 used, target 988 MB).
+// Cached meshes and hold snapshots can move (the repack moves them); every other range is pinned (groom arrays and
+// points, hair bounds, OMM indices, pending frees, anything not listed). The cut is the larger of the target and the end
+// of the highest pinned range, in 16 MiB; the movable ranges that reach past it move into free space below it, in the
+// same in-command copy as the trim. Returns the new capacity (0: no trim) and fills `out` (the allocator after the
+// moves) and `moves` (index into `movable`, new offset). Ranges in `movable` must be live ranges of `ra`.
+struct PoolRange { uint64_t off, size; };
+struct PoolMoveTo { size_t range; uint64_t to; };
+inline uint64_t pool_trim_move_plan(const as_chunks::RangeAlloc& ra, const std::vector<PoolRange>& movable,
+                                    uint64_t target, as_chunks::RangeAlloc& out, std::vector<PoolMoveTo>& moves) {
+  moves.clear();
+  const uint64_t q = 16ull << 20;
+  if (!target || !ra.cap) return 0;
+  // The highest pinned byte: walk the used intervals (the gaps between free blocks) from the top, stripping the movable
+  // ranges that end exactly where the remaining interval ends.
+  std::map<uint64_t, uint64_t> by_end;   // end -> start of each movable range
+  for (const PoolRange& r : movable) {
+    if (!r.size || r.off > ra.cap || r.size > ra.cap - r.off) return 0;
+    by_end[r.off + r.size] = r.off;
+  }
+  uint64_t pinned_end = 0, hi = ra.cap;
+  for (auto it = ra.free.rbegin();; ++it) {
+    const uint64_t lo = it == ra.free.rend() ? 0 : it->first + it->second;   // used interval [lo, hi)
+    uint64_t top = hi;
+    for (auto m = by_end.find(top); top > lo && m != by_end.end() && m->second >= lo; m = by_end.find(top)) top = m->second;
+    if (top > lo) { pinned_end = top; break; }
+    if (it == ra.free.rend()) break;
+    hi = it->first;
+  }
+  if (pinned_end > UINT64_MAX - q) return 0;
+  const uint64_t cut = (std::max)(target, (pinned_end + q - 1) / q * q);
+  if (!pool_shrink_overlap(cut, ra.cap)) return 0;
+  out = ra;
+  std::vector<size_t> above;
+  for (size_t i = 0; i < movable.size(); ++i)
+    if (movable[i].off + movable[i].size > cut) { above.push_back(i); out.release(movable[i].off, movable[i].size); }
+  if (!out.shrink(cut)) return 0;
+  std::sort(above.begin(), above.end(), [&](size_t a, size_t b) { return movable[a].size > movable[b].size; });
+  for (size_t i : above) {
+    uint64_t to = 0;
+    if (!out.alloc(movable[i].size, 16, &to)) { moves.clear(); return 0; }
+    moves.push_back({i, to});
+  }
+  return out.used == ra.used ? cut : 0;
+}
 inline bool hold_move_matches(uint64_t offset,uint64_t size,uint64_t source,uint64_t bytes){
  return size && offset==source && size==bytes;
 }

@@ -551,6 +551,7 @@ struct GroomSlot {
   uint64_t first_seen = 0;     // the frame this slot was made (warm-up line: frames until its key was published)
   AsAlloc as;
   VkDeviceSize build_scratch = 0, update_scratch = 0;
+  VkDeviceSize as_full = 0;    // the full build's accelerationStructureSize (as.size is smaller once compacted)
   bool built = false;          // the BLAS holds a full build of this LOD
   uint64_t rec = 0;            // build record of its last build/refit (refit once that was submitted)
   Buf readback;                // host-visible: the compacted size (at 32), then a ring of bounds (24 bytes per frame)
@@ -1038,6 +1039,7 @@ struct GroomStats {
   uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0, lod_waits = 0, lod_drops = 0;
   uint64_t keyed_new = 0, key_wait_sum = 0, key_wait_max = 0;   // slots whose first key was published (warm-up line)
   uint64_t shared_withheld = 0;   // rt_hair_shared_key: groom rows whose shared key was withheld (cards)
+  uint64_t regrown = 0;   // full builds that needed the full size back after compaction (hair_groom::groom_storage)
   // 5q diagnostic: slots whose points left their own bounds between consecutive builds, of the judged pairs of builds.
   uint64_t jumps = 0, jump_judged = 0;
   // rt_hair_slot_stable: draws given another occurrence than their draw order, in captures where the order of the
@@ -1988,10 +1990,13 @@ uint32_t status_slots(uint32_t n) {
   // A batch still waiting for its done word (up to 240 frames: a recorded command buffer not yet submitted) whose slot
   // the ring hands out again would read a later batch's done word as its own. Not seen; counted so a log proves it.
   static uint64_t aliased = 0;
-  for (const JobBatch& b : g_batches)
-    if (!b.relocation && b.done_slot >= s && b.done_slot < s + n && (++aliased & (aliased - 1)) == 0)
+  for (const JobBatch& b : g_batches) {
+    if (b.relocation || b.done_slot < s || b.done_slot >= s + n) continue;
+    const uint64_t k = ++aliased;   // one read: `++a & (a - 1)` is unsequenced
+    if ((k & (k - 1)) == 0)
       log("[bvh] status ring wrapped onto the done word of a batch still pending (frame %llu, %llu times)",
-          (unsigned long long)b.frame, (unsigned long long)aliased);
+          (unsigned long long)b.frame, (unsigned long long)k);
+  }
   std::memset(g_status.map + VkDeviceSize(s) * 16, 0, size_t(n) * 16);
   return s;
 }
@@ -2035,28 +2040,87 @@ void pool_repack_begin(VkCommandBuffer cmd, uint64_t rec, uint64_t now) {
   if (!g_batches.empty()) {deferred("outstanding build results");return;}
   if (hair_ranges) {
     const VkDeviceSize before = g_pool.size;
-    const VkDeviceSize trimmed = vram_compact::pool_trim_target(target, g_pool_ra.tail(), before);
-    if (!trimmed) {deferred("native hair ranges (the pool's end is in use: no trim)");return;}
+    VkDeviceSize trimmed = 0;
+    // rt_mesh_pool_trim_move (vram_compact::pool_trim_move_plan): cached meshes and hold snapshots past the cut move
+    // below it in the same copy. Meshes move only while the hit-material jobs are frozen (none pending, every scene's
+    // offsets snapshotted, as for the repack); otherwise they stay pinned and only holds move.
+    struct Owner { uint64_t key; int what; };   // what: 0 mesh positions, 1 mesh basis, 2 hold snapshot
+    std::vector<vram_compact::PoolRange> movable;
+    std::vector<Owner> owners;
+    std::vector<vram_compact::PoolMoveTo> moves;
+    as_chunks::RangeAlloc planned;
+    bool frozen = false;
+    const bool trim_move = cfg_int("rt_mesh_pool_trim_move", 0) != 0;
+    if (trim_move) {
+      frozen = native_hit::pool_compact_freeze();
+      if (frozen)
+        for (const auto& [key, m] : g_meshes) {
+          if (m.state != kReady) continue;
+          if (m.pool_size) { movable.push_back({m.pool_off, m.pool_size}); owners.push_back({key, 0}); }
+          if (m.basis_size) { movable.push_back({m.basis_off, m.basis_size}); owners.push_back({key, 1}); }
+        }
+      for (const auto& [key, d] : g_dyn)
+        if (d.hold_size) { movable.push_back({d.hold_off, d.hold_size}); owners.push_back({key, 2}); }
+      trimmed = vram_compact::pool_trim_move_plan(g_pool_ra, movable, target, planned, moves);
+    } else {
+      trimmed = vram_compact::pool_trim_target(target, g_pool_ra.tail(), before);
+    }
+    auto thaw = [&] { if (frozen) native_hit::pool_compact_thaw(); };
+    if (!trimmed) {thaw();deferred("native hair ranges (the pool's end is in use: no trim)");return;}
     Buf nb;
     if (!make_buf(nb, trimmed, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
             VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "mesh pool trim")) {
-      deferred("trim allocation failed");g_pool_quiet = {};return;
+      thaw();deferred("trim allocation failed");g_pool_quiet = {};return;
     }
-    if (!g_pool_ra.shrink(trimmed)) {free_buf(nb);deferred("trim range accounting failed");g_pool_quiet = {};return;}
+    if (trim_move) g_pool_ra = std::move(planned);
+    else if (!g_pool_ra.shrink(trimmed)) {free_buf(nb);deferred("trim range accounting failed");g_pool_quiet = {};return;}
     // As a growth: earlier frames' writes are copied, this frame's come after the copy, in the new pool.
     barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, kXfer, VK_ACCESS_TRANSFER_READ_BIT);
     VkBufferCopy r{0, 0, trimmed};
     g_dd->vk.CmdCopyBuffer(cmd, g_pool.b, nb.b, 1, &r);
+    VkDeviceSize moved_bytes = 0;
+    bool mesh_moved = false;
+    if (!moves.empty()) {
+      std::vector<VkBufferCopy> regions;
+      for (const vram_compact::PoolMoveTo& mv : moves) {
+        const vram_compact::PoolRange& src = movable[mv.range];
+        regions.push_back({src.off, mv.to, src.size});
+        moved_bytes += src.size;
+        const Owner& o = owners[mv.range];
+        if (o.what == 2) { g_dyn[o.key].hold_off = mv.to; continue; }
+        Mesh& m = g_meshes[o.key];
+        (o.what == 0 ? m.pool_off : m.basis_off) = mv.to;
+        mesh_moved = true;
+      }
+      // The moves overwrite bytes the identity copy wrote (free in the old pool): write after write.
+      barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT);
+      g_dd->vk.CmdCopyBuffer(cmd, g_pool.b, nb.b, uint32_t(regions.size()), regions.data());
+    }
     barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kCS | kAS, kRW);
     g_old_pools.push_back({g_pool, now});
     g_pool = nb;
     ++g_pool_epoch;
+    if (mesh_moved) {   // the hit-material rows of later scenes take the new offsets; older scenes keep their snapshots
+      for (const vram_compact::PoolMoveTo& mv : moves)
+        if (owners[mv.range].what != 2) {
+          const Mesh& m = g_meshes[owners[mv.range].key];
+          native_hit::pool_compact_rebase(m.geo_key, m.gen, m.pool_off, m.basis_off, g_pool_epoch);
+        }
+      g_pool_snapshots = true;
+    }
+    thaw();
     g_pool_grew = true;
     ++g_pool_repacks;g_pool_saved += before - trimmed;g_pool_quiet = {};
-    log("[bvh] mesh pool capacity: trimmed %.1f / %.0f -> %.0f MB at the same offsets (rt_mesh_pool_trim), epoch %llu; "
-        "old pool waits for scene retirement", double(g_pool_ra.used) / 1048576.0, double(before) / 1048576.0,
-        double(trimmed) / 1048576.0, (unsigned long long)g_pool_epoch);
+    if (!trim_move)
+      log("[bvh] mesh pool capacity: trimmed %.1f / %.0f -> %.0f MB at the same offsets (rt_mesh_pool_trim), epoch %llu; "
+          "old pool waits for scene retirement", double(g_pool_ra.used) / 1048576.0, double(before) / 1048576.0,
+          double(trimmed) / 1048576.0, (unsigned long long)g_pool_epoch);
+    else
+      log("[bvh] mesh pool capacity: trimmed %.1f / %.0f -> %.0f MB, %zu ranges moved below the cut (%.1f MB, meshes %s; "
+          "rt_mesh_pool_trim_move), epoch %llu; old pool waits for scene retirement", double(g_pool_ra.used) / 1048576.0,
+          double(before) / 1048576.0, double(trimmed) / 1048576.0, moves.size(), double(moved_bytes) / 1048576.0,
+          frozen ? "movable" : "pinned", (unsigned long long)g_pool_epoch);
     return;
   }
   for (const auto& p : g_pending_free) if (p.chunk < 0) {deferred("pending pool ranges");return;}
@@ -3444,6 +3508,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         const auto sz = groom_sizes(l);
         g.build_scratch = sz.buildScratchSize; g.update_scratch = sz.updateScratchSize;
         ok = as_create(sz.accelerationStructureSize, g.as, "hair groom BLAS", 1);
+        g.as_full = sz.accelerationStructureSize;
         g.built = false; g.compact = 0;
       }
       // Compaction: the size queried after the first build, read once that frame completed on the GPU.
@@ -3466,6 +3531,25 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
       if (ok) {
         w.refit = g.built && rec_submitted(g.rec) && dyn_refit_ok;
+        // A full build needs the full size; compacted storage fits only a refit (hair_groom::groom_storage).
+        switch (hair_groom::groom_storage(w.refit, g.as.size, g.as_full, w.compact_copy)) {
+          case hair_groom::GroomStorage::Keep: break;
+          case hair_groom::GroomStorage::UndoCopy:   // the copy is not recorded yet: the new storage was never written
+            as_destroy(g.as);
+            g.as = w.old; w.old = {}; w.compact_copy = false;
+            g.compact = 0;   // compacted again after this full build
+            --g_groom_st.compacted;
+            ++g_groom_st.regrown;
+            break;
+          case hair_groom::GroomStorage::Regrow:
+            as_destroy(g.as, kGroomFreeLag);   // the strand passes may still trace it
+            g.compact = 0;
+            ++g_groom_st.regrown;
+            ok = as_create(g.as_full, g.as, "hair groom BLAS", 1);
+            break;
+        }
+      }
+      if (ok) {
         if (!w.refit) g.built = false;   // a full build (also after an unsubmitted one)
         g.rec = rec;
         // M1: prev points are last frame's, not an older update's (prev_frames is checked at the row, after this update)
@@ -4587,14 +4671,15 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     log_stats("[hair groom] frame %llu: %u groom instances; last %u frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
         "refits %llu, LOD switches waiting for upload %llu (kept) / %llu (groom dropped), compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
-        "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB; shared-key rows withheld %llu (rt_hair_shared_key)",
+        "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB; shared-key rows withheld %llu (rt_hair_shared_key); "
+        "full builds into re-grown compacted storage %llu",
         (unsigned long long)now, groom_count, stats_period(300), g_groom_st.max_instances, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
         g_groom_st.lod[2], (unsigned long long)g_groom_st.builds, (unsigned long long)g_groom_st.refits,
         (unsigned long long)g_groom_st.lod_waits, (unsigned long long)g_groom_st.lod_drops, (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched,
         (unsigned long long)g_groom_st.miss[1], (unsigned long long)g_groom_st.miss[2], (unsigned long long)g_groom_st.miss[3],
         (unsigned long long)g_groom_st.miss[4], (unsigned long long)g_groom_st.miss[5], (unsigned long long)g_groom_st.miss[6],
         double(g_groom_pool_used) / 1048576.0, double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0,
-        (unsigned long long)g_groom_st.shared_withheld);
+        (unsigned long long)g_groom_st.shared_withheld, (unsigned long long)g_groom_st.regrown);
     {
       char first[160] = {};
       size_t fa = 0;

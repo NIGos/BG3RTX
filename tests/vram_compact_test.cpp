@@ -226,5 +226,56 @@ int main() {
     full.release(32 * MB, 32 * MB);
     CHECK(full.tail() == 32 * MB && full.shrink(32 * MB) && full.cap == 32 * MB && full.free.empty());
   }
+  {
+    // rt_mesh_pool_trim_move, hx1-s8-hair-stable 001645 00:19:54: 1479 MB for 648 used, target 988 MB, "the pool's
+    // end is in use: no trim". Layout: 600 MB pinned at 0, a hole, then a 32 MB mesh at 1400 and a 16 MB hold at the end.
+    constexpr uint64_t MB = 1ull << 20;
+    auto layout = [&](as_chunks::RangeAlloc& ra, std::vector<std::pair<uint64_t, uint64_t>> used) {
+      ra.init(1479 * MB);
+      uint64_t pos = 0, off = 0;
+      std::vector<std::pair<uint64_t, uint64_t>> gaps;
+      for (const auto& [at, size] : used) {   // ascending: fill the gap, take the range; the gaps are freed at the end
+        if (at > pos) { CHECK(ra.alloc(at - pos, 16, &off) && off == pos); gaps.push_back({pos, at - pos}); }
+        CHECK(ra.alloc(size, 16, &off) && off == at);
+        pos = at + size;
+      }
+      for (const auto& [at, size] : gaps) ra.release(at, size);
+    };
+    using vram_compact::PoolRange;
+    using vram_compact::PoolMoveTo;
+    as_chunks::RangeAlloc ra, out;
+    std::vector<PoolMoveTo> mv;
+    layout(ra, {{0, 600 * MB}, {1400 * MB, 32 * MB}, {1463 * MB, 16 * MB}});
+    CHECK(ra.used == 648 * MB && ra.tail() == 1479 * MB);
+    CHECK(pool_trim_target(988 * MB, ra.tail(), ra.cap) == 0);                   // today: no trim
+    const std::vector<PoolRange> both = {{1400 * MB, 32 * MB}, {1463 * MB, 16 * MB}};
+    CHECK(pool_trim_move_plan(ra, both, 988 * MB, out, mv) == 988 * MB);       // -491 MB
+    CHECK(mv.size() == 2 && out.cap == 988 * MB && out.used == ra.used && out.tail() <= 988 * MB);
+    for (const PoolMoveTo& m : mv) CHECK(m.to >= 600 * MB && m.to + both[m.range].size <= 988 * MB);
+    CHECK(mv[0].range == 0 && mv[1].range == 1 && mv[0].to + 32 * MB <= mv[1].to);   // largest first, no overlap
+    // Only the hold listed (meshes pinned, hit-material jobs not frozen): the mesh at 1400 pins 1440 MB, over 75%.
+    CHECK(pool_trim_move_plan(ra, {{1463 * MB, 16 * MB}}, 988 * MB, out, mv) == 0 && mv.empty());
+    // A groom range (pinned) at 1303 MB: cut 1312 MB, over 75% of 1479 (1109): no trim, moves or not.
+    as_chunks::RangeAlloc g;
+    layout(g, {{0, 600 * MB}, {1303 * MB, MB / 8}, {1400 * MB, 32 * MB}, {1463 * MB, 16 * MB}});
+    CHECK(pool_trim_move_plan(g, both, 988 * MB, out, mv) == 0 && mv.empty());
+    // A pinned range below the target and a mesh across the cut: the cut is the target, the mesh moves whole.
+    layout(g, {{0, 600 * MB}, {900 * MB, 16 * MB}, {980 * MB, 32 * MB}, {1463 * MB, 16 * MB}});
+    const std::vector<PoolRange> cross = {{980 * MB, 32 * MB}, {1463 * MB, 16 * MB}};
+    CHECK(pool_trim_move_plan(g, cross, 988 * MB, out, mv) == 988 * MB && mv.size() == 2 && out.used == g.used);
+    for (const PoolMoveTo& m : mv) CHECK(m.to + cross[m.range].size <= 988 * MB);
+    // The pinned end above the target, within 75%: cut at the pinned end in 16 MiB.
+    layout(g, {{0, 600 * MB}, {1000 * MB, 4 * MB}, {1463 * MB, 16 * MB}});
+    CHECK(pool_trim_move_plan(g, {{1463 * MB, 16 * MB}}, 988 * MB, out, mv) == 1008 * MB && mv.size() == 1);
+    // No room below the cut: no trim (nothing half moved).
+    layout(g, {{0, 980 * MB}, {1400 * MB, 32 * MB}});
+    CHECK(pool_trim_move_plan(g, {{1400 * MB, 32 * MB}}, 988 * MB, out, mv) == 0 && mv.empty());
+    // An unlisted range is pinned; nothing to move gives the plain trim's cut.
+    layout(g, {{0, 600 * MB}, {1463 * MB, 16 * MB}});
+    CHECK(pool_trim_move_plan(g, {}, 988 * MB, out, mv) == 0);
+    layout(g, {{0, 600 * MB}, {700 * MB, 16 * MB}});
+    CHECK(pool_trim_move_plan(g, {}, 988 * MB, out, mv) == pool_trim_target(988 * MB, g.tail(), g.cap) && mv.empty());
+    CHECK(pool_trim_move_plan(g, {{700 * MB, 16 * MB}}, 0, out, mv) == 0);    // no target
+  }
   std::printf("VRAM compact: %u checks passed\n", checks);
 }

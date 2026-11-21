@@ -837,6 +837,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_capture_demand_size", "1"},
     {"rt_capture_split_mb", "1"},
     {"rt_mesh_pool_trim", "1"},
+    {"rt_mesh_pool_trim_move", "0"},
     {"rt_as_chunk_fit", "0"},
     {"rt_hair_groom_async", "0"},
     {"rt_hold_pack_base", "0"},
