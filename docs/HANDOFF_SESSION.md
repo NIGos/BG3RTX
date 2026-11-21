@@ -7,6 +7,9 @@ Main is b7532c90 plus the docs commit that follows it.
 
 ## State
 
+- Nexus upload set (user action, same layout as 0.9.5): `.scratch/release/v0.9.6-beta/` with
+  `BG3RTX-0.9.6-beta-Portable.zip` (a8556bc3...), `BG3RTX-0.9.6-beta-Setup.zip` (f16817b8..., Setup.exe plus
+  "README - Setup.txt"), `SHA256SUMS.txt`, `nexus/` texts and images, `PUBLISH.md`. The GitHub repo is public (source).
 - Release candidate 0.9.6-beta, rebuilt from main b7532c90 (lean layer, 230 files; updated player docs; the smoke-tested release code plus the diagnostic emission pack writer, off, and the launcher UX pass):
   - `dist/BG3RTX-0.9.6-beta.zip`: SHA-256 a8556bc33ec18c837c2f3fc36e3be68417589d96a8f37251411c3228728f7f3f
   - `dist/BG3RTX-0.9.6-beta-symbols.zip` (private): 0b12b3bb63dc54b6d8ac31ced5810430e072d3cd8ca5d30bb97ce041eb9b684b
