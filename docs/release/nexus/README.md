@@ -82,3 +82,5 @@ images on the Images tab.
   "Show experimental options", "Water surface reflections", "Strand hair edge resolve"). Checked for 0.9.6-beta
   against main 9ae2ede3 (after the launcher UX pass).
 - Check the Bugs tab is enabled on the mod page; both texts send reports there.
+- Publishing is an upload to Nexus Mods only (Files tab): there is no GitHub release (user decision 2026-11-21).
+  The texts link the public source repository https://github.com/NIGos/BG3RTX for the GPL source offer.

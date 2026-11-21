@@ -32,6 +32,8 @@ Git metadata is read-only. Generated archives, symbols and logs remain under .sc
 
 Hand-written; `verify_rc.ps1` keeps this section when it rewrites the table above. Not a release approval.
 User decision 2026-11-15: finalise for release, RTX Hair Off by default. Nothing is uploaded, tagged or installed by agents.
+User decision 2026-11-21: publishing is an upload to Nexus Mods only (Files tab), no GitHub release; the repository
+https://github.com/NIGos/BG3RTX is public (source code, GPL-3.0-or-later with the NVIDIA exception).
 Notes: [RELEASE_NOTES_0.9.6.md](RELEASE_NOTES_0.9.6.md), sources in [RELEASE_EVIDENCE_0.9.6.md](RELEASE_EVIDENCE_0.9.6.md).
 
 ### Candidate (built offline from main 8f4f43da, lean layer, not installed, not run)

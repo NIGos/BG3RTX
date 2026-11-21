@@ -41,3 +41,5 @@ Known
 - After a fast zoom out in a large interior, ray-tracing memory stays high for about 15 seconds.
 - The first game start after installing can spend 15 to 50 seconds longer creating hair shader variants, also with RTX Hair off. Later starts reuse them.
 - The DLSS 5 runtime is not included; you provide it.
+
+Source code: https://github.com/NIGos/BG3RTX (GPL-3.0-or-later with the NVIDIA SDK exception).
