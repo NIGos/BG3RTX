@@ -2917,7 +2917,10 @@ void replay_after_hit_gi_em(VkCommandBuffer cmd,const VkWriteDescriptorSet* writ
  if(*done==key)return;
  const Pipe::Variant* selected=nullptr;
  if(p.pipeline)for(const auto& [slot,v]:p.variants)if(v.pipeline==p.pipeline)selected=&v;
- const bool em_sun=variant && std::strcmp(variant,"emission")==0 && em;
+ // No fresh D-EM build yet (the first frames after a load run the sun variant without the emissive scene): wait for
+ // it, never refuse; only a SHaRC, direct-only or OMM emission variant is refused (r2-inn-em-pack 065644).
+ if(!em)return;
+ const bool em_sun=variant && std::strcmp(variant,"emission")==0;
  if(em_sun && !selected)return;   // the compute twin of a raygen dispatch still builds: the next frame
  if(!em_sun || selected->request.rfind("gi/gi_trace_rt_hit_sun_em.hlsl",0)!=0 || selected->request.find("RT_OMM_SCENE")!=std::string::npos){
   host->log("[replay] pack %d failed: replay_pack_pass=2 takes the rt_hit_emission + gi_hit_sun hit GI without SHaRC or OMM; this dispatch runs %s",
