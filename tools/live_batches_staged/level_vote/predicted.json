@@ -1,0 +1,26 @@
+{
+  "_rule": "Prepared BEFORE any run (AGENTS.md), 2026-11-23, branch claude/fix-level-detect. STAGED, READY_FOR_LIVE, not queued, not authorized.",
+  "question": "With assetdb_level_vote=1, does the runtime-light vote find the level at S8 (CTY_Main_A) and in Dialogue1 (WLD_Main_A), so that the roof volumes reach rt_sun_replace and the gi_far / hit-sun roof rules and the database lights reach D-LS, and what do these consumers then change in GPU ms and energy against key off in the same run?",
+  "evidence": ".scratch/coord/hunt_core.md F1: all 171 logs of captures/queue/logs print 'sun stats (600 frames, replace 0, 0 roof volumes (level unknown: nothing trusted)'; the save hint fails on Patch 8 saves (zstd SaveInfo.json), the runtime-light vote ran only inside assetdb_join (default 0), the SE bridge mod is not packaged. Offline: tests/assetdb_test.cpp 'level vote' fixtures (database lights at the logged S8 / inn cameras and the camp, float32 camera-relative round trip, 24 unknown lights): CTY_Main_A, CTY_Main_A, WLD_Main_A picked; the inn's SCL_Main_A lights vote for SCL_Main_A alone.",
+  "noise_rule": "Every threshold is the OFF repeat of the same run (off-b against off-a), with the materiality floors of tools/live_batches/sane_gates.py (cost max(0.1 ms, 1%), energy 0.5%). The vote's own cost is one light-list copy every assetdb_join_interval (240) presents: no window can resolve it.",
+  "predicted": {
+    "level": "'[assetdb] level CTY_Main_A (from lights)' (S8) and '[assetdb] level WLD_Main_A (from lights)' (Dialogue1) within 10 presents of each switch to 1 (the vote arms at once); '[assetdb] level cleared (assetdb_level_vote=0)' at each switch back. No other level named while the key is on.",
+    "sun": "'sun stats ... replace 1, N roof volumes' with N > 0 in every 120-frame period of the on window (S8: a roofed interior, N in the tens); 'replace 0, 0 roof volumes (level unknown' in the off windows. sun check: brightened pixels > 0 in the on window (the traced sun now replaces the game's mask where trusted), 0 in off.",
+    "ls": "'ls: per-light data: <n> runtime lights ... database <m>' with m > 0 once the level is set (D-LS light radii and source radii from the database); not printed with the key off at a level never detected (g_count 0).",
+    "gi_far": "rt_stats diag windows: 'GI far (...): ... qualified sun-lit <q>' with q = 0 and the roof rule count > 0 with the key off (every hit beyond R0 blocked: no volumes), q > 0 with the key on (only rays through a padded roof volume blocked).",
+    "cost": "GI trace and sun trace GPU ms may RISE with the key on (the sun ray of qualified far hits and the roof loop per pixel now run where the result is used; sun resolve now dispatched): not derived, reported with the numbers; budgets are targets, the user decides. rt passes total within the OFF pair's range plus floor is INFO.",
+    "energy": "A shading-model change, not a reconstruction change: the float pre-post mean MAY change. Expected sign: up where sun replace brightens game-dark pixels under a trusted sky and where far GI adds sunlit bounce; the PT reference judges it (offline). A change beyond noise plus floor is EXPLAIN, never a silent pass.",
+    "faults": "0: no VK_ERROR, no crash, no core fault, no nonfinite, no '[replay] pack N failed'."
+  },
+  "offline": {
+    "packs": "S8 only (lv-s8-ultra starts with OMM off: the gi_hit_sun_em pack contract is the non-OMM request): replay_pack_pass=2 packs 1 (key off) and 2 (key on), each with its sun trust image s3b8 (roof volumes when on).",
+    "steps": [
+      "bin/frame_replay --pack <pack1> --out <scratch>/off and --pack <pack2> --out <scratch>/on   (the pass as live; the 'vs live' line is the fidelity)",
+      "bin/frame_replay --pack <pack2> --pt-reference --pt-skip-cost --out <scratch>/pt   (PT_ROOFS from pack 2's trust image, PT_EM from its pass)",
+      "Compare giRaw of off and on against the PT on the tiles where they differ (rays beyond R0 = gi_rt_radius): mean |E - PT| and the share of closer tiles."
+    ],
+    "predicted": "on is closer to the PT than off on the changed tiles (off drops every far contribution beyond R0, the PT has the roofs); no change within R0 except the far fade weight. FARTHER: the far roof rule or the volumes are wrong; write it down, the key stays off.",
+    "disk": "Two packs up to 2048 MB each (one-off PT evidence, AGENTS.md): delete after the offline verdict, keep the summary."
+  },
+  "decision": "assetdb_level_vote becomes a default candidate (all presets: it only feeds data to keys already on) when the level lines and gates hold in both scenes, faults are 0, and the PT verdict for far GI and sun replace is CLOSER; the GPU ms and energy deltas go to the user with the numbers."
+}

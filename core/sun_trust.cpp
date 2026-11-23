@@ -240,7 +240,8 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
   f->replace = active;
   f->volumes = n;
 
-  if (g_sum_n >= 600) {   // counters, as fractions of the traced pixels
+  // rt_stats_period_frames (stats windows of the live jobs) shortens the 600-frame window like every other stats line.
+  if (g_sum_n >= stats_period(600)) {   // counters, as fractions of the traced pixels
     const double px = double(g_sum[0] ? g_sum[0] : 1), dis = double(g_sum[2] ? g_sum[2] : 1);
     // Why no volumes: fail-closed (nothing trusted) until the asset DB knows the level, e.g. the
     // main menu and loading (2026-11-01: "0 roof volumes, scene top -96.8" before CTY_Main_A loaded).

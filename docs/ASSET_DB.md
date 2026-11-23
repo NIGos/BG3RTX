@@ -274,7 +274,7 @@ The level is found in two ways:
    - With `-continueGame` it takes the newest save by file time.
    - Loading a save from the menu leaves no trace on the command line, so step 2 covers it.
    - Patch 8 saves compress that entry with zstd, which the layer does not decode, so in
-     practice step 2 finds the level (see Join rates).
+     practice only step 2 can find the level.
 2. **From runtime lights.** At each join check, the lights the froxel lists use vote for
    the database levels that have a light within 5 cm of them, using a 0.5 m hash grid over
    all 19,572 lights. The voters are the b25 point and spot lights plus the b29 projectors
@@ -283,6 +283,13 @@ The level is found in two ways:
    - While no level is set, a level that is the only one voted for is accepted. Positions
      match to float precision, so one exact match is strong evidence.
    - This catches a level change and a wrong hint.
+   - It runs only with `assetdb_join=1` (the diagnostic join, below) or `assetdb_level_vote=1`
+     (the vote alone, `vote_check`, no CSV; every `assetdb_join_interval` presents; live: turned on it
+     checks at once, turned off with `assetdb_join=0` it forgets a level it found). Both default to 0, so
+     a player's run on a Patch 8 save has no level: no roof volumes (rt_sun_replace inactive, the
+     gi_far and hit-sun roof rules block every far hit) and no database lights for D-LS. Found
+     2026-11-23 (.scratch/coord/hunt_core.md F1: 171 of 171 logs "level unknown"); the key stays 0 until
+     the staged live `tools/live_batches_staged/level_vote` and its PT verdict qualify the consumers.
 
 ### Join check
 
@@ -386,7 +393,8 @@ earlier run (`captures/shaders`) and the three traced frames of AUDIT_ENGINE_DAT
 
 **The save hint does not work on Patch 8 saves.** They store `SaveInfo.json`
 zstd-compressed (entry flags 0x23), and the layer has no zstd decoder. The layer logs this
-and falls back to the runtime lights, which found the level in every run. The hint still
+and falls back to the runtime lights, which found the level in every run that had `assetdb_join=1`
+(none since; see "Level detection" for `assetdb_level_vote`). The hint still
 works for LZ4 or uncompressed entries.
 
 ## Distribution: ship the tool, not the data

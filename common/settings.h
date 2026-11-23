@@ -668,6 +668,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_sun_overlap", "1"}}, {{"sun_shadows", 1}, {"gi", 2}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "r3-core: the sun trace is recorded right before the GI trace with no barrier between them, its resolve beside the GI temporal pass. The image is unchanged; judge the total RT interval in GPU ms at a static camera."},
 
+  {"exp_assetdb_level_vote", "Level detection by lights",
+   "Experimental: recognises the level from the game's lights, so the roof data of the asset database is used (sun shadow replace, far indirect light). Changes the image where roofs matter. Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"assetdb_level_vote", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"assetdb_level_vote", "1"}}, {{"sun_shadows", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "fix-level-detect: Patch 8 saves hide the level, so without it the roof volumes stay unknown. Look for \"[assetdb] level ... (from lights)\" in the log, then compare sun shadows under roofs and far bounce light at Water Queen's House on Ultra."},
+
   {"exp_hair_strand_aa", "Strand hair edge resolve",
    "Experimental: blends thin strand edges by their exact pixel coverage instead of dithering.",
    Kind::Choice, Apply::Live, "live; needs RTX Hair and RR before post", true,
@@ -876,6 +883,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_backlit", "1"},
     {"rt_tmax", "300"},
     {"rt_sun_radius", "0.00459"},
+    {"assetdb_level_vote", "0"},
     {"rt_sun_replace", "1"},
     {"rt_sun_roofs", "1"},
     {"rt_sun_roof_mode", "0"},
