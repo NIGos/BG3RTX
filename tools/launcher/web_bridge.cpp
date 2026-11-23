@@ -200,6 +200,8 @@ bool Bridge::commit(State next,bool next_experimental,st::KVList keys,const std:
   std::vector<std::string> also;const int clicked=st::knob_index(anchor);
   for(int i=0;i<st::kKnobCount;++i){
     if(next.values[i]==previous.values[i]||i==clicked)continue;
+    // A hidden opt-in option has no shown value (-1): showing it is not a change (no "Custom value -> Off").
+    if(previous.values[i]<0&&st::opt_in_knob(st::kKnobs[i])&&!shown(st::kKnobs[i]))continue;
     if(shown(st::kKnobs[i])||st::opt_in_knob(st::kKnobs[i]))also.push_back(change_line(i,previous.values[i],next.values[i]));
   }
   also.insert(also.end(),key_lines.begin(),key_lines.end());
@@ -296,7 +298,10 @@ std::string Bridge::handle(const std::string& message){
       // startup key: those are written first, and named.
       State next=state_;st::KVList keys;std::string blocked;
       if(!resolve(next,next.values,keys,blocked)){status_="The game was not started. "+blocked;return state_json();}
-      if((next.values!=state_.values||!keys.empty())&&!commit(std::move(next),experimental,keys,"Settings completed before Play",{}))return state_json();
+      // A fresh install has no user file: write the shown preset, else the game runs without `preset=` and the release
+      // policy keeps the High/Ultra automatic paths (opacity micromaps, cutout masks) off (0.9.5 saved on every Play).
+      const bool no_preset=!st::parse_ini(state_.user_text).count("preset");
+      if((next.values!=state_.values||!keys.empty()||no_preset)&&!commit(std::move(next),experimental,keys,"Settings completed before Play",{}))return state_json();
       std::string error;
       if(!hooks_.play||!hooks_.play(error))status_=error.empty()?"The game could not start. See Help & support.":error;
       else{status_=error.empty()?"Game started.":error;can_play_=false;}

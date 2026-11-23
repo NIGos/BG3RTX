@@ -1406,6 +1406,8 @@ static void test_hair_motion_stability() {
   }
   CHECK(transition_apply(*k, 0, 1) == Apply::Restart && transition_apply(*k, 1, 0) == Apply::Live);
   CHECK(key_change_needs_restart("rt_hair_mv_card", "0", "2") && !key_change_needs_restart("rt_hair_mv_card", "2", "0"));
+  // RTX Hair On writes rt_hair_groom_nearest: its trace is compiled in at pipeline creation (turning it on needs a restart).
+  CHECK(key_change_needs_restart("rt_hair_groom_nearest", "0", "1") && !key_change_needs_restart("rt_hair_groom_nearest", "1", "0"));
   // On in High and Ultra (user decision 2026-11-11: hm1 210705, hf2 000619), Off in Low and Medium.
   for (int p = 0; p < kPresetCount; ++p)
     CHECK(preset_values(p)[knob_index("hair_motion_stability")] == (p == kHigh || p == kUltra ? 1 : 0));
@@ -1779,8 +1781,9 @@ static void test_strand_bundle() {
   for (const char* key : {"rt_hair_groom_tips", "rt_hair_groom_coverage", "rt_hair_macro_normal", "rt_hair_coverage_footprint",
                           "rt_hair_card_fill", "rt_hair_dense_sample"})
     CHECK_EQ(std::string(key) + "=" + get(on, key), std::string(key) + "=<missing>");
-  // 5m: the one startup reservation left in the bundle. A game started with RTX Hair off shows the restart banner for
-  // it (launcher ui_state::restart_count against the session baseline); the rest of the bundle applies live.
+  // 5m: the startup reservations left in the bundle (physical origins; since 5u also the nearest-strand trace). A game
+  // started with RTX Hair off shows the restart banner for them (launcher ui_state::restart_count against the session
+  // baseline); the rest of the bundle applies live.
   CHECK(key_change_needs_restart("rt_hair_physical_origin", "0", "1"));
   CHECK(!key_change_needs_restart("rt_hair_physical_origin", "1", "0"));
   {
@@ -1788,9 +1791,10 @@ static void test_strand_bundle() {
     for (const KV& kv : p->choices[1].kv)
       if (kv.key && key_change_needs_restart(kv.key, "0", kv.value)) {
         ++restart_keys;
-        CHECK_EQ(std::string(kv.key), "rt_hair_physical_origin");
+        // + rt_hair_groom_nearest (5u): its trace is compiled into the strand pipelines at their creation.
+        CHECK(std::string(kv.key) == "rt_hair_physical_origin" || std::string(kv.key) == "rt_hair_groom_nearest");
       }
-    CHECK(restart_keys == 1);
+    CHECK(restart_keys == 2);
     for (const KV& kv : p->choices[0].kv) CHECK(!kv.key || !key_change_needs_restart(kv.key, "1", kv.value));
   }
   {  // the visible note says it is live, and when a restart is still needed
