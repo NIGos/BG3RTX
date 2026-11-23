@@ -21,6 +21,60 @@ Full text of the 2026-11-21 entries (every branch fragment of the night) and of 
 [2026-11-15](archive/PROGRESS_CODEX_2026-11-15.md), [2026-11-14](archive/PROGRESS_CODEX_2026-11-14.md).
 Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
 
+## Tracker forgets a destroyed pool's sets before the driver call (branch claude/fix-tracker-pool, pure fix, 2026-11-23)
+- Cause (hunt2_diff S1): `layer/tracker.cpp` DestroyDescriptorPool (claude/final-layer) erased the pool's sets after
+  the driver destroy. A pool handle reused at once by another thread's CreateDescriptorPool + AllocateDescriptorSets put
+  its new set in the stale list, and the late erase dropped that set's tracked descriptors.
+- Fix: the erase now runs before `vkDestroyDescriptorPool`, as DestroyBuffer, DestroyImage and DestroyImageView already
+  do since r2-layer. There is no key: this is the same behaviour without the race.
+- Test: `descriptor_epoch_test` pool_reuse covers two orders. Forgetting before the re-created pool's allocation keeps
+  the new set. The old order shows the hazard: the new set is forgotten.
+- No live test is needed. The window is a few microseconds, so no in-game check is possible.
+
+## A stale level never stays current; sun resolve liveness row (branch claude/fix-level-clear, READY_FOR_LIVE, 2026-11-23)
+- Cause (.scratch/coord/hunt2_lifecycle.md finding 2): nothing cleared the asset DB level once set, except turning
+  `assetdb_level_vote` off. After travel or a save load the old level stayed current until a check found 3 or more
+  lights of the new level. It stayed for good when the new level was not in the DB or had too few DB lights in view.
+  With the vote on, core/sun_trust then had `roofs` true and 0 volumes around the new camera, so every pixel was
+  trusted: an interior sun leak. The SE bridge kept the old level for a level name the DB lacks.
+- Fix (layer/assetdb.cpp, behind `assetdb_level_vote` / `assetdb_join`, both 0: no image change today):
+  - `assetdb_vote` gets the clear rule: with at least 3 voters, none for the current level and no qualifying switch,
+    it clears (fail closed). Right after a level load, any lack of evidence clears it, no voters included.
+  - A level load (a new G-buffer depth image, as hair_groom's LoadGuard) drops a light-list copy recorded before it.
+    It re-runs the vote 30 presents later, not up to 240. New lines: "[assetdb] level load at present N", and
+    "... after a level load: kept | switched | cleared" on the vote line.
+  - `level_from_se`: a sub-level maps to its world. A level the DB lacks clears the current level.
+- Tests: assetdb_test.
+  - Inn level then the camp's lights: switched.
+  - Level A, then only unknown lights: cleared.
+  - Level A, then 2 lights of level B: kept in play, cleared after a load.
+  - No lights: kept in play (no false clear), cleared after a load (no false keep).
+  - The current level's own lights after a load: kept.
+  - The SE bridge: sub-level BGH_SteelWatchFoundry_B gives CTY_Main_A; NoSuchLevel_Z clears.
+- Liveness: row `sun_resolve` ("[core] gi: sun resolve pass GPU cost", silent_dead with detailed logging,
+  hunt2_claims D3). It covers rt_sun_offscreen, ramp, rise, roof_pad and roof_up, which leave baseline_no_row.
+  New field `follows`: ["level_known", "roof_volumes"]. A DEAD row whose cause row is DEAD in the same preset says
+  "(follows ... DEAD)". The checker is VERSION 2. liveness_test gets a case for it.
+- Staged (not queued): level_vote/lv-s8-ultra gains reload-on (F8, key on) and an after-reload window. It waits for
+  the load line and an after-load vote that keeps or switches. It gates "replace 1, N roof volumes" N > 0 in every
+  period. predicted.json updated. live_flow 0 failing with and without --frozen. A change to another level is not
+  staged: the runner loads one save per launch.
+
+## Player docs: three claims corrected (branch claude/fix-docs-claims, docs only, 2026-11-23)
+
+- Ctrl+Shift+F7 only flips the live `rt_hair` key (`layer/util.cpp` 301-311): it switches RTX Hair off and back on
+  after the launcher turned it On, never on from Off. README, packaged README, USER_SETTINGS, release notes, evidence,
+  Nexus description and changelog now say so.
+- Faster bounce light tracing and Bounce trace reordering act only inside the hit-GI trace, so only with Off-screen
+  bounce light Near or Far (Ultra by default); on Low, Medium and High they do nothing. USER_SETTINGS says so.
+- RTX Hair after a load: about 100 frames (96 in r4-inn, 116 in hx1a, 2026-11-21 logs), not about 70. Release notes,
+  evidence and Nexus changelog corrected.
+- Not changed (common/settings.h, being edited by another agent): the RTX Hair description shown by the launcher
+  ("Turns on and off while you play, also with its in-game key", line 460) should say the key only switches it off
+  and back on after it is On; the Faster bounce light tracing and Bounce trace reordering details (lines 338, 348)
+  should say they act only with Off-screen bounce light Near or Far.
+- The shipped README and USER_SETTINGS changed: repackage and rerun verify_rc before publishing.
+
 ## Liveness: every run proves each on-feature does work (branch claude/liveness, ready to merge, 2026-11-23)
 - Why: OMM commits 0 for a week, "level unknown" for 2+ weeks, 17 rejected VT masks: every gate passed, because the
   gates check that lines exist or that A/B deltas are small, never that a feature that is on does work
