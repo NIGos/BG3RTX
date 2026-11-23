@@ -9,12 +9,77 @@
 - Player docs updated for 0.9.6-beta (claude/docs-096). Remaining: repackage so the archive carries the new docs,
   the Setup.exe install test (or ship the ZIP only), then publish (user action).
 
+Level detection (2026-11-23 regression hunt): since Patch 8 the asset database never learns the level (zstd saves, no
+Script Extender, vote only under `assetdb_join`), so sun replace, far-GI roof rules and per-light radii are inactive in
+every log since about 2026-11-07. `assetdb_level_vote` (0) is ready with its live `tools/live_batches_staged/level_vote`.
+Run it (it changes the image; the PT judges)? Taken: not run, offline only.
+
 Live tests: allowed overnight by the user's /goal of 2026-11-21 only; a new session must ask again.
 State and next steps: [HANDOFF_SESSION](HANDOFF_SESSION.md). Release check: [RC_CHECK](release/RC_CHECK.md).
 Full text of the 2026-11-21 entries (every branch fragment of the night) and of 2026-11-20:
 [archive 2026-11-21](archive/PROGRESS_CODEX_2026-11-21.md); older: [2026-11-20](archive/PROGRESS_CODEX_2026-11-20.md),
 [2026-11-15](archive/PROGRESS_CODEX_2026-11-15.md), [2026-11-14](archive/PROGRESS_CODEX_2026-11-14.md).
 Installed test app: 0.9.6-hairtest18 (commit 1c09e039), unchanged.
+
+## VT alpha masks: all 71 load again; OMM latch visible per window (branch claude/fix-vt-masks, ready to merge, 2026-11-23)
+
+- Cause: LSLib pads a mip level below one tile (128 px) to the tile with opaque blocks. `tools/assets/vt_alpha_masks.py`
+  stored those padded levels, and the layer's `parse_mask` (common/vt_alpha_masks.h) needs the exact chain.
+  So 17 of the 71 masks of 2026-11-02 were rejected at every launch (`[vt alpha] ... invalid: skipped`). They cover
+  309k of the 782k camp2 triangles, which stayed on the page-cache alpha path. This predates 0.9.5.
+- Tool fix: each level is cropped to its exact mip size (`crop_bc4`; the content is the top-left blocks, and
+  every outside block is the opaque pad, checked on 1_1ee1...).
+- `--repair <dir>` crops existing padded files in place, bit-exact, without the game's paks.
+- Shared data: the 17 files in `data/assetdb/vt_alpha` were rewritten with `--repair`. Count before and after:
+  54 exact + 17 padded, then 71 exact. The asset DB still holds 998 files. Loaded masks: 43.8 MB (54) before, 80.1 MB (71) now
+  (+36.2 MB of VRAM, BC4). On disk the 17 files lost 4-22 KB of pad each. `vt_alpha_manifest_camp2.json` still lists the old byte sizes (informational only;
+  the layer reads the index).
+- Tests: `vt_alpha_masks_tool_test.py` (crop, observed padded sizes, repair, folder writes only padded files,
+  idempotent). `vt_alpha_masks_test` now also parses every indexed mask of `data/assetdb/vt_alpha` with the layer's
+  own parse_mask (71 of 71). It skips when there is no asset DB.
+- OMM guard (finding 4 of the layer hunt): when `retained` hides the `[omm]` lines, each window now logs
+  `[omm] off for this session: retained until the device is destroyed`. Layer change, no ABI change.
+- User check (next launch, High or Ultra): `[vt alpha] 71 masks loaded` and no `invalid: skipped` lines. In camp,
+  `VT records per frame read an offline mask` should rise.
+
+## Level detection by the runtime lights: assetdb_level_vote (branch claude/fix-level-detect, READY_FOR_LIVE, 2026-11-23)
+- Cause (.scratch/coord/hunt_core.md F1): the asset DB never knew the level in a release run. Patch 8 saves zstd-compress
+  SaveInfo.json (no save hint), the runtime-light vote ran only inside the diagnostic join (`assetdb_join`, default 0,
+  in no ini), the SE bridge mod is not packaged. 171 of 171 queue logs: "sun stats ... replace 0, 0 roof volumes
+  (level unknown: nothing trusted)". So rt_sun_replace never ran, Ultra's gi_far had every hit beyond R0 roof-blocked
+  (screen and hidden hits; the far work ran and was discarded), and D-LS had no database lights.
+- Change (layer, off by default, image unchanged): the vote is its own function (`assetdb_vote`, layer/assetdb.h),
+  shared by join_check and a lean `vote_check` (copy -> voters -> vote, no CSV or statistics). New key
+  `assetdb_level_vote` (bg3rtx.ini, common/settings.h `exp_assetdb_level_vote`, Advanced, developer, Live, needs
+  Sun shadows ray-traced): every
+  `assetdb_join_interval` (240) presents; turned on it checks at once; with both keys off it forgets a level it found
+  (so 0/1/0 is an A/B in one run). Ties now pick the lower level index (was map order). Lines: "[assetdb] level vote #n",
+  "[assetdb] level <L> (from lights)", "[assetdb] level cleared (assetdb_level_vote=0)".
+- Core (log only): "sun stats" / "sun check" follow rt_stats_period_frames like the other stats lines (600 native).
+- Tests: build.ps1 -Test 240/240. assetdb_test "level vote" fixtures from the database at the logged S8 and inn cameras (CTY_Main_A, with SCL_Main_A
+  sharing the place) and the Dialogue1 camp (WLD_Main_A): float32 camera-relative round trip plus 24 unknown lights;
+  the right level from no level and from a wrong one, no change when current, noise alone votes for nothing.
+- Staged, not queued: tools/live_batches_staged/level_vote (lv-s8-ultra with OMM off and two gi_hit_sun_em packs for the
+  PT verdict, lv-d1-ultra in the user's Ultra); predicted.json first; live_flow 0 failing with and without --frozen.
+- Cost: one light-list copy every 240 presents. The consumers it turns on will cost GPU ms (sun resolve, far hits
+  kept): measured by the staged live, the user decides with the numbers.
+- User check after qualification: the log names the level "(from lights)"; at Water Queen's House on Ultra the sun
+  under the house's roofs and the far bounce light change; Advanced > "Level detection by lights".
+
+## Launcher Play on a fresh install, Experimental notice, RTX Hair restart key (branch claude/fix-launcher-play, ready to merge, 2026-11-23)
+- Regression hunt (settings, launcher, package) against 0.9.5-beta cb2d03f2; report in .scratch/coord/hunt_tools.md.
+- Play on a fresh install (no bg3rtx_user.ini) now writes the shown preset. Since instant apply (b657b2ba, 2026-11-14),
+  Play wrote nothing, so the game ran bg3rtx.ini without `preset=`. The release policy then kept opacity micromaps and
+  cutout masks off on High/Ultra (about 1 ms at camp). Before: 0 saves, rt_omm=0, rt_vt_alpha_masks=0. After: 1 save with
+  `preset=high`, rt_omm=1, rt_vt_alpha_masks=1, and a second Play writes nothing (web_bridge_test).
+- "Show experimental options" no longer lists "Custom value -> Off/Standard" lines or the false "(after a game restart)"
+  for the four hidden opt-in options (web_bridge.cpp, the `also` loop skips -1 opt-in values).
+- rt_hair_groom_nearest 0->1 needs a restart (key_change_needs_restart): it is a pipeline-creation specialization in the
+  RTX Hair On bundle since 050328b5. The RTX Hair note and details now say that the nearest-strand trace waits for a restart
+  when RTX Hair is turned on while playing.
+- Not changed: Hair shadows and Detailed logging restart-banner gaps (same in 0.9.5; finding 4 of the report).
+- How to check: delete bg3rtx_user.ini in a portable copy, open BG3RTX.exe, press Play: the file appears with `preset=high`.
+  Turn on "Show experimental options": the notice has no extra lines.
 
 ## gi_far_roof_emission: PT verdict CLOSER, cost A/B FAIL, kept off (coordinator, 2026-11-21)
 
