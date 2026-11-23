@@ -5555,6 +5555,8 @@ void bvh_on_present() {
       "between record and submit %llu; recorded but never submitted %llu",
       (unsigned long long)s.fix_applied, (unsigned long long)s.fix_bad, (unsigned long long)s.fix_late,
       (unsigned long long)s.fix_stale);
+  // An OMM latch (omm_backend `retained`, kept resources) hides the lines below: say so per window (final 043643).
+  if (cfg_hot(CfgHot::rt_omm) && omm::has_resources() && !omm::available_for(g_dd)) log_stats("[omm] off for this session: retained until the device is destroyed (no accelerated scenes)");
   if (omm::available_for(g_dd)) {
     // Coverage (docs/P4_OMM.md 9.3): only instance ranges with an attached micromap BLAS can skip
     // any-hit work, and only for their known-opaque microtriangles (the bake's states below).

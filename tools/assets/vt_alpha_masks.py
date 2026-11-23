@@ -15,6 +15,12 @@
 
 Mask file "<gts>_<texture>.vtalpha": header "BG3VTA1\\0", uint32 width, height, levels, then per level the BC4
 blocks (ceil(w/4) x ceil(h/4) x 8 bytes) of that level, row-major. vt_alpha_index.txt: the layer's lookup.
+Each level is its exact mip size (max(w>>l,1) x max(h>>l,1)), as common/vt_alpha_masks.h parse_mask requires. LSLib
+pads a level below one tile (128 px) to the tile with opaque blocks, so such levels are cropped to their top-left
+blocks (crop_bc4). Files written before that fix (2026-11-02: 17 of the 71, rejected by the layer as "invalid")
+are cropped in place, bit-exact, without the game's paks:
+
+    py -3 -m tools.assets.vt_alpha_masks --repair data/assetdb/vt_alpha [--dry-run]
 """
 import argparse
 import json
@@ -99,18 +105,101 @@ def dds_bc3_alpha(path):
     return w, h, b"".join(blocks[16 * i:16 * i + 8] for i in range(nb))
 
 
+TILE = 128   # LSLib extracts no level smaller than one tile: smaller levels come padded to it
+
+
+def exact_level(w0, h0, level):
+    """The exact mip size of `level` of a w0 x h0 texture (common/vt_alpha_masks.h parse_mask)."""
+    return max(w0 >> level, 1), max(h0 >> level, 1)
+
+
+def level_bytes(w, h):
+    return ((w + 3) // 4) * ((h + 3) // 4) * 8
+
+
+def crop_bc4(blocks, w, h, cw, ch):
+    """The top-left ceil(cw/4) x ceil(ch/4) blocks of a w x h level of BC4 blocks (row-major)."""
+    bx, by, cx, cy = (w + 3) // 4, (h + 3) // 4, (cw + 3) // 4, (ch + 3) // 4
+    if cw > w or ch > h or len(blocks) != bx * by * 8:
+        raise ValueError(f"cannot crop a {w}x{h} level ({len(blocks)} bytes) to {cw}x{ch}")
+    if (cx, cy) == (bx, by):
+        return bytes(blocks)
+    return b"".join(blocks[(y * bx) * 8:(y * bx + cx) * 8] for y in range(cy))
+
+
+def padded_level(w0, h0, level, tile=TILE):
+    """The size LSLib extracts for `level`: the exact size, raised to one tile (or to the top level, if smaller)."""
+    w, h = exact_level(w0, h0, level)
+    return max(w, min(tile, w0)), max(h, min(tile, h0))
+
+
+def repair_mask(body, tile=TILE):
+    """(new body, cropped levels) of a .vtalpha file: an exact file comes back as it is (0 levels), a file whose
+    levels have the tile-padded sizes is cropped to the exact chain. None for anything else."""
+    if len(body) < 20 or body[:8] != MAGIC:
+        return None
+    w0, h0, n = struct.unpack_from("<3I", body, 8)
+    if not w0 or not h0 or not n:
+        return None
+    if 20 + sum(level_bytes(*exact_level(w0, h0, l)) for l in range(n)) == len(body):
+        return body, 0
+    if 20 + sum(level_bytes(*padded_level(w0, h0, l, tile)) for l in range(n)) != len(body):
+        return None
+    out, off, cropped = [body[:20]], 20, 0
+    for l in range(n):
+        pw, ph = padded_level(w0, h0, l, tile)
+        ew, eh = exact_level(w0, h0, l)
+        blocks = body[off:off + level_bytes(pw, ph)]
+        off += len(blocks)
+        out.append(crop_bc4(blocks, pw, ph, ew, eh))
+        cropped += (pw, ph) != (ew, eh)
+    return b"".join(out), cropped
+
+
+def repair(folder, dry_run=False):
+    """Crops the tile-padded masks of `folder` in place (temp file + replace; only those files are written)."""
+    exact = fixed = bad = 0
+    for p in sorted(Path(folder).glob("*.vtalpha")):
+        body = p.read_bytes()
+        r = repair_mask(body)
+        if r is None:
+            bad += 1
+            print(f"[vt alpha] {p.name}: neither exact nor tile-padded: left as it is", flush=True)
+            continue
+        new, cropped = r
+        if not cropped:
+            exact += 1
+            continue
+        fixed += 1
+        print(f"[vt alpha] {p.name}: {cropped} padded levels cropped, {len(body)} -> {len(new)} bytes"
+              f"{' (dry run)' if dry_run else ''}", flush=True)
+        if not dry_run:
+            tmp = p.with_name(p.name + ".tmp")
+            tmp.write_bytes(new)
+            os.replace(tmp, p)
+    print(f"[vt alpha] repair {folder}: {exact} exact, {fixed} cropped, {bad} unrecognised", flush=True)
+    return exact, fixed, bad
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--pack", help="a replay pack: its VT records of --fs")
     ap.add_argument("--fs", nargs="+", default=[], help="fragment shader hashes (hex)")
     ap.add_argument("--misses", help="instead of --pack: the layer's captures/vt_alpha_misses.tsv (ranked)")
     ap.add_argument("--top", type=int, default=0, help="with --misses: only the N highest triangle-frame textures")
-    ap.add_argument("--work", required=True)
+    ap.add_argument("--work")
+    ap.add_argument("--repair", help="crop the tile-padded masks of this folder in place, then stop (no game files)")
+    ap.add_argument("--dry-run", action="store_true", help="with --repair: report only")
     ap.add_argument("--out", default=None)
     ap.add_argument("--lslib", default=LSLIB)
     ap.add_argument("--set", default="", help="suffix of the index/manifest names: vt_alpha_index<set>.txt (a new set never "
                     "rewrites an older one; the layer reads every vt_alpha_index*.txt)")
     a = ap.parse_args()
+    if a.repair:
+        _, _, bad = repair(a.repair, a.dry_run)
+        sys.exit(1 if bad else 0)
+    if not a.work:
+        ap.error("--work is required")
     work = Path(a.work)
     work.mkdir(parents=True, exist_ok=True)
     if bool(a.pack) == bool(a.misses):
@@ -148,7 +237,8 @@ def main():
                     break   # LSLib extracts no level smaller than a tile; the RT test reads mip <= record p1.x
                 if i == 0:
                     w0, h0 = w, h
-                levels.append(bc4)
+                # A level below one tile comes padded to it: keep its exact mip size (the layer's parse_mask).
+                levels.append(crop_bc4(bc4, w, h, *exact_level(w0, h0, i)))
             name = f"{ts:x}_{t['name']}.vtalpha"
             if not levels:
                 # LSLib extracts no level of a texture smaller than one tile: such records keep the page cache.

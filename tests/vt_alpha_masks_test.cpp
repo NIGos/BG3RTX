@@ -4,6 +4,10 @@
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <vector>
 
 using namespace bg3::vt_alpha;
@@ -25,7 +29,34 @@ static std::vector<uint8_t> file(uint32_t w, uint32_t h, uint32_t n, int extra =
   return d;
 }
 
-int main() {
+// argv[1] (CMake: data/assetdb/vt_alpha): every mask an index names must pass the layer's own parse_mask, as
+// layer/alphatest.cpp vt_masks_load reads them (2026-11-02 to 11-23: 17 of 71 tile-padded files were "invalid").
+static void check_folder(const std::string& dir) {
+  unsigned files = 0, parsed = 0;
+  uint64_t bytes = 0;
+  std::error_code ec;
+  // Every vt_alpha_index*.txt, as the layer reads them (vt_index_lines).
+  for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+    const std::string name = entry.path().filename().string();
+    if (name.rfind("vt_alpha_index", 0) != 0 || entry.path().extension() != ".txt") continue;
+    std::ifstream index(entry.path());
+    for (std::string l; std::getline(index, l);) {
+      IndexEntry e;
+      if (!parse_index_line(l, &e)) continue;
+      std::ifstream f(dir + "/" + e.file, std::ios::binary);
+      std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+      Mask m;
+      ++files;
+      if (parse_mask(d.data(), d.size(), &m)) { ++parsed; bytes += d.size(); }
+      else std::fprintf(stderr, "invalid mask: %s (%zu bytes)\n", e.file.c_str(), d.size());
+    }
+  }
+  if (!files) { std::printf("vt_alpha_masks_test: no index in %s (no asset DB): folder check not run\n", dir.c_str()); return; }
+  std::printf("vt_alpha_masks_test: %u of %u indexed masks parse (%.2f MB)\n", parsed, files, double(bytes) / 1048576.0);
+  check(parsed == files, "every indexed mask of the asset DB parses");
+}
+
+int main(int argc, char** argv) {
   IndexEntry e;
   // The real camp line (data/assetdb/vt_alpha/vt_alpha_index.txt, 2026-11-02).
   check(parse_index_line("10 3e840000 3db00000 3c000000 3c000000 a_a821cfc6b5605b21f6fbf8fe93b8ae64.vtalpha", &e), "index line parses");
@@ -62,6 +93,7 @@ int main() {
   check(!matches(e, 1, p0, 9.0f) && !matches(e, 1, p0, 10.5f) && !matches(e, 1, p0, -1.0f), "tile set must be the same integer");
   p0[2] = std::nextafter(p0[2], 1.0f);
   check(!matches(e, 1, p0, 10.0f), "one ulp of uv transform does not match");
+  if (argc > 1) check_folder(argv[1]);
   std::printf("vt_alpha_masks_test: %u checks passed\n", checks);
   return 0;
 }
