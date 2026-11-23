@@ -29,7 +29,7 @@ int main(int argc,char** argv){
   // stays visible with Retry, and never reaches the launch callback.
   {
     launcher::State ps; ps.caps=~0u; ps.base=st::code_defaults();
-    ps.base["dev"]="0"; ps.values=st::preset_values(st::kLow);
+    ps.base["dev"]="0"; ps.values=st::preset_values(st::kLow); ps.preset=st::kLow; ps.user_text="preset=low\n";   // a file already written
     bool fail_save=false; std::string effects;
     launcher::web::Hooks ph;
     ph.save=[&](launcher::State&,const st::KVList&,std::string&){effects+='S';return !fail_save;};
@@ -281,7 +281,7 @@ int main(int argc,char** argv){
   check(launcher::web::Bridge::is_cancel_collection_intent("{\"type\":\"closeReport\"}"));
   check(launcher::web::Bridge::is_cancel_collection_intent("{\"type\":\"cancelReport\"}"));
   check(!launcher::web::Bridge::is_cancel_collection_intent("{\"type\":\"exportReport\",\"issue\":\"closeReport\"}"));
-  launcher::State s;s.caps=~0u;s.preset=st::kLow;s.values=st::preset_values(st::kLow);s.loaded=s.values;s.base={{"dev","0"}};s.user={{"unmanaged","retained"}};
+  launcher::State s;s.caps=~0u;s.preset=st::kLow;s.values=st::preset_values(st::kLow);s.loaded=s.values;s.base={{"dev","0"}};s.user={{"unmanaged","retained"}};s.user_text="preset=low\n";
   launcher::web::Hooks h;
   h.save=[&](launcher::State& candidate,const st::KVList&,std::string&){++saves;check(candidate.user.at("unmanaged")=="retained");return true;};
   h.play=[&](std::string&){++plays;return true;};
@@ -361,6 +361,24 @@ int main(int argc,char** argv){
   check(launcher::session_logging::enabled("[cfg] detailed logging: 10\n")==-1);
   check(launcher::session_logging::enabled("old log without marker")==-1);
   check(launcher::session_logging::enabled("[cfg] detailed logging: 0\n[cfg] detailed logging: 1\n")==1);
+  // Fresh install (no user file): Play writes the shown preset, so the game gets `preset=` and its automatic paths
+  // (High: opacity micromaps and cutout masks). 0.9.6-beta wrote nothing and the game ran the bare bg3rtx.ini.
+  {
+    std::ifstream bf(BG3RTX_SOURCE_DIR "/bg3rtx.ini",std::ios::binary),rf(BG3RTX_SOURCE_DIR "/data/release.ini",std::ios::binary);
+    launcher::State fs;fs.base_text=std::string(std::istreambuf_iterator<char>(bf),{})+"\n"+std::string(std::istreambuf_iterator<char>(rf),{});
+    fs.base=st::parse_ini(fs.base_text);fs.settings_readable=true;fs.caps=~0u;fs.have_gpu=true;
+    {st::Map raw;st::apply_layer(raw,fs.base);fs.values=st::knob_values(raw);fs.loaded=fs.values;const int p=st::matching_preset(fs.values);fs.preset=p<0?st::kHigh:p;}
+    int fs_saves=0,fs_plays=0;std::string written;
+    launcher::web::Hooks fh;
+    fh.save=[&](launcher::State& c,const st::KVList&,std::string&){++fs_saves;written=st::render_user_ini(c.user_text,c.preset,c.values);c.user_text=written;return true;};
+    fh.play=[&](std::string&){++fs_plays;return true;};
+    launcher::web::Bridge fb(fs,fh);fb.set_can_play(true);
+    fb.handle("{\"type\":\"play\"}");
+    check(fs_saves==1&&fs_plays==1&&written.find("preset=high\n")!=std::string::npos);
+    const st::Map user=st::parse_ini(written);const st::Map m=st::merge_layers({&fs.base,&user});
+    check(st::lookup(m,"rt_omm")=="1"&&st::lookup(m,"rt_vt_alpha_masks")=="1");
+    fb.set_can_play(true);fb.handle("{\"type\":\"play\"}");check(fs_saves==1&&fs_plays==2);   // the preset is on disk now
+  }
   // Release opt-in: the switch shows exactly settings::kOptInKnobs on their own page,
   // is saved with the settings and Off restores the qualified Off values.
   {
@@ -371,6 +389,8 @@ int main(int argc,char** argv){
     check(ob.state_json().find("\"id\":\"water_surface_fresnel\"")==std::string::npos);
     ob.handle("{\"type\":\"set\",\"id\":\"exp_hair_fibre_gi\",\"value\":1}");check(os.values[st::knob_index("exp_hair_fibre_gi")]<=0);
     auto shown=ob.handle("{\"type\":\"experimental\",\"value\":true}");
+    // Showing the hidden opt-in options changes none of them: no "Custom value" lines, no restart note (0.9.6-beta).
+    check(shown.find("Custom value")==std::string::npos&&shown.find("\"notice\":{\"text\":\"Experimental options shown\",\"also\":[]")!=std::string::npos);
     check(ob.experimental&&os_saves==1&&saved_text.find("experimental_options=1\n")!=std::string::npos&&saved_text.find("experimental_options=0")==std::string::npos&&saved_text.find("unmanaged=retained")!=std::string::npos);
     for(const auto& k:st::kKnobs){
       bool listed=shown.find("\"id\":\""+std::string(k.id)+"\"")!=std::string::npos;
