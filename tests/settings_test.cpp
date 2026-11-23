@@ -1047,7 +1047,10 @@ static void test_apply_modes() {
   }
   CHECK_EQ(get(on_map(*find_knob("rr_post"),0),"rr_post"),"1");
   CHECK_EQ(get(on_map(*find_knob("rr_post"),1),"rr_post"),"0");
-  for(const char* key : {"rt_native_hair","rt_native_scalp","rt_hair_groom","rr_post"}) {
+  // rt_native_hair On is a startup reservation (the 88-byte capture layout, layer/geocapture.cpp; alphatest.cpp refuses
+  // it live): settings_test checks it with the other restart keys. Off and the rest are live.
+  CHECK(!key_change_needs_restart("rt_native_hair","1","0"));
+  for(const char* key : {"rt_native_scalp","rt_hair_groom","rr_post"}) {
     CHECK(!key_change_needs_restart(key,"0","1"));
     CHECK(!key_change_needs_restart(key,"1","0"));
   }
@@ -1408,6 +1411,9 @@ static void test_hair_motion_stability() {
   CHECK(key_change_needs_restart("rt_hair_mv_card", "0", "2") && !key_change_needs_restart("rt_hair_mv_card", "2", "0"));
   // RTX Hair On writes rt_hair_groom_nearest: its trace is compiled in at pipeline creation (turning it on needs a restart).
   CHECK(key_change_needs_restart("rt_hair_groom_nearest", "0", "1") && !key_change_needs_restart("rt_hair_groom_nearest", "1", "0"));
+  // Hair shadows On reserves the native-hair capture layout at startup (off is live); Detailed logging is latched at start.
+  CHECK(key_change_needs_restart("rt_native_hair", "0", "1") && !key_change_needs_restart("rt_native_hair", "1", "0"));
+  CHECK(key_change_needs_restart("detailed_logging", "0", "1") && key_change_needs_restart("detailed_logging", "1", "0"));
   // On in High and Ultra (user decision 2026-11-11: hm1 210705, hf2 000619), Off in Low and Medium.
   for (int p = 0; p < kPresetCount; ++p)
     CHECK(preset_values(p)[knob_index("hair_motion_stability")] == (p == kHigh || p == kUltra ? 1 : 0));
