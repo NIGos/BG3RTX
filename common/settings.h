@@ -331,7 +331,7 @@ inline constexpr Knob kKnobs[] = {
   // hit-GI trace does not run (core/gi.cpp hit_gi_dispatch is its only reader). The id keeps its
   // exp_ prefix for saved selections. The reorder option below stays experimental and developer-only.
   {"exp_gi_rt_pipeline", "Faster bounce light tracing",
-   "The same bounce lighting, traced faster.",
+   "The same bounce lighting, traced faster. Acts only with Off-screen bounce light Near or Far (Ultra by default).",
    Kind::Choice, Apply::Live, "May briefly pause the first time while the pipeline builds", false,
    {{"off", "Off", 0, {{"gi_rt_pipeline", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"gi_rt_pipeline", "1"}}, {}, {}, false, false, false, Apply::Live}},
@@ -340,7 +340,7 @@ inline constexpr Knob kKnobs[] = {
   // Shader execution reordering on the raygen trace: on by default (user decision 2026-11-08, "Yes, turn it on"). Live: camp
   // -1.5 / -1.6 ms in two runs, inn -0.8 ms in one clean window; the committed two-scene rule was not met (inn unproven).
   {"exp_gi_rt_pipeline_reorder", "Bounce trace reordering",
-   "The same bounce lighting, traced faster again.",
+   "The same bounce lighting, traced faster again. Acts only with Off-screen bounce light Near or Far (Ultra by default).",
    Kind::Choice, Apply::Hitch, "May briefly pause when changed", false,
    {{"off", "Off", 0, {{"gi_rt_pipeline_reorder", "0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"kind", "By hit kind", kCapRayQuery, {{"gi_rt_pipeline_reorder", "1"}}, {{"exp_gi_rt_pipeline", 1}}, {}, false, false, false, Apply::Hitch},
@@ -414,7 +414,7 @@ inline constexpr Knob kKnobs[] = {
 
   {"exp_hair_groom_primary", "RTX Hair",
    "Hair as individual ray-traced strands instead of flat cards.",
-   Kind::Choice, Apply::Live, "Turns on and off while playing (also with its keyboard shortcut). If the game started with RTX Hair off, physical hair ray origins and the nearest-strand trace wait for a restart.", false,
+   Kind::Choice, Apply::Live, "Turns on and off while playing. After it is turned On in the launcher, its keyboard shortcut (Ctrl+Shift+F7 by default) switches it off and back on. If the game started with RTX Hair off, physical hair ray origins and the nearest-strand trace wait for a restart.", false,
    {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}, {"rt_hair_capture", "0"}}, {}, {}, false, false, false, Apply::Live},
     // Review 2026-11-08 (docs/RTX_HAIR_PRIMARY.md 5j): On is the one coherent strand path, the qualified bundle: header in
     // G-buffer order decided at submit (order, current), per-frame trace tags, LOD keep, coverage hold and the
@@ -457,7 +457,7 @@ inline constexpr Knob kKnobs[] = {
       {"rt_hair_header_scene_pass", "1"}, {"rt_hair_coverage_keep", "1"},
       {"rt_hair_groom_async", "1"}},
      {{"exp_hair_groom", 1}}, {"rt_hair_groom_primary"}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Beta: off in every preset. Replaces the game's flat hair cards with individual strands, on screen and in shadows, reflections and bounced light. A hair style gets strands after the game has shown it once and the launcher has converted it (Home, Preparation); until then it keeps the game's look. Turns on and off while you play, also with its in-game key. If the game was started with RTX Hair off, part of the strand lighting and the fix for holes in hair while another character's hair loads wait for the next game start. The cost depends on how much hair is on screen and is not measured across scenes yet."},
+   {}, {0, 0, 0, 0}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Lighting", {}, "Beta: off in every preset. Replaces the game's flat hair cards with individual strands, on screen and in shadows, reflections and bounced light. A hair style gets strands after the game has shown it once and the launcher has converted it (Home, Preparation); until then it keeps the game's look. Turns on and off while you play. After it is turned On in the launcher, its in-game key (Ctrl+Shift+F7 by default) switches it off and back on; the key cannot turn it on from Off. If the game was started with RTX Hair off, part of the strand lighting and the fix for holes in hair while another character's hair loads wait for the next game start. The cost depends on how much hair is on screen and is not measured across scenes yet."},
   // Distant RTX Hair detail (docs/RTX_HAIR_PRIMARY.md 5v, user request 2026-11-10): the release control of the pixel LOD.
   // 1/4 and 1/8 are rt_hair_pixel_lod_small_keep (common/hair_groom_budget.h pixel_lod_level). Off in every preset until
   // the final qualification live; to make 1/4 the default, see docs/progress/claude-hair-detail-knob.md.
@@ -1266,6 +1266,11 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   // 5u: specialization 1047 (the nearest-strand trace) is compiled into the strand pipelines only when rt_hair_groom_nearest
   // is non-zero at their creation (layer/hair_primary.cpp); RTX Hair On turned on while playing runs the older trace until then.
   if (key == "rt_hair_groom_nearest") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // Hair shadows: the 88-byte native-hair capture layout is reserved only when the key is on at startup
+  // (layer/geocapture.cpp); off is live (alphatest.cpp reads it hot).
+  if (key == "rt_native_hair") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // Detailed logging is latched at game start in both directions (layer/util.cpp, startup.at("detailed_logging")).
+  if (key == "detailed_logging") return std::atoi(from.c_str()) != std::atoi(to.c_str());
   // rt_hair_groom_primary is live since 5m (docs/RTX_HAIR_PRIMARY.md): its startup parts are prepared on every capable device.
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
   // M5.3: the water FS variants exist only if the key was on when the pipelines were created.

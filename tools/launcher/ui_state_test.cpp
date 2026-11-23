@@ -37,6 +37,14 @@ int main() {
     check(std::find(names.begin(),names.end(),"Ray-tracing detail")!=names.end());
     check(std::find(names.begin(),names.end(),"Rendered frame limit")==names.end());   // a live change is not listed
     check(ui::restart_names(from,from,&others).empty()&&others==0);
+    // Hair shadows On and Detailed logging take effect at game start: the banner names them; Hair shadows Off is live.
+    {
+      st::Map a{{"rt_native_hair","0"},{"rt_native_scalp","0"},{"detailed_logging","0"}},b=a;
+      b["rt_native_hair"]="1";b["rt_native_scalp"]="1";b["detailed_logging"]="1";
+      auto n=ui::restart_names(a,b,&others);
+      check(std::find(n.begin(),n.end(),"Hair shadows")!=n.end()&&std::find(n.begin(),n.end(),"Detailed logging")!=n.end());
+      b["detailed_logging"]="0";check(ui::restart_count(b,a)==0);
+    }
     check(ui::restart_banner({"Water lighting","Hair shadows"},0)=="Restart the game to apply: Water lighting, Hair shadows.");
     check(ui::restart_banner({"Water lighting"},2)=="Restart the game to apply: Water lighting and 2 more settings.");
     check(ui::restart_banner({},1)=="Restart the game to apply 1 change."&&ui::restart_banner({},0).empty());
