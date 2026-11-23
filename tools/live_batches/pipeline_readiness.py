@@ -57,6 +57,9 @@ for key in ("gi_rt_pipeline", "gi_rt_pipeline_reorder"):
 # rt_scene_handout (docs/SCENE_HANDOUT_DESIGN.md): specialization 1051 of every gi/ and water pipeline (core/gi.cpp
 # refresh, core/water.cpp) at 1 and 2; both values stay cached, so a toggle needs a quiet driver, not a build line.
 TABLE["rt_scene_handout"] = [QUIET]
+# fix-level-detect: assetdb_level_vote sets the level, which turns rt_sun_replace's gi/rt_sun_resolve.hlsl on (built in
+# the background at its first use, then cached: the job's warm-on phase builds it); a toggle needs a quiet driver.
+TABLE["assetdb_level_vote"] = [QUIET]
 # r3-core: rr_post_jitter_align 1/2 runs the rr_post_temporal.hlsl temporal_final entry (layer/rrpost.cpp rrpost_final;
 # built in the background on first use, the plain final meanwhile).
 TABLE["rr_post_jitter_align"] = [r"\[rrpost\] rr_post\.hlsl:temporal_final pipeline built"]

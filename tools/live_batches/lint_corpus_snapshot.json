@@ -111872,6 +111872,590 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ],
+        [
+          "cpu_timing",
+          "1"
+        ],
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dev",
+          "1"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_preview_f32",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "3"
+        ],
+        [
+          "fg_state_every",
+          "120"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "replay_pack_cap_mb",
+          "2048"
+        ],
+        [
+          "rt_capture_wide_split",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[assetdb\\] level WLD_Main_A \\(from lights\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[assetdb\\] level cleared \\(assetdb_level_vote=0\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[assetdb\\] level WLD_Main_A \\(from lights\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "1"
+        ],
+        [
+          "qa_exposure_hold",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ],
+        [
+          "qa_exposure_hold",
+          "0"
+        ],
+        [
+          "rt_stats",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ],
+        [
+          "cpu_timing",
+          "1"
+        ],
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dev",
+          "1"
+        ],
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_preview_f32",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "3"
+        ],
+        [
+          "fg_state_every",
+          "120"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "replay_pack_cap_mb",
+          "2048"
+        ],
+        [
+          "rt_alpha_fine_lod",
+          "0"
+        ],
+        [
+          "rt_capture_wide_split",
+          "1"
+        ],
+        [
+          "rt_omm",
+          "0"
+        ],
+        [
+          "rt_omm_dyn",
+          "0"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ],
+        [
+          "sharc",
+          "0"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[assetdb\\] level CTY_Main_A \\(from lights\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[assetdb\\] level cleared \\(assetdb_level_vote=0\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[replay\\] pack 1 (?:written|failed|over budget)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[replay\\] pack 2 (?:written|failed|over budget)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[assetdb\\] level CTY_Main_A \\(from lights\\)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "1"
+        ],
+        [
+          "qa_exposure_hold",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[replay\\] pack 1 (?:written|failed|over budget)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ],
+        [
+          "replay_pack",
+          "1"
+        ],
+        [
+          "rt_stats",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[replay\\] pack 2 (?:written|failed|over budget)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "1"
+        ],
+        [
+          "replay_pack",
+          "2"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ],
+        [
+          "qa_exposure_hold",
+          "0"
+        ],
+        [
+          "replay_pack",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -114734,6 +115318,38 @@
       null
     ],
     "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, emission variant": [
+      0,
+      null
+    ],
+    "\\[assetdb\\] level CTY_Main_A \\(from lights\\)": [
+      0,
+      null
+    ],
+    "\\[assetdb\\] level WLD_Main_A \\(from lights\\)": [
+      0,
+      null
+    ],
+    "\\[assetdb\\] level cleared \\(assetdb_level_vote=0\\)": [
+      0,
+      null
+    ],
+    "\\[assetdb\\] level vote #\\d+ frame \\d+: \\d+ voters": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB .*pass gi_hit_sun_em": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack 2 written: [0-9]+\\.[0-9] MB .*pass gi_hit_sun_em": [
+      0,
+      null
+    ],
+    "\\[replay\\] pack \\d+ (?:failed|over budget)": [
+      0,
+      null
+    ],
+    "ls: per-light data: \\d+ runtime lights .*: bridge \\d+, database [1-9]\\d*;": [
       0,
       null
     ]

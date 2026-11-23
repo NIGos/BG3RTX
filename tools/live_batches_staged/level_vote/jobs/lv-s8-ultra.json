@@ -1,0 +1,348 @@
+{
+  "name": "lv-s8-ultra",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 1857,
+  "max_minutes": 10,
+  "repeat": 1,
+  "live_batch": "level-vote",
+  "fail_fast": false,
+  "stop_on_dump": false,
+  "set": "preset=ultra,dev=1,fg=3,fps_cap=0,reflex=1,rt_capture_wide_split=1,headless=0,crash_dump=1,detailed_logging=1,cpu_timing=1,rt_stats_period_frames=120,rt_timing_frames=120,rt_scene_wait_log_frames=120,fg_state_every=120,dump_images=0,dump_raw=0,dump_preview_f32=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,qa_exposure_hold=0,assetdb_level_vote=0,replay_pack=0,replay_pack_pass=2,replay_pack_cap_mb=2048,rt_omm=0,rt_omm_dyn=0,rt_alpha_fine_lod=0,sharc=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches_staged/level_vote/plans/lv-s8-ultra.json"
+  ],
+  "patterns": [
+    "\\[auto\\]",
+    "\\[cfg\\]",
+    "\\[hot\\]",
+    "\\[stats\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[mem\\]",
+    "\\[vram\\]",
+    "\\[cpu\\]",
+    "\\[bvh\\] last",
+    "\\[rt\\] scene",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "gi: trace pass",
+    "ls: local-light shadow pass GPU median",
+    "rf: reflection pass GPU median",
+    "\\[ngx\\] gpu RR:",
+    "\\[rrpost\\] gpu",
+    "\\[sl\\] gpu FG input copy:",
+    "\\[sl\\] DLSS-G frame",
+    "\\[water\\] \\w+ GPU",
+    "\\[hair primary\\] (?:frame|live|strand G-buffer)",
+    "\\[hair groom\\] (?:frame|pixel LOD)",
+    "\\[hair fibre\\]",
+    "\\[dlss5\\]",
+    "\\[crash\\]",
+    "VK_ERROR",
+    "\\[log\\]",
+    "\\[assetdb\\]",
+    "sun stats",
+    "sun check",
+    "GI far",
+    "GI hit sun",
+    "ls: per-light data",
+    "gi: sun trace pass",
+    "\\[replay\\]",
+    "\\[trace\\]",
+    "gi_rt_pipeline"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[cfg\\] settings read",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[assetdb\\] level CTY_Main_A \\(from lights\\)",
+    "\\[assetdb\\] level cleared \\(assetdb_level_vote=0\\)",
+    "\\[assetdb\\] level vote #\\d+ frame \\d+: \\d+ voters",
+    "ls: per-light data: \\d+ runtime lights .*: bridge \\d+, database [1-9]\\d*;",
+    "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, emission variant",
+    "\\[em\\] last \\d+ builds, .*; emissive (?:[1-9]\\d*\\.\\d|0\\.[1-9])",
+    "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB .*pass gi_hit_sun_em",
+    "\\[replay\\] pack 2 written: [0-9]+\\.[0-9] MB .*pass gi_hit_sun_em"
+  ],
+  "expect_every": [
+    {
+      "name": "rt passes GPU ms in every cost window",
+      "select": "rt passes: GPU cost",
+      "match": "rt passes: GPU cost",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "GI GPU ms in every cost window",
+      "select": "gi: GPU cost",
+      "match": "gi: GPU cost",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "scene build GPU ms in every cost window",
+      "select": "\\[rt\\] scene build GPU",
+      "match": "\\[rt\\] scene build GPU",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "scene wait in every cost window",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "\\[rt\\] scene wait: \\d+ frames",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "rendered frame time in every cost window",
+      "select": "\\[pace\\] rendered frame time over \\d+ frames",
+      "match": "\\[pace\\] rendered frame time over \\d+ frames",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "CPU submit in every cost window",
+      "select": "\\[watch\\] presents",
+      "match": "\\[watch\\] presents",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "VRAM used and budget in every cost window",
+      "select": "\\[mem\\] device-local VRAM",
+      "match": "\\[mem\\] device-local VRAM",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "RR GPU ms in every cost window",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "\\[ngx\\] gpu RR:",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "GI trace GPU ms in every cost window",
+      "select": "gi: trace pass \\(ray-traced",
+      "match": "gi: trace pass \\(ray-traced",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "sun trace GPU ms in every cost window",
+      "select": "gi: sun trace pass GPU cost",
+      "match": "gi: sun trace pass GPU cost",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "LS GPU ms in every cost window",
+      "select": "ls: local-light shadow pass GPU median",
+      "match": "ls: local-light shadow pass GPU median",
+      "windows": [
+        "off-a",
+        "on",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "sun stats with roof volumes (on)",
+      "select": "sun stats \\(",
+      "match": "sun stats \\(\\d+ frames, replace 1, [1-9]\\d* roof volumes",
+      "windows": [
+        "on"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "sun stats without a level (off)",
+      "select": "sun stats \\(",
+      "match": "sun stats \\(\\d+ frames, replace 0, 0 roof volumes \\(level unknown",
+      "windows": [
+        "off-a",
+        "off-b"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
+    },
+    {
+      "name": "GI far with qualified far hits (diag-on)",
+      "select": "GI far \\(",
+      "match": "GI far \\(\\d+ frames\\): rays \\d+; beyond the base radius: screen hits \\d+, qualified sun-lit [1-9]\\d*",
+      "windows": [
+        "diag-on"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    },
+    {
+      "name": "GI far without them (diag-off)",
+      "select": "GI far \\(",
+      "match": "GI far \\(\\d+ frames\\): rays \\d+; beyond the base radius: screen hits \\d+, qualified sun-lit 0 ",
+      "windows": [
+        "diag-off"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 1
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "\\[log\\] reached \\d+ MB",
+    "\\bnon-?finite(?: terms)?\\s*[:=]?\\s+[1-9]\\d*\\b",
+    "\\[replay\\] pack \\d+ (?:failed|over budget)"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] complete phases=14\\b",
+    "^Run ended: done",
+    "\\[window-mode\\].*visible_unfocused"
+  ],
+  "live_flow": {
+    "expected_fps": 60,
+    "settings_latency_s": 1,
+    "trace_stall_s": 0,
+    "startup_only": [
+      "fg",
+      "replay_pack_cap_mb",
+      "rt_omm",
+      "rt_omm_dyn",
+      "rt_alpha_fine_lod"
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 28.59866539564026,
+        "windows": 88,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\final-s8-ultra-high.1.062059.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\final-s8-ultra-high.1.075628.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.1.020458.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-header-early.2.020642.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl-s8-holdpack.1.015440.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.033523.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hx1a-s8-hair-async.1.040843.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\r3-s8-sun-overlap.1.030240.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          0,
+          1,
+          0,
+          0
+        ],
+        "fps": 29.88047808762515,
+        "windows": 4,
+        "logs": [
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\final-s8-ultra-high.1.062059.log",
+          "E:\\Storage\\Code Projects\\BG3RTX\\captures\\queue\\logs\\final-s8-ultra-high.1.075628.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.34699999999793363,
+      "quantile": 0.95,
+      "samples": 47,
+      "maximum": 0.37299999999959255
+    },
+    "trace_capture_stall": {
+      "seconds": 2.80802,
+      "source": "final-stock-hair-dialogue1.1.062427.log",
+      "quantile": 0.95,
+      "samples": 47,
+      "maximum": 3.15272,
+      "logs": 11
+    }
+  },
+  "estimated_phase_seconds": 134.994,
+  "post_gate": false,
+  "purpose": "assetdb_level_vote 0 / 1 / 0 at Water Queens House, Ultra with OMM off at startup (pack contract), FG 3x, unfocused, static camera: the level lines, sun stats with roof volumes, the D-LS database lights, GI far (rt_stats diag windows), GPU ms and float energy per state, and one gi_hit_sun_em pack per state for the offline PT verdict (predicted.json). STAGED, not authorized.",
+  "window_mode": "visible_unfocused_fg"
+}

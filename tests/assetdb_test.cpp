@@ -289,6 +289,75 @@ int main(int argc, char** argv) {
     DeleteFileA((se_dir + "\\lights.txt").c_str());
     RemoveDirectoryA(se_dir.c_str());
   }
+  // ---- Level vote (assetdb_level_vote, layer/assetdb.cpp assetdb_vote) ----
+  // Fixtures recorded from the database at the cameras of the live scenes (captures/queue/logs, the "camera (...)"
+  // lines): S8 Water Queen's House and the S7 inn in CTY_Main_A (where SCL_Main_A has 39 lights of its own within
+  // 30 m), and the Dialogue1 camp in WLD_Main_A. The runtime array holds each light camera-relative in float32
+  // (layer/assetdb.cpp read_copy adds the camera back): the voters take that round trip, plus 24 lights the
+  // database cannot know (VFX, character lights) at offsets of 0.3-2.6 m from the listed ones.
+  {
+    struct Scene { const char* name; float cam[3]; const char* level; const char* other; };
+    const Scene scenes[] = {{"S8 Water Queen's House", {-217.835f, 15.327f, -197.319f}, "CTY_Main_A", "SCL_Main_A"},
+                            {"S7 inn", {-129.047f, 28.950f, -82.928f}, "CTY_Main_A", "SCL_Main_A"},
+                            {"Dialogue1 camp", {-300.1f, 15.2f, 597.7f}, "WLD_Main_A", "CTY_Main_A"}};
+    const float tol = 0.05f;   // assetdb_join_tol
+    auto level_index = [&](const char* level) {
+      CHECK(bg3::assetdb_select_level(level, "test"));
+      return a->current_level(nullptr, nullptr);
+    };
+    auto voters_of = [&](const char* level, const float cam[3], float radius, bool noise) {
+      level_index(level);
+      std::vector<uint32_t> ids(4096);
+      const uint32_t nl = a->lights_near(cam, radius, ids.data(), uint32_t(ids.size()));
+      std::vector<std::array<float, 3>> v;
+      for (uint32_t i = 0; i < nl && i < ids.size(); ++i) {
+        const Bg3DbLight* l = a->light(ids[i]);
+        std::array<float, 3> w;
+        for (int c = 0; c < 3; ++c) {
+          const volatile float rel = l->pos[c] - cam[c];   // the game's camera-relative float32
+          w[c] = rel + cam[c];
+        }
+        v.push_back(w);
+      }
+      const size_t real = v.size();
+      for (uint32_t k = 0; noise && real && k < 24; ++k) {
+        std::array<float, 3> w = v[k % real];
+        w[k % 3] += 0.3f + 0.1f * float(k);
+        v.push_back(w);
+      }
+      return v;
+    };
+    for (const Scene& s : scenes) {
+      const int want = level_index(s.level), other = level_index(s.other);
+      const auto v = voters_of(s.level, s.cam, 60.0f, true);
+      bg3::assetdb_clear_level("test");
+      CHECK(a->current_level(nullptr, nullptr) == -1);
+      const bg3::LevelVote none = bg3::assetdb_vote(v.data(), v.size(), -1, tol);
+      CHECK(none.change && none.best == want && none.levels == 1);
+      // From a wrong current level (a stale hint): the right one wins once it has 3 votes.
+      const bg3::LevelVote wrong = bg3::assetdb_vote(v.data(), v.size(), other, tol);
+      CHECK(wrong.best == want && wrong.cur_votes == 0 && wrong.change == (wrong.best_votes >= 3));
+      // Already current: no change.
+      CHECK(!bg3::assetdb_vote(v.data(), v.size(), want, tol).change);
+      // The noise alone (no database light within tol) votes for nothing.
+      const std::vector<std::array<float, 3>> noise(v.begin() + (v.size() - 24), v.end());
+      CHECK(v.size() > 24 && bg3::assetdb_vote(noise.data(), noise.size(), -1, tol).best == -1);
+      printf("level vote %s: %zu voters (%zu database lights within 60 m), %s with %u votes, %u level(s) voted for; "
+             "from %s: %u votes, change %d\n",
+             s.name, v.size(), v.size() - 24, s.level, none.best_votes, none.levels, s.other, wrong.best_votes,
+             int(wrong.change));
+    }
+    // The inn's other level (SCL_Main_A shares the place, not the positions): its own lights vote for it alone.
+    {
+      const int scl = level_index("SCL_Main_A");
+      const auto v = voters_of("SCL_Main_A", scenes[1].cam, 30.0f, false);
+      const bg3::LevelVote r = bg3::assetdb_vote(v.data(), v.size(), level_index("CTY_Main_A"), tol);
+      CHECK(v.size() >= 3 && r.best == scl && r.levels == 1 && r.change);
+    }
+    // An empty vote changes nothing.
+    CHECK(!bg3::assetdb_vote(nullptr, 0, -1, tol).change);
+    bg3::assetdb_clear_level("test");
+  }
   printf("%s (%d failures)\n", g_fail ? "FAILED" : "OK", g_fail);
   return g_fail ? 1 : 0;
 }

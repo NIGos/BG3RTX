@@ -1297,20 +1297,40 @@ bool inv3(const float m[3][4], float inv[3][3]) {
   return true;
 }
 
-void join_check(Db& d, const Pending& p) {
+// One runtime light slot of the copied b25 array (camera-relative position made absolute).
+struct RtLight {
+  uint32_t slot;
+  float w[3], col[3], inv_r, m3, m4, m5;
+  uint32_t chan, flags;
+  bool referenced;
+};
+// What a recorded light-list copy holds: the camera, the global scale, the froxel-listed slots, the valid runtime
+// lights and the voter positions of the level vote (froxel-listed point/spot lights and projector near-face anchors).
+struct LightCopy {
+  float cam[3] = {}, scale = 0;
+  uint32_t slots = 0, pslots = 0;
+  std::vector<uint8_t> ref, pref;
+  std::vector<RtLight> rt;
+  std::vector<std::array<float, 3>> voters;
+};
+bool read_copy(const Pending& p, LightCopy& c, const char* who) {
   const uint8_t* rb = g_rb_map;
   uint32_t sentinel;
   memcpy(&sentinel, rb + kOffCam + 208, 4);
   if (sentinel == 0xFFFFFFFFu) {
-    log("[assetdb] join: the recorded copy did not run (command buffer not submitted?)");
-    return;
+    log("[assetdb] %s: the recorded copy did not run (command buffer not submitted?)", who);
+    return false;
   }
-  float cam[3], scale;
+  float* cam = c.cam;
+  float& scale = c.scale;
   memcpy(cam, rb + kOffCam + 208, 12);
   memcpy(&scale, rb + kOffScale, 4);
-  const uint32_t slots = uint32_t(p.lights / 80), pslots = uint32_t(p.proj / 128);
+  const uint32_t slots = c.slots = uint32_t(p.lights / 80), pslots = c.pslots = uint32_t(p.proj / 128);
   // Lights the froxel lists reference this frame (the in-frustum set), from b23/b24.
-  std::vector<uint8_t> ref(slots, 0), pref(pslots, 0);
+  std::vector<uint8_t>& ref = c.ref;
+  std::vector<uint8_t>& pref = c.pref;
+  ref.assign(slots, 0);
+  pref.assign(pslots, 0);
   const uint32_t heads = uint32_t(p.heads / 16), nidx = uint32_t(p.index / 4);
   const int32_t* idx = reinterpret_cast<const int32_t*>(rb + kOffIndex);
   for (uint32_t f = 0; f < heads; ++f) {
@@ -1326,16 +1346,7 @@ void join_check(Db& d, const Pending& p) {
       }
     }
   }
-  // Level detection by votes
-  build_vote_grid(d);
-  const float tol = cfg_float("assetdb_join_tol", 0.05f);
-  struct RtLight {
-    uint32_t slot;
-    float w[3], col[3], inv_r, m3, m4, m5;
-    uint32_t chan, flags;
-    bool referenced;
-  };
-  std::vector<RtLight> rt;
+  std::vector<RtLight>& rt = c.rt;
   for (uint32_t i = 0; i < slots; ++i) {
     float f[12];
     uint32_t u[2];
@@ -1358,7 +1369,7 @@ void join_check(Db& d, const Pending& p) {
   // Projector (box) lights vote too, by the near-face centre of their unit box (the anchor
   // that matches the editor position, see the b29 statistics below): interiors such as the
   // Water Queen's House list only a few point lights.
-  std::vector<std::array<float, 3>> voters;
+  std::vector<std::array<float, 3>>& voters = c.voters;
   const bool any_listed = n_ref_total(ref) > 0;
   for (const RtLight& L : rt)
     if (!any_listed || L.referenced) voters.push_back({L.w[0], L.w[1], L.w[2]});
@@ -1376,41 +1387,29 @@ void join_check(Db& d, const Pending& p) {
     for (int r = 0; r < 3; ++r) w[r] = inv[r][0] * qv[0] + inv[r][1] * qv[1] + inv[r][2] * qv[2] + cam[r];
     voters.push_back(w);
   }
-  std::unordered_map<int, uint32_t> votes;
-  for (const auto& V : voters) {
-    struct { float w[3]; } L{{V[0], V[1], V[2]}};
-    std::vector<int> seen;
-    int x0 = g_vote_grid.c(L.w[0] - tol), x1 = g_vote_grid.c(L.w[0] + tol);
-    int y0 = g_vote_grid.c(L.w[1] - tol), y1 = g_vote_grid.c(L.w[1] + tol);
-    int z0 = g_vote_grid.c(L.w[2] - tol), z1 = g_vote_grid.c(L.w[2] + tol);
-    for (int x = x0; x <= x1; ++x)
-      for (int y = y0; y <= y1; ++y)
-        for (int z = z0; z <= z1; ++z) {
-          auto it = g_vote_grid.cells.find(Grid::key(x, y, z));
-          if (it == g_vote_grid.cells.end()) continue;
-          for (uint32_t i : it->second) {
-            float slack = d.lights[i].move_amount;
-            if (dist2(L.w, d.lights[i].pos) > tol * tol + slack * slack) continue;
-            int lv = d.light_level[i];
-            if (lv >= 0 && std::find(seen.begin(), seen.end(), lv) == seen.end()) seen.push_back(lv);
-          }
-        }
-    for (int lv : seen) ++votes[lv];
-  }
-  int best = -1;
-  uint32_t bv = 0;
-  for (auto& [lv, n] : votes)
-    if (n > bv) best = lv, bv = n;
+  return true;
+}
+
+void join_check(Db& d, const Pending& p) {
+  LightCopy c;
+  if (!read_copy(p, c, "join")) return;
+  const float* cam = c.cam;
+  const float scale = c.scale;
+  const uint32_t slots = c.slots, pslots = c.pslots;
+  const std::vector<uint8_t>& ref = c.ref;
+  const std::vector<uint8_t>& pref = c.pref;
+  const std::vector<RtLight>& rt = c.rt;
+  const std::vector<std::array<float, 3>>& voters = c.voters;
+  const uint8_t* rb = g_rb_map;
+  const float tol = cfg_float("assetdb_join_tol", 0.05f);
   int cur;
   {
     std::shared_lock<std::shared_mutex> lock(g_level_mu);
     cur = g_level;
   }
-  uint32_t cur_votes = cur >= 0 && votes.count(cur) ? votes[cur] : 0;
-  // Switch on 3 votes; with no level yet, a level that is the only one voted for is enough
-  // (positions match to float precision, so one exact match is strong evidence).
-  if (best >= 0 && best != cur && bv > cur_votes && (bv >= 3 || (cur < 0 && votes.size() == 1)))
-    set_level(best, "lights");
+  const LevelVote lv_vote = assetdb_vote(voters.data(), voters.size(), cur, tol);
+  const uint32_t bv = lv_vote.best_votes, cur_votes = lv_vote.cur_votes;
+  if (lv_vote.change) set_level(lv_vote.best, "lights");
   {
     std::shared_lock<std::shared_mutex> lock(g_level_mu);
     cur = g_level;
@@ -1646,7 +1645,82 @@ void join_check(Db& d, const Pending& p) {
   }
 }
 
+// The lean level vote (assetdb_level_vote=1, without assetdb_join): the copy's voters only, no CSV, no matching
+// statistics. One line per level change, and while no level is known the first 4 checks and every 16th.
+uint32_t g_vote_checks = 0;
+void vote_check(const Pending& p) {
+  LightCopy c;
+  if (!read_copy(p, c, "level vote")) return;
+  int cur;
+  {
+    std::shared_lock<std::shared_mutex> lock(g_level_mu);
+    cur = g_level;
+  }
+  const LevelVote v = assetdb_vote(c.voters.data(), c.voters.size(), cur, cfg_float("assetdb_join_tol", 0.05f));
+  if (v.change) set_level(v.best, "lights");
+  ++g_vote_checks;
+  if (v.change || (cur < 0 && (g_vote_checks <= 4 || g_vote_checks % 16 == 0))) {
+    const Db& d = *g_db;
+    log("[assetdb] level vote #%u frame %llu: %zu voters (%zu runtime lights, %u froxel-listed), best %s with %u votes "
+        "(%u levels voted for), current %s (%u votes): %s",
+        g_vote_checks, (unsigned long long)p.frame, c.voters.size(), c.rt.size(), n_ref_total(c.ref),
+        v.best >= 0 ? d.str(d.levels[v.best].name) : "none", v.best_votes, v.levels,
+        cur >= 0 ? d.str(d.levels[cur].name) : "none", v.cur_votes, v.change ? "switched" : "kept");
+  }
+}
+
+void clear_level(const char* why) {
+  std::unique_lock<std::shared_mutex> lock(g_level_mu);
+  if (g_level < 0) return;
+  g_level = -1;
+  g_level_source = "none";
+  build_grid(*g_db, -1, g_grid);
+  log("[assetdb] level cleared (%s)", why);
+}
+
 }  // namespace
+
+LevelVote assetdb_vote(const std::array<float, 3>* voters, size_t n, int current, float tol) {
+  LevelVote r;
+  Db* d = db();
+  if (!d) return r;
+  build_vote_grid(*d);
+  std::unordered_map<int, uint32_t> votes;
+  std::vector<int> seen;
+  for (size_t k = 0; k < n; ++k) {
+    const float* w = voters[k].data();
+    seen.clear();
+    int x0 = g_vote_grid.c(w[0] - tol), x1 = g_vote_grid.c(w[0] + tol);
+    int y0 = g_vote_grid.c(w[1] - tol), y1 = g_vote_grid.c(w[1] + tol);
+    int z0 = g_vote_grid.c(w[2] - tol), z1 = g_vote_grid.c(w[2] + tol);
+    for (int x = x0; x <= x1; ++x)
+      for (int y = y0; y <= y1; ++y)
+        for (int z = z0; z <= z1; ++z) {
+          auto it = g_vote_grid.cells.find(Grid::key(x, y, z));
+          if (it == g_vote_grid.cells.end()) continue;
+          for (uint32_t i : it->second) {
+            const float slack = d->lights[i].move_amount;
+            if (dist2(w, d->lights[i].pos) > tol * tol + slack * slack) continue;
+            const int lv = d->light_level[i];
+            if (lv >= 0 && std::find(seen.begin(), seen.end(), lv) == seen.end()) seen.push_back(lv);
+          }
+        }
+    for (int lv : seen) ++votes[lv];
+  }
+  for (auto& [lv, c] : votes)
+    if (c > r.best_votes || (c == r.best_votes && lv < r.best)) r.best = lv, r.best_votes = c;
+  r.levels = uint32_t(votes.size());
+  r.cur_votes = current >= 0 && votes.count(current) ? votes[current] : 0;
+  // Switch on 3 votes; with no level yet, a level that is the only one voted for is enough
+  // (positions match to float precision, so one exact match is strong evidence).
+  r.change = r.best >= 0 && r.best != current && r.best_votes > r.cur_votes &&
+             (r.best_votes >= 3 || (current < 0 && votes.size() == 1));
+  return r;
+}
+
+void assetdb_clear_level(const char* why) {
+  if (db()) clear_level(why);
+}
 
 void assetdb_on_present(uint64_t frame) {
   // The Script Extender bridge reader runs from the first present (its own thread).
@@ -1656,8 +1730,22 @@ void assetdb_on_present(uint64_t frame) {
     se_latest();
   }
   // Draw counting covers exactly one frame: the one the capture was recorded in.
-  int join = cfg_int("assetdb_join", 0);
-  if (!join) return;
+  const int join = cfg_int("assetdb_join", 0);
+  // assetdb_level_vote (default 0, live): the level vote alone. Turned on, it checks at once; with both keys off,
+  // a level the vote found is forgotten (the save hint's or the bridge's stays), so 0/1/0 within one run is an A/B.
+  const bool vote = cfg_int("assetdb_level_vote", 0) != 0;
+  static bool vote_was = false;
+  if (vote && !vote_was) g_next_check = frame;
+  if (!vote && vote_was && !join && g_db) {
+    bool from_lights;
+    {
+      std::shared_lock<std::shared_mutex> lock(g_level_mu);
+      from_lights = g_level >= 0 && std::strcmp(g_level_source, "lights") == 0;
+    }
+    if (from_lights) clear_level("assetdb_level_vote=0");
+  }
+  vote_was = vote;
+  if (!join && !vote) return;
   Db* d = db();
   if (!d) return;
   Pending p;
@@ -1671,7 +1759,8 @@ void assetdb_on_present(uint64_t frame) {
       std::lock_guard<std::mutex> lock(g_join_mu);
       g_pending = Pending{};
     }
-    join_check(*d, p);
+    if (join) join_check(*d, p);
+    else vote_check(p);
     std::lock_guard<std::mutex> lock(g_draw_mu);
     g_draw_vs.clear();
     g_draw_fs.clear();
@@ -1684,7 +1773,7 @@ void assetdb_on_present(uint64_t frame) {
       g_draw_vs.clear();
       g_draw_fs.clear();
     }
-    g_assetdb_counting = true;
+    g_assetdb_counting = join != 0;   // the shader statistics are the join's only
     g_assetdb_armed = true;
   }
 }
