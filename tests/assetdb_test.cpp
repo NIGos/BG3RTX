@@ -38,6 +38,7 @@ Tracker& tracker() {
   return t;
 }
 void defer_destroy(Bg3DeferKind, uint64_t) {}
+uint64_t geo_gbuffer_depth_image() { return 0; }   // no G-buffer: no level-load boundary in this test
 }  // namespace bg3
 
 static int g_fail = 0;
@@ -282,6 +283,26 @@ int main(int argc, char** argv) {
     uint32_t explicit_count = 0;
     for (uint32_t i = 0; i < n_legacy; ++i) explicit_count += (rl[i].flags & BG3_RTL_FROM_SE) != 0;
     CHECK(explicit_count == 3);
+    // The bridge's level (hunt2_lifecycle 2): a sub-level names its world; a level the database lacks clears the
+    // current one instead of keeping it.
+    auto export_level = [&](uint32_t seq, const char* level) {
+      std::string t(text);
+      t.replace(t.find("seq 3"), 5, "seq " + std::to_string(seq));
+      t.replace(t.find("level CTY_Main_A"), strlen("level CTY_Main_A"), std::string("level ") + level);
+      FILE* g = fopen((se_dir + "\\lights.txt").c_str(), "wb");
+      fwrite(t.data(), 1, t.size(), g);
+      fclose(g);
+      for (int i = 0; i < 50 && (!a->se_info(&info) || info.seq != seq); ++i) Sleep(50);
+      CHECK(info.active && info.seq == seq);
+      a->runtime_lights(cam, 40.0f, rl, 256);   // merges the snapshot: level_from_se
+    };
+    bg3::assetdb_select_level("WLD_Main_A", "test");
+    export_level(5, "BGH_SteelWatchFoundry_B");
+    const char* se_level = nullptr;
+    CHECK(a->current_level(&se_level, nullptr) >= 0 && std::string(se_level) == "CTY_Main_A");
+    export_level(6, "NoSuchLevel_Z");
+    CHECK(a->current_level(nullptr, nullptr) == -1);
+    bg3::assetdb_select_level("CTY_Main_A", "test");
     const char *atm = nullptr, *lit = nullptr;
     a->se_environment(cam, &atm, &lit);
     printf("se: %u runtime lights; environment at the camera: atmosphere '%s', lighting '%s'\n", n_se, atm, lit);
@@ -356,6 +377,37 @@ int main(int argc, char** argv) {
     }
     // An empty vote changes nothing.
     CHECK(!bg3::assetdb_vote(nullptr, 0, -1, tol).change);
+    // ---- Level clear (hunt2_lifecycle 2): a stale level never stays current after the scene changed ----
+    {
+      const int cty = level_index("CTY_Main_A"), wld = level_index("WLD_Main_A");
+      const auto camp = voters_of("WLD_Main_A", scenes[2].cam, 60.0f, true);
+      const std::vector<std::array<float, 3>> noise(camp.end() - 24, camp.end());
+      // Level A (CTY_Main_A, the inn) then the camp's lights (level B): switched, not cleared.
+      const bg3::LevelVote ab = bg3::assetdb_vote(camp.data(), camp.size(), cty, tol);
+      CHECK(ab.change && ab.best == wld && !ab.clear);
+      // Level A then only lights the database does not know (>= 3 voters, none for A, nothing better): cleared.
+      const bg3::LevelVote nn = bg3::assetdb_vote(noise.data(), noise.size(), cty, tol);
+      CHECK(nn.clear && !nn.change && nn.best == -1);
+      // Level A then 1-2 lights of level B only: no switch (< 3 votes) and A has none: cleared, not kept.
+      const std::vector<std::array<float, 3>> two(camp.begin(), camp.begin() + 2);
+      const bg3::LevelVote tw = bg3::assetdb_vote(two.data(), two.size(), cty, tol);
+      CHECK(!tw.change && tw.clear == false);   // 2 voters: too little evidence outside a level load ...
+      CHECK(bg3::assetdb_vote(two.data(), two.size(), cty, tol, true).clear);   // ... but right after one it clears
+      // No lights at all: in play nothing is concluded (no false clear); right after a level load no evidence for the
+      // old level is no keep (no false keep).
+      CHECK(!bg3::assetdb_vote(nullptr, 0, cty, tol).clear);
+      CHECK(bg3::assetdb_vote(nullptr, 0, cty, tol, true).clear);
+      // The current level's own lights: never cleared, after a load neither.
+      CHECK(!bg3::assetdb_vote(camp.data(), camp.size(), wld, tol, true).clear);
+      // No level: nothing to clear.
+      CHECK(!bg3::assetdb_vote(noise.data(), noise.size(), -1, tol, true).clear);
+      // The layer applies it: the public clear forgets the level.
+      level_index("CTY_Main_A");
+      bg3::assetdb_clear_level("test: stale level");
+      CHECK(a->current_level(nullptr, nullptr) == -1);
+      printf("level clear: inn -> camp switched (%u votes), unknown lights cleared, no lights kept in play and cleared "
+             "after a load\n", ab.best_votes);
+    }
     bg3::assetdb_clear_level("test");
   }
   printf("%s (%d failures)\n", g_fail ? "FAILED" : "OK", g_fail);

@@ -27,6 +27,8 @@ SUN_UNKNOWN = ("{t}  [core] sun stats (600 frames, replace 0, 0 roof volumes (le
                "traced 76.1% of px, lit 32.9%; game dark & RT lit 0.00% of traced px")
 SUN_KNOWN = ("{t}  [core] sun stats (600 frames, replace 1, 153 roof volumes, scene top 14.4): traced 76.1% of px, lit 32.9%; "
              "game dark & RT lit 0.40% of traced px")
+# core/gi.cpp pass_timing_collect, kSunResolve (detailed logging): the cost line of the sun resolve pass
+SUN_RESOLVE = "{t}  [core] gi: sun resolve pass GPU cost 0.142 ms/frame (average of 300 dispatched frames)"
 MASKS = r"06:21:24.848  [vt alpha] 54 masks loaded from E:\x\data\assetdb\vt_alpha (43.83 MB BC4)"
 MASK_INVALID = "06:21:24.518  [vt alpha] 1_1ee1bfca43a33d7e060b496f46d293e9.vtalpha invalid: skipped"
 
@@ -82,6 +84,22 @@ class Liveness(unittest.TestCase):
         r = self.check([READ_ULTRA] + stamp(t0, 4, 10, SUN_KNOWN))
         for row in ("level_known", "sun_replace_active", "roof_volumes"):
             self.assertEqual(r[row]["ultra"]["status"], L.ALIVE, row)
+
+    def test_sun_resolve_follows_the_level(self):
+        # hunt2_claims D3: with the level unknown the resolve pass never runs; with detailed logging its silent cost
+        # line is DEAD and names the level rows as its cause. A known level and the cost line: ALIVE.
+        t0 = 6 * 3600 + 22 * 60
+        r = self.check([READ_ULTRA, DETAILED] + stamp(t0, 15, 10, SUN_UNKNOWN))
+        self.assertEqual(r["sun_resolve"]["ultra"]["status"], L.DEAD)
+        self.assertEqual(r["sun_resolve"]["ultra"]["follows"], ["level_known", "roof_volumes"])
+        self.assertIn("(follows level_known, roof_volumes DEAD)", r["sun_resolve"]["ultra"]["why"])
+        r = self.check([READ_ULTRA, DETAILED] + stamp(t0, 15, 10, SUN_KNOWN) + stamp(t0 + 5, 15, 10, SUN_RESOLVE))
+        self.assertEqual(r["sun_resolve"]["ultra"]["status"], L.ALIVE)
+        self.assertNotIn("follows", r["sun_resolve"]["ultra"])
+        # Without detailed logging the pass timers do not print: UNPROVEN, never DEAD.
+        r = self.check([READ_ULTRA] + stamp(t0, 15, 10, SUN_UNKNOWN))
+        self.assertEqual(r["sun_resolve"]["ultra"]["status"], L.UNPROVEN)
+        self.assertTrue(self.by_id["sun_resolve"].line.search(SUN_RESOLVE.format(t="00:00:00.000")))
 
     def test_rejected_masks_are_dead_once_per_launch(self):
         r = self.check([READ_ULTRA, MASK_INVALID, MASKS])

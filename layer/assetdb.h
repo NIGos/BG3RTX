@@ -40,11 +40,14 @@ struct LevelVote {
   uint32_t best_votes = 0, cur_votes = 0;
   uint32_t levels = 0;   // distinct levels voted for
   bool change = false;
+  // clear: fail closed. No voter matches `current`, no switch qualifies, and either at least 3 voters were seen or this
+  // is the first vote after a level load (after_load).
+  bool clear = false;
 };
-LevelVote assetdb_vote(const std::array<float, 3>* voters, size_t n, int current, float tol);
+LevelVote assetdb_vote(const std::array<float, 3>* voters, size_t n, int current, float tol, bool after_load = false);
 // assetdb_level_vote=1 (default 0): the level vote runs without the join diagnostics (layer/assetdb.cpp
 // vote_check, every assetdb_join_interval presents). Turning both keys off forgets a level the vote set.
-// For tests: forget the current level (as if none had been detected).
+// Forget the current level (as if none had been detected): the clear rules and tests.
 void assetdb_clear_level(const char* why);
 // Makes `name` (a level, or a sub-level of one) current; false when it is not in the
 // database. For tests and tools; the layer itself detects the level.

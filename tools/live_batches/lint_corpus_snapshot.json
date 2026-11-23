@@ -112456,6 +112456,67 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[assetdb\\] level load at present \\d+: the level vote re-runs in \\d+ presents",
+        "\\[assetdb\\] level vote #\\d+ frame \\d+: .*, after a level load: (?:kept|switched)"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[assetdb\\] level load at present \\d+: the level vote re-runs in \\d+ presents",
+        "\\[assetdb\\] level vote #\\d+ frame \\d+: .*, after a level load: (?:kept|switched)"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "rt_stats",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[replay\\] pack 1 (?:written|failed|over budget)",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "assetdb_level_vote",
+          "0"
+        ],
+        [
+          "replay_pack",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -115350,6 +115411,14 @@
       null
     ],
     "ls: per-light data: \\d+ runtime lights .*: bridge \\d+, database [1-9]\\d*;": [
+      0,
+      null
+    ],
+    "\\[assetdb\\] level load at present \\d+: the level vote re-runs in \\d+ presents": [
+      0,
+      null
+    ],
+    "\\[assetdb\\] level vote #\\d+ frame \\d+: .*, after a level load: (?:kept|switched)": [
       0,
       null
     ]

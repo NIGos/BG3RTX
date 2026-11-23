@@ -345,6 +345,7 @@ std::unique_ptr<Db> load(std::string& err) {
 
 std::string current_level_from_save();
 void set_level(int level, const char* source);
+void clear_level(const char* why);
 
 Db* db() {
   std::lock_guard<std::mutex> lock(g_load_mu);
@@ -724,8 +725,21 @@ void level_from_se(Db* d, const SeSnapshot& s) {
     std::shared_lock<std::shared_mutex> lock(g_level_mu);
     if (g_level >= 0 && strcmp(d->str(d->levels[g_level].name), s.level) == 0) return;
   }
+  // A sub-level names its world (as the save hint maps it); a level the database does not have clears the current one
+  // (fail closed: an old level would trust the sun with no roof volumes around the new camera, hunt2_lifecycle 2).
   auto it = d->level_by_name.find(s.level);
-  if (it != d->level_by_name.end()) set_level(it->second, "se");
+  if (it != d->level_by_name.end()) {
+    set_level(it->second, "se");
+    return;
+  }
+  auto w = d->world_of_sublevel.find(s.level);
+  if (w != d->world_of_sublevel.end()) {
+    set_level(int(w->second), "se");
+    return;
+  }
+  char why[160];
+  snprintf(why, sizeof why, "the bridge's level %.100s is not in the database", s.level);
+  clear_level(why);
 }
 
 uint32_t api_runtime_lights(const float pos[3], float radius, Bg3RtLight* out, uint32_t max) {
@@ -1102,6 +1116,10 @@ struct Pending {
 };
 Pending g_pending;
 uint64_t g_next_check = 0;
+// A level load (a new G-buffer depth image, as hair_groom's LoadGuard): the next vote may clear the current level with
+// fewer than 3 voters (assetdb_vote after_load) and runs kLoadSettlePresents after the load, not an interval later.
+bool g_after_load = false;
+constexpr uint64_t kLoadSettlePresents = 30;
 uint32_t g_checks = 0;
 // draw counts of the counting frame
 std::mutex g_draw_mu;
@@ -1407,9 +1425,11 @@ void join_check(Db& d, const Pending& p) {
     std::shared_lock<std::shared_mutex> lock(g_level_mu);
     cur = g_level;
   }
-  const LevelVote lv_vote = assetdb_vote(voters.data(), voters.size(), cur, tol);
+  const LevelVote lv_vote = assetdb_vote(voters.data(), voters.size(), cur, tol, g_after_load);
+  g_after_load = false;
   const uint32_t bv = lv_vote.best_votes, cur_votes = lv_vote.cur_votes;
   if (lv_vote.change) set_level(lv_vote.best, "lights");
+  else if (lv_vote.clear) clear_level("join: no voter matches the current level");
   {
     std::shared_lock<std::shared_mutex> lock(g_level_mu);
     cur = g_level;
@@ -1656,16 +1676,21 @@ void vote_check(const Pending& p) {
     std::shared_lock<std::shared_mutex> lock(g_level_mu);
     cur = g_level;
   }
-  const LevelVote v = assetdb_vote(c.voters.data(), c.voters.size(), cur, cfg_float("assetdb_join_tol", 0.05f));
+  const bool after_load = g_after_load;
+  g_after_load = false;
+  const LevelVote v = assetdb_vote(c.voters.data(), c.voters.size(), cur, cfg_float("assetdb_join_tol", 0.05f), after_load);
   if (v.change) set_level(v.best, "lights");
+  else if (v.clear) clear_level(after_load ? "vote after a level load: no voter matches the current level"
+                                           : "vote: no voter matches the current level");
   ++g_vote_checks;
-  if (v.change || (cur < 0 && (g_vote_checks <= 4 || g_vote_checks % 16 == 0))) {
+  if (v.change || v.clear || after_load || (cur < 0 && (g_vote_checks <= 4 || g_vote_checks % 16 == 0))) {
     const Db& d = *g_db;
     log("[assetdb] level vote #%u frame %llu: %zu voters (%zu runtime lights, %u froxel-listed), best %s with %u votes "
-        "(%u levels voted for), current %s (%u votes): %s",
+        "(%u levels voted for), current %s (%u votes)%s: %s",
         g_vote_checks, (unsigned long long)p.frame, c.voters.size(), c.rt.size(), n_ref_total(c.ref),
         v.best >= 0 ? d.str(d.levels[v.best].name) : "none", v.best_votes, v.levels,
-        cur >= 0 ? d.str(d.levels[cur].name) : "none", v.cur_votes, v.change ? "switched" : "kept");
+        cur >= 0 ? d.str(d.levels[cur].name) : "none", v.cur_votes, after_load ? ", after a level load" : "",
+        v.change ? "switched" : v.clear ? "cleared" : "kept");
   }
 }
 
@@ -1680,7 +1705,7 @@ void clear_level(const char* why) {
 
 }  // namespace
 
-LevelVote assetdb_vote(const std::array<float, 3>* voters, size_t n, int current, float tol) {
+LevelVote assetdb_vote(const std::array<float, 3>* voters, size_t n, int current, float tol, bool after_load) {
   LevelVote r;
   Db* d = db();
   if (!d) return r;
@@ -1715,6 +1740,10 @@ LevelVote assetdb_vote(const std::array<float, 3>* voters, size_t n, int current
   // (positions match to float precision, so one exact match is strong evidence).
   r.change = r.best >= 0 && r.best != current && r.best_votes > r.cur_votes &&
              (r.best_votes >= 3 || (current < 0 && votes.size() == 1));
+  // Fail closed (hunt2_lifecycle 2): no voter matches the current level and nothing better qualifies. With 3 voters or
+  // more the check saw enough of the scene; right after a level load any evidence against the old level clears it,
+  // no evidence (no voter) included.
+  r.clear = !r.change && current >= 0 && r.cur_votes == 0 && (n >= 3 || after_load);
   return r;
 }
 
@@ -1748,6 +1777,31 @@ void assetdb_on_present(uint64_t frame) {
   if (!join && !vote) return;
   Db* d = db();
   if (!d) return;
+  // A level load: a new G-buffer depth image (or the same handle with another creation id). A copy recorded before it
+  // is dropped; the vote re-runs once the new level draws (kLoadSettlePresents), with the after-load clear rule.
+  {
+    static uint64_t depth_seen = 0, depth_id = 0;
+    const uint64_t depth = geo_gbuffer_depth_image();
+    uint64_t id = 0;
+    if (depth) {
+      std::shared_lock<std::shared_mutex> lock(tracker().mu);
+      const auto it = tracker().images.find(VkImage(depth));
+      if (it != tracker().images.end()) id = it->second.id;
+    }
+    if (depth && (depth != depth_seen || (id && depth_id && id != depth_id))) {
+      const bool first = depth_seen == 0;
+      depth_seen = depth;
+      depth_id = id;
+      g_after_load = true;
+      g_next_check = frame + kLoadSettlePresents;
+      {
+        std::lock_guard<std::mutex> lock(g_join_mu);
+        if (g_pending.recorded && g_pending.frame < frame) g_pending = Pending{};
+      }
+      if (!first) log("[assetdb] level load at present %llu: the level vote re-runs in %llu presents",
+                      (unsigned long long)frame, (unsigned long long)kLoadSettlePresents);
+    }
+  }
   Pending p;
   {
     std::lock_guard<std::mutex> lock(g_join_mu);

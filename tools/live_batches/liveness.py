@@ -29,7 +29,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = Path(__file__).with_name("liveness.json")
-VERSION = 1
+VERSION = 2   # 2: 'follows'
 ALIVE, DEAD, UNPROVEN = "ALIVE", "DEAD", "UNPROVEN"
 _RANK = {ALIVE: 0, UNPROVEN: 1, DEAD: 2}
 _TS = re.compile(r"^(\d\d):(\d\d):(\d\d)\.(\d{3})")
@@ -206,6 +206,7 @@ class Rule:
         self.dead_after_s = float(row.get("min_s", 0)) if row["kind"] == "positive" else 0.0
         self.once = bool(row.get("once"))
         self.silent_dead = bool(row.get("silent_dead"))
+        self.follows = list(row.get("follows", []))
 
 
 def load_spec(path=SPEC):
@@ -262,6 +263,9 @@ def rule_problems(spec, profiles):
                     continue
                 if (row["kind"] == "positive" and field == "line" or field == "only_if") and "v" not in rx.groupindex:
                     problems.append(f"{rid}: {field} needs a (?P<v>...) group")
+        for cause in row.get("follows", []):
+            if cause not in {r.get("id") for r in spec["rows"]} or cause == rid:
+                problems.append(f"{rid}: follows unknown row {cause}")
         actual = [p for p in PRESETS if condition_holds(profiles.preset(p), row.get("when", {}))]
         if actual != row.get("presets"):
             problems.append(f"{rid}: presets {row.get('presets')} but 'when' holds in {actual}")
@@ -391,7 +395,18 @@ def judge(rule, segs, detailed=False):
 def check_text(text, rules, profiles):
     segs = segments(text, profiles)
     detailed = "[cfg] detailed logging: 1" in text
-    return {rule.id: judge(rule, segs, detailed) for rule in rules}
+    result = {rule.id: judge(rule, segs, detailed) for rule in rules}
+    # 'follows': a row whose cause is another row (the sun resolve pass needs the level). A DEAD row whose cause row is
+    # DEAD in the same preset says so: fix the cause first.
+    for rule in rules:
+        for preset, r in result[rule.id].items():
+            if r["status"] != DEAD:
+                continue
+            causes = [c for c in rule.follows if result.get(c, {}).get(preset, {}).get("status") == DEAD]
+            if causes:
+                r["why"] += f" (follows {', '.join(causes)} DEAD)"
+                r["follows"] = causes
+    return result
 
 
 def worst(per_preset):
