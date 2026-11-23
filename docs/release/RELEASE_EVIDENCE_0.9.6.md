@@ -26,7 +26,7 @@ Baseline: the published 0.9.5-beta package is commit cb2d03f2 (2026-11-09 15:08,
 | About 0.5 ms on High at S8; unchanged on Ultra; same brightness; 0 fallbacks | HANDOUT 454-458; `common/settings.h` 364-365 (card text) |
 | On in High and Ultra; restart to turn on; shaders rebuild once | `common/settings.h` 359-365; PROGRESS 107 |
 | Shader file check every 5 s, was 250 ms | PROGRESS 47 (code change, release profile only) |
-| Strands about 70 frames after a load, was about 310 | A11 1054-1058 (hw1 VALID: 73 and 66 frames on, 309 off) |
+| Strands about 100 frames after a load (96-116), was about 310 | A11 1054-1058 (hw1 VALID: 73 and 66 frames on, 309 off); 2026-11-21 logs "first strand G-buffer swap ... frames after the load": 116 (hx1a), 96 (r4-inn) (`.scratch/coord/hunt2_claims.md`) |
 
 ## Stability
 
@@ -44,7 +44,7 @@ Baseline: the published 0.9.5-beta package is commit cb2d03f2 (2026-11-09 15:08,
 
 | Claim | Source |
 |---|---|
-| Off in every preset; Lighting > RTX Hair (Beta badge); Ctrl+Shift+F7. Home has only the conversion progress (Preparation), no switch | `common/settings.h` 415-456; `common/hotkeys.h` 9; `tools/launcher/ui/app.js` (`layout.Lighting`, `hairJob`) |
+| Off in every preset; Lighting > RTX Hair (Beta badge); Ctrl+Shift+F7 only flips the live `rt_hair` key, so it switches RTX Hair off and back on after the launcher turned it On, never on from Off (`layer/util.cpp` 301-311). Home has only the conversion progress (Preparation), no switch | `common/settings.h` 415-456; `common/hotkeys.h` 9; `tools/launcher/ui/app.js` (`layout.Lighting`, `hairJob`) |
 | On did nothing in 0.9.5-beta; fixed | A11 209-217 (`test_release_rtx_hair`) |
 | 0 switches to cards in every test window (fast zoom and orbit, S8) | HAIR 44-45 (hx1 202905); PROGRESS 90 |
 | 97 to 99% of hair drawn as strands | HAIR 45-46 (hx1 194658: 97.4 to 99.1%) |

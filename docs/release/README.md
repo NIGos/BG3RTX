@@ -78,7 +78,7 @@ Reference measurements come from an RTX 5090, not a GPU support matrix or an FPS
 Long-session acceptance is still open.
 Every control, its choices and restart requirements are in `docs\USER_SETTINGS.md`.
 Lighting, Surfaces and Performance contain player controls; Home shows what needs attention and the Preparation
-status (shaders, RTX Hair styles); Help & support contains the game folder, compatibility, memory and reporting help. Visible hair is the game's stock hair unless **Lighting > RTX Hair** is on (beta, off in every preset; it turns on and off while you play, also with Ctrl+Shift+F7).
+status (shaders, RTX Hair styles); Help & support contains the game folder, compatibility, memory and reporting help. Visible hair is the game's stock hair unless **Lighting > RTX Hair** is on (beta, off in every preset; it turns on and off while you play. Ctrl+Shift+F7 switches it off and back on while you play, after it was turned On in the launcher; it cannot turn it on by itself.)
 
 ### VRAM guidance
 
@@ -120,7 +120,7 @@ Before Play with Ray Reconstruction On, the launcher restores the game's DLSS up
 backs up `graphicSettings.lsx` as `.lsx.bg3rtx-bak`, and keeps an existing DLSS quality mode.
 Set `game_dlss_guard=0` in `bg3rtx_user.ini` to disable this repair.
 Change the hotkeys on the launcher's **Hotkeys** page (defaults: Ctrl+Shift+F9 all ray tracing, Ctrl+Shift+F7
-RTX Hair, Ctrl+Shift+F8 DLSS 5). **Clear** disables a key and **Reset to** restores
+RTX Hair off and back on once it is On in the launcher, Ctrl+Shift+F8 DLSS 5). **Clear** disables a key and **Reset to** restores
 its default; a key change applies at once.
 
 ## Known limits (beta)

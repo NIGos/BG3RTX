@@ -18,11 +18,11 @@ Stability
 
 RTX Hair (beta, off by default)
 - Fixed: in 0.9.5-beta the option could be turned on but drew no strands.
-- Turn it on in the launcher (Lighting > RTX Hair) or in game with Ctrl+Shift+F7. Home shows how many hair styles are converted.
+- Turn it on in the launcher (Lighting > RTX Hair); after that, Ctrl+Shift+F7 switches it off and back on in game. Home shows how many hair styles are converted.
 - Strands stay while the camera moves: in the test scene fast zooms and orbits no longer switch hair back to the game's hair cards.
 - New: RTX Hair detail at distance (Full, 1/4, 1/8; off by default; applies while you play). Fewer, wider strands on small distant heads; saved about 0.08 to 0.10 ms in one scene.
 - New: RTX Hair motion stability (on in High and Ultra; restart to turn on). Hair no longer smears or trails behind moving heads.
-- Strands appear sooner after a level load: after about 70 frames instead of about 310.
+- Strands appear sooner after a level load: after about 100 frames (96 to 116 in the latest tests) instead of about 310.
 - Smoother in crowded rooms: hair styles are unpacked in the background. At the inn the slowest frames while the camera pulled back fell from about 100 ms to 40 ms.
 - Limits: a style that is not converted yet stays as the game's hair; hair on distant characters can look softer; a head that comes into view shows the game's hair for a few frames (about 3) first, about 0.6 seconds when its style is loaded for the first time.
 
