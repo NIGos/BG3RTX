@@ -25,6 +25,9 @@ KEY = "assetdb_level_vote"
 OMM_OFF = "rt_omm=0,rt_omm_dyn=0,rt_alpha_fine_lod=0"   # common/settings.h exp_omm "off" (restart keys)
 LEVEL_ON = "\\[assetdb\\] level {level} \\(from lights\\)"
 CLEARED = "\\[assetdb\\] level cleared \\(assetdb_level_vote=0\\)"
+# claude/fix-level-clear: a level load re-runs the vote 30 presents later with the after-load clear rule.
+LOAD = "\\[assetdb\\] level load at present \\d+: the level vote re-runs in \\d+ presents"
+AFTER_LOAD = "\\[assetdb\\] level vote #\\d+ frame \\d+: .*, after a level load: (?:kept|switched)"
 VOTE = "\\[assetdb\\] level vote #\\d+ frame \\d+: \\d+ voters"
 LS_DB = "ls: per-light data: \\d+ runtime lights .*: bridge \\d+, database [1-9]\\d*;"
 SUN_ON = "sun stats \\(\\d+ frames, replace 1, [1-9]\\d* roof volumes"
@@ -43,7 +46,7 @@ def state(on, extra=""):
     return f"{KEY}={on},qa_exposure_hold=1" + (f",{extra}" if extra else "")
 
 
-def plan_of(level, packs):
+def plan_of(level, packs, reload=False):
     plan = [pab.phase("warmup", 20, state(0, "qa_exposure_hold=0")), pab.phase("warm-on", 4, state(1)),
             pab.phase("warm-off", 4, state(0))]
     plan[1].update(wait_log=[LEVEL_ON.format(level=level)], wait_log_timeout=40)
@@ -55,6 +58,13 @@ def plan_of(level, packs):
     for label, on in (("diag-off", 0), ("diag-on", 1)):
         p = pab.phase(label, 6, state(on, "rt_stats=1"), frames=2 * pab.PERIOD)
         plan.append(p)
+    if reload:
+        # A level load with the vote on (hunt2_lifecycle 2): F8 reloads this run's save (auto-run.ps1 reload_selected).
+        # The layer sees a new G-buffer depth image, re-runs the vote 30 presents later with the after-load rule, and
+        # must keep (or re-find) the level with its roof volumes: never an old level with 0 volumes.
+        p = pab.phase("reload-on", 5, state(1, "rt_stats=0"))
+        p.update(reload_selected=True, wait_log=[LOAD, AFTER_LOAD], wait_log_timeout=180)
+        plan += [p, pab.phase("after-reload", 12, state(1, "rt_stats=0"), frames=2 * pab.PERIOD)]
     if packs:
         for serial, (label, on) in enumerate((("pack-off", 0), ("pack-on", 1)), 1):
             p = pab.phase(label, 3, state(on, f"rt_stats=0,replay_pack={serial}"))
@@ -64,15 +74,19 @@ def plan_of(level, packs):
     return plan
 
 
-def job(name, save, level, start, packs, purpose):
-    plan = plan_of(level, packs)
+def job(name, save, level, start, packs, purpose, reload=False):
+    plan = plan_of(level, packs, reload)
     cost = ["off-a", "on", "off-b"]
     gates = [pab.every(n + " in every cost window", s, s, cost) for n, s in LINES[len(pab.LINES):]]
     gates += [pab.every("sun stats with roof volumes (on)", "sun stats \\(", SUN_ON, ["on"]),
               pab.every("sun stats without a level (off)", "sun stats \\(", SUN_OFF, ["off-a", "off-b"]),
               pab.every("GI far with qualified far hits (diag-on)", "GI far \\(", FAR_ON, ["diag-on"], min=1),
               pab.every("GI far without them (diag-off)", "GI far \\(", FAR_OFF, ["diag-off"], min=1)]
+    if reload:
+        gates.append(pab.every("sun stats with roof volumes after the reload", "sun stats \\(", SUN_ON, ["after-reload"]))
     expect = ["\\[ngx\\] RR create .*: Success", LEVEL_ON.format(level=level), CLEARED, VOTE, LS_DB]
+    if reload:
+        expect += [LOAD, AFTER_LOAD]
     if packs:
         expect += [EMVAR, EMBUILD] + [f"\\[replay\\] pack {s} written: [0-9]+\\.[0-9] MB .*pass gi_hit_sun_em" for s in (1, 2)]
     j = pab.focused_job(name, save, start, plan, gates, expect, purpose, batch=BATCH, live_batch="level-vote")
@@ -101,11 +115,12 @@ def main():
     assert (HERE / "predicted.json").exists(), "predicted.json precedes the jobs"
     base = f"{pab.USER},{KEY}=0,replay_pack=0,replay_pack_pass=2,replay_pack_cap_mb=2048"
     made = [
-        job("lv-s8-ultra", pab.S8, "CTY_Main_A", f"{base},{OMM_OFF},sharc=0", True,
+        job("lv-s8-ultra", pab.S8, "CTY_Main_A", f"{base},{OMM_OFF},sharc=0", True, reload=True, purpose=
             "assetdb_level_vote 0 / 1 / 0 at Water Queens House, Ultra with OMM off at startup (pack contract), FG 3x, "
             "unfocused, static camera: the level lines, sun stats with roof volumes, the D-LS database lights, GI far "
-            "(rt_stats diag windows), GPU ms and float energy per state, and one gi_hit_sun_em pack per state for the "
-            "offline PT verdict (predicted.json)."),
+            "(rt_stats diag windows), GPU ms and float energy per state, one F8 reload of the save with the key on (the "
+            "level kept with its roof volumes after the load), and one gi_hit_sun_em pack per state for the offline PT "
+            "verdict (predicted.json)."),
         job("lv-d1-ultra", D1, "WLD_Main_A", base, False,
             "assetdb_level_vote 0 / 1 / 0 in Test Dialogue1 (camp), the user's Ultra (OMM on), FG 3x, unfocused, static "
             "camera: the level lines, sun stats with roof volumes, the D-LS database lights, GI far (rt_stats diag "
@@ -118,6 +133,8 @@ def main():
         for p in plan:
             if p["label"].startswith("pack-"):
                 p["wait_log_timeout"] = WRITE_S
+            if p["label"] == "reload-on":
+                p["wait_log_timeout"] = 180
         flow.write(plan_path, plan)
     print("Generated", ", ".join(j["name"] for _, j in made), f"- no queue staging; {added} new entries appended to "
           "lint_corpus_snapshot.json")

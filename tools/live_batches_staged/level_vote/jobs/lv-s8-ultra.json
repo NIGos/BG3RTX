@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 1857,
+  "timeout": 2050,
   "max_minutes": 10,
   "repeat": 1,
   "live_batch": "level-vote",
@@ -66,6 +66,8 @@
     "\\[assetdb\\] level cleared \\(assetdb_level_vote=0\\)",
     "\\[assetdb\\] level vote #\\d+ frame \\d+: \\d+ voters",
     "ls: per-light data: \\d+ runtime lights .*: bridge \\d+, database [1-9]\\d*;",
+    "\\[assetdb\\] level load at present \\d+: the level vote re-runs in \\d+ presents",
+    "\\[assetdb\\] level vote #\\d+ frame \\d+: .*, after a level load: (?:kept|switched)",
     "gi: gi_rt_pipeline: the hit-GI trace runs as a ray tracing pipeline, emission variant",
     "\\[em\\] last \\d+ builds, .*; emissive (?:[1-9]\\d*\\.\\d|0\\.[1-9])",
     "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB .*pass gi_hit_sun_em",
@@ -259,6 +261,17 @@
       "period_frames": 120,
       "sample_frames": 120,
       "min": 1
+    },
+    {
+      "name": "sun stats with roof volumes after the reload",
+      "select": "sun stats \\(",
+      "match": "sun stats \\(\\d+ frames, replace 1, [1-9]\\d* roof volumes",
+      "windows": [
+        "after-reload"
+      ],
+      "period_frames": 120,
+      "sample_frames": 120,
+      "min": 2
     }
   ],
   "forbid": [
@@ -273,7 +286,7 @@
     "\\[replay\\] pack \\d+ (?:failed|over budget)"
   ],
   "expect_runner": [
-    "\\[motion-plan\\] complete phases=14\\b",
+    "\\[motion-plan\\] complete phases=16\\b",
     "^Run ended: done",
     "\\[window-mode\\].*visible_unfocused"
   ],
@@ -341,8 +354,8 @@
       "logs": 11
     }
   },
-  "estimated_phase_seconds": 134.994,
+  "estimated_phase_seconds": 156.572,
   "post_gate": false,
-  "purpose": "assetdb_level_vote 0 / 1 / 0 at Water Queens House, Ultra with OMM off at startup (pack contract), FG 3x, unfocused, static camera: the level lines, sun stats with roof volumes, the D-LS database lights, GI far (rt_stats diag windows), GPU ms and float energy per state, and one gi_hit_sun_em pack per state for the offline PT verdict (predicted.json). STAGED, not authorized.",
+  "purpose": "assetdb_level_vote 0 / 1 / 0 at Water Queens House, Ultra with OMM off at startup (pack contract), FG 3x, unfocused, static camera: the level lines, sun stats with roof volumes, the D-LS database lights, GI far (rt_stats diag windows), GPU ms and float energy per state, one F8 reload of the save with the key on (the level kept with its roof volumes after the load), and one gi_hit_sun_em pack per state for the offline PT verdict (predicted.json). STAGED, not authorized.",
   "window_mode": "visible_unfocused_fg"
 }

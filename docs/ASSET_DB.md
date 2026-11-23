@@ -290,6 +290,13 @@ The level is found in two ways:
      gi_far and hit-sun roof rules block every far hit) and no database lights for D-LS. Found
      2026-11-23 (.scratch/coord/hunt_core.md F1: 171 of 171 logs "level unknown"); the key stays 0 until
      the staged live `tools/live_batches_staged/level_vote` and its PT verdict qualify the consumers.
+   - Fail closed (hunt2_lifecycle 2, 2026-11-23): a stale level would trust the sun with no roof volumes around
+     the new camera (an interior sun leak). A check with at least 3 voters and none for the current level, and
+     nothing better that qualifies, clears the level (`assetdb_vote` `clear`). A level load (a new G-buffer
+     depth image) drops a copy recorded before it and re-runs the vote 30 presents later; that vote clears the
+     current level on any lack of evidence for it, an empty voter list included. In play, no voters change nothing.
+   - The bridge's level: a sub-level maps to its world (as the save hint); a level the database lacks clears
+     the current one.
 
 ### Join check
 
