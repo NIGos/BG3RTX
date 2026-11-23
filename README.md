@@ -72,8 +72,9 @@ and raise settings step by step.
 ### RTX Hair (Beta)
 
 RTX Hair draws hair as individual ray-traced strands instead of the game's flat hair cards. It is off in every
-preset. Turn it on in the launcher (**Lighting > RTX Hair**) or in game with **Ctrl+Shift+F7**; it switches while
-you play. A hair style gets strands after the game has shown it once and the launcher has converted it (Home,
+preset. Turn it on in the launcher (**Lighting > RTX Hair**); it applies while you play. After that,
+**Ctrl+Shift+F7** switches it off and back on in game; the key cannot turn it on while it is Off in the launcher.
+A hair style gets strands after the game has shown it once and the launcher has converted it (Home,
 Preparation). Styles that are not converted keep the game's hair. Its cost depends on how much hair is on screen
 and is not measured across scenes yet.
 
@@ -82,7 +83,7 @@ and is not measured across scenes yet.
 | Key (default) | In game |
 |---|---|
 | Ctrl+Shift+F9 | Switches all ray-traced lighting off and on, to compare the same view. DLSS and Frame Generation stay as they are. |
-| Ctrl+Shift+F7 | Switches RTX Hair off and on. |
+| Ctrl+Shift+F7 | Switches RTX Hair off and back on, after it was turned On in the launcher (Lighting > RTX Hair). |
 | Ctrl+Shift+F8 | Switches DLSS 5 Neural Rendering off and on, when it was enabled at game start (experimental, you provide its runtime). |
 
 Change them on the launcher's **Hotkeys** page.

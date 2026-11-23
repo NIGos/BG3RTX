@@ -42,7 +42,7 @@ another card or scene. Sources for every number: [RELEASE_EVIDENCE_0.9.6.md](REL
   that cast sun shadows keep their last shape for that frame instead of losing their ray-traced shadows. The test PC
   never reached the limit, so the gain was not seen there; costs and brightness were unchanged. Always on.
 - **RTX Hair appears sooner after loading.** Strands showed about 310 frames after a level load. Now they show
-  after about 70 frames.
+  after about 100 frames (96 to 116 in the latest test runs).
 
 ## Stability
 
@@ -71,7 +71,8 @@ preset**. The game's own hair is what you see unless you turn it on.
 How to turn it on:
 
 - In the launcher: **Lighting > RTX Hair** (marked Beta).
-- In game: **Ctrl+Shift+F7** (you can change the key on the Hotkeys page). It switches while you play.
+- In game: **Ctrl+Shift+F7** (you can change the key on the Hotkeys page) switches it off and back on while you
+  play, after it was turned On in the launcher. It cannot turn RTX Hair on while it is Off in the launcher.
 - A hair style gets strands after the game has shown it once and the launcher has converted it. Home shows the
   progress under Preparation. "Convert all styles" is optional and needs a `granny2.dll` that you provide;
   BG3RTX does not ship or download that file.

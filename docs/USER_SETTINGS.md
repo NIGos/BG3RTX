@@ -58,8 +58,8 @@ lighting, Sun shadows, Indirect lighting) show the choices under the description
 | Performance | Frame rate | NVIDIA Reflex | Off / On / On + Boost | At once; Frame Generation needs On or On + Boost |
 | Performance | Frame rate | Rendered frame limit | Off / 30-240 fps, step 1 | At once (when you release the slider); counts rendered frames; On starts at 58 fps |
 | Performance | Frame rate | Low-latency scene | Off / On | On: restart; Off: at once; On in High and Ultra. Removes most of the scene wait (3.5 to 0.3 ms at Water Queens House, 8.5 to 2.9 ms at the inn, Ultra); frame time unchanged on Ultra in both (GPU-bound), about 0.5 ms saved on High at Water Queens House; 0 fallbacks, same brightness. Not yet measured in CPU-bound scenes |
-| Performance | Tracing speed | Faster bounce light tracing | Off / On | At once; same image, on in every preset |
-| Performance | Tracing speed | Bounce trace reordering | Off / By hit kind / By hit kind and object | At once, may briefly pause |
+| Performance | Tracing speed | Faster bounce light tracing | Off / On | At once; same image, on in every preset; acts only with Off-screen bounce light Near or Far (Ultra by default) |
+| Performance | Tracing speed | Bounce trace reordering | Off / By hit kind / By hit kind and object | At once, may briefly pause; acts only with Off-screen bounce light Near or Far (Ultra by default) |
 | DLSS 5 | DLSS 5 | DLSS 5 Neural Rendering (Experimental) | Off / On, runtime file | Restart to activate; its key toggles live after activation |
 | Experimental | Frame Generation | Frame generation pacing test | Standard / Deferred | At once |
 | Experimental | Frame Generation | Multi-frame presentation test | Standard / Driver metering | Restart |
@@ -67,7 +67,10 @@ lighting, Sun shadows, Indirect lighting) show the choices under the description
 | Experimental | RTX Hair | Strand hair edge resolve | Off / Strands unresolved / Analytic coverage | At once; needs RTX Hair |
 | Help & support | Problem reports | Detailed logging | Off / On | Restart |
 
-Tracing speed is collapsed by default: both options are on in every preset and do not change the image.
+Tracing speed is collapsed by default: both options are on in every preset and do not change the image. They
+speed up only the tracing of Off-screen bounce light, so they act only when it is Near or Far (Ultra by default);
+with it Off (Low, Medium and High) they do nothing and save nothing. Their savings (about 2 ms, and 0.8 to 1.5 ms
+more) were measured on Ultra.
 The Experimental page has the switch **Show experimental options**; its options are not fully tested, off in every
 preset and hidden until you turn the switch on. Turning the switch off hides them and sets them back to Off (Undo
 restores them).
@@ -78,7 +81,8 @@ the game folder, the graphics check, reports, tips and the version.
 Visible hair is the game's stock hair. With Hair shadows On, the game's hair and scalp cast
 ray-traced shadows. The first start after turning it on compiles shaders and can pause or stutter.
 No replacement hair files are included. **Lighting > RTX Hair** (beta, Off in every preset; turns on and off
-while playing, also with Ctrl+Shift+F7) shows hair as ray-traced strands: a style gets strands after the game has
+while playing; after it was turned On here, Ctrl+Shift+F7 switches it off and back on in game, but the key cannot
+turn it on by itself) shows hair as ray-traced strands: a style gets strands after the game has
 shown it once and the launcher has converted it (Home > Preparation). A style that is not converted yet stays as the
 game's hair, hair on distant characters can look softer, and a head that comes into view shows the game's hair for
 a few frames (about 3) first, or about 0.6 seconds when its style is loaded for the first time.
@@ -125,7 +129,8 @@ Changing activation or the runtime needs a restart.
 This switches the runtime bypass, without restarting or changing Ray Reconstruction.
 
 On **Hotkeys**, select a field and press Ctrl, Shift and/or Alt with F1-F12, A-Z or 0-9.
-The defaults are Ctrl+Shift+F9 (all ray tracing), Ctrl+Shift+F8 (DLSS 5) and Ctrl+Shift+F7 (RTX Hair).
+The defaults are Ctrl+Shift+F9 (all ray tracing), Ctrl+Shift+F8 (DLSS 5) and Ctrl+Shift+F7 (RTX Hair, off and back
+on after it was turned On in the launcher).
 A single key is also accepted. **Clear** disables a key; **Reset to** restores its default.
 Duplicate keys and the reserved Ctrl+Shift+F10 are rejected. A key change applies at once.
 
