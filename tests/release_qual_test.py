@@ -63,6 +63,12 @@ class FinalReleaseTests(unittest.TestCase):
                 with self.subTest(window=phase['label'], wait=rx):
                     self.assertTrue(all(states[phase['label']].get(k, '0') != '0' for k in keys))
 
+    def test_staged_final_jobs_gate_on_liveness(self):
+        # docs/REGRESSION_PROCESS.md: a feature on in the preset that does no work fails the release smoke
+        for name in ('final-s8-ultra-high', 'final-stock-hair-dialogue1'):
+            job, _, _ = flow.load_job(ROOT / f'tools/live_batches_staged/release_final/final/jobs/{name}.json')
+            self.assertEqual(job.get('liveness'), 'gate', name)
+
     def test_omm_downgrades_are_info_and_hit_material_failures_still_fail(self):
         # claude/omm-ab: a downgraded slot traces the reference scene (a correct image); 052606 High failed on 9.
         path = ROOT / 'tools/live_batches_staged/release_final/final/jobs/final-s8-ultra-high.json'

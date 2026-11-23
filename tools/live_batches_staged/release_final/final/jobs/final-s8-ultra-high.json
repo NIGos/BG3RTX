@@ -1146,5 +1146,6 @@
       }
     ]
   },
-  "post": "py -3 tools/live_batches/release_qual/analyze_final.py --job tools/live_batches_staged/release_final/final/jobs/final-s8-ultra-high.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.final.json\""
+  "post": "py -3 tools/live_batches/release_qual/analyze_final.py --job tools/live_batches_staged/release_final/final/jobs/final-s8-ultra-high.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.final.json\"",
+  "liveness": "gate"
 }

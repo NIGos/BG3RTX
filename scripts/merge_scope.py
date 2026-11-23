@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 TOOL_TESTS = ('batch_jobs_lint', 'live_flow', 'queue_gates', 'live_guard',
-              'fold_progress', 'merge_scope')
+              'fold_progress', 'merge_scope', 'liveness')
 CAMERA_TESTS = ('camera_plan_test.ps1', 'camera_plan_fields_test.ps1')
 
 

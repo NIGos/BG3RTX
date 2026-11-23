@@ -279,5 +279,6 @@
     "\\[motion-trace\\] phase=1 label=energy-static repeat=0"
   ],
   "post": "py -3 tools/live_batches/release_qual/analyze_final.py --job tools/live_batches_staged/release_final/final/jobs/final-stock-hair-dialogue1.json --log \"{log}\" --runner \"{runner}\" --out \"{log}.final.json\"",
-  "post_gate": true
+  "post_gate": true,
+  "liveness": "gate"
 }

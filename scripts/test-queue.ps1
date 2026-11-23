@@ -668,6 +668,27 @@ function Run-Job($file) {
         if (Select-String -LiteralPath $r.keptLog -Pattern $pattern -Quiet) { $missing += "forbidden log pattern: $pattern" }
       }
     }
+    # Liveness (tools/live_batches/liveness.py, docs/REGRESSION_PROCESS.md): every run is also a health check of each
+    # feature that is on in its presets (OMM commits 0 and "level unknown" passed every gate for weeks in 2026-11).
+    # Reported on every run; "liveness": "gate" (the release smoke) makes a DEAD row fail the run, "off" skips it.
+    $liveness = $null
+    if ($job.liveness -ne 'off' -and $r.keptLog -and (Test-Path -LiteralPath $r.keptLog)) {
+      $liveTool = if ($root) { Join-Path $root 'tools\live_batches\liveness.py' } else { $null }
+      if ($liveTool -and (Test-Path -LiteralPath $liveTool)) {
+        $liveArgs = @($liveTool, $r.keptLog, '--json', "$($r.keptLog).liveness.json", '--root', $tree, '--gate')
+        $treeSpec = Join-Path $tree 'tools\live_batches\liveness.json'
+        if (Test-Path -LiteralPath $treeSpec) { $liveArgs += @('--spec', $treeSpec) }
+        $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try { $liveOut = @(& py -3 @liveArgs 2>&1 | ForEach-Object { "$_" }); $liveExit = $LASTEXITCODE }
+        finally { $ErrorActionPreference = $eap }
+        $liveness = @($liveOut | Where-Object { $_ -match '^liveness \S+: ALIVE' } | Select-Object -First 1)
+        $lines += @($liveOut | Where-Object { $_ -match '^(liveness |  DEAD )' } | Select-Object -First 8)
+        if ($job.liveness -eq 'gate') {
+          if (-not $liveness) { $missing += 'liveness check did not run' }
+          elseif ($liveExit -ne 0) { $missing += @('liveness: ' + (@($liveOut | Where-Object { $_ -match '^  DEAD ' } | Select-Object -First 4) -join ' ; ')) }
+        }
+      }
+    }
     if((Get-QueueBuildIdentity $tree) -cne $actualBuild){$missing+='frozen candidate build changed'}
     if ($missing) {
       $r.outcome = "INVALID (missing: $($missing -join ' | ')); $($r.outcome)"
@@ -681,6 +702,7 @@ function Run-Job($file) {
                        build_changed = ($before -ne $after -or (Get-QueueBuildIdentity $tree) -cne $actualBuild); log = $r.keptLog; captures = $caps; lines = $lines
                        session = $r.session; core_gen = $r.generation; saved_sec = $r.saved;
                        process_status = $r.status; runner_log = $r.runner_log; window_mode=$job.window_mode; candidate_build=$actualBuild; live_batch=$job.live_batch; authorization_session=$PermissionSession }
+    $rec.liveness = $liveness
     $rec.completed = [bool]$r.completed
     $rec.failed_check = $r.failed_check
     $rec.failed_phase = $r.failed_phase
