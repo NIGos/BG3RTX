@@ -54,6 +54,10 @@ These rules come from mistakes already made in this repo. They apply on every br
   views, `rt_stats`/`ls_stats` counters, `Ctrl+Shift+F9` A/B, the QA detectors.
 - When a feature is done: its key, its gate numbers, its cost, and how the user checks it in game
   (what to look at, which save) go in the progress file and the effect's TRACK doc.
+- Liveness (docs/REGRESSION_PROCESS.md): a key whose default or preset value becomes non-zero needs its row in
+  `tools/live_batches/liveness.json` in the same branch. The row names the log line that proves the feature does work in
+  that preset: a value > 0, a line that must appear, or a line that must not appear. The CTest `liveness_test`
+  (merge-green) fails otherwise. Every queue run is judged with it; read its `DEAD` lines like a failed gate.
 
 ## Fix first, measure second
 - The goal is a visible, physically correct improvement in game (QUALITY R0). Instrumentation is

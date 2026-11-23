@@ -144,11 +144,19 @@ def main():
     job = flow.read(path)
     handout_gates(job)
     flow.write(path, job)
+    # Liveness (tools/live_batches/liveness.py): a feature that is on in the window's preset and does no work fails
+    # the smoke, whatever the A/B gates say (2026-11: OMM commits 0 and "level unknown" passed every smoke).
+    for name in QUEUE:
+        path = HERE / 'final/jobs' / (name + '.json')
+        job = flow.read(path)
+        job['liveness'] = 'gate'
+        flow.write(path, job)
     schedule = {}
     for name in QUEUE:
         job, plan, _ = flow.load_job(HERE / 'final/jobs' / (name + '.json'))
         assert job['window_mode'] == 'visible_unfocused_fg' and job['timeout'] >= 300 and job['max_minutes'] * 60 >= job['timeout']
         assert job['hold'] >= 90 and job['patterns'] and job['expect'] and job['expect_every'] and job['fail_fast']
+        assert job['liveness'] == 'gate'
         assert job['post'].startswith('py -3 ') and BATCH in job['post'] and BATCH in job['args'][-1]
         budget = flow.duration_budget(job, plan)
         captures = sum(len(p.get('trace_at', [])) for p in plan)
