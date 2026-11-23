@@ -534,11 +534,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL ResetDescriptorPool(VkDevice device,VkDesc
   return r;
 }
 static VKAPI_ATTR void VKAPI_CALL DestroyDescriptorPool(VkDevice device,VkDescriptorPool pool,const VkAllocationCallbacks* alloc){
-  auto* dd=device_of(device);omm::sampler_pool_reset(dd,pool);dd->vk.DestroyDescriptorPool(device,pool,alloc);
+  auto* dd=device_of(device);omm::sampler_pool_reset(dd,pool);
+  // Our records go before the driver's destroy (as DestroyBuffer/DestroyImage): the pool handle may be reused at once by
+  // a CreateDescriptorPool + AllocateDescriptorSets on another thread, whose new sets an erase after the destroy would
+  // forget (claude/fix-tracker-pool).
   if(pool){
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     descriptor_pool_reset(tracker(),pool);
   }
+  dd->vk.DestroyDescriptorPool(device,pool,alloc);
 }
 static VKAPI_ATTR VkResult VKAPI_CALL CreateSampler(VkDevice device,const VkSamplerCreateInfo* info,const VkAllocationCallbacks* alloc,VkSampler* sampler){
   auto* dd=device_of(device);const auto r=dd->vk.CreateSampler(device,info,alloc,sampler);if(r==VK_SUCCESS)omm::sampler_created(dd,*sampler,*info);return r;
