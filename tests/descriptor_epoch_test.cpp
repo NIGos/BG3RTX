@@ -53,8 +53,35 @@ static int pools() {
   return 0;
 }
 
+// claude/fix-tracker-pool: vkDestroyDescriptorPool forgets the pool's sets BEFORE the driver call, because the driver
+// may hand the same pool handle to another thread's vkCreateDescriptorPool at once. A set allocated from the re-created
+// pool must survive; with the forget after the destroy (the old order) it was erased.
+static int pool_reuse() {
+  const uint64_t P = 3000, old_set = 31, new_set = 32;
+  {   // layer/tracker.cpp order: forget, destroy, (another thread) create P again, allocate
+    Tracker t;
+    descriptor_set_allocated(t, old_set, uint64_t(7), P);
+    t.sets[old_set][1] = 1;
+    descriptor_pool_reset(t, P);
+    descriptor_set_allocated(t, new_set, uint64_t(8), P);
+    t.sets[new_set][1] = 2;
+    if (!forgotten(t, old_set)) return 20;
+    if (t.sets.at(new_set).at(1) != 2 || t.set_layouts.at(new_set) != 8 || t.set_pools.at(new_set) != P) return 21;
+    if (t.pool_sets.at(P).size() != 1) return 22;
+  }
+  {   // the hazard the order avoids: the new set lands in the stale list, and a late forget erases it
+    Tracker t;
+    descriptor_set_allocated(t, old_set, uint64_t(7), P);
+    descriptor_set_allocated(t, new_set, uint64_t(8), P);
+    descriptor_pool_reset(t, P);
+    if (!forgotten(t, new_set)) return 23;
+  }
+  return 0;
+}
+
 int main() {
   if (int r = pools()) return r;
+  if (int r = pool_reuse()) return r;
   Tracker t;
   descriptor_set_allocated(t, uint64_t(42), uint64_t(7));
   if (t.set_layouts.at(42) != 7 || t.sets.count(42) || t.dynamic_counts.count(42)) return 1;
