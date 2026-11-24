@@ -1,0 +1,15 @@
+Version 0.9.7-beta
+
+Lighting
+- Sun shadows under roofs, far bounce light and per-light data work again (Medium, High and Ultra): since game Patch 8 BG3RTX no longer recognised the level. It now recognises it from the game's lights, also right after a load (about 0.2 ms).
+
+Fixes
+- Play on a fresh install saves the shown preset again (High and Ultra had run without opacity micromaps and cutout masks).
+- The launcher asks for a restart when Hair shadows or Detailed logging are turned on while playing.
+- 17 of the 71 cutout masks, rejected at every start, now load (about 36 MB more video memory).
+
+Known
+- Tested only on an RTX 5090 with driver 621.01.
+- Everything else as in 0.9.6-beta (see its changelog).
+
+Source code: https://github.com/NIGos/BG3RTX (GPL-3.0-or-later with the NVIDIA SDK exception).

@@ -28,27 +28,27 @@ Only synthetic installer child shells mock named-process discovery, as release_i
 Setup row covers compiled Inno setup/update/uninstall in TEMP, with shortcuts disabled and isolated LOCALAPPDATA; only PASS qualifies that route. No fresh-PC, signing, shortcut UI, locked-file, interruption, game/visual acceptance or release/upload approval is claimed.
 Git metadata is read-only. Generated archives, symbols and logs remain under .scratch/rc and must not be added to Git.
 
-## Release readiness: 0.9.6-beta (refreshed 2026-11-24 for main 7ee3f9cf: level vote on, fixes since b7532c90)
+## Release readiness: 0.9.7-beta (from main 4955eba7 = 7ee3f9cf plus docs: level vote on, fixes since b7532c90)
 
 Hand-written; `verify_rc.ps1` keeps this section when it rewrites the table above. Not a release approval.
 User decision 2026-11-15: finalise for release, RTX Hair Off by default. Nothing is uploaded, tagged or installed by agents.
 User decision 2026-11-21: publishing is an upload to Nexus Mods only (Files tab), no GitHub release; the repository
 https://github.com/NIGos/BG3RTX is public (source code, GPL-3.0-or-later with the NVIDIA exception).
-Notes: [RELEASE_NOTES_0.9.6.md](RELEASE_NOTES_0.9.6.md), sources in [RELEASE_EVIDENCE_0.9.6.md](RELEASE_EVIDENCE_0.9.6.md).
+User decision 2026-11-24: 0.9.6-beta is published on Nexus (built from b7532c90); the fixes since then ship as 0.9.7-beta.
+Notes: [RELEASE_NOTES_0.9.7.md](RELEASE_NOTES_0.9.7.md) (what changed since 0.9.6-beta) and
+[RELEASE_NOTES_0.9.6.md](RELEASE_NOTES_0.9.6.md), sources in [RELEASE_EVIDENCE_0.9.6.md](RELEASE_EVIDENCE_0.9.6.md).
 
-### Candidate (built offline from main 7ee3f9cf, lean layer, not installed, not run)
+### Candidate (built offline from branch claude/release-0.9.7, lean layer, not installed, not run)
 
-| Artifact (main checkout) | Bytes | SHA-256 |
-|---|---|---|
-| `dist/BG3RTX-0.9.6-beta.zip` (230 files) | 77697854 | db4efe70a5d8a7fca08566e88076b2a61bbcaa98751a1d6f4d54f9439e3a44e5 |
-| `dist/BG3RTX-0.9.6-beta-symbols.zip` (private) | 84100783 | 496d8c06ec57a1c625bf2b4ca4a0b79f35e7d24e364bac183e76dd2454a40ee3 |
-| `.scratch/setup-0.9.6-beta/BG3RTX-0.9.6-beta-Setup.exe` (Inno 6.7.3, unsigned) | 57686876 | 22eed44fb5ee88680eef340b6b6bf5cc0e2c89e325ee64db7d66a3bb69ff5a92 |
+Filled after the build of claude/release-0.9.7 (see below).
 
-`VERSION.txt`: BG3RTX 0.9.6-beta, commit 7ee3f9cf, layer lean, built 2026-11-24 20:23. Nexus upload set: `.scratch/release/v0.9.6-beta/` (Setup.zip 57198320 bytes, 2d530d28ef872c86e071e6d9ded680a5917fa1a26b173fed86e023b3e513d817).
-Since b7532c90: `assetdb_level_vote` On in Medium, High and Ultra (level recognised from the game's lights after Patch 8,
-fast re-votes after a load), Play on a fresh install saves the preset, restart notices for Hair shadows and Detailed
-logging, 71 of 71 VT alpha masks load, tracker pool erase before the driver destroy, stale level cleared.
-`.scratch/release/v0.9.6-beta/SHA256SUMS.txt` lists the Portable, Setup.zip and Setup.exe hashes. Older candidates: `.scratch/old_rc_b7532c90/` (the previous Nexus set), `.scratch/old_rc_9ae2ede3/` (the build the user installed and tested), `.scratch/old_rc_122493b1/`, `.scratch/old_rc_3ed4ec08/` (the smoke-tested code; 122493b1 adds only the diagnostic emission pack writer, off in release, and docs), `.scratch/old_rc_08cb1e99/`, `.scratch/old_rc_745a1fff/`.
+Since b7532c90 (the published 0.9.6-beta): `assetdb_level_vote` On in Medium, High and Ultra (level recognised from the
+game's lights after Patch 8, fast re-votes after a load), Play on a fresh install saves the preset, restart notices for
+Hair shadows and Detailed logging, 71 of 71 VT alpha masks load, tracker pool erase before the driver destroy, stale
+level cleared. Older candidates: `.scratch/old_rc_7ee3f9cf_misnamed/` (the same code built as 0.9.6-beta by mistake on
+2026-11-24, never published), `.scratch/old_rc_b7532c90/` (the published 0.9.6-beta Nexus set), `.scratch/old_rc_9ae2ede3/`
+(the build the user installed and tested), `.scratch/old_rc_122493b1/`, `.scratch/old_rc_3ed4ec08/`, `.scratch/old_rc_08cb1e99/`,
+`.scratch/old_rc_745a1fff/`.
 Since 08cb1e99 (overnight 2026-11-21, confirmed by the user 2026-11-21): `rt_hold_pack_base`, `rt_hair_header_early`,
 `rt_as_size_class`, `rt_cascade_keep_refused` are 1 in the packaged `bg3rtx.ini`; `rt_hair_groom_async` joins the RTX Hair
 On bundle; fixes: OMM working again in High and Ultra, water one-frame no-scene flips, groom BLAS overflow, groom decode

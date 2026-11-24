@@ -1,8 +1,8 @@
 #pragma once
 // The build's base version: the executable's version resource (launcher.rc) and the label of a developer build.
 // scripts/package.ps1 refuses a numbered package version that does not start with it.
-#define BG3RTX_PRODUCT_VERSION "0.9.6.0"
-#define BG3RTX_PRODUCT_VERSION_NUM 0,9,6,0
+#define BG3RTX_PRODUCT_VERSION "0.9.7.0"
+#define BG3RTX_PRODUCT_VERSION_NUM 0,9,7,0
 #ifndef RC_INVOKED
 #include <string>
 namespace launcher {

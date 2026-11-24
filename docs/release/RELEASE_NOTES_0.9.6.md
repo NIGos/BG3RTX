@@ -46,13 +46,6 @@ another card or scene. Sources for every number: [RELEASE_EVIDENCE_0.9.6.md](REL
 
 ## Stability
 
-- **Sun shadows under roofs, far bounce light and per-light data work again.** Since game Patch 8 BG3RTX no longer
-  recognised the level, so these silently did nothing. It now recognises the level from the game's lights, also
-  right after a load (Medium, High and Ultra; about 0.2 ms).
-- **Launcher and data fixes.** Play on a fresh install saves the shown preset again (High and Ultra had run without
-  opacity micromaps and cutout masks). The launcher asks for a restart when Hair shadows or Detailed logging are
-  turned on while playing. 17 of the 71 cutout masks were rejected at every start; all 71 now load (about 36 MB more
-  video memory).
 - **Video memory guard.** When Windows lowered the video memory budget of the game once, BG3RTX could stay in
   its low-memory mode for the rest of the session: objects were left out of ray tracing and the game stuttered.
   The guard now recovers when the budget comes back. This fix is not yet confirmed in a long play session.

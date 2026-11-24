@@ -5,7 +5,7 @@ indirect lighting (GI), reflections and water, with NVIDIA DLSS Ray Reconstructi
 It runs as a Vulkan layer that its launcher, `BG3RTX.exe`, enables for the game process only. Nothing in the game
 folder, the registry or your saves is changed.
 
-Current release: **0.9.6-beta** (public beta). What is new: [release notes](docs/release/RELEASE_NOTES_0.9.6.md).
+Current release: **0.9.7-beta** (public beta). What is new: [release notes](docs/release/RELEASE_NOTES_0.9.7.md).
 The full player guide is the packaged README, [docs/release/README.md](docs/release/README.md); every launcher
 control is in [the settings guide](docs/USER_SETTINGS.md).
 
@@ -40,9 +40,9 @@ control is in [the settings guide](docs/USER_SETTINGS.md).
 Download BG3RTX from the **Files** tab of the BG3RTX page on Nexus Mods. There are no downloads on GitHub: this
 repository is the source code. Two downloads hold the same files. Close the game first.
 
-- **Setup.exe** (`BG3RTX-0.9.6-beta-Setup.exe`): installs for your Windows user only, without administrator rights,
+- **Setup.exe** (`BG3RTX-0.9.7-beta-Setup.exe`): installs for your Windows user only, without administrator rights,
   to `%LOCALAPPDATA%\Programs\BG3RTX`, and adds a Start menu entry. It is not signed, so Windows SmartScreen may warn.
-- **ZIP** (`BG3RTX-0.9.6-beta.zip`): unzip it anywhere, not inside the game folder. Run `bin\BG3RTX.exe` from there
+- **ZIP** (`BG3RTX-0.9.7-beta.zip`): unzip it anywhere, not inside the game folder. Run `bin\BG3RTX.exe` from there
   (portable), or double-click **Install.cmd** to copy it to `%LOCALAPPDATA%\Programs\BG3RTX` with a Start menu entry.
 
 Then start **BG3RTX**. It finds Steam installs by itself; otherwise use **Choose folder…** and pick the folder that
@@ -95,7 +95,7 @@ Change them on the launcher's **Hotkeys** page.
 - Video memory is the main risk, especially on 12 to 16 GB cards. If you see stalls, missing geometry or crashes,
   lower the preset or resolution and restart the game.
 - The first game start after installing can spend 15 to 50 seconds longer creating shaders. Later starts reuse them.
-- RTX Hair limits, and the full list: [release notes](docs/release/RELEASE_NOTES_0.9.6.md#known-issues).
+- RTX Hair limits, and the full list: [release notes](docs/release/RELEASE_NOTES_0.9.7.md#known-issues).
 - To report a bug: **Create a report…** in the launcher (Home, or Help & support), then attach the ZIP on the Bugs
   tab of the BG3RTX page on Nexus Mods. Nothing is uploaded automatically.
 
