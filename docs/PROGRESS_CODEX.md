@@ -12,7 +12,16 @@
 Level detection (2026-11-23 regression hunt): since Patch 8 the asset database never learns the level (zstd saves, no
 Script Extender, vote only under `assetdb_join`), so sun replace, far-GI roof rules and per-light radii are inactive in
 every log since about 2026-11-07. `assetdb_level_vote` (0) is ready with its live `tools/live_batches_staged/level_vote`.
-Run it (it changes the image; the PT judges)? Taken: not run, offline only.
+Live run 2026-11-23/24 (`level-vote`, main cb4fc188, Ultra): the vote works. S8 finds CTY_Main_A (359 roof volumes, 57 of 57
+near lights from the database, kept after an F8 reload), Dialogue1 finds WLD_Main_A (20 volumes); cleared at every switch off,
+0 faults. Cost with the key on: sun trace +0.16 ms (S8) / +0.08 ms (Dialogue1), sun resolve +0.03-0.04 ms, totals within
+the OFF pair. Sun replace brightens 0.5% (S8) / 2.9% (Dialogue1) of px, none darker. Dialogue1 INVALID only at its last
+diag window (the game keeps creating pipelines there; readiness waits for 0). Energy: no image dumps in these windows.
+PT (offline, S8 pack 2 with the 183 volumes supplied by tools/pt_roofs.py: the pack was written 154 ms before the vote):
+far screen hits FARTHER (changed px 1.37%, mean |E-PT| 0.011 off -> 0.042 on, 12% of px closer; giRaw +6.5%); the far
+sun half not judged (hit material cache dropped by the 2 GB pack cap). Kept off. Next: why far screen hits through the
+volumes overshoot (sky/ambient in screen radiance, or roofs covered by triangles but not by a volume). Details:
+`.scratch/level_vote_pt/`. Packs kept: `test-main/captures/replay-20261123-15395*` (2.2 GB).
 
 Live tests: allowed overnight by the user's /goal of 2026-11-21 only; a new session must ask again.
 State and next steps: [HANDOFF_SESSION](HANDOFF_SESSION.md). Release check: [RC_CHECK](release/RC_CHECK.md).
