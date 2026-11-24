@@ -285,11 +285,17 @@ The level is found in two ways:
    - This catches a level change and a wrong hint.
    - It runs only with `assetdb_join=1` (the diagnostic join, below) or `assetdb_level_vote=1`
      (the vote alone, `vote_check`, no CSV; every `assetdb_join_interval` presents; live: turned on it
-     checks at once, turned off with `assetdb_join=0` it forgets a level it found). Both default to 0, so
-     a player's run on a Patch 8 save has no level: no roof volumes (rt_sun_replace inactive, the
+     checks at once, turned off with `assetdb_join=0` it forgets a level it found). Without either, a
+     run on a Patch 8 save has no level: no roof volumes (rt_sun_replace inactive, the
      gi_far and hit-sun roof rules block every far hit) and no database lights for D-LS. Found
-     2026-11-23 (.scratch/coord/hunt_core.md F1: 171 of 171 logs "level unknown"); the key stays 0 until
-     the staged live `tools/live_batches_staged/level_vote` and its PT verdict qualify the consumers.
+     2026-11-23 (.scratch/coord/hunt_core.md F1: 171 of 171 logs "level unknown").
+   - `assetdb_level_vote` is **on by default since 2026-11-24** (user decision, claude/level-vote-on) in
+     Medium, High and Ultra; Low writes 0 (no RT sun, local shadows or RT GI there, so no consumer). In release
+     (no dev=1) `enforce_release_policy` writes it On wherever Sun shadows are ray-traced. Live
+     2026-11-23/24 (`level_vote`): level found in S8 and Dialogue1, kept after an F8 reload, cleared on
+     switch-off, 0 faults, about +0.2 ms. The offline PT put far GI screen hits FARTHER on 1.4% of px; the user
+     accepts it as a regression fix (the consumers were qualified with the level known). Liveness row
+     `level_known` (covers the key), with `roof_volumes`, `sun_replace_active`, `sun_resolve`, `ls_per_light_data`.
    - Fail closed (hunt2_lifecycle 2, 2026-11-23): a stale level would trust the sun with no roof volumes around
      the new camera (an interior sun leak). A check with at least 3 voters and none for the current level, and
      nothing better that qualifies, clears the level (`assetdb_vote` `clear`). A level load (a new G-buffer

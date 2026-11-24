@@ -37,7 +37,7 @@
      "line": "\\[vt alpha\\] \\S+ invalid: skipped", "proof": "\\[vt alpha\\] \\d+ masks loaded",
      "caught": "2026-11-02..23: 17 of 71 masks rejected at every launch"},
     {"id": "level_known", "feature": "asset DB knows the level (sun replace, roofs, per-light data)", "when": {"rt_shadows": "1", "rt_sun_replace": "1"},
-     "presets": ["medium", "high", "ultra"], "kind": "absent", "covers": ["rt_sun_roofs"],
+     "presets": ["medium", "high", "ultra"], "kind": "absent", "covers": ["rt_sun_roofs", "assetdb_level_vote"],
      "line": "level unknown: nothing trusted", "proof": "\\[core\\] sun stats \\(",
      "caught": "2026-11-07..23: 'level unknown: nothing trusted' in every log after Patch 8 (zstd saves)"},
     {"id": "sun_replace_active", "feature": "traced sun replaces the game's dark pixels", "when": {"rt_shadows": "1", "rt_sun_replace": "1"},

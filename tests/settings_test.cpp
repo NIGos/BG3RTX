@@ -1265,6 +1265,7 @@ static void test_release_migration() {
       if ((id == "exp_omm" || id == "exp_vt_alpha_masks") && (p == kHigh || p == kUltra)) want = 1;
       if ((id == "exp_water_compose_shift" || id == "exp_hair_pool_trim" ||
            id == "exp_ls_exact_k") && p == kUltra) want = 1;
+      if (id == "exp_assetdb_level_vote" && p != kLow) want = 1;   // user decision 2026-11-24: where RT sun shadows are on
       CHECK(knob_value(k, m) == want);
     }
     CHECK_EQ(get(m, "perf_submit_batch"), "0"); CHECK_EQ(get(m, "perf_hook_state"), "0");

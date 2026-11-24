@@ -669,11 +669,11 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "r3-core: the sun trace is recorded right before the GI trace with no barrier between them, its resolve beside the GI temporal pass. The image is unchanged; judge the total RT interval in GPU ms at a static camera."},
 
   {"exp_assetdb_level_vote", "Level detection by lights",
-   "Experimental: recognises the level from the game's lights, so the roof data of the asset database is used (sun shadow replace, far indirect light). Changes the image where roofs matter. Unqualified.",
+   "Recognises the level from the game's lights, so the roof data of the asset database is used (sun shadow replace, far indirect light, per-light data). On in Medium, High and Ultra.",
    Kind::Choice, Apply::Live, "live", true,
    {{"off", "Off", 0, {{"assetdb_level_vote", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"assetdb_level_vote", "1"}}, {{"sun_shadows", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "fix-level-detect: Patch 8 saves hide the level, so without it the roof volumes stay unknown. Look for \"[assetdb] level ... (from lights)\" in the log, then compare sun shadows under roofs and far bounce light at Water Queen's House on Ultra."},
+   {}, {0, 1, 1, 1}, false, {}, true, "Advanced", {"Measured", "About 0.2 ms", "Unknown", "RTX 5090, level_vote live 2026-11-23/24 (S8, Dialogue1)."}, "fix-level-detect: Patch 8 saves hide the level, so without it the roof volumes stay unknown. On by default since 2026-11-24 (user decision): it restores the level the roof consumers were qualified with. Low has no consumer (no RT sun, local shadows or RT GI) and the On choice needs RT sun shadows, so Low stays Off. Look for \"[assetdb] level ... (from lights)\" in the log, then compare sun shadows under roofs and far bounce light at Water Queen's House on Ultra."},
 
   {"exp_hair_strand_aa", "Strand hair edge resolve",
    "Experimental: blends thin strand edges by their exact pixel coverage instead of dithering.",
@@ -883,7 +883,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_backlit", "1"},
     {"rt_tmax", "300"},
     {"rt_sun_radius", "0.00459"},
-    {"assetdb_level_vote", "0"},
+    {"assetdb_level_vote", "1"},
     {"rt_sun_replace", "1"},
     {"rt_sun_roofs", "1"},
     {"rt_sun_roof_mode", "0"},
@@ -1676,6 +1676,9 @@ inline void enforce_release_policy(Map& m) {
   // Approved k1 optimisation, no release control. Lower presets lack qualification.
   write("exp_ls_exact_k", lookup(m, "preset") == "ultra" && lookup(m, "rt_build") != "0" &&
       knob_value(*find_knob("local_shadows"), m) == 2 ? 1 : 0);
+  // Level detection by lights (user decision 2026-11-24), no release control: on wherever its consumer, RT sun
+  // shadows, is on (Medium, High, Ultra), so the roof volumes and the per-light data know the level.
+  write("exp_assetdb_level_vote", knob_value(*find_knob("sun_shadows"), m) >= 1 && lookup(m, "rt_build") != "0" ? 1 : 0);
   // Qualified camera correction follows water.
   m["rt_water_compose_shift"] = map_int(m, "rt_water_compose", 0) ? "1" : "0";
 }
