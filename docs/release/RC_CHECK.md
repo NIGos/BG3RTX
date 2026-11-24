@@ -1,27 +1,27 @@
-# Release candidate check
+﻿# Release candidate check
 
-Date: 2026-11-24 20:26:23 +01:00. Commit: 7ee3f9cf52eed6a8441e58a63bdc6ce08db36174.
+Date: 2026-11-24 20:57:34 +01:00. Commit: 3dc3ed675f4b236e2e4f4c373a9ed31ea581a950.
 Source state at start: clean tracked files (untracked files excluded).
-Result: PASS with 1 skipped row. Candidate version: rc-20261124-7ee3f9cf-a09a9c6d.
+Result: PASS with 1 skipped row. Candidate version: rc-20261124-3dc3ed67-074d02b3.
 
 Rerun: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1`.
 
 | Item | Result | Evidence |
 |---|---|---|
 | Build | PASS | Core, launcher and lean layer built from this tree; diagnostics OFF. No shader compile or game run. |
-| Archive | PASS | Real ZIP, 73.74 MiB; SHA256 ef671927a3d91c22f24e92ef7cfcac6a3c63a3433b6fee19fbef406aa61ee9c4; symbols kept in separate archive. |
+| Archive | PASS | Real ZIP, 73.71 MiB; SHA256 23b4d65c109c0a96f945c298c881e95e7adeed41a5dc6f65180da498509408a4; symbols kept in separate archive. |
 | Manifest | PASS | 230 files; expected 230 (delta 0); 0 differences across ZIP / extracted / files.txt / source plan. Runtime source dependencies covered. |
 | Hashes | PASS | 12 shipped DLLs and launcher match build/copy sources; 227 verbatim files checked; 9 Streamline DLLs match production SDK. |
 | Exclusions | PASS | 0 symbols, developer tools, SDK payloads, Aftermath DLLs, Python or unexpected binaries. Private symbols outside player ZIP. |
 | Licences | PASS | 16 required notices plus project licences and font OFL present, verbatim hashes checked; README licence lines 3-4 PASS. |
-| Version | PASS | rc-20261124-7ee3f9cf-a09a9c6d; commit matches HEAD; layer lean. |
+| Version | PASS | rc-20261124-3dc3ed67-074d02b3; commit matches HEAD; layer lean. |
 | Install | PASS | 230 real payload files hash-match after install; fake game unchanged; 3 original collisions backed up. |
 | Update | PASS | 230 files hash-match after same-candidate update; corrupted installed DLL repaired; original backups, settings and unrelated file preserved. |
 | Uninstall | PASS | 5/5 original files restored byte-for-byte; fake game unchanged; no owned payload/metadata remains. |
 | Setup | SKIPPED | skipped: another BG3RTX install present (C:\Users\quali\AppData\Local\Programs\BG3RTX\, 0.9.6-beta). The compiled Setup was not run, so it is not qualified here: run verify_rc on a PC without a BG3RTX install, or uninstall it first. |
 | Cleanup | PASS | Owned TEMP test tree deleted; no existing installation, cache, shortcuts or game files changed. Setup Apps cleanup is checked in the Setup row. |
 
-Archive: E:\Storage\Code Projects\BG3RTX\.scratch\rc\20261124-202409-a09a9c6d\BG3RTX-rc-20261124-7ee3f9cf-a09a9c6d.zip
+Archive: E:\Storage\Code Projects\BG3RTX\.claude\worktrees\release-097\.scratch\rc\20261124-205552-074d02b3\BG3RTX-rc-20261124-3dc3ed67-074d02b3.zip
 
 Scope: real ZIP legacy install.ps1/uninstall.ps1 route, no shortcut, settings retained. Update reapplies this candidate, not a different release.
 Only synthetic installer child shells mock named-process discovery, as release_install_test.py does; build process guards remain real. No game or payload binary executes.
@@ -40,7 +40,16 @@ Notes: [RELEASE_NOTES_0.9.7.md](RELEASE_NOTES_0.9.7.md) (what changed since 0.9.
 
 ### Candidate (built offline from branch claude/release-0.9.7, lean layer, not installed, not run)
 
-Filled after the build of claude/release-0.9.7 (see below).
+| Artifact (worktree `.claude/worktrees/release-097`) | Bytes | SHA-256 |
+|---|---|---|
+| `dist/BG3RTX-0.9.7-beta.zip` (230 files) | 77667994 | 9c14cfc84aa6bc22068578b948d00dc58483d10025d7a76f368dba064799e570 |
+| `dist/BG3RTX-0.9.7-beta-symbols.zip` (private) | 31048461 | b401b399c03a6541c4c4d45f67c109b6aac16f32ec30daf9025f0e13e3c21305 |
+| `.scratch/setup-0.9.7-beta/BG3RTX-0.9.7-beta-Setup.exe` (Inno 6.7.3, unsigned) | 57676750 | 8949d4bd57bd81aa7d70a6f93d9aa34d3e71f8608ae0ea58e04a04b57325837b |
+
+`VERSION.txt`: BG3RTX 0.9.7-beta, commit 3dc3ed67, layer lean, built 2026-11-24 20:55. Packaged `bg3rtx.ini`:
+`assetdb_level_vote=1`; no `granny2*`. Nexus upload set (main checkout): `.scratch/release/v0.9.7-beta/`
+(Portable.zip = the ZIP above; Setup.zip 57188256 bytes, 81dde30927267ad55ddd5c7467b4d9c7f505477071c1f65283833ca2fcfbda97;
+`SHA256SUMS.txt`, `PUBLISH.md`). verify_rc above (rc-20261124-3dc3ed67-074d02b3) ran on commit 3dc3ed67.
 
 Since b7532c90 (the published 0.9.6-beta): `assetdb_level_vote` On in Medium, High and Ultra (level recognised from the
 game's lights after Patch 8, fast re-votes after a load), Play on a fresh install saves the preset, restart notices for
@@ -63,7 +72,7 @@ packaged `bg3rtx.ini`: `rt_hold_pack_base`, `rt_hair_header_early`, `gi_far_roof
 | Gate | Result | Evidence |
 |---|---|---|
 | Build and all CTests | PASS | merge-green of 41a5e7f8 ("full gates passed"); every branch of the night 239 of 239 |
-| verify_rc (table above) | 11 PASS, 1 SKIPPED | rc-20261124-7ee3f9cf-a09a9c6d. Setup row skipped: another install present (0.9.6-beta from its `VERSION.txt`). See "Not verified" 6 |
+| verify_rc (table above) | 11 PASS, 1 SKIPPED | rc-20261124-3dc3ed67-074d02b3. Setup row skipped: another install present (0.9.6-beta from its `VERSION.txt`). See "Not verified" 6 |
 | RTX Hair Off in Low, Medium, High, Ultra and without a user file | PASS | `tests/settings_test.cpp` `test_release_rtx_hair`; the packaged `bg3rtx.ini` reads `rt_hair_groom_primary=0`, `rt_hair_capture=0` |
 | RTX Hair On from the launcher survives the release policy | PASS | same test: all 27 bundle keys, 4 presets, experimental options 0 and 1; policy idempotent |
 | Release controls | PASS | 23 visible controls plus 4 behind "Show experimental options"; 32 developer knobs hidden (`settings_test`, `launcher_web_bridge_json_test`) |
