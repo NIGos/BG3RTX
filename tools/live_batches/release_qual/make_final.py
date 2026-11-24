@@ -75,6 +75,9 @@ def energy_phase():
                 set='qa_exposure_hold=1,rt_stats=0,rt_primary_check=0,rt_debug=0')
 
 
+REBUILD_FLOOR_S = 13.6
+
+
 def readiness_timeouts(job, plan):
     """Startup 60 s; a phase that changes a pipeline key gets the preflight's readiness allowance (the learned
     VALID median plus margin, else the unproven pipeline allowance); 10 s only where no pipeline key changes.
@@ -89,9 +92,11 @@ def readiness_timeouts(job, plan):
         if phase.get('wait_log'):
             phase['wait_log_timeout'] = 60 if i == 0 else pipeline_readiness.PIPELINE_TIMEOUT_S if rebuilds[-1] else 10
     # Only rebuild phases take the learned allowance: the startup keeps its 60 s (a startup median is not a cold build).
+    # A learned median of a warm rebuild (settings-reset: 1 s on 2026-11-21) must not undercut a cold one: floor at
+    # the slowest rebuild seen (GI sun raygen 12.6 s, 2026-11-21) plus the 1 s settling margin.
     for phase, rebuild, limit in zip(plan, rebuilds, flow.readiness_budget.timeouts(job, plan)):
         if rebuild:
-            phase['wait_log_timeout'] = limit
+            phase['wait_log_timeout'] = max(limit, REBUILD_FLOOR_S)
 
 
 def watchdog(job, plan):
