@@ -82,7 +82,8 @@ packaged `bg3rtx.ini`: `rt_hold_pack_base`, `rt_hair_header_early`, `gi_far_roof
 2. **Qualification live in the release profile: done 2026-11-21** (final smoke above, with the overnight keys on).
    The user confirmed the overnight changes, kept OMM on in High and tested the candidate (all OK), 2026-11-21.
    Repackaged from main 7ee3f9cf with the current player docs and verify_rc rerun on 2026-11-24. The level vote (on since
-   b53c5479) ran in the release smoke of 2026-11-24 (194918), not in the 2026-11-21 qualification.
+   b53c5479) passed the release smoke on 7ee3f9cf (2026-11-24): final-s8-ultra-high.1.200936 29/29 window gates,
+   liveness ALIVE 49 DEAD 0; final-stock-hair-dialogue1.1.201324 15/15, ALIVE 32 DEAD 0 (both valid).
 3. **Hitch frames with RTX Hair**: fixed live by `rt_hair_groom_async` (inn dolly p99 98-111 -> 40 ms, 2026-11-21). RTX Hair ships Off and Beta.
 4. **EXPLAIN: GI trace read 0.2 to 0.4 ms lower with the handout in one rerun.** Not a blocker: energy equal and 0
    fallbacks in the qualification; claude/final-core read it as benign (another specialization, constant 1051).
