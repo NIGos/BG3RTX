@@ -742,14 +742,14 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_sun_overlap": "1"}, "needs": {"sun_shadows": 1, "gi": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_assetdb_level_vote", "label": "Level detection by lights",
-     "description": "Experimental: recognises the level from the game's lights, so the roof data of the asset database is used (sun shadow replace, far indirect light). Changes the image where roofs matter. Unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Advanced", "summary": "Experimental: recognises the level from the game's lights, so the roof data of the asset database is used (sun shadow replace, far indirect light). Changes the image where roofs matter. Unqualified.",
-     "details": "fix-level-detect: Patch 8 saves hide the level, so without it the roof volumes stay unknown. Look for \"[assetdb] level ... (from lights)\" in the log, then compare sun shadows under roofs and far bounce light at Water Queen's House on Ultra.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "description": "Recognises the level from the game's lights, so the roof data of the asset database is used (sun shadow replace, far indirect light, per-light data). On in Medium, High and Ultra.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": false, "developer": true,
+     "category": "Advanced", "summary": "Recognises the level from the game's lights, so the roof data of the asset database is used (sun shadow replace, far indirect light, per-light data). On in Medium, High and Ultra.",
+     "details": "fix-level-detect: Patch 8 saves hide the level, so without it the roof volumes stay unknown. On by default since 2026-11-24 (user decision): it restores the level the roof consumers were qualified with. Low has no consumer (no RT sun, local shadows or RT GI) and the On choice needs RT sun shadows, so Low stays Off. Look for \"[assetdb] level ... (from lights)\" in the log, then compare sun shadows under roofs and far bounce light at Water Queen's House on Ultra.",
+     "cost": {"status": "Measured", "gpu": "About 0.2 ms", "vram": "Unknown", "provenance": "RTX 5090, level_vote live 2026-11-23/24 (S8, Dialogue1)."},
      "required_on": {},
      "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"assetdb_level_vote": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"assetdb_level_vote": "1"}, "needs": {"sun_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
