@@ -28,7 +28,7 @@ This is a beta. Expect bugs. Please report them (see "Reporting a bug").
 
 ## Install
 
-BG3RTX 0.9.6-beta comes as a Windows installer (`BG3RTX-0.9.6-beta-Setup.exe`) and as this ZIP; both hold the same
+BG3RTX 0.9.7-beta comes as a Windows installer (`BG3RTX-0.9.7-beta-Setup.exe`) and as this ZIP; both hold the same
 files. **Installer:** close the game and run the Setup. It installs for your Windows user only, without
 administrator rights, to `%LOCALAPPDATA%\Programs\BG3RTX` and adds a Start menu entry. It is not signed, so
 Windows SmartScreen may warn. Update by running the new Setup; uninstall in Windows Settings > Apps > BG3RTX.

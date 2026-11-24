@@ -76,7 +76,7 @@ images on the Images tab.
 
 ## Before publishing
 
-- The installation section names `BG3RTX-0.9.6-beta-Setup.exe`; change it if the uploaded file name differs.
+- The installation section names `BG3RTX-0.9.7-beta-Setup.exe`; change it if the uploaded file name differs.
 - Check that the launcher labels quoted in the texts still match the current launcher
   ("Create a report…", "Preview files", "Save report…", "Choose folder…", "Hotkeys", "Restart to apply",
   "Show experimental options", "Water surface reflections", "Strand hair edge resolve"). Checked for 0.9.6-beta
