@@ -410,6 +410,30 @@ int main(int argc, char** argv) {
     }
     bg3::assetdb_clear_level("test");
   }
+  // ---- Vote schedule after a level load (layer/assetdb.cpp kLoadSettleTries, assetdb_next_vote) ----
+  // Release smoke 2026-11-24: loads at presents 1004 and 1096, the vote at 1126 cleared the menu level, the next ones
+  // ran at 1366 and 1846 (interval 240), so the level stayed unknown ~25 s. Now: every 30 presents for 10 tries.
+  {
+    uint32_t tries = 10;
+    uint64_t frame = 1126, votes = 0;
+    while (tries > 0) {
+      const uint64_t next = bg3::assetdb_next_vote(frame, frame + 240, false, tries, 30);
+      CHECK(next == frame + 30);
+      frame = next;
+      ++votes;
+    }
+    CHECK(votes == 10 && frame == 1426);
+    // Tries used up: back to the interval.
+    CHECK(bg3::assetdb_next_vote(frame, frame + 240, false, tries, 30) == frame + 240 && tries == 0);
+    // A known level ends the fast phase at once; with no load (0 tries) nothing changes.
+    tries = 7;
+    CHECK(bg3::assetdb_next_vote(2000, 2240, true, tries, 30) == 2240 && tries == 0);
+    CHECK(bg3::assetdb_next_vote(2000, 2240, false, tries, 30) == 2240);
+    // An interval shorter than the settle step is kept.
+    tries = 3;
+    CHECK(bg3::assetdb_next_vote(2000, 2010, false, tries, 30) == 2010 && tries == 2);
+    printf("vote schedule: 10 tries every 30 presents after a load, then the interval\n");
+  }
   printf("%s (%d failures)\n", g_fail ? "FAILED" : "OK", g_fail);
   return g_fail ? 1 : 0;
 }

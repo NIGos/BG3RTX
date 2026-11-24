@@ -28,6 +28,9 @@ SUN_UNKNOWN = ("{t}  [core] sun stats (600 frames, replace 0, 0 roof volumes (le
 SUN_KNOWN = ("{t}  [core] sun stats (600 frames, replace 1, 153 roof volumes, scene top 14.4): traced 76.1% of px, lit 32.9%; "
              "game dark & RT lit 0.40% of traced px")
 # core/gi.cpp pass_timing_collect, kSunResolve (detailed logging): the cost line of the sun resolve pass
+# final-stock-hair-dialogue1.1.194918 (2026-11-24, level vote): the menu, then the game level found after a load
+LEVEL_MENU = "19:49:46.886  [assetdb] level SYS_Menuscreen_Act3_B (from lights): 78 lights, 4 triggers, 34 probes"
+LEVEL_GAME = "{t}  [assetdb] level WLD_Main_A (from lights): 4069 lights, 280 triggers, 1057 probes"
 SUN_RESOLVE = "{t}  [core] gi: sun resolve pass GPU cost 0.142 ms/frame (average of 300 dispatched frames)"
 MASKS = r"06:21:24.848  [vt alpha] 54 masks loaded from E:\x\data\assetdb\vt_alpha (43.83 MB BC4)"
 MASK_INVALID = "06:21:24.518  [vt alpha] 1_1ee1bfca43a33d7e060b496f46d293e9.vtalpha invalid: skipped"
@@ -77,13 +80,25 @@ class Liveness(unittest.TestCase):
 
     def test_level_unknown_is_dead_and_a_known_level_is_alive(self):
         t0 = 6 * 3600 + 22 * 60
-        r = self.check([READ_ULTRA] + stamp(t0, 4, 10, SUN_UNKNOWN))
-        for row in ("level_known", "sun_replace_active", "roof_volumes"):
+        r = self.check([READ_ULTRA] + stamp(t0, 15, 10, SUN_UNKNOWN))
+        self.assertEqual(r["level_known"]["launch"]["status"], L.DEAD)
+        for row in ("sun_replace_active", "roof_volumes"):
             self.assertEqual(r[row]["ultra"]["status"], L.DEAD, row)
         self.assertEqual(r["sun_traced"]["ultra"]["status"], L.ALIVE)
-        r = self.check([READ_ULTRA] + stamp(t0, 4, 10, SUN_KNOWN))
-        for row in ("level_known", "sun_replace_active", "roof_volumes"):
+        r = self.check([READ_ULTRA] + stamp(t0, 1, 1, LEVEL_GAME) + stamp(t0, 4, 10, SUN_KNOWN))
+        self.assertEqual(r["level_known"]["launch"]["status"], L.ALIVE)
+        for row in ("sun_replace_active", "roof_volumes"):
             self.assertEqual(r[row]["ultra"]["status"], L.ALIVE, row)
+
+    def test_level_unknown_during_loads_is_alive_once_the_level_is_found(self):
+        # release smoke 2026-11-24: 'level unknown' after each load until the vote found the level; a preset switch
+        # after it does not print the level again (one judgement per launch). The menu level alone proves nothing.
+        t0 = 6 * 3600 + 22 * 60
+        log = ([READ_ULTRA, LEVEL_MENU] + stamp(t0, 12, 2, SUN_UNKNOWN) + stamp(t0 + 25, 1, 1, LEVEL_GAME)
+               + stamp(t0 + 30, 5, 10, SUN_KNOWN) + [READ_HIGH] + stamp(t0 + 90, 10, 10, SUN_KNOWN))
+        self.assertEqual(self.check(log)["level_known"]["launch"]["status"], L.ALIVE)
+        r = self.check([READ_ULTRA, LEVEL_MENU] + stamp(t0, 15, 10, SUN_UNKNOWN))
+        self.assertEqual(r["level_known"]["launch"]["status"], L.DEAD)
 
     def test_sun_resolve_follows_the_level(self):
         # hunt2_claims D3: with the level unknown the resolve pass never runs; with detailed logging its silent cost
@@ -112,7 +127,7 @@ class Liveness(unittest.TestCase):
         r = self.check([READ_ULTRA] + stamp(4 * 3600, 2, 2, HANDOUT_DEAD))
         self.assertEqual(r["omm_handout_commits"]["ultra"]["status"], L.UNPROVEN)
         self.assertEqual(r["omm_session_latch"]["ultra"]["status"], L.ALIVE)   # the handout line is its proof
-        self.assertEqual(r["level_known"]["ultra"]["status"], L.UNPROVEN)      # no sun stats line: path never ran
+        self.assertEqual(r["level_known"]["launch"]["status"], L.UNPROVEN)     # 2 s: too short to judge
 
     def test_keys_line_turns_a_row_off_and_a_truncated_token_is_ignored(self):
         keys = "04:03:50.965  [cfg] keys: rr=1 rt_omm=0 rt_omm_dyn=0"
@@ -131,7 +146,8 @@ class Liveness(unittest.TestCase):
 
     def test_needles_are_literal_substrings_of_real_matches(self):
         samples = [HANDOUT_DEAD.format(t="00:00:00.000"), REJECTED, OMM_DYN.format(t="00:00:00.000"), MASKS, MASK_INVALID,
-                   SUN_UNKNOWN.format(t="00:00:00.000"), SUN_KNOWN.format(t="00:00:00.000")]
+                   SUN_UNKNOWN.format(t="00:00:00.000"), SUN_KNOWN.format(t="00:00:00.000"), LEVEL_MENU,
+                   LEVEL_GAME.format(t="00:00:00.000")]
         for rule in self.rules:
             for line in samples:
                 if rule.line.search(line):
@@ -165,14 +181,28 @@ class Liveness(unittest.TestCase):
         if not logs.is_dir() and ROOT.parent.name == "worktrees":   # a worktree: the queue logs live in the main checkout
             logs = ROOT.parents[2] / "captures/queue/logs"
         dead, alive = logs / "final-s8-ultra-high.1.040347.log", logs / "final-s8-ultra-high.1.062059.log"
-        if not (dead.exists() and alive.exists()):
+        if not alive.exists():
             self.skipTest("no 2026-11-21 queue logs in this checkout")
-        _, _, res = L.run([dead, alive], cache_path=None)
-        d, a = res[str(dead)], res[str(alive)]
-        self.assertEqual(L.log_status(d["omm_handout_commits"]), L.DEAD)
+        _, _, res = L.run([p for p in (dead, alive) if p.exists()], cache_path=None)
+        a = res[str(alive)]
+        if dead.exists():   # deleted with the analysed raw logs since
+            self.assertEqual(L.log_status(res[str(dead)]["omm_handout_commits"]), L.DEAD)
         self.assertEqual(L.log_status(a["omm_handout_commits"]), L.ALIVE)
         self.assertEqual(a["omm_handout_commits"]["high"]["status"], L.ALIVE)
         self.assertEqual(L.log_status(a["level_known"]), L.DEAD)
+
+    def test_real_level_vote_logs_when_present(self):
+        # 2026-11-24 release smoke (level vote on, 12 'level unknown' lines during loads, then WLD_Main_A): ALIVE;
+        # 2026-11-21 (before the vote, the level never known): DEAD.
+        logs = ROOT / "captures/queue/logs"
+        if not logs.is_dir() and ROOT.parent.name == "worktrees":
+            logs = ROOT.parents[2] / "captures/queue/logs"
+        alive, dead = logs / "final-stock-hair-dialogue1.1.194918.log", logs / "final-s8-ultra-high.1.062059.log"
+        if not (dead.exists() and alive.exists()):
+            self.skipTest("no 2026-11-21/24 queue logs in this checkout")
+        _, _, res = L.run([alive, dead], cache_path=None)
+        self.assertEqual(L.log_status(res[str(alive)]["level_known"]), L.ALIVE)
+        self.assertEqual(L.log_status(res[str(dead)]["level_known"]), L.DEAD)
 
 
 if __name__ == "__main__":

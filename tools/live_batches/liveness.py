@@ -29,7 +29,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = Path(__file__).with_name("liveness.json")
-VERSION = 2   # 2: 'follows'
+VERSION = 3   # 2: 'follows'; 3: a 'once' row as a 'follows' cause
 ALIVE, DEAD, UNPROVEN = "ALIVE", "DEAD", "UNPROVEN"
 _RANK = {ALIVE: 0, UNPROVEN: 1, DEAD: 2}
 _TS = re.compile(r"^(\d\d):(\d\d):(\d\d)\.(\d{3})")
@@ -402,7 +402,9 @@ def check_text(text, rules, profiles):
         for preset, r in result[rule.id].items():
             if r["status"] != DEAD:
                 continue
-            causes = [c for c in rule.follows if result.get(c, {}).get(preset, {}).get("status") == DEAD]
+            # a 'once' cause row is judged per launch, not per preset
+            causes = [c for c in rule.follows
+                      if (result.get(c, {}).get(preset) or result.get(c, {}).get("launch", {})).get("status") == DEAD]
             if causes:
                 r["why"] += f" (follows {', '.join(causes)} DEAD)"
                 r["follows"] = causes

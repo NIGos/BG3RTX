@@ -28,7 +28,9 @@ Evidence: `.scratch/coord/hunt_*.md` and the 32 queue logs of 2026-11-21 in `cap
   segment), `presets` (where it is on by default; a test checks this against the schema), `kind`:
   - `positive`: the regex value must be > 0, or >= `min`.
   - `appear`: the line must appear.
-  - `absent`: the line must not appear (`level unknown`, `invalid: skipped`, `retaining until idle`), with a `proof` line that the path ran.
+  - `absent`: the line must not appear (`invalid: skipped`, `retaining until idle`), with a `proof` line that the path ran.
+    `level_known` was `absent` of `level unknown` until 2026-11-24; it is now `appear` + `once` of a game level line,
+    since the level is legitimately unknown during loads.
   - `only_if` sets a scene precondition (water rows need water passes). `once` marks launch-time lines.
   - 31 rows today, covering 41 keys.
 - **Checker:** `tools/live_batches/liveness.py`.

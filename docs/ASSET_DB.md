@@ -301,6 +301,10 @@ The level is found in two ways:
      nothing better that qualifies, clears the level (`assetdb_vote` `clear`). A level load (a new G-buffer
      depth image) drops a copy recorded before it and re-runs the vote 30 presents later; that vote clears the
      current level on any lack of evidence for it, an empty voter list included. In play, no voters change nothing.
+     While no level is current after a load, the vote re-runs every 30 presents for up to 10 tries (300 presents,
+     about 10 s at a loading screen's 30 fps), then every `assetdb_join_interval` (2026-11-24: the release smoke
+     left the level unknown ~25 s after each load). The liveness row `level_known` now asks for a game level line
+     (`[assetdb] level <not SYS_> (from`) once per launch, so `level unknown` lines during loads are not DEAD.
    - The bridge's level: a sub-level maps to its world (as the save hint); a level the database lacks clears
      the current one.
 
