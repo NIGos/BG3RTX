@@ -10,6 +10,8 @@ Faster, less memory
 - Better use of ray-tracing memory near its limit: in a recorded sequence refused allocations fell from 53 to 2, and objects keep their ray-traced sun shadows when an allocation is refused. The test PC never reached the limit.
 
 Stability
+- Sun shadows under roofs, far bounce light and per-light data work again (Medium, High and Ultra): since game Patch 8 BG3RTX no longer recognised the level. It now recognises it from the game's lights, also right after a load (about 0.2 ms).
+- Fixes: Play on a fresh install saves the shown preset again (High and Ultra had run without opacity micromaps and cutout masks); the launcher asks for a restart when Hair shadows or Detailed logging are turned on while playing; 17 of the 71 cutout masks, rejected at every start, now load (about 36 MB more video memory).
 - Video memory guard: after Windows lowered the game's video memory budget once, BG3RTX could stay in its low-memory mode for the rest of the session (objects left out of ray tracing, stutter). It now recovers when the budget comes back. Not yet confirmed in a long play session.
 - A hair style that does not fit in memory no longer stops the ray-traced scene from being rebuilt; only that style is left out for that frame.
 - When memory for hair was short, RTX Hair could unpack one hair style up to 9 times (pauses over 100 ms). It is now unpacked once. Fixed offline, not yet confirmed in play.
