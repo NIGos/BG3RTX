@@ -45,6 +45,10 @@ struct LevelVote {
   bool clear = false;
 };
 LevelVote assetdb_vote(const std::array<float, 3>* voters, size_t n, int current, float tol, bool after_load = false);
+// The present of the next vote once a vote finished at `frame` (`next`: the one the interval already scheduled). After a
+// level load (settle_tries > 0) with no level current it is `settle` presents later, one try used; a known level ends
+// the fast phase. layer/assetdb.cpp kLoadSettleTries.
+uint64_t assetdb_next_vote(uint64_t frame, uint64_t next, bool level_known, uint32_t& settle_tries, uint64_t settle);
 // assetdb_level_vote=1 (default 0): the level vote runs without the join diagnostics (layer/assetdb.cpp
 // vote_check, every assetdb_join_interval presents). Turning both keys off forgets a level the vote set.
 // Forget the current level (as if none had been detected): the clear rules and tests.

@@ -1120,6 +1120,13 @@ uint64_t g_next_check = 0;
 // fewer than 3 voters (assetdb_vote after_load) and runs kLoadSettlePresents after the load, not an interval later.
 bool g_after_load = false;
 constexpr uint64_t kLoadSettlePresents = 30;
+// After a level load, while no level is current, the vote re-runs every kLoadSettlePresents presents up to
+// kLoadSettleTries times, then every assetdb_join_interval (default 240) presents. 10 tries x 30 presents = 300
+// presents: about 10 s at the 30 fps of a loading screen or an unfocused window (the slowest present rate in the
+// release smoke, 2026-11-24: 240 presents per 8 s) and more than one default interval, so the fast phase never ends
+// before the slow schedule would have voted. Before this, the level stayed unknown about 25 s after each load.
+constexpr uint32_t kLoadSettleTries = 10;
+uint32_t g_settle_tries = 0;
 uint32_t g_checks = 0;
 // draw counts of the counting frame
 std::mutex g_draw_mu;
@@ -1747,6 +1754,16 @@ LevelVote assetdb_vote(const std::array<float, 3>* voters, size_t n, int current
   return r;
 }
 
+uint64_t assetdb_next_vote(uint64_t frame, uint64_t next, bool level_known, uint32_t& settle_tries, uint64_t settle) {
+  if (level_known) {
+    settle_tries = 0;   // found: back to the normal interval
+    return next;
+  }
+  if (settle_tries == 0) return next;
+  --settle_tries;
+  return std::min(next, frame + settle);
+}
+
 void assetdb_clear_level(const char* why) {
   if (db()) clear_level(why);
 }
@@ -1794,6 +1811,7 @@ void assetdb_on_present(uint64_t frame) {
       depth_id = id;
       g_after_load = true;
       g_next_check = frame + kLoadSettlePresents;
+      g_settle_tries = kLoadSettleTries;
       {
         std::lock_guard<std::mutex> lock(g_join_mu);
         if (g_pending.recorded && g_pending.frame < frame) g_pending = Pending{};
@@ -1815,6 +1833,12 @@ void assetdb_on_present(uint64_t frame) {
     }
     if (join) join_check(*d, p);
     else vote_check(p);
+    bool known;
+    {
+      std::shared_lock<std::shared_mutex> lock(g_level_mu);
+      known = g_level >= 0;
+    }
+    g_next_check = assetdb_next_vote(frame, g_next_check, known, g_settle_tries, kLoadSettlePresents);
     std::lock_guard<std::mutex> lock(g_draw_mu);
     g_draw_vs.clear();
     g_draw_fs.clear();
