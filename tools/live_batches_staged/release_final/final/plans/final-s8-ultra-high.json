@@ -278,7 +278,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 13.6
   },
   {
     "label": "b2-rel2-smoke-high-s8--warmup",

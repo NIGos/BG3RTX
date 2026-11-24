@@ -5,7 +5,7 @@
     "scheduled_seconds": 93.968,
     "readiness_seconds": 8.235,
     "expected_minutes": 3.7,
-    "hard_timeout_seconds": 506,
+    "hard_timeout_seconds": 518,
     "captures": 2,
     "disk_estimate_mb": 130
   },
